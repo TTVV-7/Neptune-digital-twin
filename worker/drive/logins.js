@@ -646,7 +646,12 @@ export async function signOutEverywhere( context ) {
 	const { env, url } = context;
 	const db = checkOn( env );
 	const account = await changing( context );
-	await db.prepare( 'DELETE FROM sessions WHERE account_id = ?' ).bind( account.id ).run();
+	// And every key to its player handed to a browser as it signed in (accounts.js's accountPlayer):
+	// those browsers pick a nickname, or sign in again for the player.
+	await db.batch( [
+		db.prepare( 'DELETE FROM sessions WHERE account_id = ?' ).bind( account.id ),
+		db.prepare( 'DELETE FROM player_keys WHERE account_id = ?' ).bind( account.id ),
+	] );
 	return noContent( { 'Set-Cookie': signedOutCookie( url ) } );
 
 }

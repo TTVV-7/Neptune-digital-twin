@@ -31,25 +31,28 @@
 // start spot's cells one place) for a day, a week or a month, ADMIN_EMAILS only and ADMIN_LOOKS a
 // minute, kept a while; topCells and topPlaces (the featured places alone too); the towns read
 // without a request; the page keeping its places when a post doesn't get through; and the cells'
-// grid itself. Visit tokens stay as the Worker before them read them, so a rollback keeps visits. And the look a car travels with to
-// the others in its room (live-protocol.js's checkLook, which the rooms use): every part a page
-// sends, the underglow and the horn too, kept, anything else left out, a bad one turned away. And
-// challenges: the fastest the game goes worked out from its own numbers; periods turning over at
-// midnight UTC, on Monday and at a month's end; routes laid out as their shapes say, the Moon's off
-// its steep ground; the rotation round the places, never twice in a row nor a day's place its
-// week's or month's (nor a week's either month it's in), over years and with several keys, the same
-// in every instance and another with another key; a time written only while its challenge is open,
-// checked in the write; six live, fixed in D1 as they're first asked for, and staying so; times
-// taken from a player with a visit of the right kind (an Earth challenge's an Earth visit), only
-// bests kept, the boards with names and levels, each way of cheating turned away (too fast, out of
-// order, missing points, longer than the visit, another period's, bad tokens, the wrong secret), too
-// often (a player's 10 s, a visitor's day, then held till midnight writing nothing), the same run
-// posted again answered as taken, the owner's runs off the boards, the cache and CHALLENGE_LOOKS;
-// past boards kept with each player's final place, cached no longer than live ones, and a run
-// finished just before midnight taken in the minute after; and the admin page's routes (ADMIN_EMAILS
-// only): picks ahead fixing their period, back to the rotation, a live one changed only after a
-// warning and then a new board, the old kept apart, nothing replaced where nothing changes, and busy
-// places approved and unapproved.
+// grid itself, on every world (Mars's cells only with Mars's drop-ins: no other key lets them
+// through). Visit tokens stay as the Worker before them read them, so a rollback keeps visits; the
+// Moon and Mars are never limited, and a world that isn't one is the Earth. And the look a car
+// travels with to the others in its room (live-protocol.js's checkLook, which the rooms use): every
+// part a page sends, the underglow and the horn too, kept, anything else left out, a bad one turned
+// away. And challenges: the fastest the game goes worked out from its own numbers; periods turning
+// over at midnight UTC, on Monday and at a month's end; routes laid out as their shapes say, the
+// Moon's and Mars's off their steep ground, each on its own heights; the rotation round the places,
+// never twice in a row nor a day's place its week's or month's (nor a week's either month it's in),
+// over years and with several keys, the same in every instance and another with another key; a time
+// written only while its challenge is open, checked in the write; nine live, three on each world,
+// fixed in D1 as they're first asked for (no more than three checked on their ground an ask), and
+// staying so; times taken from a player with a visit of the right kind (an Earth challenge's an
+// Earth visit), only bests kept, the boards with names and levels, each way of cheating turned away
+// (too fast, out of order, missing points, longer than the visit, another period's, bad tokens, the
+// wrong secret), too often (a player's 10 s, a visitor's day, then held till midnight writing
+// nothing), the same run posted again answered as taken, the owner's runs off the boards, the cache
+// and CHALLENGE_LOOKS; past boards kept with each player's final place, cached no longer than live
+// ones, and a run finished just before midnight taken in the minute after; and the admin page's
+// routes (ADMIN_EMAILS only): picks ahead fixing their period, back to the rotation, a live one
+// changed only after a warning and then a new board, the old kept apart, nothing replaced where
+// nothing changes, and busy places approved and unapproved.
 // And username and password accounts: the rules for both, PBKDF2-SHA-256 (RFC 7914's vector) at
 // 100,000 iterations, DriveLimits' tries per address and per username (counted as they're checked,
 // so a burst sent at once gets no more; a robot check and a short wait, never a lock) kept only as
@@ -90,9 +93,13 @@ import {
 	BOOSTED, FASTEST, GRACE, KINDS, LEG_SLACK, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
 	bearingTo, checkPasses, destination, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, randomFrom, rankText, formatTime,
 } from '../src/drive-app/challenge-rules.js';
-import { REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick } from '../worker/drive/challenges.js';
+import { GROUNDS, REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, legFaultsOn, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick, routeFaults, steepOn } from '../worker/drive/challenges.js';
 import { setHeights } from '../src/drive-app/moon-height.js';
 import { MOON_PLACES } from '../src/drive-app/moon-places.js';
+import { MARS_PLACES } from '../src/drive-app/mars-places.js';
+import { VESTA_PLACES } from '../src/drive-app/vesta-places.js';
+import { CERES_PLACES } from '../src/drive-app/ceres-places.js';
+import { OFF_EARTH, WORLD_IDS } from '../src/drive-app/worlds.js';
 import {
 	GHOST_BYTES, GHOST_DENSITY, GHOST_EVERY, GHOST_SAMPLES, GHOST_TEXT, PASS_SLACK, SAMPLE_SLACK, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime,
 } from '../src/drive-app/ghost-rules.js';
@@ -107,7 +114,8 @@ const TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 const DAILY = 5;
 const PER_VISITOR = 2;
 // A visit's token (visits.js), its id's last letter saying which kind: the Earth's, for a visit the
-// Earth's caps let through; the owner's (ADMIN_EMAILS); the Moon's for any other.
+// Earth's caps let through; the owner's (ADMIN_EMAILS); a free world's (the Moon's, Mars's) for any
+// other.
 const EARTH_TOKEN = /^v1\.[\w-]{21}e\.\d{10}\.[\w-]{43}$/;
 const OWNER_TOKEN = /^v1\.[\w-]{21}o\.\d{10}\.[\w-]{43}$/;
 const MOON_TOKEN = /^v1\.[\w-]{21}m\.\d{10}\.[\w-]{43}$/;
@@ -320,7 +328,7 @@ describe( 'World Drive Worker', () => {
 
 		const { status, json, text } = await call( server, '/api/config' );
 		assert.equal( status, 200 );
-		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: true, live: true } );
+		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: true, live: true, liveMoon: true, liveWorlds: { earth: { open: true }, moon: { open: true }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } } );
 		assert.ok( ! text.includes( MAPS_KEY ) );
 
 	} );
@@ -575,7 +583,7 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 	test( 'config says maps are off, with the site key from wrangler.drive.jsonc', async () => {
 
 		const { json } = await call( server, '/api/config' );
-		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '', passwords: true, live: true } );
+		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '', passwords: true, live: true, liveMoon: true, liveWorlds: { earth: { open: true }, moon: { open: true }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } } );
 
 	} );
 
@@ -585,10 +593,14 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 		assert.equal( res.status, 403 );
 		assert.equal( res.json.error, 'The robot check didn\'t pass' );
 		assert.equal( verifications.at( - 1 ).secret, FAIL_SECRET );
-		// The Moon too: never limited, but still behind the robot check.
-		const moon = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, world: 'moon' } ), ip: '198.51.100.9' } );
-		assert.equal( moon.status, 403 );
-		assert.equal( moon.json.visit, undefined );
+		// The Moon and Mars too: never limited, but still behind the robot check.
+		for ( const world of OFF_EARTH ) {
+
+			const free = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, world } ), ip: '198.51.100.9' } );
+			assert.equal( free.status, 403, world );
+			assert.equal( free.json.visit, undefined );
+
+		}
 
 	} );
 
@@ -1660,7 +1672,7 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
-	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went', async () => {
+	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went (a link to the Moon or to Mars each its own)', async () => {
 
 		// On the suite's own day (others' visits that day are counted too: what these add is compared).
 		const day = PASS_DAY;
@@ -1673,14 +1685,15 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await drive() ).status, 429 );
 		assert.equal( ( await drive() ).status, 429 );
 		assert.equal( ( await drive( { world: 'moon' } ) ).status, 200 );
+		assert.equal( ( await drive( { world: 'mars' } ) ).status, 200 );
 		const added = () => {
 
 			const now = counts();
 			return Object.fromEntries( Object.entries( now ).map( ( [ name, n ] ) => [ name, n - ( before[ name ] ?? 0 ) ] ).filter( ( [ , n ] ) => n ) );
 
 		};
-		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 11; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
-		assert.deepEqual( added(), { 'visit:all': 11, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 1 } );
+		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 12; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		assert.deepEqual( added(), { 'visit:all': 12, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 1, 'visit_kind:mars_link': 1 } );
 
 	} );
 
@@ -1714,34 +1727,57 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
-	test( 'the Moon is never limited: a link to it spends no drive, and over the cap there\'s a visit for it; the owner is never limited', async () => {
+	test( 'the Moon and Mars are never limited: a link to either spends no drive, and over the cap there\'s a visit for the Moon; a world that isn\'t one is the Earth; the owner is never limited', async () => {
 
 		const ip = nextIp();
 		const drive = ( { cookie, world, time = PASS_DAY } = {} ) => call( server, '/api/visit', {
 			method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json', ...( cookie ? { Cookie: cookie } : {} ) },
 			body: JSON.stringify( world ? { token: TOKEN, world } : { token: TOKEN } ), ip, time,
 		} );
-		// To the Moon: no key and nothing counted, however many times.
+		// To the Moon or Mars: no key and nothing counted, however many times. The answer says which
+		// world, that it's free, and moon: true as a page from before Mars (still in a browser's cache)
+		// knows a free visit by.
 		for ( let i = 0; i < 12; i ++ ) {
 
-			const res = await drive( { world: 'moon' } );
-			assert.equal( res.status, 200, res.text );
-			assert.equal( res.json.moon, true );
-			assert.match( res.json.visit, MOON_TOKEN );
-			assert.ok( ! res.text.includes( MAPS_KEY ) );
+			for ( const world of OFF_EARTH ) {
+
+				const res = await drive( { world } );
+				assert.equal( res.status, 200, res.text );
+				assert.deepEqual( Object.keys( res.json ).sort(), [ 'free', 'moon', 'visit', 'world' ] );
+				assert.deepEqual( [ res.json.moon, res.json.free, res.json.world ], [ true, true, world ] );
+				assert.match( res.json.visit, MOON_TOKEN );
+				assert.ok( ! res.text.includes( MAPS_KEY ) );
+
+			}
 
 		}
 
-		// So the address's 8 Earth drives are all still there.
-		for ( let i = 7; i >= 0; i -- ) assert.equal( ( await drive() ).json.left, i );
+		// A world that isn't one (or the Earth by name) is an Earth visit: the key, and one of the
+		// address's drives.
+		const pluto = await drive( { world: 'pluto' } );
+		assert.deepEqual( [ pluto.status, pluto.json.mapsKey, pluto.json.left, pluto.json.moon ], [ 200, MAPS_KEY, 7, undefined ] );
+		assert.match( pluto.json.visit, EARTH_TOKEN );
+		assert.equal( ( await drive( { world: 'earth' } ) ).json.left, 6 );
+		// Nor is a name every object has (the registry is looked in for its own worlds alone).
+		for ( const [ world, left ] of [ [ '__proto__', 5 ], [ 'constructor', 4 ], [ 'toString', 3 ] ] ) {
+
+			const res = await drive( { world } );
+			assert.deepEqual( [ res.status, res.json.mapsKey, res.json.left, res.json.free ], [ 200, MAPS_KEY, left, undefined ], world );
+			assert.match( res.json.visit, EARTH_TOKEN );
+
+		}
+
+		// So the rest of the address's 8 Earth drives are all still there.
+		for ( let i = 2; i >= 0; i -- ) assert.equal( ( await drive() ).json.left, i );
 		// Over the cap: no key, but a visit for the Moon (scores, stats).
 		const over = await drive();
 		assert.equal( over.status, 429 );
 		assert.equal( over.json.reason, 'visitor' );
 		assert.match( over.json.visit, MOON_TOKEN );
 		assert.ok( ! over.text.includes( MAPS_KEY ) );
-		// The Moon's still open.
+		// The Moon's and Mars's still open.
 		assert.equal( ( await drive( { world: 'moon' } ) ).json.moon, true );
+		assert.equal( ( await drive( { world: 'mars' } ) ).json.world, 'mars' );
 
 		// The owner (ADMIN_EMAILS, any case), from the same used-up address: never limited, and their
 		// visits say they're the owner's (on the Moon too), so they post no drop-in places.
@@ -1757,6 +1793,7 @@ describe( 'World Drive Supporter Pass', () => {
 		}
 
 		assert.match( ( await drive( { cookie: boss.cookie, world: 'moon' } ) ).json.visit, OWNER_TOKEN );
+		assert.match( ( await drive( { cookie: boss.cookie, world: 'mars' } ) ).json.visit, OWNER_TOKEN );
 
 		// And anyone else there still isn't.
 		assert.equal( ( await drive() ).status, 429 );
@@ -1899,8 +1936,8 @@ describe( 'World Drive Supporter Pass', () => {
 		// and no other funnel step, device, world, search, bucket, problem or button, nor anything typed.
 		assert.equal( ( await post( {
 			'play:go-kart': 60, 'nope:x': 5, 'play:not-a-ride': 9, 'dropin:my-street': 1, 'garage_edit:engine': 2, 'garage_open:all': 0, 'party:made': - 3, 'load:<b>': 1,
-			'funnel:drove_5m': 1, 'funnel:': 1, 'device:watch': 1, 'device:Phone': 1, 'world:earth': 1, 'world:mars': 1, 'play_world:mars': 5, 'search:my street': 1,
-			'search:51.5, -0.1': 1, 'dropin_time:3 s': 1, 'problem:boom': 1, 'board:close': 1, 'pass:steal': 1, 'level_up:9': 1,
+			'funnel:drove_5m': 1, 'funnel:': 1, 'device:watch': 1, 'device:Phone': 1, 'world:earth': 1, 'world:pluto': 1, 'play_world:pluto': 5, 'search:my street': 1,
+			'search:51.5, -0.1': 1, 'dropin_time:3 s': 1, 'problem:boom': 1, 'board:close': 1, 'pass:steal': 1, 'level_up:9': 1, 'dropin:pluto': 1, 'search:pluto': 1, 'problem:pluto_failed': 1,
 		} ) ).status, 204 );
 		// No more than a post may add: 600 s of play, one load, the funnel's seven steps together, one device.
 		assert.equal( ( await post( { 'play:go-kart': 1e9, 'load:direct': 5, 'funnel:globe': 50, 'device:computer': 3, 'device:tablet': 1 } ) ).status, 204 );
@@ -1910,6 +1947,8 @@ describe( 'World Drive Supporter Pass', () => {
 			'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'funnel:drove_1m': 1, 'device:phone': 1,
 			'world:moon': 2, 'play_world:earth': 90.5, 'play_world:moon': 30, 'search:earth': 2, 'search:moon': 1, 'search:coordinates': 1, 'search:nothing': 1,
 			'dropin_time:10-20 s': 1, 'problem:no_ground': 1, 'problem:drop_abandoned': 1, 'board:open': 1, 'board:named': 1, 'pass:open': 2, 'pass:buy': 1, 'level_up:all': 1,
+			// And Mars's, as the Moon's.
+			'dropin:mars': 1, 'world:mars': 1, 'play_world:mars': 12, 'search:mars': 3, 'problem:mars_failed': 1,
 		} ) ).status, 204 );
 		const day = new Date( STATS_DAY ).toISOString().slice( 0, 10 );
 		assert.deepEqual( statsRows( day ), {
@@ -1919,6 +1958,7 @@ describe( 'World Drive Supporter Pass', () => {
 			'funnel:globe': FUNNEL.length, 'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'funnel:drove_1m': 1, 'device:phone': 1, 'device:computer': 1,
 			'world:moon': 2, 'play_world:earth': 90, 'play_world:moon': 30, 'search:earth': 2, 'search:moon': 1, 'search:coordinates': 1, 'search:nothing': 1,
 			'dropin_time:10-20 s': 1, 'problem:no_ground': 1, 'problem:drop_abandoned': 1, 'board:open': 1, 'board:named': 1, 'pass:open': 2, 'pass:buy': 1, 'level_up:all': 1,
+			'dropin:mars': 1, 'world:mars': 1, 'play_world:mars': 12, 'search:mars': 3, 'problem:mars_failed': 1,
 		} );
 
 		// Only with the visit's token, as JSON from the site itself.
@@ -2115,7 +2155,7 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await cy.post( { 'dropin:other': 1 }, { 0: PARIS } ) ).status, 400 );
 		// What isn't a cell of the grid is left out: past its last row or a row's last column, another
 		// world, negative, a number, coordinates themselves.
-		assert.equal( ( await cy.post( { 'dropin:other': 6, 'dropin:moon': 1 }, [ 'earth:20015:0', 'earth:20014:3', 'mars:1:1', 'earth:-1:0', 5, '48.87,2.30' ] ) ).status, 204 );
+		assert.equal( ( await cy.post( { 'dropin:other': 6, 'dropin:moon': 1 }, [ 'earth:20015:0', 'earth:20014:3', 'pluto:1:1', 'earth:-1:0', 5, '48.87,2.30' ] ) ).status, 204 );
 		assert.equal( ( await cy.post( { 'dropin:moon': 1 }, [ 'moon:5458:0' ], 2 * MINUTE ) ).status, 204 );
 		assert.deepEqual( placeRows( PLACES_DAY ), { [ GOLDEN ]: 2, [ TYCHO ]: 1, [ LYON ]: 1 } );
 		// And only with a visit's token, as the stats are.
@@ -2231,6 +2271,37 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await post( ownersMoon, { 'dropin:moon': 1 }, [ PLATO ], HOUR ) ).status, 204 );
 		assert.deepEqual( [ placeRows( day )[ ARC ], placeRows( day )[ PLATO ] ], [ undefined, undefined ] );
 		assert.equal( dropins(), before + 4 );
+
+	} );
+
+	test( 'where people drop in on Mars: a visit there (free, as the Moon\'s) posts its cells, counted under mars as its drop-ins are under dropin:mars; a Mars cell needs a Mars drop-in in the same post, whatever else the post counts', async () => {
+
+		const day = PLACES_DAY + 13 * DAY;
+		const ip = nextIp();
+		const mars = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, world: 'mars' } ), ip, time: day } );
+		assert.deepEqual( [ mars.status, mars.json.world, mars.json.free, mars.json.mapsKey ], [ 200, 'mars', true, undefined ] );
+		assert.match( mars.json.visit, MOON_TOKEN );
+		const post = ( counts, places, after ) => send( 'POST', '/api/stats', { visit: mars.json.visit, counts, places }, { ip, time: day + after } );
+		// Curiosity's landing in Gale crater, and Olympus Mons's top, each a cell of Mars's grid (on its
+		// 3,389.5 km sphere: 10,648 rows).
+		const GALE = cellOf( 'mars', - 4.5895, 137.4417 );
+		const OLYMPUS = cellOf( 'mars', 18.65, - 133.8 );
+		assert.equal( GALE, 'mars:5052:18719' );
+		assert.deepEqual( checkCell( OLYMPUS ), { world: 'mars', row: 6427, column: 2589, key: OLYMPUS } );
+		assert.equal( ( await post( { 'dropin:mars': 1 }, [ GALE ], 10 * MINUTE ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ GALE ]: 1 } );
+		assert.equal( statsRows( dayOf( day ) )[ 'dropin:mars' ], 1 );
+		// A Mars cell with only the Moon's and the Earth's drop-ins counted beside it, or one that isn't a
+		// world's: left out (its counts still counted). And an Earth cell from a Mars visit, as from the
+		// Moon's: never.
+		const CHAMPS = cellOf( 'earth', 48.87, 2.31 );
+		assert.equal( ( await post( { 'dropin:moon': 1, 'dropin:other': 1 }, [ OLYMPUS ], 20 * MINUTE ) ).status, 204 );
+		assert.equal( ( await post( { 'dropin:pluto': 1, 'dropin:other': 1 }, [ OLYMPUS, 'pluto:1:1' ], 30 * MINUTE ) ).status, 204 );
+		assert.equal( ( await post( { 'dropin:other': 1 }, [ CHAMPS ], 40 * MINUTE ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ GALE ]: 1 } );
+		// With its own drop-in, it's counted.
+		assert.equal( ( await post( { 'dropin:mars': 1 }, [ OLYMPUS ], 50 * MINUTE ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ GALE ]: 1, [ OLYMPUS ]: 1 } );
 
 	} );
 
@@ -3684,12 +3755,23 @@ describe( 'World Drive username and password accounts', () => {
 
 		const one = await signUp( 'Leaver', 'the leaver\'s passphrase' );
 		const two = await signIn( 'Leaver', 'the leaver\'s passphrase' );
+		// The account's player, made in the first browser, and handed to the second as it signed in.
+		const ip = nextIp();
+		const visited = await send( 'POST', '/api/visit', { token: TOKEN }, { ip } );
+		const made = await send( 'POST', '/api/player', { name: 'Leaver Plays', visit: visited.json.visit }, { ip } );
+		assert.equal( ( await send( 'POST', '/api/player/mine', { id: made.json.id, secret: made.json.secret }, { cookie: one.cookie } ) ).status, 200 );
+		const handed = await send( 'POST', '/api/player/mine', {}, { cookie: two.cookie } );
+		assert.equal( handed.json.player.id, made.json.id );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM player_keys WHERE player_id = '${ made.json.id }'` )[ 0 ].n, 1 );
 		const out = await send( 'POST', '/api/account/sign-out-everywhere', {}, { cookie: one.cookie } );
 		assert.equal( out.status, 204 );
 		assert.match( out.headers.get( 'Set-Cookie' ), /^__Host-wd_session=; Max-Age=0;/ );
 		assert.equal( ( await me( one.cookie ) ).json.signedIn, false );
 		assert.equal( ( await me( two.cookie ) ).json.signedIn, false );
 		assert.equal( ( await signIn( 'Leaver', 'the leaver\'s passphrase' ) ).status, 200 );
+		// The key handed to the second browser went with it; the player's own secret didn't.
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM player_keys WHERE player_id = '${ made.json.id }'` )[ 0 ].n, 0 );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM players WHERE id = '${ made.json.id }'` )[ 0 ].n, 1 );
 
 	} );
 
@@ -3988,13 +4070,38 @@ describe( 'DriveLimits\' drop-in places by itself', () => {
 		const ask = cells => limits.places( '198.51.100.77', { now, visit: 'A'.repeat( 22 ), since: now - HOUR, cells, daily: 100, perVisitor: 100, perVisit: 10, gap: 10000, asks: 3 } );
 		const X = cellOf( 'earth', 33, 44 );
 		const Y = cellOf( 'earth', 34, 44 );
-		assert.deepEqual( await ask( [ X ] ), { cells: [ X ], full: { earth: false, moon: false }, done: false } );
-		assert.deepEqual( await ask( [ X ] ), { cells: [], full: { earth: false, moon: false }, done: false } );
+		assert.deepEqual( await ask( [ X ] ), { cells: [ X ], full: { earth: false, moon: false, mars: false, vesta: false, ceres: false }, done: false } );
+		assert.deepEqual( await ask( [ X ] ), { cells: [], full: { earth: false, moon: false, mars: false, vesta: false, ceres: false }, done: false } );
 		// Its third: done, though it has places to spare.
-		assert.deepEqual( await ask( [ X ] ), { cells: [], full: { earth: false, moon: false }, done: true } );
+		assert.deepEqual( await ask( [ X ] ), { cells: [], full: { earth: false, moon: false, mars: false, vesta: false, ceres: false }, done: true } );
 		// Asked again (by another Worker instance, which hasn't heard): a new place isn't counted.
-		assert.deepEqual( await ask( [ Y ] ), { cells: [], full: { earth: false, moon: false }, done: true } );
+		assert.deepEqual( await ask( [ Y ] ), { cells: [], full: { earth: false, moon: false, mars: false, vesta: false, ceres: false }, done: true } );
 		assert.deepEqual( db.prepare( 'SELECT count, asks FROM place_visits' ).all().map( row => ( { ...row } ) ), [ { count: 1, asks: 4 } ] );
+
+	} );
+
+	test( 'each world\'s day is its own, Mars\'s too: its cells counted in its own total, and full when that reaches the day\'s', async () => {
+
+		await loadWorker();
+		const { DriveLimits } = await import( '../worker/drive/limits.js' );
+		const db = new DatabaseSync( ':memory:' );
+		const sql = { exec: ( query, ...values ) => {
+
+			const rows = db.prepare( query ).all( ...values ).map( row => ( { ...row } ) );
+			return { toArray: () => rows, one: () => rows[ 0 ] };
+
+		} };
+		const limits = new DriveLimits( { storage: { sql, transactionSync: run => run() } }, { TURNSTILE_SECRET: PASS_SECRET } );
+		const now = Date.UTC( 2026, 10, 16, 12 );
+		const ask = ( cells, visit ) => limits.places( '198.51.100.78', { now, visit, since: now - HOUR, cells, daily: 2, perVisitor: 100, perVisit: 10, gap: 10000, asks: 3 } );
+		const [ gale, jezero, olympus ] = [ [ - 4.59, 137.44 ], [ 18.44, 77.45 ], [ 18.65, - 133.8 ] ].map( ( [ lat, lon ] ) => cellOf( 'mars', lat, lon ) );
+		const paris = cellOf( 'earth', 48.87, 2.31 );
+		assert.deepEqual( await ask( [ gale ], 'B'.repeat( 22 ) ), { cells: [ gale ], full: { earth: false, moon: false, mars: false, vesta: false, ceres: false }, done: false } );
+		// Mars's day's two: the second, then none; the Earth's day still open.
+		assert.deepEqual( await ask( [ jezero, olympus, paris ], 'C'.repeat( 22 ) ), { cells: [ jezero, paris ], full: { earth: false, moon: false, mars: true, vesta: false, ceres: false }, done: false } );
+		assert.deepEqual( db.prepare( 'SELECT world, count FROM place_totals ORDER BY world' ).all().map( row => ( { ...row } ) ), [ { world: 'earth', count: 1 }, { world: 'mars', count: 2 } ] );
+		// A world that isn't one: never counted.
+		assert.deepEqual( ( await ask( [ 'pluto:1:1' ], 'D'.repeat( 22 ) ) ).cells, [] );
 
 	} );
 
@@ -4024,7 +4131,7 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 			};
 			const config = await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), env, {} );
 			// (No database here, so no usernames and passwords.)
-			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: false, live: true }, name );
+			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: false, live: true, liveMoon: true, liveWorlds: { earth: { open: true }, moon: { open: true }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } }, name );
 
 			const failed = await ask( { ...env, TURNSTILE_SECRET: FAIL_SECRET }, '198.51.100.30' );
 			assert.equal( failed.status, 403, name );
@@ -4099,7 +4206,7 @@ describe( 'World Drive Worker with AdSense set', () => {
 
 			const json = await ( await ask( vars ) ).json();
 			assert.ok( ! ( 'adsense' in json ), JSON.stringify( vars ) );
-			assert.deepEqual( Object.keys( json ).sort(), [ 'googleClientId', 'live', 'mapsOn', 'passwords', 'turnstileSiteKey' ], JSON.stringify( vars ) );
+			assert.deepEqual( Object.keys( json ).sort(), [ 'googleClientId', 'live', 'liveMoon', 'liveWorlds', 'mapsOn', 'passwords', 'turnstileSiteKey' ], JSON.stringify( vars ) );
 			const res = await ask( vars, '/ads.txt' );
 			assert.equal( res.status, 404, JSON.stringify( vars ) );
 			assert.ok( ! ( await res.text() ).includes( 'google.com' ) );
@@ -4182,7 +4289,7 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 		};
 		const day = Date.UTC( 2030, 5, 1, 12 );
 		assert.deepEqual( await config( day ), { live: true, liveReason: undefined } );
-		assert.deepEqual( asked, [ { now: day, budget: 1234 } ] );
+		assert.deepEqual( asked, [ { now: day, budgets: { earth: 1234, moon: 20000, mars: 4000, vesta: 3000, ceres: 3000 }, budget: 1234, moonBudget: 20000 } ] );
 		// An open answer holds for 30 s from when it was given (anyone can ask, and every page load
 		// does): not asked again till then.
 		for ( const later of [ 1, 10000, 29999 ] ) assert.deepEqual( await config( day + later ), { live: true, liveReason: undefined } );
@@ -4203,6 +4310,12 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 			answer = new Error( 'DriveLimits is down' );
 			assert.deepEqual( await config( day + MINUTE ), { live: false, liveReason: 'unknown' } );
 			assert.deepEqual( logged, [ 'Live budget check Error DriveLimits is down' ] );
+			// Every world 'unknown' then, but one known here without asking (switched off: Mars's budget
+			// of 0) said as it is, so the page closes it from the start.
+			const failing = await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( day + MINUTE + 1 ) } } ), { ...env, LIVE_MARS_DAILY_BUDGET: '0' }, {} ) ).json();
+			const unknown = { open: false, reason: 'unknown' };
+			assert.deepEqual( failing.liveWorlds, { earth: unknown, moon: unknown, mars: { open: false }, vesta: unknown, ceres: unknown } );
+			assert.deepEqual( [ failing.live, failing.liveReason, failing.liveMoon, failing.liveMoonReason ], [ false, 'unknown', false, 'unknown' ] );
 
 		} finally {
 
@@ -4210,8 +4323,9 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 
 		}
 
-		// Spent: off, saying why, and this Worker doesn't ask again that day (an ask is a request too).
-		answer = { open: false, spent: 1234 };
+		// Spent (every world's: the far worlds' too, or this Worker would still ask for them, every
+		// FAR_OPEN_MS): off, saying why, and this Worker doesn't ask again that day (an ask is a request too).
+		answer = { open: false, spent: 1234, worlds: { mars: { open: false, spent: 4000 }, vesta: { open: false, spent: 3000 }, ceres: { open: false, spent: 3000 } } };
 		assert.deepEqual( await config( day + 2 * MINUTE ), { live: false, liveReason: 'budget' } );
 		const asks = asked.length;
 		assert.deepEqual( await config( day + 11 * HOUR ), { live: false, liveReason: 'budget' } );
@@ -4220,10 +4334,88 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 		answer = { open: true, spent: 1 };
 		assert.deepEqual( await config( day + DAY ), { live: true, liveReason: undefined } );
 		assert.equal( asked.length, asks + 1 );
-		// A budget of 0, or LIVE off: off, without asking.
-		assert.deepEqual( await config( day + DAY, { LIVE_DAILY_BUDGET: '0' } ), { live: false, liveReason: undefined } );
+		// A budget of 0 on every world, or LIVE off: off, without asking.
+		const allOff = { LIVE_DAILY_BUDGET: '0', LIVE_MOON_DAILY_BUDGET: '0', LIVE_MARS_DAILY_BUDGET: '0', LIVE_VESTA_DAILY_BUDGET: '0', LIVE_CERES_DAILY_BUDGET: '0' };
+		assert.deepEqual( await config( day + DAY, allOff ), { live: false, liveReason: undefined } );
 		assert.deepEqual( await config( day + DAY, { LIVE: 'off' } ), { live: false, liveReason: undefined } );
 		assert.equal( asked.length, asks + 1 );
+		// The Earth's and the Moon's of 0 with the far worlds' open: off on the Earth (no reason), and
+		// asked, for the far worlds (their budgets in the ask).
+		const nearOff = await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( day + DAY + 1 ) } } ), { ...env, LIVE_DAILY_BUDGET: '0', LIVE_MOON_DAILY_BUDGET: '0' }, {} );
+		const nearJson = await nearOff.json();
+		assert.deepEqual( [ nearJson.live, nearJson.liveReason, nearJson.liveMoon ], [ false, undefined, false ] );
+		assert.deepEqual( nearJson.liveWorlds, { earth: { open: false }, moon: { open: false }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } );
+		assert.equal( asked.length, asks + 2 );
+		assert.deepEqual( asked.at( - 1 ).budgets, { earth: 0, moon: 0, mars: 4000, vesta: 3000, ceres: 3000 } );
+
+	} );
+
+	test( '/api/config: the Moon\'s said apart (liveMoon), its rooms having a budget of their own: the Earth\'s spent and the Moon\'s open, still asked about for the Moon; both spent, not asked again that day; a Moon budget of 0, off there only', async () => {
+
+		const worker = await loadWorker();
+		const asked = [];
+		let answer = { open: true, spent: 1, moon: { open: true, spent: 1 } };
+		const limits = {
+			liveOpen: async options => {
+
+				asked.push( options );
+				return answer;
+
+			},
+		};
+		const env = { TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: '1235', LIVE_MOON_DAILY_BUDGET: '321', LIMITS: { idFromName: id => id, get: () => limits } };
+		// (And the Moon's reason, liveMoonReason, as the last answer said it.)
+		let moonReason;
+		const config = async ( time, more = {} ) => {
+
+			const res = await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( time ) } } ), { ...env, ...more }, {} );
+			const { live, liveReason, liveMoon, liveMoonReason } = await res.json();
+			moonReason = liveMoonReason;
+			return { live, liveReason, liveMoon };
+
+		};
+		const day = Date.UTC( 2030, 7, 1, 12 );
+		assert.deepEqual( await config( day ), { live: true, liveReason: undefined, liveMoon: true } );
+		assert.deepEqual( asked, [ { now: day, budgets: { earth: 1235, moon: 321, mars: 4000, vesta: 3000, ceres: 3000 }, budget: 1235, moonBudget: 321 } ] );
+		// The Earth's spent: off there, saying why, and on on the Moon; asked again (for the Moon).
+		answer = { open: false, spent: 1235, moon: { open: true, spent: 3 } };
+		assert.deepEqual( await config( day + MINUTE ), { live: false, liveReason: 'budget', liveMoon: true } );
+		assert.deepEqual( await config( day + 2 * MINUTE ), { live: false, liveReason: 'budget', liveMoon: true } );
+		assert.equal( moonReason, undefined );
+		assert.equal( asked.length, 3 );
+		// The Moon's spent too: with the far worlds' budgets 0, neither asked about again that day.
+		answer = { open: false, spent: 1235, moon: { open: false, spent: 321 } };
+		const farOff = { LIVE_MARS_DAILY_BUDGET: '0', LIVE_VESTA_DAILY_BUDGET: '0', LIVE_CERES_DAILY_BUDGET: '0' };
+		assert.deepEqual( await config( day + 3 * MINUTE, farOff ), { live: false, liveReason: 'budget', liveMoon: false } );
+		assert.deepEqual( await config( day + HOUR, farOff ), { live: false, liveReason: 'budget', liveMoon: false } );
+		assert.equal( moonReason, 'budget' );
+		assert.equal( asked.length, 4 );
+		// With the far worlds' open (the defaults), asked again, but at most once every FAR_OPEN_MS
+		// (10 min) in this instance, the ask counted against the Earth's (spent) day.
+		answer = { open: false, spent: 1235, moon: { open: false, spent: 321 }, worlds: { mars: { open: true, spent: 5 }, vesta: { open: true, spent: 1 }, ceres: { open: false, spent: 3000 } } };
+		assert.deepEqual( await config( day + 2 * HOUR ), { live: false, liveReason: 'budget', liveMoon: false } );
+		assert.equal( asked.length, 5 );
+		for ( const later of [ MINUTE, 5 * MINUTE, 10 * MINUTE - 1 ] ) await config( day + 2 * HOUR + later );
+		assert.equal( asked.length, 5 );
+		await config( day + 2 * HOUR + 10 * MINUTE );
+		assert.equal( asked.length, 6 );
+		// (Ceres's said spent: its reason; Mars and Vesta open.)
+		const far = await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( day + 2 * HOUR + 11 * MINUTE ) } } ), env, {} ) ).json();
+		assert.deepEqual( far.liveWorlds, { earth: { open: false, reason: 'budget' }, moon: { open: false, reason: 'budget' }, mars: { open: true }, vesta: { open: true }, ceres: { open: false, reason: 'budget' } } );
+		assert.equal( asked.length, 6 );
+		// All five known spent: not asked again that day.
+		answer = { open: false, spent: 1235, moon: { open: false, spent: 321 }, worlds: { mars: { open: false, spent: 4000 }, vesta: { open: false, spent: 3000 }, ceres: { open: false, spent: 3000 } } };
+		await config( day + 3 * HOUR );
+		assert.equal( asked.length, 7 );
+		await config( day + 5 * HOUR );
+		assert.equal( asked.length, 7 );
+		// The Moon's budget of 0: off there, the Earth's as it is (a new day, asked).
+		answer = { open: true, spent: 1, moon: { open: true, spent: 1 } };
+		assert.deepEqual( await config( day + DAY, { LIVE_MOON_DAILY_BUDGET: '0' } ), { live: true, liveReason: undefined, liveMoon: false } );
+		// (Switched off there, not spent: no reason, so the page says nothing of lots of drivers.)
+		assert.equal( moonReason, undefined );
+		// And the Earth's of 0: on on the Moon.
+		assert.deepEqual( await config( day + DAY + HOUR, { LIVE_DAILY_BUDGET: '0' } ), { live: false, liveReason: undefined, liveMoon: true } );
 
 	} );
 
@@ -4384,6 +4576,12 @@ describe( 'Play stats\' counts', () => {
 		assert.deepEqual( checkCounts( Object.fromEntries( [ ...SEARCHES, 'Furka Pass', '46.57, 8.41' ].map( kind => [ `search:${ kind }`, 30 ] ) ) ), [ [ 'search', 'earth', 30 ], [ 'search', 'moon', 10 ] ] );
 		assert.deepEqual( checkCounts( Object.fromEntries( [ ...PROBLEMS, 'other' ].map( problem => [ `problem:${ problem }`, 1 ] ) ) ), PROBLEMS.map( problem => [ 'problem', problem, 1 ] ) );
 		assert.deepEqual( checkCounts( { 'world:moon': 25, 'world:earth': 1, 'play_world:moon': 700, 'play_world:earth': 9, 'level_up:all': 11 } ), [ [ 'world', 'moon', 20 ], [ 'play_world', 'moon', 600 ], [ 'level_up', 'all', 10 ] ] );
+		// Mars's, as the Moon's: its drop-ins, the globe turned to it, its driving, its places searched
+		// and its files not loading; a world that isn't one, none of them.
+		assert.deepEqual( SEARCHES, [ 'earth', 'moon', 'mars', 'vesta', 'ceres', 'coordinates', 'nothing' ] );
+		assert.deepEqual( PROBLEMS, [ 'no_ground', 'ride_failed', 'moon_failed', 'mars_failed', 'vesta_failed', 'ceres_failed', 'map_failed', 'map_session_ended', 'drop_abandoned' ] );
+		assert.deepEqual( checkCounts( { 'dropin:mars': 2, 'world:mars': 1, 'play_world:mars': 30, 'search:mars': 4, 'problem:mars_failed': 1, 'dropin:pluto': 1, 'world:pluto': 1, 'play_world:pluto': 1, 'search:pluto': 1, 'problem:pluto_failed': 1 } ),
+			[ [ 'dropin', 'mars', 2 ], [ 'world', 'mars', 1 ], [ 'play_world', 'mars', 30 ], [ 'search', 'mars', 4 ], [ 'problem', 'mars_failed', 1 ] ] );
 		assert.deepEqual( checkCounts( { 'board:open': 1, 'board:named': 1, 'board:x': 1, 'pass:open': 1, 'pass:buy': 1, 'pass:refund': 1 } ), [ [ 'board', 'open', 1 ], [ 'board', 'named', 1 ], [ 'pass', 'open', 1 ], [ 'pass', 'buy', 1 ] ] );
 		assert.deepEqual( [ 0, 4999, 5000, 19999, 20000, 39999, 40000, 1e6 ].map( dropinBucket ), [ 'under 5 s', 'under 5 s', '5-10 s', '10-20 s', '20-40 s', '20-40 s', 'over 40 s', 'over 40 s' ] );
 		assert.deepEqual( checkCounts( Object.fromEntries( [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s', '1 s' ].map( bucket => [ `dropin_time:${ bucket }`, 1 ] ) ) ).length, 5 );
@@ -4414,8 +4612,8 @@ describe( 'Play stats\' counts', () => {
 		const rides = [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDES, ...DRIVE_CARS, ...PASS_RIDES ];
 		const keysOf = {
 			load: [ 'a'.repeat( 30 ) + '.' + 'b'.repeat( 33 ) ], load_time: [ 'under 2 s', '2-5 s', '5-10 s', '10-20 s', 'over 20 s' ], load_ms: [ 'total' ],
-			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', 'moon' ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
-			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: [ 'moon' ], play_world: [ 'earth', 'moon' ], search: SEARCHES,
+			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', ...OFF_EARTH ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
+			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: OFF_EARTH, play_world: WORLD_IDS, search: SEARCHES,
 			dropin_time: [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ], problem: PROBLEMS, board: [ 'open', 'named' ], pass: [ 'open', 'buy' ], level_up: [ 'all' ], ad: [ 'shown', 'blocked' ],
 			challenge: [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open', 'share', 'link', 'link_start' ],
 		};
@@ -4441,9 +4639,10 @@ describe( 'Play stats\' counts', () => {
 
 describe( 'Where people drop in: the cells', () => {
 
-	test( 'a cell is about a kilometre each way at every latitude on both worlds, and holds what\'s in it', () => {
+	test( 'a cell is about a kilometre each way at every latitude on every world, and holds what\'s in it', () => {
 
-		for ( const world of [ 'earth', 'moon' ] ) {
+		assert.deepEqual( WORLD_IDS, [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] );
+		for ( const world of WORLD_IDS ) {
 
 			for ( let lat = - 89.95; lat < 90; lat += 7.3 ) {
 
@@ -4473,19 +4672,22 @@ describe( 'Where people drop in: the cells', () => {
 		assert.equal( cellOf( 'earth', 90, 0 ), cellOf( 'earth', 89.9999, 0 ) );
 		assert.equal( cellOf( 'earth', 37.8199, - 122.4783 ), 'earth:14212:5052' );
 		assert.equal( cellOf( 'moon', - 43.31, - 11.36 ), 'moon:1415:3720' );
+		// (Mars's grid on its 3,389.5 km sphere, as the Moon's on its: neither ever changes, or every cell
+		// counted would move.)
+		assert.equal( cellOf( 'mars', - 4.5895, 137.4417 ), 'mars:5052:18719' );
 
 	} );
 
 	test( 'only the grid\'s cells are taken, each with a drop-in in the same post, at most PLACES_PER_POST', () => {
 
-		for ( const bad of [ null, 5, '', 'earth:1:1:1', 'earth:-1:0', 'earth:20015:0', 'earth:20014:3', 'moon:5458:0', 'moon:0:4', 'mars:1:1', 'Earth:1:1', 'earth:1.5:1', 'earth: 1:1', 'earth:123456:1', '48.87,2.30' ] ) {
+		for ( const bad of [ null, 5, '', 'earth:1:1:1', 'earth:-1:0', 'earth:20015:0', 'earth:20014:3', 'moon:5458:0', 'moon:0:4', 'mars:10648:0', 'mars:0:4', 'pluto:1:1', 'Earth:1:1', 'Mars:1:1', 'earth:1.5:1', 'earth: 1:1', 'earth:123456:1', '48.87,2.30' ] ) {
 
 			assert.equal( checkCell( bad ), null, String( bad ) );
 
 		}
 
 		assert.deepEqual( checkCell( 'earth:007:1' ), { world: 'earth', row: 7, column: 1, key: 'earth:7:1' } );
-		assert.equal( cellOf( 'mars', 1, 1 ), null );
+		assert.equal( cellOf( 'pluto', 1, 1 ), null );
 		assert.equal( cellOf( 'earth', 91, 1 ), null );
 		assert.equal( cellOf( 'earth', Number.NaN, 1 ), null );
 
@@ -4499,6 +4701,13 @@ describe( 'Where people drop in: the cells', () => {
 		assert.deepEqual( keys( checkPlaces( [ golden, tycho ], [ [ 'dropin', 'moon', 1 ] ] ) ), [ tycho ] );
 		assert.deepEqual( keys( checkPlaces( [ golden, golden, tycho ], [ [ 'dropin', 'other', 2 ], [ 'dropin', 'moon', 1 ] ] ) ), [ golden, tycho ] );
 		assert.deepEqual( keys( checkPlaces( [ golden ], [ [ 'play', 'go-kart', 60 ] ] ) ), [] );
+		// Mars's cells by Mars's drop-ins alone: never through the Earth's or the Moon's, nor through a
+		// drop-in at a world that isn't one (counted as the Earth's), however many.
+		const gale = cellOf( 'mars', - 4.5895, 137.4417 );
+		assert.deepEqual( keys( checkPlaces( [ golden, tycho, gale ], [ [ 'dropin', 'mars', 1 ] ] ) ), [ gale ] );
+		assert.deepEqual( keys( checkPlaces( [ gale, tycho, golden ], [ [ 'dropin', 'other', 3 ], [ 'dropin', 'moon', 3 ] ] ) ), [ tycho, golden ] );
+		assert.deepEqual( keys( checkPlaces( [ gale, golden ], [ [ 'dropin', 'pluto', 5 ] ] ) ), [ golden ] );
+		assert.deepEqual( keys( checkPlaces( [ gale, 'pluto:1:1' ], [ [ 'dropin', 'mars', 1 ], [ 'dropin', 'pluto', 1 ] ] ) ), [ gale ] );
 
 	} );
 
@@ -4525,6 +4734,25 @@ describe( 'Where people drop in: the cells', () => {
 		const offDaedalus = named( 'moon', - 5.9, - 179.9 );
 		assert.deepEqual( [ offDaedalus.name, offDaedalus.region ], [ '21 km E of Daedalus crater', '' ] );
 		assert.match( offDaedalus.link, /world=moon/ );
+		// Mars's, the same, named up to 500 km off (it's about twice the Moon's size), its links to Mars.
+		const curiosity = MARS_PLACES.find( p => p.id === 'mars-curiosity' );
+		assert.deepEqual( named( 'mars', curiosity.lat, curiosity.lon ), { name: curiosity.name, region: curiosity.region, link: '/?spot=mars-curiosity', featured: true } );
+		const nearest = ( lat, lon ) => MARS_PLACES.map( p => [ metresOn( 'mars', lat, lon, p.lat, p.lon ), p ] ).sort( ( a, b ) => a[ 0 ] - b[ 0 ] )[ 0 ];
+		const olympus = MARS_PLACES.find( p => p.id === 'mars-olympus-mons' );
+		for ( const metres of [ 120000, 300000, 450000 ] ) {
+
+			const [ lat, lon ] = destination( 'mars', olympus.lat, olympus.lon, 70, metres );
+			const [ far, place ] = nearest( lat, lon );
+			const off = named( 'mars', lat, lon );
+			assert.match( off.name, new RegExp( `^${ Math.round( far / 1000 ) } km [NESW]{1,2} of ${ place.name }$` ) );
+			assert.deepEqual( [ off.region, off.featured, new URLSearchParams( off.link.slice( 2 ) ).get( 'world' ) ], [ '', false, 'mars' ] );
+
+		}
+
+		// Further than that from them all: its coordinates.
+		const [ alone ] = [ [ 10, 10 ], [ 60, - 40 ], [ - 60, 100 ], [ 40, 160 ] ].filter( ( [ lat, lon ] ) => nearest( lat, lon )[ 0 ] > 500000 );
+		assert.ok( alone );
+		assert.match( named( 'mars', ...alone ).name, /^\d+\.\d\d° [NS], \d+\.\d\d° [EW]$/ );
 		// What a page would get from the link: the place pinned, by name.
 		const link = new URLSearchParams( named( 'earth', 45.8386, 4.9505 ).link.slice( 2 ) );
 		assert.deepEqual( Object.fromEntries( link ), { at: '45.8386,4.9505', name: '12 km NE of Lyon', region: 'Rhône-Alpes, France' } );
@@ -4578,7 +4806,7 @@ describe( 'Where people drop in: the cells', () => {
 		assert.deepEqual( keys( await topCells( d1, { world: 'earth', from: '2026-11-10', to: '2026-11-10' } ) ), [ [ A, 6, 1 ], [ B, 2, 1 ] ] );
 		// The Moon's own; a world that isn't one is an error.
 		assert.deepEqual( keys( await topCells( d1, { world: 'moon', ...period } ) ), [ [ MOON, 9, 1 ] ] );
-		await assert.rejects( topCells( d1, { world: 'mars', ...period } ), /No world mars/ );
+		await assert.rejects( topCells( d1, { world: 'pluto', ...period } ), /No world pluto/ );
 		// At least one, and at most 2,000.
 		for ( const most of [ 1, 0, - 3, 'x' ] ) assert.deepEqual( keys( await topCells( d1, { world: 'earth', ...period, most } ) ), [ [ B, 6, 3 ] ], String( most ) );
 		for ( let i = 0; i < 2100; i ++ ) add( '2026-11-20', cellOf( 'earth', - 60 + i * 0.01, 100 ), 1 );
@@ -4746,14 +4974,44 @@ describe( 'The look that travels', () => {
 // Monday 16 November 2026, 15:00 UTC: a day, a week and a month under way. The month ends on Monday
 // 30 November's night, a week after the next week starts.
 const CHALLENGE_DAY = Date.UTC( 2026, 10, 16, 15, 0, 0 );
+// CHALLENGE_MISSES's limit a minute (wrangler.drive.jsonc): a list, its four re-asks while a new
+// period's routes are laid out, all fifteen boards and a time, with room to spare.
+const CHALLENGE_MISSES = 24;
+assert.equal( Number( /"name": "CHALLENGE_MISSES"[^}]*"limit": (\d+)/.exec( readFileSync( new URL( '../wrangler.drive.jsonc', import.meta.url ), 'utf8' ) )?.[ 1 ] ), CHALLENGE_MISSES );
 const MOON_HEIGHTS = new URL( '../drive/public/moon/height.bin', import.meta.url );
+const MARS_HEIGHTS = new URL( '../drive/public/mars/height.bin', import.meta.url );
+const HEIGHTS_OF = { vesta: new URL( '../drive/public/vesta/height.bin', import.meta.url ), ceres: new URL( '../drive/public/ceres/height.bin', import.meta.url ) };
 
-// A Moon route's points on steep ground that could have been elsewhere: all but the place's own pin
-// (a sprint's or collectibles' start, a landmark's goal), which is where it is.
-function movableFaults( route ) {
+// The site's files as the Worker's ASSETS binding has them, for those that ask it: each world's
+// heights by its own path (/moon/height.bin, /mars/height.bin, /vesta/..., /ceres/...), nothing else.
+function heightsAssets() {
+
+	const files = { '/moon/height.bin': MOON_HEIGHTS, '/mars/height.bin': MARS_HEIGHTS, '/vesta/height.bin': HEIGHTS_OF.vesta, '/ceres/height.bin': HEIGHTS_OF.ceres };
+	return { fetch: async request => {
+
+		const file = files[ new URL( request.url ).pathname ];
+		return file ? new Response( readFileSync( file ) ) : new Response( 'Not found', { status: 404 } );
+
+	} };
+
+}
+
+// `world`'s heights (one made in the page: the Moon's, Mars's, Vesta's, Ceres's) handed to the
+// Worker's ground for it (challenges.js's GROUNDS: the Moon's is moon-height.js's own), as it hands
+// them over itself.
+function giveHeights( world ) {
+
+	const bytes = readFileSync( { moon: MOON_HEIGHTS, mars: MARS_HEIGHTS, ...HEIGHTS_OF }[ world ] );
+	GROUNDS[ world ].setHeights( new Int16Array( bytes.buffer, bytes.byteOffset, bytes.byteLength / 2 ) );
+
+}
+
+// A Moon (or Mars) route's points on steep ground that could have been elsewhere: all but the
+// place's own pin (a sprint's or collectibles' start, a landmark's goal), which is where it is.
+function movableFaults( route, world = 'moon' ) {
 
 	const [ lat, lon ] = route.goal ? route.points[ 0 ] : [ route.start.lat, route.start.lon ];
-	return [ [ route.start.lat, route.start.lon ], ...route.points ].filter( point => moonSteep( ...point ) ).length - ( moonSteep( lat, lon ) ? 1 : 0 );
+	return [ [ route.start.lat, route.start.lon ], ...route.points ].filter( point => steepOn( world, ...point ) ).length - ( steepOn( world, lat, lon ) ? 1 : 0 );
 
 }
 
@@ -4985,7 +5243,7 @@ describe( 'World Drive challenges: the rules', () => {
 
 		const bytes = seq => Uint8Array.from( { length: 32 }, ( _, i ) => ( i * 29 + seq * 7 ) & 255 );
 		const golden = { name: 'Golden Gate Bridge', lat: 37.8199, lon: - 122.4783, heading: 352 };
-		for ( const world of [ 'earth', 'moon' ] ) {
+		for ( const world of WORLD_IDS ) {
 
 			for ( const size of [ 'day', 'week', 'month' ] ) {
 
@@ -5080,7 +5338,7 @@ describe( 'World Drive challenges: the rules', () => {
 
 		const env = { TURNSTILE_SECRET: PASS_SECRET };
 		const other = { TURNSTILE_SECRET: '2x0000000000000000000000000000000AA' };
-		for ( const world of [ 'earth', 'moon' ] ) {
+		for ( const world of WORLD_IDS ) {
 
 			// A round of days: as many as there are places, each one once.
 			const first = periodOf( 'day', CHALLENGE_DAY );
@@ -5133,7 +5391,7 @@ describe( 'World Drive challenges: the rules', () => {
 
 			const env = { TURNSTILE_SECRET: secret };
 			const pick = async ( kind, time, world ) => ( await rotationPick( env, periodOf( kind, time ), world, [] ) ).place.id;
-			for ( const world of [ 'earth', 'moon' ] ) {
+			for ( const world of WORLD_IDS ) {
 
 				let last = null;
 				for ( let i = 0; i < 3 * 366; i ++ ) {
@@ -5357,7 +5615,7 @@ describe( 'World Drive challenges: the rules', () => {
 				put: async ( request, response ) => void kept.set( request.url, { body: await response.text(), control: response.headers.get( 'Cache-Control' ) } ),
 				delete: async request => kept.delete( request.url ),
 			} };
-			// A day no other test asks for the six on (this process keeps the six it has fixed a minute).
+			// A day no other test asks for the fifteen on (this process keeps the fifteen it has fixed a minute).
 			const now = Date.UTC( 2027, 2, 10, 12 );
 			const env = { DB, TURNSTILE_SECRET: PASS_SECRET };
 			const ask = async ( handler, path ) => {
@@ -5368,9 +5626,12 @@ describe( 'World Drive challenges: the rules', () => {
 				return { body: await res.json(), read };
 
 			};
-			const ids = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.map( c => c.id );
-			assert.equal( ids.length, 6 );
-			// Each of the six a board of 1,240: 1,200 quicker times, then 40 players at the bottom of all six
+			// (Asked again if the first ask left some for the next: no more than three checked on their
+			// ground an ask, should this process have the Moon's or Mars's heights already.)
+			let ids = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.map( c => c.id );
+			for ( let k = 0; k < 3 && ids.length < 15; k ++ ) ids = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.map( c => c.id );
+			assert.equal( ids.length, 15 );
+			// Each of the fifteen a board of 1,240: 1,200 quicker times, then 40 players at the bottom of all fifteen
 			// (a script's own, asked as in turn); and a finished board of yesterday's, the same.
 			const { meta: { last_row_id: past } } = await raw.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at, final_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
 				.bind( 'day:2027-03-09', 'earth', 'sprint', 'Old', '', '{"start":{"lat":0,"lon":0},"points":[[0,0.01]],"radius":30}', 'rotation', now - 36 * HOUR, now - 12 * HOUR, now - 36 * HOUR, now - 11 * HOUR ).run();
@@ -5392,14 +5653,15 @@ describe( 'World Drive challenges: the rules', () => {
 			// list's tops.
 			const first = await ask( listChallenges, `/api/challenges?id=${ player( 0 ) }` );
 			assert.ok( first.body.challenges.every( c => c.me.rank === RANK_MOST + 1 ) );
-			assert.ok( first.read <= 6 * ( RANK_MOST + 40 ), String( first.read ) );
+			assert.ok( first.read <= 15 * ( RANK_MOST + 40 ), String( first.read ) );
 			// Then a script's 40 players in turn, each missing the cache for its own rows: a few rows each,
-			// not six counts of the 1,000 ahead.
+			// not fifteen counts of the 1,000 ahead.
 			for ( let i = 1; i < bottom; i ++ ) {
 
 				const look = await ask( listChallenges, `/api/challenges?id=${ player( i ) }` );
 				assert.ok( look.body.challenges.every( c => c.me.rank === RANK_MOST + 1 ), JSON.stringify( look.body.challenges.map( c => c.me ) ) );
-				assert.ok( look.read <= 24, `list ${ i }: ${ look.read } rows read` );
+				// (Two a board and a few: 24 with the nine of three worlds, 36 with the fifteen of five.)
+				assert.ok( look.read <= 2 * ids.length + 6, `list ${ i }: ${ look.read } rows read` );
 
 			}
 
@@ -5469,7 +5731,9 @@ describe( 'World Drive challenges: the rules', () => {
 			const listing = await ask( listChallenges, '/api/challenges' );
 			const posted = listing.body.challenges.find( c => c.id === challenge.id );
 			t.diagnostic( `a board's miss with its ghosts kept read ${ ghosted.read } rows, the list's ${ listing.read }` );
-			assert.ok( listing.read <= 52, `the list's miss: ${ listing.read } rows read` );
+			// (Fifteen challenges' tops and races, and their players: 122 measured; 74 with the nine of
+			// three worlds. About eight a challenge.)
+			assert.ok( listing.read <= 8 * ids.length + 8, `the list's miss: ${ listing.read } rows read` );
 			assert.ok( posted.top.every( row => ! row.run ) );
 			assert.deepEqual( [ posted.race.name, posted.race.run, posted.race.ms ], [ 'Rows 10', 'rowsrun000000000010', 60100 ] );
 			assert.ok( listing.body.challenges.filter( c => c.id !== challenge.id ).every( c => c.race === null ) );
@@ -5901,6 +6165,195 @@ describe( 'World Drive challenges: the rules', () => {
 
 	} );
 
+	test( 'on Mars, as on the Moon: its routes checked on its own heights (MOLA\'s, from /mars/height.bin, on its own made-up ground), no gate on ground sloping 20° or more and its legs kept off its canyons\' walls where any of its tries is', async () => {
+
+		giveHeights( 'moon' );
+		giveHeights( 'mars' );
+		// Mars's own ground: Olympus Mons's top over 20 km up (higher than anything on the Moon), and down
+		// Valles Marineris's south wall into Coprates Chasma, from the plateau to the canyon's floor 8 km
+		// under it, steep stretch after steep stretch; along the floor, none. The Moon's ground at the
+		// same latitudes and longitudes is nothing like it.
+		const place = id => MARS_PLACES.find( p => p.id === id );
+		const summit = place( 'mars-olympus-summit' );
+		assert.ok( GROUNDS.mars.heightAt( summit.lat, summit.lon ) > 20000 );
+		assert.ok( GROUNDS.moon.heightAt( summit.lat, summit.lon ) < 12000 );
+		const canyon = place( 'mars-valles-marineris' );
+		const south = metres => destination( 'mars', canyon.lat, canyon.lon, 180, metres );
+		const wall = legFaultsOn( 'mars', ...south( 42000 ), ...south( 28000 ) );
+		assert.ok( wall >= 50, String( wall ) );
+		assert.equal( legFaultsOn( 'mars', canyon.lat, canyon.lon, ...destination( 'mars', canyon.lat, canyon.lon, 90, 2000 ) ), 0, 'the canyon\'s floor' );
+		assert.notEqual( legFaultsOn( 'moon', ...south( 42000 ), ...south( 28000 ) ), wall );
+		// Every Mars place's routes of each kind, laid out as the Worker does (its check on Mars's
+		// heights): hardly a point left on steep ground.
+		let checked = 0;
+		let faults = 0;
+		const check = ( route, kind, enough ) => routeFaults( 'mars', route, kind, enough );
+		for ( const at of MARS_PLACES ) {
+
+			for ( const kind of KINDS ) {
+
+				const bytes = Uint8Array.from( { length: 16 }, ( _, i ) => at.id.charCodeAt( i % at.id.length ) * ( i + 1 ) );
+				const route = makeRoute( { kind, size: 'week', world: 'mars', place: at }, randomFrom( bytes ), check );
+				faults += movableFaults( route, 'mars' );
+				checked += route.points.length;
+
+			}
+
+		}
+
+		assert.ok( faults <= checked * 0.01, `${ faults } of ${ checked }` );
+		// And their sprints' and landmarks' legs of each length: fewer steep ones than with the points
+		// alone checked, and hardly any.
+		const lay = check => {
+
+			let legs = 0;
+			let steep = 0;
+			for ( const at of MARS_PLACES ) {
+
+				for ( const size of [ 'day', 'week', 'month' ] ) {
+
+					for ( const kind of [ 'sprint', 'landmark' ] ) {
+
+						const seed = Uint8Array.from( { length: 16 }, ( _, i ) => ( at.id.charCodeAt( i % at.id.length ) * ( i + 7 ) + size.length * 31 + kind.length ) & 255 );
+						const route = makeRoute( { kind, size, world: 'mars', place: at }, randomFrom( seed ), check );
+						const points = [ [ route.start.lat, route.start.lon ], ...route.points ];
+						for ( let i = 1; i < points.length; i ++ ) {
+
+							legs ++;
+							if ( legFaultsOn( 'mars', ...points[ i - 1 ], ...points[ i ] ) ) steep ++;
+
+						}
+
+					}
+
+				}
+
+			}
+
+			return { legs, steep };
+
+		};
+		const legs = lay( check );
+		const pointsAlone = lay( route => [ [ route.start.lat, route.start.lon ], ...route.points ].filter( point => steepOn( 'mars', ...point ) ).length );
+		assert.ok( legs.steep <= legs.legs * 0.005 && legs.steep < pointsAlone.steep, JSON.stringify( { legs, pointsAlone } ) );
+		// The Worker lays them out so: on Mars with Mars's heights from the site's own file (through
+		// ASSETS), and the Moon's with the Moon's.
+		const env = { TURNSTILE_SECRET: PASS_SECRET, ASSETS: heightsAssets() };
+		const period = periodOf( 'week', CHALLENGE_DAY );
+		const at = place( 'mars-curiosity' );
+		const made = JSON.parse( ( await challengeFor( env, period, 'mars', { place: at, kind: 'sprint', source: 'rotation' }, CHALLENGE_DAY ) ).route );
+		// (Its random numbers the Worker's own: an HMAC of the period, the world, the kind and the place.)
+		const key = await derivedKey( PASS_SECRET, 'world-drive challenges v1' );
+		const random = randomFrom( new Uint8Array( await crypto.subtle.sign( 'HMAC', key, encoder.encode( `route:${ period.key }:mars:sprint:${ at.lat },${ at.lon }` ) ) ) );
+		assert.deepEqual( made, makeRoute( { kind: 'sprint', size: 'week', world: 'mars', place: at }, random, check ) );
+
+	} );
+
+	test( 'on Vesta and Ceres the slope checks measure against the level spheroid\'s up (level.js), not the radial: a point is steep as its ground leans 20° from what\'s level there, a leg as it rises along the level up; their places\' routes checked on it leave fewer points on steep ground than unchecked', async () => {
+
+		const { levelFrame, pointOn } = await import( '../src/drive-app/level.js' );
+		giveHeights( 'vesta' );
+		giveHeights( 'ceres' );
+		const tan = Math.tan( 20 * Math.PI / 180 );
+		const minus = ( a, b ) => [ a[ 0 ] - b[ 0 ], a[ 1 ] - b[ 1 ], a[ 2 ] - b[ 2 ] ];
+		const dot = ( a, b ) => a[ 0 ] * b[ 0 ] + a[ 1 ] * b[ 1 ] + a[ 2 ] * b[ 2 ];
+		const cross = ( a, b ) => [ a[ 1 ] * b[ 2 ] - a[ 2 ] * b[ 1 ], a[ 2 ] * b[ 0 ] - a[ 0 ] * b[ 2 ], a[ 0 ] * b[ 1 ] - a[ 1 ] * b[ 0 ] ];
+		for ( const world of [ 'vesta', 'ceres' ] ) {
+
+			const { heightAt } = GROUNDS[ world ];
+			const ground = ( lat, lon ) => pointOn( world, lat, lon, heightAt( lat, lon, 30 ) );
+			// A point: the ground's plane through the four points 15 m north, east, south and west, and the
+			// angle of its normal from the level up there (what the radial check would say beside it).
+			let [ points, agreed, near, radialOther ] = [ 0, 0, 0, 0 ];
+			for ( let lat = - 80; lat <= 80; lat += 4 ) {
+
+				for ( let lon = - 180; lon < 180; lon += 9 ) {
+
+					points ++;
+					const [ n, e, s, w ] = [ 0, 90, 180, 270 ].map( bearing => destination( world, lat, lon, bearing, 15 ) );
+					const normal = cross( minus( ground( ...e ), ground( ...w ) ), minus( ground( ...n ), ground( ...s ) ) );
+					const cos = dot( normal, levelFrame( world, lat, lon ).up ) / Math.hypot( ...normal );
+					const leans = Math.sqrt( 1 - cos * cos ) / cos;
+					const radial = Math.hypot( heightAt( ...n, 30 ) - heightAt( ...s, 30 ), heightAt( ...e, 30 ) - heightAt( ...w, 30 ) ) / 30 >= tan;
+					if ( radial !== leans >= tan ) radialOther ++;
+					if ( Math.abs( leans - tan ) < 0.02 ) {
+
+						near ++;
+						continue;
+
+					}
+
+					assert.equal( steepOn( world, lat, lon ), leans >= tan, `${ world } ${ lat }, ${ lon }: leans ${ ( Math.atan( leans ) * 180 / Math.PI ).toFixed( 1 ) }°` );
+					agreed ++;
+
+				}
+
+			}
+
+			assert.ok( agreed > points * 0.9, `${ world }: ${ agreed } of ${ points } (${ near } near 20°)` );
+			// Vesta's level leans up to 12.6° off the radial: there the radial check would say otherwise
+			// at many places; Ceres's hardly leans (4°), at few.
+			if ( world === 'vesta' ) assert.ok( radialOther > points * 0.02, `${ world }: the radial says otherwise at ${ radialOther } of ${ points }` );
+			// A leg of 100 m (one stretch of LEG_REACH): steep as it rises along the level up at its start
+			// against how far it goes across it.
+			let [ legs, steepLegs ] = [ 0, 0 ];
+			for ( let lat = - 76; lat <= 76; lat += 8 ) {
+
+				for ( let lon = - 175; lon < 180; lon += 25 ) {
+
+					for ( const bearing of [ 0, 135 ] ) {
+
+						const end = destination( world, lat, lon, bearing, 100 );
+						const d = minus( ground( ...end ), ground( lat, lon ) );
+						const { up } = levelFrame( world, lat, lon );
+						const rise = dot( d, up );
+						const across = Math.hypot( ...minus( d, up.map( v => v * rise ) ) );
+						if ( Math.abs( Math.abs( rise ) / across - tan ) < 0.02 ) continue;
+						legs ++;
+						const steep = Math.abs( rise ) >= tan * across;
+						if ( steep ) steepLegs ++;
+						assert.equal( legFaultsOn( world, lat, lon, ...end ), steep ? 1 : 0, `${ world } ${ lat }, ${ lon } at ${ bearing }°: rises ${ rise.toFixed( 1 ) } m over ${ across.toFixed( 1 ) } m` );
+
+					}
+
+				}
+
+			}
+
+			assert.ok( legs > 400 && steepLegs > 0, `${ world }: ${ steepLegs } of ${ legs }` );
+			// Every place's routes of each kind, laid out as the Worker does (checked on its heights), and
+			// the same unchecked. Far rougher than the Moon's or Mars's (half of what's round Vesta's
+			// places, unchecked, leans 20° or more; a tenth of Ceres's), so not "hardly any", as there,
+			// but far fewer than without the check.
+			const faultsOf = check => {
+
+				let [ checked, faults ] = [ 0, 0 ];
+				for ( const at of { vesta: VESTA_PLACES, ceres: CERES_PLACES }[ world ] ) {
+
+					for ( const kind of KINDS ) {
+
+						const bytes = Uint8Array.from( { length: 16 }, ( _, i ) => at.id.charCodeAt( i % at.id.length ) * ( i + 1 ) );
+						const route = makeRoute( { kind, size: 'week', world, place: at }, randomFrom( bytes ), check );
+						faults += movableFaults( route, world );
+						checked += route.points.length;
+
+					}
+
+				}
+
+				return { checked, faults };
+
+			};
+			const { checked, faults } = faultsOf( ( route, kind, enough ) => routeFaults( world, route, kind, enough ) );
+			const unchecked = faultsOf( undefined ).faults;
+			assert.ok( faults <= unchecked * 0.7, `${ world }: ${ faults } checked, ${ unchecked } unchecked` );
+			assert.ok( faults <= checked * { vesta: 0.35, ceres: 0.05 }[ world ], `${ world }: ${ faults } of ${ checked }` );
+			console.log( `# ${ world }: ${ agreed } points as the level says (${ near } near 20°, the radial otherwise at ${ radialOther }); ${ steepLegs } of ${ legs } legs steep; routes' points steep ${ faults } of ${ checked } (unchecked ${ unchecked })` );
+
+		}
+
+	} );
+
 	test( 'the rotation keeps clear of what D1 has fixed: a year of days fixed as the Worker fixes them, with the owner\'s picks for weeks and months and places approved and unapproved on the way, never a place twice in a row nor two of the three live alike', async () => {
 
 		// As liveChallenges fixes them: each day the periods not yet fixed, the longest first, each from
@@ -5914,11 +6367,12 @@ describe( 'World Drive challenges: the rules', () => {
 			{ world: 'earth', cell_row: 14212, cell_column: 5052, name: 'Lombard Street', region: 'San Francisco', lat: 37.8021, lon: - 122.4187 },
 			{ world: 'earth', cell_row: 15000, cell_column: 4000, name: 'Somewhere busy', region: '', lat: 41.2, lon: 12.1 },
 			{ world: 'moon', cell_row: 300, cell_column: 400, name: 'A busy crater', region: '', lat: 12.5, lon: 30.25 },
+			{ world: 'mars', cell_row: 5000, cell_column: 9000, name: 'A busy plain', region: '', lat: - 5.4, lon: - 27.9 },
 		];
 		for ( const secret of [ PASS_SECRET, 'another-secret-for-the-rotation-x' ] ) {
 
 			const env = { TURNSTILE_SECRET: secret };
-			for ( const world of [ 'earth', 'moon' ] ) {
+			for ( const world of WORLD_IDS ) {
 
 				const rows = new Map();
 				let approved = [];
@@ -6015,17 +6469,23 @@ describe( 'World Drive challenges: the rules', () => {
 
 describe( 'World Drive challenge ghosts: the rules', () => {
 
-	// A sprint at the Arc de Triomphe, and a hunt for stars on the Moon, laid out as the Worker does.
+	// A sprint at the Arc de Triomphe, a hunt for stars on the Moon, and a drive to a landmark on Mars
+	// (the Pathfinder lander's), laid out as the Worker does.
 	const sprint = { world: 'earth', kind: 'sprint', route: makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 21 ) ) ) };
 	const hunt = { world: 'moon', kind: 'collect', route: makeRoute( { kind: 'collect', size: 'week', world: 'moon', place: { name: 'Tycho', lat: - 43.31, lon: - 11.36 } }, randomFrom( new Uint8Array( 32 ).fill( 22 ) ) ) };
+	const drive = { world: 'mars', kind: 'landmark', route: makeRoute( { kind: 'landmark', size: 'week', world: 'mars', place: { name: 'Ares Vallis', lat: 19.13, lon: - 33.22 } }, randomFrom( new Uint8Array( 32 ).fill( 23 ) ) ) };
 
-	test( 'a ghost\'s frame is the scene\'s at the route\'s start: where a point is from it (localOf) is where 3d-tiles-renderer\'s object frame there puts it, to the millimetre, on the Earth\'s ellipsoid and the Moon\'s sphere', async () => {
+	test( 'a ghost\'s frame is the scene\'s at the route\'s start: where a point is from it (localOf) is where 3d-tiles-renderer\'s object frame there puts it, to the millimetre, on the Earth\'s ellipsoid and the Moon\'s and Mars\'s spheres', async () => {
 
 		const { Matrix4, Vector3 } = await import( 'three' );
 		const { Ellipsoid, OBJECT_FRAME, WGS84_ELLIPSOID } = await import( '3d-tiles-renderer' );
 		const moon = new Ellipsoid( 1737400, 1737400, 1737400 );
+		const mars = new Ellipsoid( 3389500, 3389500, 3389500 );
 		const rad = Math.PI / 180;
-		for ( const [ world, ellipsoid, lat, lon ] of [ [ 'earth', WGS84_ELLIPSOID, 46.5725, 8.4153 ], [ 'earth', WGS84_ELLIPSOID, - 33.86, 151.21 ], [ 'earth', WGS84_ELLIPSOID, 64.1, - 21.9 ], [ 'moon', moon, - 43.31, - 11.36 ], [ 'moon', moon, 0.67, 23.47 ] ] ) {
+		for ( const [ world, ellipsoid, lat, lon ] of [
+			[ 'earth', WGS84_ELLIPSOID, 46.5725, 8.4153 ], [ 'earth', WGS84_ELLIPSOID, - 33.86, 151.21 ], [ 'earth', WGS84_ELLIPSOID, 64.1, - 21.9 ], [ 'moon', moon, - 43.31, - 11.36 ], [ 'moon', moon, 0.67, 23.47 ],
+			[ 'mars', mars, 18.65, - 133.8 ], [ 'mars', mars, - 4.5895, 137.4417 ], [ 'mars', mars, - 83.9, 160 ],
+		] ) {
 
 			const frame = new Matrix4();
 			ellipsoid.getObjectFrame( lat * rad, lon * rad, 0, 0, 0, 0, frame, OBJECT_FRAME );
@@ -6038,6 +6498,186 @@ describe( 'World Drive challenge ghosts: the rules', () => {
 				assert.ok( Math.abs( - point.x - east ) < 0.001 && Math.abs( point.z - north ) < 0.001 && Math.abs( point.y - up ) < 0.001, `${ world } ${ lat },${ lon }: ${ point.toArray() } ${ [ east, north, up ] }` );
 
 			}
+
+		}
+
+		// Mars's frame is its sphere, never the Earth's ellipsoid (where a point 5 km off on Mars would be
+		// nearly twice as far); a world that isn't one has none, and no ghost on it is taken.
+		const [ east ] = localOf( 'mars', { lat: 0, lon: 0 }, 0, 5000 / ( 3389500 * rad ) );
+		assert.ok( Math.abs( east - 5000 ) < 1, String( east ) );
+		assert.equal( localOf( 'pluto', { lat: 0, lon: 0 }, 0, 0.1 ), null );
+		const run = fairRun( drive, 3000 );
+		assert.equal( ghostFault( { ...drive, world: 'pluto' }, run.ms, run.passes, fairGhost( drive, run.ms, run.passes ) ), 'world' );
+
+	} );
+
+	// Vesta's and Ceres's frames lean on their level spheroids (level.js): the scene's up is the
+	// spheroid's normal, not the radial, and the scene's frame is moved to the car every recentre m
+	// while it drives (the recorder's samples moved with it). A run recorded so is taken whatever its
+	// recentres; the same run with its samples left where they were isn't.
+	test( 'on Vesta and Ceres a ghost\'s frame is the level one (levelFrame): localOf is where it puts a point, and a run recorded across the scene\'s recentres (its samples moved with them) is taken, in a deep basin, on a leaning slope and in the air; one whose samples weren\'t moved, or off its gates or its start, isn\'t', async () => {
+
+		const { Group, Matrix4, Object3D, Vector3 } = await import( 'three' );
+		const { Ellipsoid, OBJECT_FRAME } = await import( '3d-tiles-renderer' );
+		const { createRecorder } = await import( '../src/drive-app/challenge-ghost.js' );
+		const { inFrame, levelFrame, levelled, pointOn } = await import( '../src/drive-app/level.js' );
+		const { WORLDS } = await import( '../src/drive-app/worlds.js' );
+		assert.deepEqual( WORLD_IDS.filter( levelled ), [ 'vesta', 'ceres' ] );
+		assert.deepEqual( [ WORLDS.vesta.recentre, WORLDS.ceres.recentre ], [ 1000, 1500 ] );
+		// The scene's matrix for the body at a place (main.js's placeBody): the inverse of the frame there,
+		// x west, y up, z north.
+		const basis = ( { origin, east, north, up } ) => new Matrix4().makeBasis( new Vector3( ...east ).negate(), new Vector3( ...up ), new Vector3( ...north ) ).setPosition( ...origin );
+		const groupAt = ( world, lat, lon, height ) => {
+
+			if ( levelled( world ) ) return basis( levelFrame( world, lat, lon, height ) ).invert();
+			const R = WORLDS[ world ].radius;
+			const m = new Matrix4();
+			new Ellipsoid( R, R, R ).getObjectFrame( lat * Math.PI / 180, lon * Math.PI / 180, height, 0, 0, 0, m, OBJECT_FRAME );
+			return m.invert();
+
+		};
+		// With no level (the Moon), levelFrame's basis is 3d-tiles-renderer's object frame.
+		const R = WORLDS.moon.radius;
+		const object = new Matrix4();
+		new Ellipsoid( R, R, R ).getObjectFrame( 23 * Math.PI / 180, - 47 * Math.PI / 180, 0, 0, 0, 0, object, OBJECT_FRAME );
+		const made = basis( levelFrame( 'moon', 23, - 47, 0 ) );
+		assert.ok( object.elements.every( ( v, i ) => Math.abs( v - made.elements[ i ] ) < 1e-6 ) );
+		// localOf on a levelled world: the point in the level frame at the start (height 0), where the
+		// scene's own frame there puts it; along the level up from the pin, straight up in it, though
+		// that's 12° off the radial at 40° N on Vesta.
+		for ( const [ world, lat, lon ] of [ [ 'vesta', 40, 30 ], [ 'vesta', - 70, - 60 ], [ 'ceres', - 30, 100 ], [ 'ceres', 60, - 150 ] ] ) {
+
+			const frame = basis( levelFrame( world, lat, lon, 0 ) ).invert();
+			for ( const [ dLat, dLon, height ] of [ [ 0.01, 0.02, 0 ], [ - 0.05, 0.03, 2500 ], [ 0.07, - 0.06, - 30000 ] ] ) {
+
+				const point = new Vector3( ...pointOn( world, lat + dLat, lon + dLon, height ) ).applyMatrix4( frame );
+				const [ east, north, up ] = localOf( world, { lat, lon }, lat + dLat, lon + dLon, height );
+				assert.ok( Math.abs( - point.x - east ) < 0.001 && Math.abs( point.z - north ) < 0.001 && Math.abs( point.y - up ) < 0.001, `${ world } ${ lat },${ lon }: ${ point.toArray() } ${ [ east, north, up ] }` );
+
+			}
+
+		}
+
+		const level = levelFrame( 'vesta', 40, 30, 0 );
+		const over = inFrame( level, level.origin.map( ( v, i ) => v + level.up[ i ] * 500 ) );
+		assert.ok( Math.abs( over[ 0 ] ) < 1e-6 && Math.abs( over[ 1 ] ) < 1e-6 && Math.abs( over[ 2 ] - 500 ) < 1e-6 );
+		const radial = localOf( 'vesta', { lat: 40, lon: 30 }, 40, 30, 500 );
+		assert.ok( Math.hypot( radial[ 0 ], radial[ 1 ] ) > 50, String( radial ) );
+
+		// A run: from `start` through `points` at `speed` m/s, the car's pivot `lift` m over the ground at
+		// groundAt( lat, lon ) (and `hop` m more, up and down), recorded as the page does (the recorder,
+		// packed at the route's start) in a scene moved to the car every `every` m (0: never), its samples
+		// moved with it or not.
+		const metres = ( world, a, b ) => {
+
+			const [ p, q ] = [ pointOn( world, ...a ), pointOn( world, ...b ) ];
+			return Math.hypot( p[ 0 ] - q[ 0 ], p[ 1 ] - q[ 1 ], p[ 2 ] - q[ 2 ] );
+
+		};
+		const record = ( { world, start, points, groundAt, speed = 30, lift = 0.6, every = 0, moved = true, hop = 0, packStart = start } ) => {
+
+			const globe = { earth: new Group(), ellipsoid: new Ellipsoid( WORLDS[ world ].radius, WORLDS[ world ].radius, WORLDS[ world ].radius ) };
+			const setGroup = matrix => {
+
+				matrix.decompose( globe.earth.position, globe.earth.quaternion, globe.earth.scale );
+				globe.earth.updateMatrixWorld( true );
+
+			};
+			setGroup( groupAt( world, start.lat, start.lon, groundAt( start.lat, start.lon ) ) );
+			let origin = [ start.lat, start.lon ];
+			const recorder = createRecorder();
+			const pivot = new Object3D();
+			const place = ( lat, lon, t ) => {
+
+				pivot.position.set( ...pointOn( world, lat, lon, groundAt( lat, lon ) + lift + hop * Math.abs( Math.sin( t / 3 ) ) ) ).applyMatrix4( globe.earth.matrixWorld );
+				pivot.updateMatrixWorld( true );
+
+			};
+			const path = [ [ start.lat, start.lon ], ...points ];
+			const dt = 1 / 30;
+			let ms = 0;
+			let recentres = 0;
+			const passes = [];
+			place( start.lat, start.lon, 0 );
+			recorder.start( pivot );
+			for ( let leg = 1; leg < path.length; leg ++ ) {
+
+				const [ a, b ] = [ path[ leg - 1 ], path[ leg ] ];
+				const steps = Math.ceil( metres( world, a, b ) / speed / dt );
+				for ( let k = 1; k <= steps; k ++ ) {
+
+					ms += dt * 1000;
+					const [ lat, lon ] = [ a[ 0 ] + ( b[ 0 ] - a[ 0 ] ) * k / steps, a[ 1 ] + ( b[ 1 ] - a[ 1 ] ) * k / steps ];
+					// main.js's recentre: the scene moved to the car before this frame's drive, by M.
+					if ( every && metres( world, origin, [ lat, lon ] ) > every ) {
+
+						const was = globe.earth.matrixWorld.clone();
+						setGroup( groupAt( world, lat, lon, groundAt( lat, lon ) ) );
+						if ( moved ) recorder.transform( globe.earth.matrixWorld.clone().multiply( was.invert() ) );
+						origin = [ lat, lon ];
+						recentres ++;
+
+					}
+
+					place( lat, lon, ms / 1000 );
+					if ( k < steps ) recorder.frame( ms, pivot );
+
+				}
+
+				passes.push( [ leg - 1, Math.round( ms ) ] );
+				if ( leg === path.length - 1 ) recorder.finish( Math.round( ms ), pivot );
+				else recorder.frame( ms, pivot );
+
+			}
+
+			return { ghost: recorder.pack( globe, packStart, world ), ms: passes.at( - 1 )[ 1 ], passes, recentres };
+
+		};
+		const routeOf = ( world, start, legs, radius = 40 ) => {
+
+			let at = [ start.lat, start.lon ];
+			return { start, radius, points: legs.map( ( [ bearing, length ] ) => at = destination( world, ...at, bearing, length ) ) };
+
+		};
+		// Rheasilvia's floor 45 km under Vesta's sphere; 40° N on Vesta, where the level leans 12° off
+		// the radial, 12 km over it; Ceres at 30° S.
+		const deep = ( lat, lon ) => - 45000 + 300 * Math.sin( lat * 7 ) + 200 * Math.cos( lon * 5 );
+		const rolling = ( lat, lon ) => 12000 + 800 * Math.sin( lat * 3 ) * Math.cos( lon * 2 );
+		const gates = [ [ 10, 600 ], [ 40, 800 ], [ 80, 700 ], [ 120, 900 ] ];
+		const cases = [
+			{ name: 'Vesta, Rheasilvia, no recentre', world: 'vesta', start: { lat: - 70, lon: - 60 }, groundAt: deep, legs: gates, every: 0 },
+			{ name: 'Vesta, Rheasilvia', world: 'vesta', start: { lat: - 70, lon: - 60 }, groundAt: deep, legs: gates, every: 1000 },
+			{ name: 'Vesta, 40° N, a landmark 8.5 km off', world: 'vesta', start: { lat: 40, lon: 30 }, groundAt: rolling, legs: [ [ 200, 8500 ] ], every: 1000 },
+			{ name: 'Vesta, 40° N, hopping up to 25 m', world: 'vesta', start: { lat: 40, lon: 30 }, groundAt: rolling, legs: gates.slice( 0, 3 ), every: 1000, hop: 25 },
+			{ name: 'Ceres, 30° S', world: 'ceres', start: { lat: - 30, lon: 100 }, groundAt: ( lat, lon ) => - 3000 + 400 * Math.sin( lon * 9 ), legs: [ [ 300, 1200 ], [ 340, 1500 ], [ 20, 1400 ] ], every: 1500 },
+			{ name: 'the Moon, as before', world: 'moon', start: { lat: 12, lon: 18 }, groundAt: ( lat ) => - 1500 + 200 * Math.sin( lat * 50 ), legs: gates.slice( 0, 2 ), every: 0 },
+		];
+		for ( const c of cases ) {
+
+			const route = routeOf( c.world, c.start, c.legs );
+			const run = record( { ...c, points: route.points } );
+			assert.equal( ghostFault( { world: c.world, route }, run.ms, run.passes, run.ghost ), '', c.name );
+			if ( c.every ) assert.ok( run.recentres >= 2, `${ c.name }: ${ run.recentres } recentres` );
+			if ( ! c.every ) continue;
+			// Its samples left where the scene was: off its start (and everything after).
+			const stale = record( { ...c, points: route.points, moved: false } );
+			assert.notEqual( ghostFault( { world: c.world, route }, stale.ms, stale.passes, stale.ghost ), '', `${ c.name }, not moved` );
+
+		}
+
+		// Not taken off its gates or its start: a gate 60 m off the path (radius 40) is a 'pass' fault, one
+		// 38 m off passed; a run from 150 m off the pin a 'start' one, from 80 m taken.
+		const c = cases[ 2 ];
+		const route = routeOf( c.world, c.start, gates.slice( 0, 3 ) );
+		const run = record( { ...c, points: route.points } );
+		const shifted = by => ( { ...route, points: route.points.map( ( point, i ) => i === 1 ? destination( c.world, ...point, 90, by ) : point ) } );
+		assert.equal( ghostFault( { world: c.world, route: shifted( 60 ) }, run.ms, run.passes, run.ghost ), 'pass' );
+		assert.equal( ghostFault( { world: c.world, route: shifted( 38 ) }, run.ms, run.passes, run.ghost ), '' );
+		for ( const [ off, fault ] of [ [ 150, 'start' ], [ 80, '' ] ] ) {
+
+			const [ lat, lon ] = destination( c.world, c.start.lat, c.start.lon, 0, off );
+			const from = record( { ...c, start: { lat, lon }, packStart: c.start, points: route.points } );
+			assert.equal( ghostFault( { world: c.world, route }, from.ms, from.passes, from.ghost ), fault, `${ off } m off the pin` );
 
 		}
 
@@ -6067,7 +6707,7 @@ describe( 'World Drive challenge ghosts: the rules', () => {
 		// Too little room: not packed.
 		assert.equal( packGhost( ghost, new Uint8Array( 100 ) ), - 1 );
 		// Not one: not base64url, too long, another version, cut short, a byte too many, a count past
-		// the most, a number too big for any sample, a place 60 km off or 20 km up. Each of the last
+		// the most, a number too big for any sample, a place 60 km off or 30 km up. Each of the last
 		// four whole and well made but for that one thing (as packGhost packs it: the interval 100,
 		// two samples), so it's that the check is for that turns it away, and nothing before it: the
 		// count is what keeps a post from having the Worker make arrays of hundreds of millions.
@@ -6081,7 +6721,11 @@ describe( 'World Drive challenge ghosts: the rules', () => {
 			return Buffer.from( bytes.subarray( 0, packGhost( ghost, bytes ) ) );
 
 		};
-		assert.ok( readGhost( as( still( 2 ) ) ) && readGhost( as( still( GHOST_SAMPLES + 1 ) ) ) && readGhost( as( still( 2, g => g.east[ 0 ] = 60000 * 100 ) ) ) && readGhost( as( still( 2, g => g.up[ 1 ] = - 20000 * 100 ) ) ) );
+		assert.ok( readGhost( as( still( 2 ) ) ) && readGhost( as( still( GHOST_SAMPLES + 1 ) ) ) && readGhost( as( still( 2, g => g.east[ 0 ] = 60000 * 100 ) ) ) && readGhost( as( still( 2, g => g.up[ 1 ] = - 60000 * 100 ) ) ) );
+		// (Up to 60 km up or down: a run on Olympus Mons is 20 km and more above the start's frame's
+		// height 0, and Vesta's ground is from 50.7 km under its sphere to 30.3 km over it, which a start
+		// on the level spheroid's frame can be most of either way.)
+		assert.ok( readGhost( as( still( 2, g => g.up[ 1 ] = 22000 * 100 ) ) ) && readGhost( as( still( 2, g => g.up[ 1 ] = 60000 * 100 ) ) ) && readGhost( as( still( 2, g => g.up[ 1 ] = - 45000 * 100 ) ) ) );
 		// (Sample 0's east as five bytes, a number four would hold: 0 written long.)
 		const long = still( 2 );
 		assert.deepEqual( [ ...long.subarray( 0, 4 ) ], [ 1, 0xc8, 0x01, 4 ] );
@@ -6093,7 +6737,8 @@ describe( 'World Drive challenge ghosts: the rules', () => {
 			'a count past the most': as( still( GHOST_SAMPLES + 2 ) ),
 			'a number too big': as( Buffer.concat( [ long.subarray( 0, 4 ), Buffer.from( [ 0x80, 0x80, 0x80, 0x80, 0x00 ] ), long.subarray( 5 ) ] ) ),
 			'a place 60 km off': as( still( 2, g => g.east[ 0 ] = 60000 * 100 + 1 ) ),
-			'a place 20 km down': as( still( 2, g => g.up[ 1 ] = - 20000 * 100 - 1 ) ),
+			'a place 60 km down': as( still( 2, g => g.up[ 1 ] = - 60000 * 100 - 1 ) ),
+			'a place 60 km up': as( still( 2, g => g.up[ 1 ] = 60000 * 100 + 1 ) ),
 		} ) ) assert.equal( readGhost( bad ), null, name );
 
 	} );
@@ -6105,6 +6750,13 @@ describe( 'World Drive challenge ghosts: the rules', () => {
 		assert.equal( fault( fairGhost( sprint, run.ms, run.passes ) ), '' );
 		const stars = fairRun( hunt, 3000, [ 3, 1, 0, 5, 2, 4, 9, 8, 7, 6 ] );
 		assert.equal( fault( fairGhost( hunt, stars.ms, stars.passes ), stars.ms, stars.passes, hunt ), '' );
+		// On Mars, in its sphere's frame: a fair drive to its landmark passes; the same samples read in
+		// the Earth's frame (or the Moon's) miss the goal by kilometres.
+		const landing = fairRun( drive, 3000 );
+		const marsGhost = fairGhost( drive, landing.ms, landing.passes );
+		assert.equal( fault( marsGhost, landing.ms, landing.passes, drive ), '' );
+		assert.equal( fault( marsGhost, landing.ms, landing.passes, { ...drive, world: 'earth' } ), 'pass' );
+		assert.equal( fault( marsGhost, landing.ms, landing.passes, { ...drive, world: 'moon' } ), 'pass' );
 		// Not one, or sampled at another interval.
 		assert.equal( fault( 'nonsense!' ), 'form' );
 		assert.equal( fault( fairGhost( sprint, run.ms, run.passes, { alter: ghost => ghost.every = 200 } ) ), 'form' );
@@ -6426,11 +7078,14 @@ describe( 'World Drive challenges', () => {
 				// A visitor's times a day, held to fewer than challenges.js's 300 to see it reached.
 				CHALLENGE_TIMES_PER_VISITOR_DAILY: '4',
 			},
-			// The towns busy places are named by, and the Moon's heights its routes are checked on, as
-			// the site has them.
+			// The towns busy places are named by, and the Moon's, Mars's, Vesta's and Ceres's heights their
+			// routes are checked on, as the site has them.
 			assets: {
 				'places/towns.tsv': readFileSync( new URL( '../drive/public/places/towns.tsv', import.meta.url ) ),
 				'moon/height.bin': readFileSync( MOON_HEIGHTS ),
+				'mars/height.bin': readFileSync( MARS_HEIGHTS ),
+				'vesta/height.bin': readFileSync( HEIGHTS_OF.vesta ),
+				'ceres/height.bin': readFileSync( HEIGHTS_OF.ceres ),
 				// The page itself, its link card's tags as the site has them (a link's page rewrites them).
 				'index.html': readFileSync( new URL( '../drive/index.html', import.meta.url ) ),
 			},
@@ -6453,7 +7108,16 @@ describe( 'World Drive challenges', () => {
 		ip,
 		time,
 	} );
-	const list = ( { time = CHALLENGE_DAY, id, ip = nextIp() } = {} ) => call( server, `/api/challenges${ id ? `?id=${ id }` : '' }`, { ip, time } );
+	// The list, asked again (at most three times more, from another address) while it has fewer than
+	// the fifteen: a period's first ask lays out only CHECKED_MOST checked routes (challenges.js), the
+	// next ones the rest, three worlds' worth more at most.
+	const list = async ( { time = CHALLENGE_DAY, id, ip = nextIp() } = {} ) => {
+
+		let res = await call( server, `/api/challenges${ id ? `?id=${ id }` : '' }`, { ip, time } );
+		for ( let k = 0; k < 3 && res.status === 200 && res.json.challenges.length < 3 * WORLD_IDS.length; k ++ ) res = await call( server, `/api/challenges${ id ? `?id=${ id }` : '' }`, { ip: nextIp(), time } );
+		return res;
+
+	};
 	const board = ( challenge, { time = CHALLENGE_DAY, id, ip = nextIp() } = {} ) => call( server, `/api/challenges/board?challenge=${ challenge }${ id ? `&id=${ id }` : '' }`, { ip, time } );
 
 	// A player with an address and a visit (`kind`: 'earth', 'moon' or 'owner') of their own, from
@@ -6495,6 +7159,7 @@ describe( 'World Drive challenges', () => {
 	let live;
 	const earthDay = () => live.find( c => c.world === 'earth' && c.period === 'day' );
 	const moonDay = () => live.find( c => c.world === 'moon' && c.period === 'day' );
+	const marsDay = () => live.find( c => c.world === 'mars' && c.period === 'day' );
 
 	test( 'the migration: the challenges\' tables, keyed as their asks read them, with nothing of an address', () => {
 
@@ -6528,18 +7193,37 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'six live: the day\'s, the week\'s and the month\'s on each world, fixed in D1 as they\'re first asked for, the same on every ask and as another instance works them out', async () => {
+	test( 'fifteen live: the day\'s, the week\'s and the month\'s on each of the five worlds, fixed in D1 as they\'re first asked for (no more than three checked on their ground an ask, the rest by the next ones, more said till then), the same on every ask and as another instance works them out', async () => {
 
 		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 0 );
-		const res = await list();
-		assert.equal( res.status, 200, res.text );
+		// The first ask: a world at a time, each world's the longest first, three checked on their
+		// ground at most (the Moon's month, week and day; Mars's month the fourth, and so it and every
+		// checked one after it left), the Earth's all three (not checked: they cost next to nothing):
+		// those fixed so far, the Moon's three together, and nothing kept as live. Each ask after fixes
+		// the next world's three (Mars's, then Vesta's, then Ceres's), saying there's more till the last.
+		const keys = world => [ `${ world } day:2026-11-16`, `${ world } week:2026-11-16`, `${ world } month:2026-11` ];
+		const asks = [];
+		for ( const [ k, worlds ] of [ [ 'earth', 'moon' ], [ 'earth', 'moon', 'mars' ], [ 'earth', 'moon', 'mars', 'vesta' ], [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] ].entries() ) {
+
+			const res = await call( server, '/api/challenges', { ip: nextIp(), time: CHALLENGE_DAY + k * MINUTE } );
+			assert.equal( res.status, 200, res.text );
+			assert.deepEqual( res.json.challenges.map( c => `${ c.world } ${ c.key }` ), worlds.flatMap( keys ), `ask ${ k + 1 }` );
+			assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 3 * worlds.length );
+			if ( worlds.length < 5 ) assert.equal( res.json.more, true, `ask ${ k + 1 }` );
+			asks.push( res );
+
+		}
+
+		const [ first, res ] = [ asks[ 0 ], asks.at( - 1 ) ];
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
 		live = res.json.challenges;
-		assert.equal( res.json.now, CHALLENGE_DAY );
-		assert.deepEqual( live.map( c => `${ c.world } ${ c.key }` ), [ 'earth day:2026-11-16', 'earth week:2026-11-16', 'earth month:2026-11', 'moon day:2026-11-16', 'moon week:2026-11-16', 'moon month:2026-11' ] );
+		assert.equal( res.json.now, CHALLENGE_DAY + 3 * MINUTE );
+		assert.equal( 'more' in res.json, false );
+		assert.equal( live.length, 15 );
+		assert.deepEqual( first.json.challenges.map( c => c.id ), live.filter( c => first.json.challenges.some( f => f.id === c.id ) ).map( c => c.id ) );
 		const rows = server.d1( 'SELECT id, period, world, kind, place, route, source, starts_at, ends_at FROM challenges ORDER BY id' );
-		assert.equal( rows.length, 6 );
-		const featured = { earth: [ ...SPOTS.map( s => s.name ), 'Eiffel Tower', 'Colosseum', 'Piccadilly Circus', 'Hollywood Boulevard', 'Copacabana' ], moon: MOON_PLACES.map( p => p.name ) };
+		assert.equal( rows.length, 15 );
+		const featured = { earth: [ ...SPOTS.map( s => s.name ), 'Eiffel Tower', 'Colosseum', 'Piccadilly Circus', 'Hollywood Boulevard', 'Copacabana' ], moon: MOON_PLACES.map( p => p.name ), mars: MARS_PLACES.map( p => p.name ), vesta: VESTA_PLACES.map( p => p.name ), ceres: CERES_PLACES.map( p => p.name ) };
 		for ( const c of live ) {
 
 			const row = rows.find( r => r.id === c.id );
@@ -6553,23 +7237,24 @@ describe( 'World Drive challenges', () => {
 			assert.equal( c.route.points.length, { sprint: SHAPES[ c.world ][ c.period ].sprint.gates, collect: SHAPES[ c.world ][ c.period ].collect.items, landmark: 1 }[ c.kind ] );
 			assert.deepEqual( [ c.total, c.top, c.me ], [ 0, [], null ] );
 			// As this process, another instance with the same secret, works it out: the place, the kind and
-			// the route, the Moon's checked on its heights too.
-			const env = { TURNSTILE_SECRET: PASS_SECRET, ASSETS: { fetch: async () => new Response( readFileSync( MOON_HEIGHTS ) ) } };
+			// the route, the Moon's and Mars's checked on their heights too (each from its own file).
+			const env = { TURNSTILE_SECRET: PASS_SECRET, ASSETS: heightsAssets() };
 			const pick = await rotationPick( env, period, c.world, [] );
 			assert.equal( pick.place.name, c.place );
 			assert.equal( pick.kind, c.kind );
 			const made = await challengeFor( env, period, c.world, pick, CHALLENGE_DAY );
 			assert.deepEqual( JSON.parse( made.route ), c.route );
 			if ( c.world === 'moon' ) assert.equal( movableFaults( c.route ), 0, c.place );
+			if ( c.world === 'mars' ) assert.equal( movableFaults( c.route, 'mars' ), 0, c.place );
 
 		}
 
 		// The three on a world are three places.
-		for ( const world of [ 'earth', 'moon' ] ) assert.equal( new Set( live.filter( c => c.world === world ).map( c => c.place ) ).size, 3 );
+		for ( const world of WORLD_IDS ) assert.equal( new Set( live.filter( c => c.world === world ).map( c => c.place ) ).size, 3 );
 		// Asked again, later in the period, from anywhere: the same, nothing more fixed.
 		const again = await list( { time: CHALLENGE_DAY + 8 * HOUR } );
 		assert.deepEqual( again.json.challenges.map( c => [ c.id, c.place, c.kind ] ), live.map( c => [ c.id, c.place, c.kind ] ) );
-		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 6 );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 15 );
 
 	} );
 
@@ -6940,10 +7625,10 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'a ghost and a link are held to the looks as the boards are: those that miss the cache and read D1 ten a minute from an address (all of a /48 one); what the cache has still answered, and other addresses too', async () => {
+	test( 'a ghost and a link are held to the looks as the boards are: those that miss the cache and read D1 CHALLENGE_MISSES (24) a minute from an address (all of a /48 one); what the cache has still answered, and other addresses too', async () => {
 
-		// (The rate limiter's minutes are the wall clock's: started early in one, so the ten are counted in
-		// it.)
+		// (The rate limiter's minutes are the wall clock's: started early in one, so the 24 are counted
+		// in it.)
 		const into = Date.now() % MINUTE;
 		if ( into > 40 * SECOND ) await new Promise( resolve => setTimeout( resolve, MINUTE - into + 200 ) );
 		let n = 0;
@@ -6955,7 +7640,7 @@ describe( 'World Drive challenges', () => {
 		assert.equal( ( await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=${ nia }`, { ip: nextIp(), time } ) ).status, 200 );
 		// Runs and handles that aren't, in turn, each from another /64 of the /48: each a miss.
 		const answers = [];
-		for ( let k = 0; k < 8; k ++ ) {
+		for ( let k = 0; k < 15; k ++ ) {
 
 			answers.push( await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=nothing${ String( k ).padStart( 9, '0' ) }`, { ip: from(), time } ) );
 			answers.push( await call( server, `/api/challenges/link?challenge=${ c.id }&vs=${ String( k ).padStart( 16, 'B' ) }`, { ip: from(), time } ) );
@@ -6963,9 +7648,9 @@ describe( 'World Drive challenges', () => {
 		}
 
 		const statuses = answers.map( answer => answer.status );
-		assert.equal( statuses.indexOf( 429 ), 10, statuses.join( ' ' ) );
-		assert.ok( statuses.slice( 0, 10 ).every( status => status === 404 || status === 200 ), statuses.join( ' ' ) );
-		assert.ok( statuses.slice( 10 ).every( status => status === 429 ), statuses.join( ' ' ) );
+		assert.equal( statuses.indexOf( 429 ), CHALLENGE_MISSES, statuses.join( ' ' ) );
+		assert.ok( statuses.slice( 0, CHALLENGE_MISSES ).every( status => status === 404 || status === 200 ), statuses.join( ' ' ) );
+		assert.ok( statuses.slice( CHALLENGE_MISSES ).every( status => status === 429 ), statuses.join( ' ' ) );
 		const cached = await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=${ nia }`, { ip: from(), time } );
 		assert.deepEqual( [ cached.status, cached.headers.get( 'X-Board-Cache' ) ], [ 200, 'hit' ] );
 		assert.equal( ( await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=nothingelsewhere`, { ip: '2001:db8:6b::5', time } ) ).status, 404 );
@@ -6996,7 +7681,7 @@ describe( 'World Drive challenges', () => {
 		for ( const [ name, options ] of Object.entries( bad ) ) {
 
 			// (Each from an address of its own: those checked against the challenge read it from D1, so
-			// each is one of its address's CHALLENGE_MISSES, ten a minute.)
+			// each is one of its address's CHALLENGE_MISSES, 24 a minute.)
 			const res = await post( dan, c, { run: okay, ip: nextIp(), ...options } );
 			assert.equal( res.status, 400, `${ name }: ${ res.text }` );
 
@@ -7017,10 +7702,14 @@ describe( 'World Drive challenges', () => {
 		const eve = await player( 'Eve Moon', { kind: 'moon' } );
 		const c = earthDay();
 		const run = fairRun( c, 9000 );
-		// The Earth's needs an Earth visit; the Moon's takes the Moon visit.
+		// The Earth's needs an Earth visit; the Moon's takes the Moon visit, and Mars's too (a free
+		// world's visit, as both are), its ghost checked in Mars's sphere's frame.
 		let res = await post( eve, c, { run } );
 		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'world' ] );
 		assert.equal( ( await post( eve, moonDay(), { run: fairRun( moonDay(), 9000 ) } ) ).status, 200 );
+		res = await post( eve, marsDay(), { run: fairRun( marsDay(), 9000 ), after: 11 * MINUTE } );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( [ res.json.rank, res.json.isNewBest ], [ 1, true ] );
 		const fay = await player( 'Fay Token' );
 		const gus = await player( 'Gus Other' );
 		const [ , id, expires, signature ] = fay.visit.split( '.' );
@@ -7194,7 +7883,7 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'admin: ADMIN_EMAILS only, the six live and the six next, and the places to choose from', async () => {
+	test( 'admin: ADMIN_EMAILS only, the fifteen live and the fifteen next, and the places to choose from', async () => {
 
 		assert.equal( ( await call( server, '/api/admin/challenges', { time: CHALLENGE_DAY } ) ).status, 401 );
 		const someone = await signIn( 'someone@example.com' );
@@ -7208,12 +7897,17 @@ describe( 'World Drive challenges', () => {
 		assert.equal( res.json.current.find( c => c.id === earthDay().id ).top[ 0 ].name, 'Bea Fast' );
 		assert.deepEqual( res.json.upcoming.map( u => `${ u.world } ${ u.key } ${ u.source }` ).sort(), [
 			'earth day:2026-11-17 rotation', 'earth month:2026-12 rotation', 'earth week:2026-11-23 rotation',
+			'mars day:2026-11-17 rotation', 'mars month:2026-12 rotation', 'mars week:2026-11-23 rotation',
 			'moon day:2026-11-17 rotation', 'moon month:2026-12 rotation', 'moon week:2026-11-23 rotation',
-		] );
+			'vesta day:2026-11-17 rotation', 'vesta month:2026-12 rotation', 'vesta week:2026-11-23 rotation',
+		].concat( [ 'ceres day:2026-11-17 rotation', 'ceres month:2026-12 rotation', 'ceres week:2026-11-23 rotation' ] ).sort() );
 		assert.equal( res.json.featured.earth.length, 17 );
 		assert.equal( res.json.featured.moon.length, MOON_PLACES.length );
+		assert.deepEqual( res.json.featured.mars.map( p => p.id ), MARS_PLACES.map( p => p.id ) );
+		assert.deepEqual( res.json.featured.vesta.map( p => p.id ), VESTA_PLACES.map( p => p.id ) );
+		assert.deepEqual( res.json.featured.ceres.map( p => p.id ), CERES_PLACES.map( p => p.id ) );
 		assert.deepEqual( res.json.approved, [] );
-		assert.deepEqual( Object.keys( res.json.busy ), [ 'earth', 'moon' ] );
+		assert.deepEqual( Object.keys( res.json.busy ), WORLD_IDS );
 
 	} );
 
@@ -7243,12 +7937,13 @@ describe( 'World Drive challenges', () => {
 			[ 'next year and more', { action: 'pick', period: 'month:2028-02', world: 'earth', kind: 'sprint', place: { featured: 'spot:monaco' } } ],
 			[ 'a Tuesday week', { action: 'pick', period: 'week:2026-11-24', world: 'earth', kind: 'sprint', place: { featured: 'spot:monaco' } } ],
 			[ 'the Moon\'s place on the Earth', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint', place: { featured: 'moon-tycho' } } ],
+			[ 'the Moon\'s place on Mars', { action: 'pick', period: 'day:2026-11-18', world: 'mars', kind: 'sprint', place: { featured: 'moon-tycho' } } ],
 			[ 'a kind', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'drag', place: { featured: 'spot:monaco' } } ],
 			[ 'no place', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint' } ],
 			[ 'off the world', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint', place: { name: 'Nowhere', lat: 95, lon: 0 } } ],
 			[ 'a rude name', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint', place: { name: 'shit road', lat: 1, lon: 1 } } ],
 			[ 'a heading', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint', place: { name: 'Road', lat: 1, lon: 1, heading: 400 } } ],
-			[ 'a world', { action: 'pick', period: 'day:2026-11-18', world: 'mars', kind: 'sprint', place: { featured: 'spot:monaco' } } ],
+			[ 'a world', { action: 'pick', period: 'day:2026-11-18', world: 'pluto', kind: 'sprint', place: { featured: 'spot:monaco' } } ],
 			[ 'an action', { action: 'delete', period: 'day:2026-11-18', world: 'earth' } ],
 		] ) assert.equal( ( await admin( body ) ).status, 400, name );
 
@@ -7293,8 +7988,8 @@ describe( 'World Drive challenges', () => {
 		}
 
 		assert.ok( server.d1( `SELECT final_at FROM challenges WHERE id = ${ yesterday.id }` )[ 0 ].final_at >= Date.UTC( 2026, 10, 17, 0, 1 ) );
-		// The week's and the month's go on.
-		assert.deepEqual( server.d1( 'SELECT period FROM challenges WHERE final_at IS NOT NULL ORDER BY id' ).map( r => r.period ), [ 'day:2026-11-16', 'day:2026-11-16' ] );
+		// Each world's day finished; the week's and the month's go on.
+		assert.deepEqual( server.d1( 'SELECT period FROM challenges WHERE final_at IS NOT NULL ORDER BY id' ).map( r => r.period ), WORLD_IDS.map( () => 'day:2026-11-16' ) );
 		// Its board as it ended, a while later.
 		const shown = await board( yesterday.id, { time: Date.UTC( 2026, 10, 18 ) } );
 		assert.equal( shown.status, 200 );
@@ -7341,6 +8036,13 @@ describe( 'World Drive challenges', () => {
 		assert.match( linkWords( { challenge: { ...live, period: 'month', endsAt: Date.UTC( 2026, 11, 1 ) }, vs: { ...vs, ghost: false } }, time ).description, /^A monthly .+, on till the end of Monday 30 November \(UTC\)\. Drive it in your browser and beat it\.$/ );
 		assert.doesNotMatch( JSON.stringify( linkWords( { challenge: week, vs }, time ) ), / left/ );
 		assert.match( linkWords( { challenge: { ...live, replacedAt: time }, vs: null }, time ).title, /is over$/ );
+		// On another world, its words say which: "on the Moon", "on Mars" (no "the"); a world that isn't
+		// one, nothing.
+		const on = world => linkWords( { challenge: { ...live, world, kind: 'sprint', place: 'Somewhere', region: '' }, vs: null }, time );
+		assert.deepEqual( [ on( 'moon' ).title, on( 'mars' ).title, on( 'earth' ).title, on( 'pluto' ).title ], [
+			'World Drive: today\'s challenge at Somewhere on the Moon', 'World Drive: today\'s challenge at Somewhere on Mars', 'World Drive: today\'s challenge at Somewhere', 'World Drive: today\'s challenge at Somewhere',
+		] );
+		assert.match( on( 'mars' ).description, /^A daily checkpoint sprint at Somewhere on Mars in World Drive, / );
 
 	} );
 
@@ -7403,10 +8105,10 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'CHALLENGE_MISSES: the lists and boards that miss the cache and read D1, ten a minute from an address (all of a /48\'s /64s one), so past boards and players asked for in turn are turned away past it; what the cache has is still answered, and other addresses too', async () => {
+	test( 'CHALLENGE_MISSES: the lists and boards that miss the cache and read D1, 24 a minute from an address (all of a /48\'s /64s one: room for the list and its four re-asks while a period\'s routes are laid out, all fifteen boards and a time), so past boards and players asked for in turn are turned away past it; what the cache has is still answered, and other addresses too', async () => {
 
-		// (The rate limiter's minutes are the wall clock's: started early in one, so the ten are counted in
-		// it.)
+		// (The rate limiter's minutes are the wall clock's: started early in one, so the 24 are counted
+		// in it.)
 		const into = Date.now() % MINUTE;
 		if ( into > 40 * SECOND ) await new Promise( resolve => setTimeout( resolve, MINUTE - into + 200 ) );
 		let n = 0;
@@ -7417,7 +8119,7 @@ describe( 'World Drive challenges', () => {
 		// Boards that aren't (or past ones: each read from D1 the first time it's asked for in a place) and
 		// lists for players who aren't, in turn, each from another /64 of the /48: each a miss.
 		const answers = [];
-		for ( let k = 0; k < 15; k ++ ) {
+		for ( let k = 0; k < 20; k ++ ) {
 
 			answers.push( await board( 5000 + k, { ip: from() } ) );
 			answers.push( await list( { id: `script${ String( k ).padStart( 10, '0' ) }`, ip: from() } ) );
@@ -7426,9 +8128,11 @@ describe( 'World Drive challenges', () => {
 
 		const statuses = answers.map( answer => answer.status );
 		const first = statuses.indexOf( 429 );
-		assert.equal( first, 10, statuses.join( ' ' ) );
-		assert.ok( statuses.slice( 0, 10 ).every( status => status === 404 || status === 200 ), statuses.join( ' ' ) );
-		assert.ok( statuses.slice( 10 ).every( status => status === 429 ), statuses.join( ' ' ) );
+		assert.equal( first, CHALLENGE_MISSES, statuses.join( ' ' ) );
+		// (Room for what a page asks of a new period: the list, its RELOADS re-asks, every board and a time.)
+		assert.ok( CHALLENGE_MISSES >= 1 + 4 + 3 * WORLD_IDS.length + 1 );
+		assert.ok( statuses.slice( 0, CHALLENGE_MISSES ).every( status => status === 404 || status === 200 ), statuses.join( ' ' ) );
+		assert.ok( statuses.slice( CHALLENGE_MISSES ).every( status => status === 429 ), statuses.join( ' ' ) );
 		assert.deepEqual( [ answers[ first ].json.retryAfter, answers[ first ].headers.get( 'Retry-After' ) ], [ 60, '60' ] );
 		// What the cache has costs nothing, and is still answered; another /48 is another address.
 		assert.equal( ( await list( { ip: from() } ) ).status, 200 );

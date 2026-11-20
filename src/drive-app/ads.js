@@ -88,8 +88,10 @@ export function showAds( { client, slot = '', root, onShown = () => {}, onBlocke
 
 	}
 
-	// Google's script, and the ad asked for, only while the globe shows: an ad slot with no width
-	// (the globe's section hidden as a drive starts) is one Google can't fill.
+	// Google's script, and the ad asked for, only while the globe shows and the orrery isn't open over
+	// it (main.js, body[data-orrery]): an ad slot with no width (the globe's section hidden as a drive
+	// starts) is one Google can't fill, and one under the orrery isn't seen. (One already shown is
+	// only hidden while the orrery's open: style.css.)
 	const load = () => {
 
 		if ( gone ) return;
@@ -117,18 +119,20 @@ export function showAds( { client, slot = '', root, onShown = () => {}, onBlocke
 		}
 
 	};
-	if ( ! root.hidden ) load();
+	const showing = () => ! root.hidden && document.body.dataset.orrery !== 'open';
+	if ( showing() ) load();
 	else {
 
 		waiting = new MutationObserver( () => {
 
-			if ( root.hidden ) return;
+			if ( ! showing() ) return;
 			waiting.disconnect();
 			waiting = null;
 			load();
 
 		} );
 		waiting.observe( root, { attributes: true, attributeFilter: [ 'hidden' ] } );
+		waiting.observe( document.body, { attributes: true, attributeFilter: [ 'data-orrery' ] } );
 
 	}
 

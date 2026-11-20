@@ -1,7 +1,8 @@
-import { Box3, Euler, MathUtils, Quaternion, Raycaster, Vector3 } from 'three';
+import { BufferGeometry, Box3, DoubleSide, Euler, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshStandardMaterial, Quaternion, Raycaster, SphereGeometry, Vector3 } from 'three';
 import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from './geo.js';
 import { blocks, isTyping } from './walk.js';
 import { createDriveFx } from './drive-fx.js';
+import { PARACHUTE, PlaneMode } from './plane.js';
 
 // Race mode: drive a placed vehicle at highway speeds. Arcade physics rather than a simulation:
 // the vehicle follows the ground under its wheels, keeps its upward speed off ramps and crests so
@@ -21,15 +22,27 @@ import { createDriveFx } from './drive-fx.js';
 // unless an app gives one (World Drive's drive-app/water.js, which tells water from ground on
 // Google's mesh): every vehicle drives on water as on the ground (it's ground in the mesh), and one
 // whose tuning says it `floats` (a hovercraft) throws up spray behind it there.
+//
+// And `plane`, off unless an app asks: T turns the vehicle into a little plane (plane.js) that
+// goes faster the higher it flies, and T again lands it. It's kept apart from everything scored:
+// no tricks or boost while it's a plane, and a new stunt run once it's down. canPlane() may say why
+// it can't be one just now (a challenge's run going), and onPlane( on ) hears it change.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
-const JUMP_SPEED = 7;
+// A hop (Space, tapped) leaves the ground at JUMP_SPEED m/s: about 5 m up, over a car or a barrier.
+// Its own time in the air (2 × JUMP_SPEED / g, about 2 s) isn't big air: only what more a ramp or a
+// drop gives it is (see tricksOf).
+const JUMP_SPEED = 10;
 // The ground is looked for this far (m) under the wheels; fallen this far (m) under where it last
 // stood, with none found, it's put back there. Both further in low gravity (by 1 / gravity), where
-// a jump goes higher over the ground falling away beneath it.
+// a jump goes higher over the ground falling away beneath it; but never put back from further down
+// than FALL_MOST (the Moon's 1.2 km and Mars's 0.5 km are under it): on Vesta, at a fortieth of
+// the Earth's gravity, 200 m by that would be 8 km, over four minutes of falling with nothing
+// under it.
 const REACH_DOWN = 400;
 const FALL_RESET = 200;
+const FALL_MOST = 1500;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
 const LEAVE_GROUND = 0.35;
 // Hitting a wall faster than this (m/s) into it says "Crash!".
@@ -59,13 +72,17 @@ const FLY_CLIMB = 7;
 const FLY_CEILING = 150;
 const FLY_GLIDE = 3;
 const FLY_YAW = 75;
-// Booster: a full gauge fires for BOOST_TIME s and refills in BOOST_RECHARGE s; firing pushes at
-// BOOST_ACCEL m/s² up to BOOST_SPEED times the top speed. It needs BOOST_MIN of the gauge to fire.
+// Booster: held down, it burns a full gauge in BOOST_TIME s; let go and it stops, and the gauge
+// refills in BOOST_RECHARGE s. Firing pushes at BOOST_ACCEL m/s² up to BOOST_SPEED times the top
+// speed. It needs BOOST_MIN of the gauge to light (but, once lit, burns down to empty if held).
+// Off the ground it pushes the way the nose points (see pushAlongNose): nose up it climbs, at most
+// BOOST_CLIMB m/s, and nose down or back it dives or slows; along the ground never past BOOST_SPEED.
 const BOOST_TIME = 2.5;
 const BOOST_RECHARGE = 8;
 const BOOST_ACCEL = 28;
 const BOOST_SPEED = 2;
 const BOOST_MIN = 0.15;
+const BOOST_CLIMB = 20;
 // Supersonic: boosting at `near` or more of the booster's top speed for `after` s goes supersonic,
 // with a sonic boom and streaks of air past it (drive-fx.js), a shake, and the view a little wider
 // (`warp`, eased in and out at `ease` 1/s, which an app adds to its field of view). It lasts,
@@ -99,8 +116,17 @@ const KART_YAW = [ 150, 55 ];
 // of `kick` m/s and then pushes for `time` s up to `speed` times the top speed: strong and short.
 // Space pressed without steering waits to see: held, then steered, it drifts with no hop (the
 // DRIFT button is pressed before steering); let go within HOP_TAP s, it hops.
+//
+// Drifts chain: pressing Space again within DRIFT_CHAIN s of letting go of one, steering, starts
+// the next drift at once on the ground, with no hop, so left-right-left S-turns flow. (Each one
+// used to hop first, and a hop kept it off the ground for half a second.) Space held as it lands
+// at POWERSLIDE.min° or more off the way it's going (up to POWERSLIDE.max°) powerslides: it keeps
+// its speed and slides on the way it was going, sideways, into a drift that way, keeping `keep` of
+// its speed, instead of losing what was sideways.
 const DRIFT_MIN = 5;
-const DRIFT_HOP = 2.4;
+const DRIFT_HOP = 1.8;
+const DRIFT_CHAIN = 0.35;
+const POWERSLIDE = { min: 12, max: 120, keep: 0.97 };
 const DRIFT_YAW = [ 40, 110 ];
 const DRIFT_SLIP = 2;
 const GRIP = 12;
@@ -191,6 +217,9 @@ const CHAIN_TIME = 6;
 const TRICK_GAUGE = 0.2;
 const TRICK_BOOST = { speed: 1.25, time: 0.3, each: 0.15, max: 0.9 };
 const BEST_KEY = 'drive.stunt-best';
+// The scoring rules as numbers, for the "How scoring works" card (drive-app/scoring.js), so what it
+// says is always what the game does.
+export const SCORING = { points: POINTS, spinTol: SPIN_TOL, flipTol: FLIP_TOL, bigAir: BIG_AIR, combo: COMBO_BONUS, multMax: MULT_MAX, chainTime: CHAIN_TIME, landTilt: LAND_TILT, bounceMin: BOUNCE_SCORE, gauge: TRICK_GAUGE };
 // Hits and landings squash the model, which springs back: a spring of `stiffness` (1/s²) and
 // `damping` (1/s), kicked at `hit` per m/s into a wall and `land` per m/s coming down, so it's
 // quick (about 0.3 s) and never more than `max` of its size. The camera shakes by SHAKE m per m/s
@@ -259,9 +288,12 @@ const _axis = new Vector3();
 const _q = new Quaternion();
 const _euler = new Euler();
 const _attitude = new Quaternion();
+const _nose = new Vector3();
 const DOWN = new Vector3( 0, - 1, 0 );
 const UP = new Vector3( 0, 1, 0 );
 const LEVEL = new Quaternion();
+const _turn = new Quaternion();
+const _velocity = new Vector3();
 
 export class Driver {
 
@@ -274,7 +306,7 @@ export class Driver {
 	// over y: { level }, the water's surface height there (null where it isn't water). gravity: the
 	// world's, as a share of the Earth's (World Drive's Moon: 0.165), which an app may change between
 	// drives (see leap).
-	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null, effects = null, gravity = 1 } ) {
+	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null, effects = null, gravity = 1, plane = false, canPlane = null, onPlane = null } ) {
 
 		this.camera = camera;
 		this.models = models;
@@ -289,6 +321,9 @@ export class Driver {
 		this.launch = crash === 'launch';
 		this.water = water;
 		this.gravity = gravity;
+		// The colour of the dust a landing throws up (drive-fx.js), or null for the usual grey-beige:
+		// another world's own (main.js sets it for each drive).
+		this.dust = null;
 		// World Drive's feel (see BODY), with any of those on; and whether the camera may move for
 		// effect (hits' shakes and the jolts), which an app turns off for those who'd rather it didn't.
 		this.lively = booster || drift || this.launch;
@@ -319,8 +354,12 @@ export class Driver {
 		// Machines that aren't driven like a car bring their own controls (see addMachine).
 		this.machines = new Map();
 		this.machine = null;
+		// Plane mode (plane.js), with the `plane` option.
+		this.aircraft = plane ? new PlaneMode( this ) : null;
+		this.canPlane = canPlane;
+		this.onPlane = onPlane;
 
-		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [] ];
+		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly || plane ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [], ...plane ? [ 'KeyT' ] : [] ];
 		window.addEventListener( 'keydown', e => {
 
 			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
@@ -344,7 +383,12 @@ export class Driver {
 
 		}, true );
 		window.addEventListener( 'keyup', e => this.release( e.code ), true );
-		window.addEventListener( 'blur', () => this.keys.clear() );
+		window.addEventListener( 'blur', () => {
+
+			this.keys.clear();
+			this.cutBooster();
+
+		} );
 		// A HUD with buttons for touch screens (drive-hud.js) presses keys through press() and release().
 		hud.attach?.( this );
 
@@ -364,12 +408,30 @@ export class Driver {
 
 		}
 
+		// T: into a plane and back; F too, unless F flies (the `fly` option, off in World Drive: the
+		// plane is its way into the air). As one, the car's own keys (hop, booster, reset) do nothing:
+		// plane.js reads the held keys itself.
+		if ( this.aircraft && ( code === 'KeyT' || code === 'KeyF' && ! this.fly ) ) {
+
+			this.togglePlane();
+			return;
+
+		}
+
+		if ( this.aircraft?.on ) return;
+
 		// With kart handling, Space without steering is a drift waiting for the steering, or a hop
 		// if it's let go at once (see release).
 		if ( code === 'Space' && this.grounded && this.drift && this.steerInput() === 0 ) this.spaceTap = this.clock;
+		else if ( code === 'Space' && this.drift && this.chainable() ) this.startDrift( this.steerInput() );
 		else if ( code === 'Space' && this.grounded ) this.hop();
 		// The booster goes on Shift, by the gas and steering keys, as well as B.
-		else if ( this.booster && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) ) this.fireBooster();
+		else if ( this.booster && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) ) {
+
+			this.ranDry = false;
+			this.fireBooster();
+
+		}
 		else if ( code === 'KeyR' ) this.respawn();
 
 	}
@@ -377,10 +439,48 @@ export class Driver {
 	release( code ) {
 
 		this.keys.delete( code );
+		// Hold to boost: letting go of the last boost key puts the booster out.
+		if ( this.booster && this.firing && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) && ! this.boostHeld() ) this.cutBooster();
 		if ( code !== 'Space' || this.spaceTap === null ) return;
 		const tapped = this.clock - this.spaceTap <= HOP_TAP;
 		this.spaceTap = null;
 		if ( tapped && this.active && this.grounded && ! this.drifting && ! this.machine ) this.hop();
+
+	}
+
+	// T: a plane, unless the app says not now (a challenge's run), or it's wiping out; as one, down.
+	togglePlane() {
+
+		const plane = this.aircraft;
+		if ( ! plane.on ) {
+
+			const reason = this.canPlane?.();
+			if ( reason ) {
+
+				this.hud.flash( reason );
+				return;
+
+			}
+
+			if ( this.air?.wipeout ) return;
+
+		}
+
+		plane.toggle();
+
+	}
+
+	// A new stunt run (crash: 'launch'): the score from nothing.
+	newRun() {
+
+		if ( ! this.launch ) return;
+		this.score = 0;
+		this.mult = 1;
+		this.runStart = this.clock;
+		this.runAir = 0;
+		this.bestAir = 0;
+		this.bestJump = null;
+		this.showScore();
 
 	}
 
@@ -424,6 +524,8 @@ export class Driver {
 		this.entry = entry;
 		this.spec = spec;
 		entry.driving = true;
+		this.aircraft?.reset();
+		this.hud.setPlane?.( false );
 
 		// Measure the vehicle in its own frame: it faces -Z there once turned by its front axis.
 		const { pivot, state } = entry;
@@ -482,8 +584,10 @@ export class Driver {
 		this.topSpeed = 0;
 		this.lastSafe = { east: this.east, north: this.north, y: this.y };
 		this.flying = false;
+		this.chute = null;
 		this.gauge = 1;
 		this.firing = false;
+		this.ranDry = false;
 		// How long it has boosted near its top speed, whether it's supersonic, and how far into the
 		// supersonic view it is (0 to 1).
 		this.nearTop = 0;
@@ -492,6 +596,7 @@ export class Driver {
 		this.drifting = 0;
 		this.driftTime = 0;
 		this.driftLevel = 0;
+		this.driftEnded = - Infinity;
 		this.driftHop = false;
 		this.boost = null;
 		this.stuckTime = 0;
@@ -549,7 +654,7 @@ export class Driver {
 		this.lastBase = null;
 		// Its effects, with water's (drive-fx.js's pools of droplets, spray and foam) only for a ride
 		// that floats, the only one that throws any up: every other drives on water as on the ground.
-		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water && this.floats, gravity: this.gravity, ...this.effects ? { effects: this.effects } : {} } ) : null;
+		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water && this.floats, gravity: this.gravity, ...this.effects ? { effects: this.effects } : {}, ...this.dust ? { dust: this.dust } : {} } ) : null;
 
 		this.keys.clear();
 		this.controls.keys?.clear();
@@ -571,8 +676,18 @@ export class Driver {
 
 		if ( ! this.active ) return;
 		this.active = false;
+		this.showChute( false );
+		this.disposeChute();
 		this.machine?.stop();
 		this.machine = null;
+		if ( this.aircraft?.on ) {
+
+			this.aircraft.reset();
+			this.hud.setPlane?.( false );
+			this.onPlane?.( false );
+
+		}
+
 		const { entry } = this;
 		entry.driving = false;
 		this.showCab( false );
@@ -613,6 +728,110 @@ export class Driver {
 
 	}
 
+	// The scene's frame moved under it while it drives (World Drive's recentre on a small world,
+	// main.js): `matrix` (a Matrix4, turning and moving only) carries whatever was in the scene to
+	// where it is now. Everything of its own kept in the scene goes with it, so it drives on as it
+	// was, mid-air or mid-drift, its effects and its chase camera too (the camera itself is carried by
+	// whoever moved the frame: main.js's globe.capture and restore). Where it is, how it's turned,
+	// its velocity, where R and a fall put it back, the way its camera looks and its lean's last
+	// course (both headings: left as they were, the camera would swing round by the frame's turn and
+	// the body would roll as if it had turned that much in a frame). Not driving, nothing: a parked
+	// vehicle is its app's to move.
+	transform( matrix ) {
+
+		if ( ! this.active ) return;
+		_turn.setFromRotationMatrix( matrix );
+		// A point in the scene's east, north and up, carried.
+		const carry = ( east, north, up ) => localToEnu( enuToLocal( east, north, up, _c ).applyMatrix4( matrix ) );
+		const stunt = !! this.air && ! this.air.flight;
+		// Its velocity as it was, before its heading and course are turned.
+		const rad = this.course * MathUtils.DEG2RAD;
+		_velocity.set( - Math.sin( rad ) * this.speed, this.vy, Math.cos( rad ) * this.speed ).applyQuaternion( _turn );
+		// Turning any way in the air, the middle of its box is where it is, and its attitude its own;
+		// otherwise its wheels, turned by its heading, pitch and roll.
+		const at = carry( this.east, this.north, this.y + ( stunt ? this.centre.y : 0 ) );
+		const was = this.y;
+		this.east = at.east;
+		this.north = at.north;
+		this.y = at.up - ( stunt ? this.centre.y : 0 );
+		if ( stunt ) {
+
+			this.air.q.premultiply( _turn );
+			_euler.setFromQuaternion( this.air.q, 'YXZ' );
+			this.heading = yawToHeading( _euler.y );
+
+		} else {
+
+			_q.setFromEuler( _euler.set( this.pitch, headingToYaw( this.heading ), this.roll, 'YXZ' ) ).premultiply( _turn );
+			_euler.setFromQuaternion( _q, 'YXZ' );
+			this.pitch = _euler.x;
+			this.roll = _euler.z;
+			this.heading = yawToHeading( _euler.y );
+
+		}
+
+		// Every other heading turned as the ground's ways are, so a drift's slip and the chase camera's
+		// lag stay as they were: each a way along the ground, carried by the frame's turn and laid flat
+		// again. (Not by how much its own yaw changed: nose up or down mid-flip, the yaw of a tilt of a
+		// fifth of a degree can swing by tens of degrees, and its course with it.) Its speed what of
+		// its velocity is along its course, and vy the rest, up.
+		const turn = heading => {
+
+			const r = heading * MathUtils.DEG2RAD;
+			_axis.set( - Math.sin( r ), 0, Math.cos( r ) ).applyQuaternion( _turn );
+			return heading + ( ( Math.atan2( - _axis.x, _axis.z ) * MathUtils.RAD2DEG - heading ) % 360 + 540 ) % 360 - 180;
+
+		};
+		this.course = turn( this.course );
+		this.view = turn( this.view );
+		if ( this.body ) this.body.lastCourse = turn( this.body.lastCourse );
+		const course = this.course * MathUtils.DEG2RAD;
+		this.speed = - Math.sin( course ) * _velocity.x + Math.cos( course ) * _velocity.z;
+		this.vy = _velocity.y;
+		// Where it's put back: as it last stood, and spots it drove through freely (the same spot, just
+		// after R).
+		const spot = ( { east, north, y } ) => {
+
+			const { east: e, north: n, up } = carry( east, north, y );
+			return { east: e, north: n, y: up };
+
+		};
+		const good = this.lastGood;
+		this.lastSafe = spot( this.lastSafe );
+		this.lastGood = spot( good );
+		this.recentGood = this.recentGood === good ? this.lastGood : spot( this.recentGood );
+		// A plane's heights of its own go with it (plane.js's transform).
+		this.aircraft?.transform( this.y - was );
+
+		this.scrapeAt.at.applyMatrix4( matrix );
+		this.scrapeAt.normal.applyQuaternion( _turn );
+		this.lastBase?.applyMatrix4( matrix );
+		const { air } = this;
+		if ( air?.wall ) {
+
+			// Which way the wall it bounced off faces, along the ground.
+			const facing = localToEnu( enuToLocal( air.wall.east, air.wall.north, 0, _c ).applyQuaternion( _turn ) );
+			const length = Math.hypot( facing.east, facing.north ) || 1;
+			air.wall.east = facing.east / length;
+			air.wall.north = facing.north / length;
+
+		}
+
+		if ( air?.righting ) {
+
+			air.righting.from.premultiply( _turn );
+			air.righting.to.premultiply( _turn );
+			air.righting.heading = turn( air.righting.heading );
+
+		}
+
+		this.fx?.transform( matrix );
+		// Drawn where it is now this frame, as it would be after its next update.
+		this.pose();
+		this.entry.pivot.updateMatrixWorld( true );
+
+	}
+
 	update( dt ) {
 
 		if ( ! this.active ) return;
@@ -631,6 +850,13 @@ export class Driver {
 		}
 
 		this.clock += dt;
+		if ( this.aircraft?.on ) {
+
+			this.updatePlane( dt );
+			return;
+
+		}
+
 		const { keys, spec } = this;
 		// Flying with stunts on, holding Space turns W/S and A/D into flips and rolls (see airInput).
 		const tricking = this.flying && !! this.air && this.airKey( 'Space' );
@@ -730,7 +956,7 @@ export class Driver {
 		} else if ( heights.length === 0 ) {
 
 			// Off the edge of the world: put it back where it last stood.
-			if ( this.y < this.lastSafe.y - FALL_RESET / this.gravity ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
+			if ( this.y < this.lastSafe.y - this.fallReset ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
 			this.vy -= this.fall * dt;
 			this.y += this.vy * dt;
 
@@ -747,8 +973,11 @@ export class Driver {
 				// a steep lump in Google's mesh (a building's skirt) taken at 90 km/h climbs at 24 m/s,
 				// which threw the kart 25 m into the sky.
 				this.grounded = false;
-				// (In low gravity the climb it carries off is multiplied by leap too, as a hop is.)
-				if ( this.launch ) this.vy = Math.min( this.vy * this.leap, LAUNCH.max * this.handling.launch * this.leap );
+				// (In low gravity the climb it carries off is multiplied by leap too, as a hop is; going
+				// down it keeps its speed down the slope, which leap would have slowed, sailing it off
+				// any slope steep enough to leave: on Vesta a 20° one at 119 m/s, falling at 6.8 m/s
+				// rather than 43, came down two and a half minutes later.)
+				if ( this.launch && this.vy > 0 ) this.vy = Math.min( this.vy * this.leap, LAUNCH.max * this.handling.launch * this.leap );
 				if ( this.launch && ! this.driftHop && ! this.drifting ) this.enterAir();
 
 			}
@@ -769,7 +998,7 @@ export class Driver {
 
 			} else {
 
-				this.vy -= this.fall * dt;
+				this.fallStep( dt, this.y - ground );
 				this.y += this.vy * dt;
 				this.airTime += dt;
 				this.pitch += ( MathUtils.clamp( this.vy / Math.max( 1, Math.abs( this.speed ) ), - 0.5, 0.5 ) - this.pitch ) * Math.min( 1, dt * 2 );
@@ -843,6 +1072,34 @@ export class Driver {
 
 		}
 
+		// The parachute packs away once it's down (or flying again).
+		if ( this.chute && ( this.grounded || this.flying ) ) this.showChute( false );
+		else this.placeChute();
+		this.placeCamera( dt );
+
+	}
+
+	// A frame as a plane (plane.js moves it): posed, its parts moved (the kit's `plane` share out for
+	// those that fold: cars.js's wheels), the readouts and the camera.
+	updatePlane( dt ) {
+
+		const plane = this.aircraft;
+		plane.update( dt );
+		const { pivot } = this.entry;
+		this.pose();
+		pivot.updateMatrixWorld( true );
+		// (Its wheels spin as fans while it's a plane.)
+		const share = plane.deploy;
+		for ( const animate of this.animators ) animate( { steer: plane.on ? 0 : this.steer, speed: plane.on ? 20 + this.speed * 0.2 : this.speed, dt, airborne: plane.on, vy: this.vy, throttle: false, plane: share } );
+		this.updateFx( dt );
+		this.hud.update( {
+			kmh: Math.abs( this.speed ) * KMH, reverse: false, top: this.topSpeed * KMH, bestAir: this.bestAir, air: 0, boost: false,
+			altitude: plane.on ? plane.height : null,
+		} );
+		if ( this.booster ) this.hud.setBoost?.( this.gauge );
+		this.ringJolts( dt );
+		if ( this.launch ) this.turnView( dt );
+		this.placeChute();
 		this.placeCamera( dt );
 
 	}
@@ -889,19 +1146,26 @@ export class Driver {
 		if ( this.drift && steer !== 0 && this.speed > DRIFT_MIN ) {
 
 			// (As short as on the Earth, wherever: it's a flick into the drift, not a jump.)
-			this.vy = DRIFT_HOP * this.gravity;
+			// Up from the ground's own climb (the jump is off the slope, not straight up the world,
+			// so a hop going up a hill doesn't drop into it).
+			this.vy = Math.max( this.vy, 0 ) + DRIFT_HOP * this.gravity;
 			this.driftHop = true;
 			this.startDrift( steer );
 
 		} else {
 
-			this.vy = JUMP_SPEED * this.leap;
+			this.vy = Math.max( this.vy, 0 ) + JUMP_SPEED * this.leap;
 			this.driftHop = false;
 
 		}
 
 		this.grounded = false;
-		if ( this.launch && ! this.driftHop ) this.enterAir();
+		if ( this.launch && ! this.driftHop ) {
+
+			this.enterAir();
+			this.air.hop = 2 * JUMP_SPEED / GRAVITY;
+
+		}
 
 	}
 
@@ -913,7 +1177,7 @@ export class Driver {
 
 		this.steer += ( steerInput - this.steer ) * Math.min( 1, dt * 10 );
 		const space = this.keys.has( 'Space' );
-		if ( ! this.drifting && space && steerInput !== 0 && this.grounded && this.speed > DRIFT_MIN ) this.startDrift( steerInput );
+		if ( ! this.drifting && space && steerInput !== 0 && ( this.grounded || this.driftHop ) && this.speed > DRIFT_MIN ) this.startDrift( steerInput );
 		if ( this.drifting && ! space ) this.endDrift( true );
 		else if ( this.drifting && this.speed < DRIFT_MIN * 0.6 ) this.endDrift( false );
 
@@ -944,10 +1208,19 @@ export class Driver {
 
 		}
 
-		this.heading += yawRate * ( this.grounded ? 1 : 0.5 ) * dt;
+		// (A drift's hop is a flick into it: it turns as on the ground.)
+		this.heading += yawRate * ( this.grounded || this.driftHop ? 1 : 0.5 ) * dt;
 		// The way it travels follows the way it points: slowly while sliding, almost at once with grip.
 		const slip = ( ( this.heading - this.course ) % 360 + 540 ) % 360 - 180;
 		this.course += slip * Math.min( 1, dt * ( this.drifting ? handling.slip : handling.grip ) );
+
+	}
+
+	// Space pressed again just after a drift, steering at speed on the ground: straight into the next
+	// one (see DRIFT_CHAIN).
+	chainable() {
+
+		return ! this.drifting && this.grounded && ! this.air && this.steerInput() !== 0 && this.speed > DRIFT_MIN && this.clock - this.driftEnded <= DRIFT_CHAIN;
 
 	}
 
@@ -974,6 +1247,7 @@ export class Driver {
 
 		}
 
+		if ( this.drifting ) this.driftEnded = this.clock;
 		this.drifting = 0;
 		this.driftLevel = 0;
 
@@ -990,6 +1264,22 @@ export class Driver {
 
 	}
 
+	// Whether a boost key (Shift or B, or the touch BOOST button, which presses B) is held.
+	boostHeld() {
+
+		return this.keys.has( 'KeyB' ) || this.keys.has( 'ShiftLeft' ) || this.keys.has( 'ShiftRight' );
+
+	}
+
+	// Let go of the booster before it runs dry: the exhaust cools, and the gauge starts refilling.
+	cutBooster() {
+
+		if ( ! this.firing ) return;
+		this.firing = false;
+		this.fx?.cool();
+
+	}
+
 	// Boost from somewhere else (World Drive's boost pads): `share` of a full gauge, filling it at
 	// most. Returns how much it took.
 	addBoost( share ) {
@@ -997,6 +1287,7 @@ export class Driver {
 		if ( ! this.booster || ! this.active ) return 0;
 		const before = this.gauge;
 		this.gauge = Math.min( 1, this.gauge + share );
+		this.ranDry = false;
 		this.hud.setBoost?.( this.gauge );
 		this.hud.refuel?.( this.gauge - before );
 		return this.gauge - before;
@@ -1038,6 +1329,10 @@ export class Driver {
 	// back down to the top speed.
 	thrust( dt, top ) {
 
+		// Held down, the booster lights as soon as there's enough in the gauge (pressed with too
+		// little, a pad's top-up, held from before a resume), but not again after the hold ran it
+		// dry, until it's pressed again (or a pad tops it up): no sputter of 15 % bursts.
+		if ( this.booster && ! this.firing && ! this.ranDry && this.gauge >= BOOST_MIN && this.boostHeld() ) this.fireBooster();
 		const base = this.spec.topSpeed / KMH;
 		if ( this.firing ) {
 
@@ -1046,10 +1341,12 @@ export class Driver {
 
 				// Run dry: the exhaust glows on and cools.
 				this.firing = false;
+				this.ranDry = true;
 				this.fx?.cool();
 
 			}
-			if ( this.speed < base * BOOST_SPEED ) this.speed = Math.min( this.speed + BOOST_ACCEL * dt, base * BOOST_SPEED );
+			if ( ! this.grounded ) this.pushAlongNose( BOOST_ACCEL * dt, base * BOOST_SPEED );
+			else if ( this.speed < base * BOOST_SPEED ) this.speed = Math.min( this.speed + BOOST_ACCEL * dt, base * BOOST_SPEED );
 
 		} else {
 
@@ -1068,6 +1365,45 @@ export class Driver {
 			this.speed = Math.max( top, this.speed - ( this.speed - top ) * Math.min( 1, dt * 1.2 ) - dt );
 
 		}
+
+	}
+
+	// The booster off the ground: `dv` (m/s) more the way the nose points, as it's turned (a jump's
+	// spin or flip, flying's climb or a trick). Along the ground it may only bring the speed up to
+	// `cap` (BOOST_SPEED times the top speed, as on the road: the most a challenge's legs allow), or
+	// keep what's over that, and slow it pointing back; upward it adds up to BOOST_CLIMB m/s.
+	// Flying (F) goes the way it heads, so only the push along that counts there.
+	pushAlongNose( dv, cap ) {
+
+		const nose = _nose.set( 0, 0, - 1 ).applyQuaternion( this.attitude( _attitude ) );
+		// (The scene's -x is east and +z north: see move.)
+		const east = - nose.x, north = nose.z;
+		if ( this.flying ) {
+
+			const rad = this.heading * MathUtils.DEG2RAD;
+			const speed = this.speed + dv * ( east * Math.sin( rad ) + north * Math.cos( rad ) );
+			this.speed = Math.abs( speed ) > cap && Math.abs( speed ) > Math.abs( this.speed ) ? Math.sign( speed ) * Math.max( cap, Math.abs( this.speed ) ) : speed;
+
+		} else {
+
+			const rad = this.course * MathUtils.DEG2RAD;
+			let ve = Math.sin( rad ) * this.speed + east * dv;
+			let vn = Math.cos( rad ) * this.speed + north * dv;
+			const was = Math.abs( this.speed );
+			const now = Math.hypot( ve, vn );
+			if ( now > cap && now > was ) {
+
+				ve *= Math.max( cap, was ) / now;
+				vn *= Math.max( cap, was ) / now;
+
+			}
+
+			this.speed = Math.hypot( ve, vn );
+			if ( this.speed > 1e-6 ) this.course = Math.atan2( ve, vn ) * MathUtils.RAD2DEG;
+
+		}
+
+		if ( nose.y < 0 || this.vy < BOOST_CLIMB ) this.vy = Math.min( this.vy + nose.y * dv, Math.max( this.vy, BOOST_CLIMB ) );
 
 	}
 
@@ -1138,6 +1474,108 @@ export class Driver {
 		}
 
 		this.pitch += ( MathUtils.clamp( this.vy / Math.max( 6, Math.abs( this.speed ) ), - 0.35, 0.35 ) - this.pitch ) * Math.min( 1, dt * 3 );
+
+	}
+
+	// Falling `height` m over the ground: gravity, or under the parachute (`chute`, a plane's drop,
+	// plane.js: opened as it comes down through PARACHUTE.open), a slow, steady sink and its speed
+	// across the ground easing off.
+	fallStep( dt, height ) {
+
+		const chute = this.chute;
+		if ( chute && ! chute.open && this.vy < 0 && height <= Math.max( PARACHUTE.open, - this.vy * PARACHUTE.lead ) ) {
+
+			chute.open = true;
+			this.hud.flash( 'Parachute!' );
+			this.showChute( true );
+
+		}
+
+		if ( chute?.open ) {
+
+			chute.t += dt;
+			this.vy += ( - PARACHUTE.sink * Math.sqrt( this.gravity ) - this.vy ) * Math.min( 1, dt * PARACHUTE.settle );
+			this.speed *= Math.exp( - PARACHUTE.drag * dt );
+
+		} else {
+
+			this.vy -= this.fall * dt;
+
+		}
+
+	}
+
+	// The parachute's canopy and lines, over the vehicle while it's open (made the first time).
+	showChute( on ) {
+
+		if ( ! on ) {
+
+			this.chute = null;
+			if ( this.chuteMesh ) this.chuteMesh.visible = false;
+			return;
+
+		}
+
+		const radius = Math.max( PARACHUTE.least, this.width * PARACHUTE.size );
+		if ( ! this.chuteMesh || this.chuteMesh.userData.radius !== radius ) {
+
+			this.disposeChute();
+			const group = new Group();
+			group.userData.radius = radius;
+			const canopy = new Mesh( new SphereGeometry( radius, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2.6 ), new MeshStandardMaterial( { color: 0xff5a36, roughness: 0.8, side: DoubleSide } ) );
+			canopy.scale.y = 0.6;
+			group.add( canopy );
+			// Lines from round the canopy's rim down to the vehicle's roof (the group's origin is the canopy's middle).
+			const rim = Math.sin( Math.PI / 2.6 ) * radius;
+			const rimY = Math.cos( Math.PI / 2.6 ) * radius * 0.6;
+			const drop = radius * 1.6;
+			const points = [];
+			for ( let i = 0; i < 8; i ++ ) {
+
+				const a = i / 8 * Math.PI * 2;
+				points.push( Math.cos( a ) * rim, rimY, Math.sin( a ) * rim, 0, - drop, 0 );
+
+			}
+
+			const lines = new LineSegments( new BufferGeometry().setAttribute( 'position', new Float32BufferAttribute( points, 3 ) ), new LineBasicMaterial( { color: 0xeeeeee } ) );
+			group.add( lines );
+			for ( const part of [ canopy, lines ] ) part.userData.noCollide = true;
+			group.userData.drop = drop;
+			( this.models.group.parent ?? this.models.group ).add( group );
+			this.chuteMesh = group;
+
+		}
+
+		this.chuteMesh.visible = true;
+		this.placeChute();
+
+	}
+
+	// Over the middle of the vehicle's roof, opening out over a moment and swaying a little.
+	placeChute() {
+
+		const mesh = this.chuteMesh;
+		if ( ! mesh?.visible || ! this.chute ) return;
+		const t = this.chute.t;
+		this.middle( mesh.position );
+		mesh.position.y += this.height / 2 + mesh.userData.drop;
+		const open = MathUtils.clamp( t / 0.4, 0.1, 1 );
+		mesh.scale.set( open, MathUtils.clamp( t / 0.25, 0.3, 1 ), open );
+		mesh.rotation.set( Math.sin( t * 1.7 ) * 0.06, headingToYaw( this.heading ), Math.cos( t * 1.3 ) * 0.06 );
+
+	}
+
+	disposeChute() {
+
+		if ( ! this.chuteMesh ) return;
+		this.chuteMesh.removeFromParent();
+		this.chuteMesh.traverse( part => {
+
+			part.geometry?.dispose();
+			part.material?.dispose();
+
+		} );
+		this.chuteMesh = null;
 
 	}
 
@@ -1340,7 +1778,7 @@ export class Driver {
 			velocity: _target.set( - Math.sin( this.course * Math.PI / 180 ) * this.speed, this.vy, Math.cos( this.course * Math.PI / 180 ) * this.speed ),
 			flame: this.firing ? 1 : this.boost ? 0.55 : 0,
 			// A trail (World Drive's Garage) shows behind it boosting or flying.
-			trail: this.firing || this.boost || this.flying ? 1 : 0,
+			trail: this.firing || this.boost || this.flying || this.aircraft?.on ? 1 : 0,
 			drifting: !! this.drifting && this.grounded,
 			level: this.driftLevel,
 			scrape: this.scraping > 0 ? this.scrapeAt : null,
@@ -1722,9 +2160,17 @@ export class Driver {
 
 		const { air } = this;
 		if ( air.righting ) return;
-		const input = air.wipeout ? null : this.airInput();
-		this.turn( dt, input, AIR_DAMP );
+		// Under the parachute it hangs: no more tricks, and it swings back upright to land.
+		const hanging = !! this.chute?.open;
+		const input = air.wipeout || hanging ? null : this.airInput();
+		this.turn( dt, input, hanging ? AIR_STOP : AIR_DAMP );
 		const { q, spin } = air;
+		if ( hanging ) {
+
+			_euler.setFromQuaternion( q, 'YXZ' );
+			q.slerp( _q.setFromEuler( _euler.set( 0, _euler.y, 0, 'YXZ' ) ), 1 - Math.exp( - PARACHUTE.right * dt ) );
+
+		}
 		const idle = input && ! input.yaw && ! input.pitch && ! input.roll;
 		if ( idle && air.time > 0.15 && this.tilt( q ) < ASSIST_TILT ) {
 
@@ -1776,8 +2222,14 @@ export class Driver {
 		this.airTime += dt;
 		const middle = this.y + this.centre.y;
 		// The ground under its middle, looked for from just over it (before it moves, so it can't
-		// drop through a roof), never a bridge or a roof overhead.
-		const ground = this.groundAt( this.east, this.north, middle + 0.3 );
+		// drop through a roof), never a bridge or a roof overhead. Over it by as much again as a
+		// steep slope (56°) climbs in this frame's travel: flying into a hill, its middle had already
+		// gone under the hillside by the time it looked, the ray found nothing (the map's ground is a
+		// skin, seen only from above) and it fell through the world. Should it still find nothing,
+		// it looks again from over the top of its box, for a hillside it has gone into.
+		const climb = Math.abs( this.speed ) * dt * 1.5;
+		let ground = this.groundAt( this.east, this.north, middle + 0.3 + climb );
+		if ( ground === null ) ground = this.groundAt( this.east, this.north, middle + this.extent( UP, air.q ) + 1 + climb );
 		if ( air.righting ) {
 
 			this.rightStep( dt, ground );
@@ -1785,7 +2237,7 @@ export class Driver {
 
 		}
 
-		this.vy -= this.fall * dt;
+		this.fallStep( dt, ground === null ? Infinity : middle - ground );
 		const reach = this.extent( UP, air.q );
 		if ( this.vy > 0 ) {
 
@@ -1798,7 +2250,7 @@ export class Driver {
 		if ( ground === null ) {
 
 			// Off the edge of the world: put it back where it last stood.
-			if ( this.y < this.lastSafe.y - FALL_RESET / this.gravity ) {
+			if ( this.y < this.lastSafe.y - this.fallReset ) {
 
 				Object.assign( this, this.lastSafe, { speed: 0, vy: 0, pitch: 0, roll: 0, grounded: true, airTime: 0 } );
 				this.air = null;
@@ -1811,8 +2263,10 @@ export class Driver {
 		}
 
 		// Down only coming down: thrown up off something low, the top of that thing can be under its
-		// middle and over its wheels for a moment, and it isn't landing on it.
-		if ( this.vy > 0 || this.y + this.centre.y - reach > ground ) return;
+		// middle and over its wheels for a moment, and it isn't landing on it. Unless the ground is
+		// over its middle: a hill rising faster than it climbs, which it lands on.
+		const buried = ground > this.y + this.centre.y;
+		if ( ! buried && ( this.vy > 0 || this.y + this.centre.y - reach > ground ) ) return;
 		this.y = ground + reach - this.centre.y;
 		if ( air.wipeout ) this.startRighting();
 		else if ( this.tilt( air.q ) <= this.handling.landTilt ) this.touchDown( ground );
@@ -1834,14 +2288,41 @@ export class Driver {
 		this.heading = yawToHeading( _euler.y );
 		this.pitch = _euler.x;
 		this.roll = _euler.z;
-		this.speed *= Math.cos( ( this.course - this.heading ) * MathUtils.DEG2RAD );
-		this.course = this.heading;
-		if ( this.vy < - 12 * this.leap ) this.speed *= 0.8;
-		this.squashBy( - this.vy * SQUASH.land, 'land' );
-		if ( this.vy < - 5 ) this.fx?.dust( enuToLocal( this.east, this.north, ground, _c ), MathUtils.clamp( - this.vy / 15, 0, 1 ), this.width );
+		// Its speed along the slope it lands on: coming down onto a downhill run it carries the fall
+		// on as speed, as a skier does; onto an uphill one it loses some. (On the ground `speed` is
+		// across the ground, climbing at speed × slope, so it's the velocity's share along the slope,
+		// measured across the ground. Still rising, it never gains from that: that's the jump's own
+		// push, not a fall.) Only the speed into the slope is the landing's thump.
+		const slope = this.slopeAlong( this.course );
+		const across = ( this.speed + this.vy * slope ) / ( 1 + slope * slope );
+		const impact = Math.min( 0, ( this.vy - this.speed * slope ) / Math.sqrt( 1 + slope * slope ) );
+		// (And never past what the booster reaches, the fastest anything goes: challenge-rules.js's
+		// FASTEST.)
+		const most = Math.max( Math.abs( this.speed ), this.spec.topSpeed / KMH * BOOST_SPEED );
+		this.speed = this.vy >= 0 && Math.abs( across ) > Math.abs( this.speed ) ? this.speed : MathUtils.clamp( across, - most, most );
+		// Down at an angle to the way it was going: it loses what was sideways, unless Space (drift) is
+		// held, when it powerslides on, sideways, into a drift (see POWERSLIDE).
+		const slip = ( ( this.heading - this.course ) % 360 + 540 ) % 360 - 180;
+		const powerslide = this.drift && this.keys.has( 'Space' ) && Math.abs( slip ) >= POWERSLIDE.min && Math.abs( slip ) <= POWERSLIDE.max && this.speed > DRIFT_MIN;
+		if ( powerslide ) {
+
+			this.speed *= POWERSLIDE.keep;
+			this.startDrift( this.steerInput() || Math.sign( slip ) );
+			this.hud.flash( 'Powerslide!' );
+
+		} else {
+
+			this.speed *= Math.cos( slip * MathUtils.DEG2RAD );
+			this.course = this.heading;
+
+		}
+
+		if ( impact < - 12 * this.leap ) this.speed *= 0.8;
+		this.squashBy( - impact * SQUASH.land, 'land' );
+		if ( impact < - 5 ) this.fx?.dust( enuToLocal( this.east, this.north, ground, _c ), MathUtils.clamp( - impact / 15, 0, 1 ), this.width );
 		if ( ! air.flew ) this.bestAir = Math.max( this.bestAir, air.time );
 		const tricks = this.tricksOf( air );
-		const fall = - this.vy;
+		const fall = - impact;
 		this.vy = 0;
 		this.airTime = 0;
 		this.grounded = true;
@@ -1870,6 +2351,7 @@ export class Driver {
 		const lost = this.tricksOf( air );
 		const hard = Math.max( 0, - this.vy );
 		air.wipeout = true;
+		this.showChute( false );
 		this.y = Math.max( this.y, ground + this.extent( UP, air.q ) - this.centre.y );
 		if ( ! air.flew ) this.bestAir = Math.max( this.bestAir, air.time );
 		this.vy = MathUtils.clamp( hard * 0.3, WIPE_HOP * 0.6 * this.leap, WIPE_HOP * this.leap );
@@ -1988,7 +2470,7 @@ export class Driver {
 		if ( air.hits > 0 && ! air.flew ) tricks.push( { name: air.hits > 1 ? `Wall bounce ×${ air.hits }` : 'Wall bounce', points: POINTS.bounce * air.hits } );
 		// In low gravity it's counted as the time the same jump would have taken on the Earth (see
 		// leap), so the Moon's long, slow jumps don't score more than the Earth's.
-		const earthAir = air.time * this.leap;
+		const earthAir = air.time * this.leap - ( air.hop ?? 0 );
 		if ( earthAir >= BIG_AIR && ! air.flew ) tricks.push( { name: `Big air ${ air.time.toFixed( 1 ) } s`, points: Math.round( earthAir * POINTS.air ), pending: 'Big air' } );
 		return tricks;
 
@@ -2185,9 +2667,11 @@ export class Driver {
 			// Never inside a building, a container or the vehicle itself: the camera heads for a spot
 			// behind and above the vehicle's box (a crane's boom and all), in front of whatever is
 			// behind it, and on the way there it keeps out of both. A small vehicle has it nearer.
+			// As a plane, further back and up the faster it goes, to see where it's heading.
+			const pull = this.aircraft?.on ? 1 + this.aircraft.deploy * ( 0.7 + Math.min( 1.3, Math.abs( this.speed ) / 150 ) ) : 1;
 			const reach = Math.min( 5, 1.5 + this.length );
-			const lift = Math.min( 2.5, 0.6 + this.length * 0.4 ) * this.chaseZoom;
-			const back = this.rear + ( this.length * 0.3 + reach ) * this.chaseZoom;
+			const lift = Math.min( 2.5, 0.6 + this.length * 0.4 ) * this.chaseZoom * pull;
+			const back = this.rear + ( this.length * 0.3 + reach ) * this.chaseZoom * pull;
 			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + lift );
 			_eye.copy( base ).setY( base.y + height * 0.8 );
 			this.clearView( _eye, _target, base, lift );
@@ -2337,6 +2821,14 @@ export class Driver {
 
 	}
 
+	// How far (m) under where it last stood it's put back there, with no ground found under it (see
+	// FALL_RESET).
+	get fallReset() {
+
+		return Math.min( FALL_RESET / this.gravity, FALL_MOST );
+
+	}
+
 	// How fast (m/s²) it falls in the air: the world's gravity, as much of it as the ride's tuning
 	// says (handling.gravity: the floatier rides less).
 	get fall() {
@@ -2354,6 +2846,19 @@ export class Driver {
 	get leap() {
 
 		return Math.sqrt( this.gravity );
+
+	}
+
+	// How steeply the ground climbs (rise over run) the way `heading` points, across the vehicle's
+	// length about where it is; 0 where it can't tell.
+	slopeAlong( heading ) {
+
+		const rad = heading * Math.PI / 180;
+		const d = Math.max( 1, this.wheelbase / 2 );
+		const from = this.y + 2 + d;
+		const ahead = this.groundAt( this.east + Math.sin( rad ) * d, this.north + Math.cos( rad ) * d, from );
+		const behind = this.groundAt( this.east - Math.sin( rad ) * d, this.north - Math.cos( rad ) * d, from );
+		return ahead === null || behind === null ? 0 : MathUtils.clamp( ( ahead - behind ) / ( 2 * d ), - 1.5, 1.5 );
 
 	}
 

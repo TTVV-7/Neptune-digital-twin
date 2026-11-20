@@ -264,5 +264,35 @@ export const MOON_DRIVING = [
 	'<b>A sixth of the gravity.</b> A jump goes as high as on the Earth and lasts two and a half times as long, so there\'s time for more spins and flips (each is worth fewer points, to be fair to the Earth\'s).',
 	'<b>The Earth in the sky.</b> Over the near side it hangs in the black sky, lit by the same sun, so it shows a phase. From the far side it\'s never in sight.',
 	'<b>No water and no roads.</b> Grey dust and rock to the horizon, plains, crater rims and mountainsides.',
-	'<b>On your own.</b> Driving with others is on the Earth: on the Moon you drive alone. Driving, air, drifts and tricks still earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
+	'<b>With others.</b> See who\'s driving near you on the Moon, or bring friends in a party, wherever each of you is: a friend on the Earth is a tap away. Driving, air, drifts and tricks earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
 ];
+
+// The rest of what the Moon's pages say (build.js): its page's title, description and words, the
+// line over the coordinates, the search, its place in the Earth's pages' lists, and its credit.
+export const MOON_SITE = {
+	pages: MOON_PAGES,
+	made: MOON_MADE,
+	driving: MOON_DRIVING,
+	// Its page, /moon/.
+	title: 'Drive on the Moon in 3D, Free in Your Browser',
+	description: 'Drive on the real Moon in 3D, made from NASA\'s maps: the Apollo landing sites, Tycho, the south pole and the far side, in a sixth of the gravity. Free.',
+	social: 'Drive on the Moon in 3D',
+	cardAlt: 'The Moon from space in World Drive: pick anywhere on it, drop in and drive, free in your browser',
+	lede: 'World Drive\'s globe turns to the Moon: pick anywhere on it, drop in and drive, in a sixth of the Earth\'s gravity with the Earth hanging in the black sky. Its mountains, craters and seas are where the real ones are, from NASA\'s maps.',
+	// Said of the first of its places, Tranquility Base, which its Drive on the Moon pins.
+	first: 'where Apollo 11 landed',
+	data: 'It\'s a whole Moon, the near side and the far side, the poles and all, made in your browser from under 3 MB of NASA\'s data, so it needs no map service: the globe\'s search knows the Moon\'s own places, its seas, craters, mountains and landing sites, by name.',
+	elsewhere: {
+		heading: 'And the Earth',
+		html: 'On the Earth, World Drive drops you into Google\'s photorealistic 3D map of the real world, anywhere: your own street, or <a href="/drive/">famous roads, bridges and cities</a> like the Golden Gate Bridge, Times Square and Monaco.',
+	},
+	// Where on it a place is, as its pages say.
+	coordinates: 'selenographic latitude and longitude, north and east positive',
+	search: 'search for a crater, a sea or a mountain by name',
+	// Among the Earth's places, in each one's list of the others, and on /drive/.
+	tagline: 'Craters, seas and the Apollo sites',
+	others: 'World Drive\'s globe turns to the Moon too: its craters, seas and mountains from NASA\'s maps, a sixth of the Earth\'s gravity, and the Earth in its black sky. <a href="/moon/">Drive on the Moon</a>: the Apollo landing sites, Tycho, the south pole and the far side.',
+	// Its pages' footer: NASA's maps, through its Scientific Visualization Studio's CGI Moon Kit, as
+	// the game credits them.
+	credit: 'World Drive is a free arcade driving game. Its Moon is made from NASA\'s Lunar Reconnaissance Orbiter\'s heights (LOLA) and pictures (LROC), from NASA\'s Scientific Visualization Studio\'s <a href="https://svs.gsfc.nasa.gov/4720/">CGI Moon Kit</a>, in the public domain; World Drive isn\'t made or endorsed by NASA.',
+};

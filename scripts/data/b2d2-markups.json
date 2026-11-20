@@ -1,6 +1,6 @@
 {
 	"source": "B2D2 Repair Model artifact (https://claude.ai/artifact/KWrwNnAjGSySgoDRXgEcRa), collection \"markups\"",
-	"saved": "2026-11-11",
+	"saved": "2026-11-18",
 	"markups": [
 		{
 			"v": 2,
@@ -13,14 +13,14 @@
 			"zone": "ground",
 			"face": "east pony wall at grade (AA side)",
 			"grid": "Grid 42–43 / AB–AC · EL +4.31 to EL +4.59",
-			"no": "CW0008",
+			"no": "CW0009",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 42–43, EL +2.78 to EL +3.13; Bluebeam 0.12 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 42–43, EL +2.78 to EL +3.13; Bluebeam 0.12 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -46,9 +46,9 @@
 				]
 			],
 			"area": 0.12,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400000,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-MRERYKONONQURHXE"
 		},
@@ -63,14 +63,14 @@
 			"zone": "ground",
 			"face": "east pony wall at grade (AA side)",
 			"grid": "Grid 27–33 / AB–AC · EL +4.32 to EL +5.02",
-			"no": "CW0013",
+			"no": "CW0012",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 27–33, EL +2.79 to EL +3.65; Bluebeam 4.3 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 27–33, EL +2.79 to EL +3.65; Bluebeam 4.3 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -96,9 +96,9 @@
 				]
 			],
 			"area": 4.3,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400001,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-MMENOHUWQRNYVVAE"
 		},
@@ -120,7 +120,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 25–26, EL +3.11 to EL +3.51; Bluebeam 0.2 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 25–26, EL +3.11 to EL +3.51; Bluebeam 0.2 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -146,9 +146,9 @@
 				]
 			],
 			"area": 0.2,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400002,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-IQLIHQHZXINEHUZD"
 		},
@@ -170,7 +170,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 24–25, EL +3.21 to EL +3.55; Bluebeam 0.25 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 24–25, EL +3.21 to EL +3.55; Bluebeam 0.25 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -196,9 +196,9 @@
 				]
 			],
 			"area": 0.25,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400003,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FJFOXJSRNEABQPWN"
 		},
@@ -220,7 +220,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 22–24, EL +3.16 to EL +3.55; Bluebeam 0.21 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 22–24, EL +3.16 to EL +3.55; Bluebeam 0.21 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -246,9 +246,9 @@
 				]
 			],
 			"area": 0.21,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400004,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-PUFPCRFLHHPJDNNO"
 		},
@@ -270,7 +270,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 20–23, EL +3.06 to EL +3.61; Bluebeam 0.62 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 20–23, EL +3.06 to EL +3.61; Bluebeam 0.62 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -296,9 +296,9 @@
 				]
 			],
 			"area": 0.62,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400005,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BGNPEGEUQDMTHLQZ"
 		},
@@ -320,7 +320,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 19–21, EL +3.04 to EL +3.59; Bluebeam 0.38 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 19–21, EL +3.04 to EL +3.59; Bluebeam 0.38 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -346,9 +346,9 @@
 				]
 			],
 			"area": 0.38,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400006,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-AVAXVXLMRKFAZIOB"
 		},
@@ -370,7 +370,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 17–18, EL +2.86 to EL +3.66; Bluebeam 0.16 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 17–18, EL +2.86 to EL +3.66; Bluebeam 0.16 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -396,9 +396,9 @@
 				]
 			],
 			"area": 0.16,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400007,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-OCBEQIJXEBMONGPH"
 		},
@@ -420,7 +420,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 16–17, EL +2.97 to EL +3.62; Bluebeam 0.49 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 16–17, EL +2.97 to EL +3.62; Bluebeam 0.49 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -446,9 +446,9 @@
 				]
 			],
 			"area": 0.49,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400008,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EMLDRNESHPNUKACC"
 		},
@@ -470,7 +470,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 41–42, EL +2.84 to EL +3.64; Bluebeam 0.53 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 41–42, EL +2.84 to EL +3.64; Bluebeam 0.53 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -496,9 +496,9 @@
 				]
 			],
 			"area": 0.53,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400009,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-OOGANRSQLKLNGNCJ"
 		},
@@ -513,14 +513,13 @@
 			"zone": "ground",
 			"face": "east pony wall at grade (AA side)",
 			"grid": "Grid 33–34 / AB–AC · EL +4.56 to EL +5.00",
-			"no": "CW0012",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 33–34, EL +3.08 to EL +3.62; Bluebeam 0.24 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 33–34, EL +3.08 to EL +3.62; Bluebeam 0.24 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -546,9 +545,9 @@
 				]
 			],
 			"area": 0.24,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400010,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-XIMGDSGEFUSCDKBX"
 		},
@@ -570,7 +569,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 51–53, EL +3.20 to EL +3.50; Bluebeam 0.1 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 51–53, EL +3.20 to EL +3.50; Bluebeam 0.1 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -596,9 +595,9 @@
 				]
 			],
 			"area": 0.1,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400012,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-KOXMBVWGVTDBFVAN"
 		},
@@ -613,14 +612,13 @@
 			"zone": "ground",
 			"face": "west pony wall at grade (AJ side)",
 			"grid": "Grid 48–51 / AH–AJ · EL +4.37 to EL +4.93",
-			"no": "CW0039",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 48–51, EL +2.86 to EL +3.54; Bluebeam 1.07 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 48–51, EL +2.86 to EL +3.54; Bluebeam 1.07 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -681,9 +679,9 @@
 				]
 			],
 			"area": 1.07,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400013,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DNNHBECPNBSJSXBB"
 		},
@@ -705,7 +703,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 47–49, EL +2.84 to EL +3.54; Bluebeam 0.55 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 47–49, EL +2.84 to EL +3.54; Bluebeam 0.55 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -741,9 +739,9 @@
 				]
 			],
 			"area": 0.55,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400014,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-QBAUCZLNHFSHRDVO"
 		},
@@ -758,14 +756,13 @@
 			"zone": "ground",
 			"face": "west pony wall at grade (AJ side)",
 			"grid": "Grid 45–46 / AH–AJ · EL +4.28 to EL +5.01",
-			"no": "CW0037",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 45–46, EL +2.74 to EL +3.64; Bluebeam 0.36 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 45–46, EL +2.74 to EL +3.64; Bluebeam 0.36 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -791,9 +788,9 @@
 				]
 			],
 			"area": 0.36,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400015,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-IISOIZZSJJVMQEDL"
 		},
@@ -815,7 +812,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 43–45, EL +2.91 to EL +3.51; Bluebeam 0.47 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 43–45, EL +2.91 to EL +3.51; Bluebeam 0.47 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -846,9 +843,9 @@
 				]
 			],
 			"area": 0.47,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400016,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-SRLJUNCDFNCAVQLO"
 		},
@@ -863,14 +860,13 @@
 			"zone": "ground",
 			"face": "west pony wall at grade (AJ side)",
 			"grid": "Grid 42–44 / AH–AJ · EL +4.43 to EL +4.85",
-			"no": "CW0035",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 42–44, EL +2.92 to EL +3.44; Bluebeam 0.78 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 42–44, EL +2.92 to EL +3.44; Bluebeam 0.78 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -896,9 +892,9 @@
 				]
 			],
 			"area": 0.78,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400017,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-ZUMKUHUPVMCNJLAR"
 		},
@@ -913,14 +909,14 @@
 			"zone": "ground",
 			"face": "west pony wall at grade (AJ side)",
 			"grid": "Grid 36–40 / AH–AJ · EL +4.38 to EL +4.95",
-			"no": "CW0033",
+			"no": "CW0032",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 36–40, EL +2.87 to EL +3.57; Bluebeam 1.43 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 36–40, EL +2.87 to EL +3.57; Bluebeam 1.43 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -966,9 +962,9 @@
 				]
 			],
 			"area": 1.43,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400018,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-TNXASRNQAKNXXJZI"
 		},
@@ -983,14 +979,13 @@
 			"zone": "ground",
 			"face": "west pony wall at grade (AJ side)",
 			"grid": "Grid 39–42 / AH–AJ · EL +4.38 to EL +4.99",
-			"no": "CW0034",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 39–42, EL +2.87 to EL +3.62; Bluebeam 1.76 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 39–42, EL +2.87 to EL +3.62; Bluebeam 1.76 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1016,9 +1011,9 @@
 				]
 			],
 			"area": 1.76,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400019,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-IRTKFUJGPENQQJXW"
 		},
@@ -1033,14 +1028,13 @@
 			"zone": "ground",
 			"face": "west pony wall at grade (AJ side)",
 			"grid": "Grid 36–37 / AH–AJ · EL +4.53 to EL +4.83",
-			"no": "CW0032",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 36–37, EL +3.05 to EL +3.42; Bluebeam 0.1 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 36–37, EL +3.05 to EL +3.42; Bluebeam 0.1 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1066,9 +1060,9 @@
 				]
 			],
 			"area": 0.1,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400020,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-OMDSFKRSXBRYMCIT"
 		},
@@ -1090,7 +1084,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 33–36, EL +2.77 to EL +3.67; Bluebeam 0.98 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 33–36, EL +2.77 to EL +3.67; Bluebeam 0.98 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1131,9 +1125,9 @@
 				]
 			],
 			"area": 0.98,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400021,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-SHFVCRRIEZQJLTCR"
 		},
@@ -1155,7 +1149,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-03",
-				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 31–33, EL +2.83 to EL +3.58; Bluebeam 0.86 m²."
+				"text": "Chipped 2026.11.03 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 31–33, EL +2.83 to EL +3.58; Bluebeam 0.86 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1191,60 +1185,11 @@
 				]
 			],
 			"area": 0.86,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400022,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-NZIHSRYCRMQAXOWI"
-		},
-		{
-			"v": 2,
-			"kind": "area",
-			"n": [
-				0,
-				0,
-				1
-			],
-			"zone": "c31",
-			"face": "west wall (AJ side)",
-			"grid": "Grid 54–56 / AH–AJ · EL −0.08 to EL +0.92",
-			"f": {
-				"type": "Exposed rebar",
-				"depth": null,
-				"depthMm": null,
-				"status": "Chipped / hydro-demo",
-				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 54–56, EL −0.08 to EL +0.92; Bluebeam 1 m²."
-			},
-			"photos": [],
-			"pts": [
-				[
-					54.738,
-					-0.083,
-					-7.17
-				],
-				[
-					55.738,
-					-0.083,
-					-7.17
-				],
-				[
-					55.738,
-					0.917,
-					-7.17
-				],
-				[
-					54.738,
-					0.917,
-					-7.17
-				]
-			],
-			"area": 1,
-			"src": "2026.11.10 progress",
-			"at": 1793750400023,
-			"upd": 1794409808824,
-			"by": null,
-			"id": "prog-SVXUCQBZZTOSKZFZ"
 		},
 		{
 			"v": 2,
@@ -1264,7 +1209,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-04",
-				"text": "Chipped 2026.11.04 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 25–26, EL +3.26 to EL +3.48; Bluebeam 0.2 m²."
+				"text": "Chipped 2026.11.04 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 25–26, EL +3.26 to EL +3.48; Bluebeam 0.2 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1290,9 +1235,9 @@
 				]
 			],
 			"area": 0.2,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-AFGJIFBEIDADDGBI"
 		},
@@ -1314,7 +1259,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-04",
-				"text": "Chipped 2026.11.04 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 19–22, EL +3.36 to EL +3.68; Bluebeam 0.63 m²."
+				"text": "Chipped 2026.11.04 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 19–22, EL +3.36 to EL +3.68; Bluebeam 0.63 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1340,9 +1285,9 @@
 				]
 			],
 			"area": 0.63,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DFAFBBCEFGCBADHF"
 		},
@@ -1363,7 +1308,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-04",
-				"text": "Chipped 2026.11.04 (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 14–16, EL +3.01 to EL +3.61; Bluebeam 0.36 m²."
+				"text": "Chipped 2026.11.04 (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 14–16, EL +3.01 to EL +3.61; Bluebeam 0.36 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1399,9 +1344,9 @@
 				]
 			],
 			"area": 0.36,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-HCBHBAEFABGBBAEE"
 		},
@@ -1422,7 +1367,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 0–1, EL −6.04 to EL −4.94; Bluebeam 0.49 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 0–1, EL −6.04 to EL −4.94; Bluebeam 0.49 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1448,9 +1393,9 @@
 				]
 			],
 			"area": 0.49,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FBEFIFDECAECDCBC"
 		},
@@ -1471,7 +1416,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 1–3, EL −4.98 to EL −3.49; Bluebeam 1.95 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 1–3, EL −4.98 to EL −3.49; Bluebeam 1.95 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1497,9 +1442,9 @@
 				]
 			],
 			"area": 1.95,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EFIEEBJBFCCCCBEB"
 		},
@@ -1521,7 +1466,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 35–41, EL +2.85 to EL +3.68; Bluebeam 2.75 m²."
+				"text": "Chipped 2026.11.02 and before (night shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 35–41, EL +2.85 to EL +3.68; Bluebeam 2.75 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1587,9 +1532,9 @@
 				]
 			],
 			"area": 2.75,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400011,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-CDDNIZIMOTHNYMSV"
 		},
@@ -1611,7 +1556,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 8–10, EL +3.08 to EL +3.68; Bluebeam 0.42 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 8–10, EL +3.08 to EL +3.68; Bluebeam 0.42 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1637,9 +1582,9 @@
 				]
 			],
 			"area": 0.42,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-GEEFAFADGCFECAGB"
 		},
@@ -1661,7 +1606,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 10–12, EL +3.01 to EL +3.36; Bluebeam 0.12 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 10–12, EL +3.01 to EL +3.36; Bluebeam 0.12 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1687,9 +1632,9 @@
 				]
 			],
 			"area": 0.12,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EBDBBBDDFAIBHIFA"
 		},
@@ -1711,7 +1656,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 9–11, EL +3.03 to EL +3.48; Bluebeam 0.23 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 9–11, EL +3.03 to EL +3.48; Bluebeam 0.23 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1737,9 +1682,9 @@
 				]
 			],
 			"area": 0.23,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EJAHCGECFEACJECI"
 		},
@@ -1761,7 +1706,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 11–13, EL +2.94 to EL +3.34; Bluebeam 0.16 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 11–13, EL +2.94 to EL +3.34; Bluebeam 0.16 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1787,9 +1732,9 @@
 				]
 			],
 			"area": 0.16,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BGGBBADDDHIJBHEH"
 		},
@@ -1811,7 +1756,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 15–18, EL +3.39 to EL +3.62; Bluebeam 0.67 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 15–18, EL +3.39 to EL +3.62; Bluebeam 0.67 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1837,9 +1782,9 @@
 				]
 			],
 			"area": 0.67,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DIGEIDHBFEFAAEBB"
 		},
@@ -1861,7 +1806,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 28–30, EL +2.83 to EL +3.48; Bluebeam 0.79 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 28–30, EL +2.83 to EL +3.48; Bluebeam 0.79 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1897,9 +1842,9 @@
 				]
 			],
 			"area": 0.79,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-JEFDABBEFEFIFBDG"
 		},
@@ -1921,7 +1866,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 30–32, EL +2.80 to EL +3.20; Bluebeam 0.16 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 30–32, EL +2.80 to EL +3.20; Bluebeam 0.16 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1947,9 +1892,9 @@
 				]
 			],
 			"area": 0.16,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EECAAEBBBADAEDHF"
 		},
@@ -1971,7 +1916,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 60–62, EL +3.25 to EL +3.60; Bluebeam 0.44 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 60–62, EL +3.25 to EL +3.60; Bluebeam 0.44 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -1997,9 +1942,9 @@
 				]
 			],
 			"area": 0.44,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-JGJHBBEBEDHIDEID"
 		},
@@ -2013,7 +1958,7 @@
 			],
 			"zone": "ground",
 			"face": "west pony wall at grade (AJ side)",
-			"grid": "Grid 58–60 / AH–AJ · EL +4.54 to EL +4.95",
+			"grid": "Grid 58–60 / AH–AJ · EL +4.30 to EL +4.95",
 			"no": "CW0045",
 			"f": {
 				"type": "Exposed rebar",
@@ -2021,7 +1966,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 58–60, EL +3.07 to EL +3.57; Bluebeam 0.57 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 58–60, EL +2.77 to EL +3.57; Bluebeam 0.74 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2031,8 +1976,28 @@
 					-7.77
 				],
 				[
+					59.544,
+					4.551,
+					-7.77
+				],
+				[
+					59.544,
+					4.303,
+					-7.77
+				],
+				[
+					59.953,
+					4.3,
+					-7.77
+				],
+				[
+					59.946,
+					4.679,
+					-7.77
+				],
+				[
 					59.645,
-					4.544,
+					4.681,
 					-7.77
 				],
 				[
@@ -2046,59 +2011,10 @@
 					-7.77
 				]
 			],
-			"area": 0.57,
-			"src": "2026.11.10 progress",
+			"area": 0.74,
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
-			"by": null,
-			"id": "prog-CCJJJDABECEBCDAJ"
-		},
-		{
-			"v": 2,
-			"kind": "area",
-			"n": [
-				0,
-				0,
-				1
-			],
-			"zone": "ground",
-			"face": "west pony wall at grade (AJ side)",
-			"grid": "Grid 59–60 / AH–AJ · EL +4.31 to EL +4.67",
-			"f": {
-				"type": "Exposed rebar",
-				"depth": null,
-				"depthMm": null,
-				"status": "Chipped / hydro-demo",
-				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 59–60, EL +2.78 to EL +3.23; Bluebeam 0.18 m²."
-			},
-			"photos": [],
-			"pts": [
-				[
-					59.544,
-					4.309,
-					-7.77
-				],
-				[
-					59.943,
-					4.309,
-					-7.77
-				],
-				[
-					59.943,
-					4.675,
-					-7.77
-				],
-				[
-					59.544,
-					4.675,
-					-7.77
-				]
-			],
-			"area": 0.18,
-			"src": "2026.11.10 progress",
-			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-GCEHIECGJDDDDCFF"
 		},
@@ -2120,7 +2036,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 57–59, EL +3.15 to EL +3.50; Bluebeam 0.25 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 57–59, EL +3.15 to EL +3.50; Bluebeam 0.25 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2146,9 +2062,9 @@
 				]
 			],
 			"area": 0.25,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-CEEEIHEFFDAAJFJB"
 		},
@@ -2170,7 +2086,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 56–58, EL +2.80 to EL +3.40; Bluebeam 0.66 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 56–58, EL +2.80 to EL +3.40; Bluebeam 0.66 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2196,9 +2112,9 @@
 				]
 			],
 			"area": 0.66,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-HEIGACEIDEDBEACC"
 		},
@@ -2220,7 +2136,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 54–56, EL +3.21 to EL +3.71; Bluebeam 0.2 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 54–56, EL +3.21 to EL +3.71; Bluebeam 0.2 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2246,9 +2162,9 @@
 				]
 			],
 			"area": 0.2,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FDDFICBFEDDEDEBJ"
 		},
@@ -2270,7 +2186,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section A (west wall), grid 53–55, EL +3.19 to EL +3.74; Bluebeam 0.22 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 53–55, EL +3.19 to EL +3.74; Bluebeam 0.22 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2296,9 +2212,9 @@
 				]
 			],
 			"area": 0.22,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DFCHCEAFDAAJCFGB"
 		},
@@ -2313,14 +2229,13 @@
 			"zone": "ground",
 			"face": "east pony wall at grade (AA side)",
 			"grid": "Grid 58–60 / AB–AC · EL +4.62 to EL +4.86",
-			"no": "CW0001",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 58–60, EL +3.16 to EL +3.46; Bluebeam 0.09 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 58–60, EL +3.16 to EL +3.46; Bluebeam 0.09 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2346,9 +2261,9 @@
 				]
 			],
 			"area": 0.09,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-GCACBBHCGDECCEDB"
 		},
@@ -2370,7 +2285,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 56–59, EL +3.02 to EL +3.67; Bluebeam 1.27 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 56–59, EL +3.02 to EL +3.67; Bluebeam 1.27 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2396,9 +2311,9 @@
 				]
 			],
 			"area": 1.27,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-AIDAAHCJFJDFFJDH"
 		},
@@ -2420,7 +2335,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 52–55, EL +2.81 to EL +3.71; Bluebeam 1.62 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 52–55, EL +2.81 to EL +3.71; Bluebeam 1.62 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2446,9 +2361,9 @@
 				]
 			],
 			"area": 1.62,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-GCGBAIECDDEBFFDE"
 		},
@@ -2470,7 +2385,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 51–52, EL +2.93 to EL +3.43; Bluebeam 0.25 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 51–52, EL +2.93 to EL +3.43; Bluebeam 0.25 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2496,9 +2411,9 @@
 				]
 			],
 			"area": 0.25,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-AAAHHAFAHGHHJDIE"
 		},
@@ -2520,7 +2435,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 50–51, EL +3.26 to EL +3.71; Bluebeam 0.27 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 50–51, EL +3.26 to EL +3.71; Bluebeam 0.27 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2546,9 +2461,9 @@
 				]
 			],
 			"area": 0.27,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-AIEDGBBEDBFFABFD"
 		},
@@ -2563,14 +2478,13 @@
 			"zone": "ground",
 			"face": "east pony wall at grade (AA side)",
 			"grid": "Grid 48–50 / AB–AC · EL +4.46 to EL +5.07",
-			"no": "CW0006",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 48–50, EL +2.97 to EL +3.72; Bluebeam 0.56 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 48–50, EL +2.97 to EL +3.72; Bluebeam 0.56 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2596,9 +2510,9 @@
 				]
 			],
 			"area": 0.56,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BAFEAEDCIEEEBDFC"
 		},
@@ -2620,7 +2534,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 44–49, EL +2.85 to EL +3.65; Bluebeam 3.2 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 44–49, EL +2.85 to EL +3.65; Bluebeam 3.2 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2646,9 +2560,9 @@
 				]
 			],
 			"area": 3.2,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-AFFCDEAHCFBBDGCB"
 		},
@@ -2663,14 +2577,13 @@
 			"zone": "ground",
 			"face": "east pony wall at grade (AA side)",
 			"grid": "Grid 42–44 / AB–AC · EL +4.52 to EL +5.05",
-			"no": "CW0009",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST007 Section B (east wall), grid 42–44, EL +3.04 to EL +3.69; Bluebeam 0.52 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 42–44, EL +3.04 to EL +3.69; Bluebeam 0.52 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2696,11 +2609,2730 @@
 				]
 			],
 			"area": 0.52,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-IJDHEBICGIBGHBDC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "ground",
+			"face": "west pony wall at grade (AJ side)",
+			"grid": "Grid 36–37 / AH–AJ · EL +4.63 to EL +4.83",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 36–37, EL +3.17 to EL +3.42; Bluebeam 0.06 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					36.414,
+					4.631,
+					-7.77
+				],
+				[
+					36.649,
+					4.631,
+					-7.77
+				],
+				[
+					36.649,
+					4.832,
+					-7.77
+				],
+				[
+					36.414,
+					4.832,
+					-7.77
+				]
+			],
+			"area": 0.06,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-AEDGABCCJAFHIDFE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "ground",
+			"face": "west pony wall at grade (AJ side)",
+			"grid": "Grid 39–40 / AH–AJ · EL +4.70 to EL +4.95",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 39–40, EL +3.25 to EL +3.56; Bluebeam 0.12 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					39.051,
+					4.696,
+					-7.77
+				],
+				[
+					39.431,
+					4.696,
+					-7.77
+				],
+				[
+					39.431,
+					4.949,
+					-7.77
+				],
+				[
+					39.051,
+					4.949,
+					-7.77
+				]
+			],
+			"area": 0.12,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-FDEFJCFEAADCEIJB"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "ground",
+			"face": "west pony wall at grade (AJ side)",
+			"grid": "Grid 43–45 / AH–AJ · EL +4.60 to EL +4.85",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 43–45, EL +3.13 to EL +3.44; Bluebeam 0.11 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					43.723,
+					4.61,
+					-7.77
+				],
+				[
+					44.169,
+					4.6,
+					-7.77
+				],
+				[
+					44.073,
+					4.732,
+					-7.77
+				],
+				[
+					44.001,
+					4.85,
+					-7.77
+				],
+				[
+					43.723,
+					4.847,
+					-7.77
+				]
+			],
+			"area": 0.11,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-AAAJJDAIEEBBEBCE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "ground",
+			"face": "west pony wall at grade (AJ side)",
+			"grid": "Grid 44–46 / AH–AJ · EL +4.66 to EL +4.81",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 44–46, EL +3.20 to EL +3.39; Bluebeam 0.03 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					44.908,
+					4.657,
+					-7.77
+				],
+				[
+					45.088,
+					4.657,
+					-7.77
+				],
+				[
+					45.088,
+					4.807,
+					-7.77
+				],
+				[
+					44.908,
+					4.807,
+					-7.77
+				]
+			],
+			"area": 0.03,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-HBHAFCAABABGBBDC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "ground",
+			"face": "west pony wall at grade (AJ side)",
+			"grid": "Grid 48–50 / AH–AJ · EL +4.71 to EL +4.94",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 48–50, EL +3.27 to EL +3.55; Bluebeam 0.12 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					48.578,
+					4.719,
+					-7.77
+				],
+				[
+					48.952,
+					4.714,
+					-7.77
+				],
+				[
+					49.021,
+					4.834,
+					-7.77
+				],
+				[
+					49.082,
+					4.937,
+					-7.77
+				],
+				[
+					48.578,
+					4.937,
+					-7.77
+				]
+			],
+			"area": 0.12,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-HJJDDCGCCABFEDJI"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "ground",
+			"face": "east pony wall at grade (AA side)",
+			"grid": "Grid 58–59 / AB–AC · EL +4.61 to EL +4.87",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 58–59, EL +3.15 to EL +3.46; Bluebeam 0.14 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					58.966,
+					4.614,
+					-1.98
+				],
+				[
+					58.512,
+					4.619,
+					-1.98
+				],
+				[
+					58.51,
+					4.867,
+					-1.98
+				],
+				[
+					58.962,
+					4.864,
+					-1.98
+				]
+			],
+			"area": 0.14,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BAAJBFDHCDIAECHD"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "ground",
+			"face": "east pony wall at grade (AA side)",
+			"grid": "Grid 48–49 / AB–AC · EL +4.71 to EL +4.96",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 48–49, EL +3.26 to EL +3.58; Bluebeam 0.12 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					48.792,
+					4.705,
+					-1.98
+				],
+				[
+					48.399,
+					4.706,
+					-1.98
+				],
+				[
+					48.397,
+					4.96,
+					-1.98
+				],
+				[
+					48.788,
+					4.955,
+					-1.98
+				]
+			],
+			"area": 0.12,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-CDCEABCGDBFDFECC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "ground",
+			"face": "east pony wall at grade (AA side)",
+			"grid": "Grid 43–45 / AB–AC · EL +4.76 to EL +5.01",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 43–45, EL +3.33 to EL +3.64; Bluebeam 0.2 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					44.4,
+					4.76,
+					-1.98
+				],
+				[
+					43.764,
+					4.761,
+					-1.98
+				],
+				[
+					43.764,
+					5.015,
+					-1.98
+				],
+				[
+					44.396,
+					5.01,
+					-1.98
+				]
+			],
+			"area": 0.2,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-FJCFIDFGJFAAAHEC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "ground",
+			"face": "east pony wall at grade (AA side)",
+			"grid": "Grid 32–34 / AB–AC · EL +4.60 to EL +4.99",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-11",
+				"text": "Chipped 2026.11.11, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 32–34, EL +3.13 to EL +3.62; Bluebeam 0.56 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					33.487,
+					4.596,
+					-1.98
+				],
+				[
+					32.344,
+					4.596,
+					-1.98
+				],
+				[
+					32.344,
+					4.993,
+					-1.98
+				],
+				[
+					33.487,
+					4.993,
+					-1.98
+				]
+			],
+			"area": 0.56,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-CFEFGHEBCBDHCFEA"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 15–17 / AC–AD · EL −0.93 to EL −0.53",
+			"no": "BW0003",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-12",
+				"text": "Chipped 2026.11.12, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 15–17, EL −0.93 to EL −0.53; Bluebeam 0.28 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					16.25,
+					-0.934,
+					-2.832
+				],
+				[
+					15.551,
+					-0.934,
+					-2.832
+				],
+				[
+					15.551,
+					-0.534,
+					-2.832
+				],
+				[
+					16.25,
+					-0.534,
+					-2.832
+				]
+			],
+			"area": 0.28,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-GBJGBJCJCBDBABEE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 22–24 / AC–AD · EL −1.83 to EL −1.03",
+			"no": "BW0005",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-14",
+				"text": "Chipped 2026.11.14, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 22–24, EL −1.83 to EL −1.03; Bluebeam 0.24 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					23.125,
+					-1.832,
+					-2.832
+				],
+				[
+					22.826,
+					-1.832,
+					-2.832
+				],
+				[
+					22.826,
+					-1.032,
+					-2.832
+				],
+				[
+					23.125,
+					-1.032,
+					-2.832
+				]
+			],
+			"area": 0.24,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-ACCCIEHCHFGHFIHC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 23–25 / AC–AD · EL −1.84 to EL −1.09",
+			"no": "BW0006",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-14",
+				"text": "Chipped 2026.11.14, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 23–25, EL −1.84 to EL −1.09; Bluebeam 0.45 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					24.296,
+					-1.844,
+					-2.832
+				],
+				[
+					23.697,
+					-1.844,
+					-2.832
+				],
+				[
+					23.697,
+					-1.094,
+					-2.832
+				],
+				[
+					24.296,
+					-1.094,
+					-2.832
+				]
+			],
+			"area": 0.45,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-DIFEJEDEIDEEHHAC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 23–25 / AC–AD · EL −0.55 to EL −0.15",
+			"no": "BW0007",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-14",
+				"text": "Chipped 2026.11.14, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 23–25, EL −0.55 to EL −0.15; Bluebeam 0.12 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					24.08,
+					-0.552,
+					-2.832
+				],
+				[
+					23.78,
+					-0.552,
+					-2.832
+				],
+				[
+					23.78,
+					-0.152,
+					-2.832
+				],
+				[
+					24.08,
+					-0.152,
+					-2.832
+				]
+			],
+			"area": 0.12,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-EIBAFAEDAEEBJDDB"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 27–29 / AC–AD · EL −1.23 to EL −0.88",
+			"no": "BW0008",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-13",
+				"text": "Chipped 2026.11.13 (night), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 27–29, EL −1.23 to EL −0.88; Bluebeam 0.18 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					28.255,
+					-1.232,
+					-2.832
+				],
+				[
+					27.756,
+					-1.232,
+					-2.832
+				],
+				[
+					27.756,
+					-0.882,
+					-2.832
+				],
+				[
+					28.255,
+					-0.882,
+					-2.832
+				]
+			],
+			"area": 0.18,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-DFADFAEBGEIEBDEA"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 38–40 / AC–AD · EL −0.68 to EL +0.27",
+			"no": "BW0012",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-15",
+				"text": "Chipped 2026.11.15, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 38–40, EL −0.68 to EL +0.27; Bluebeam 0.67 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					39.014,
+					-0.682,
+					-2.832
+				],
+				[
+					38.314,
+					-0.682,
+					-2.832
+				],
+				[
+					38.314,
+					0.268,
+					-2.832
+				],
+				[
+					39.014,
+					0.268,
+					-2.832
+				]
+			],
+			"area": 0.67,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-CEHBACEFFCHFCHIJ"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 41–43 / AC–AD · EL −1.49 to EL −1.14",
+			"no": "BW0014",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-14",
+				"text": "Chipped 2026.11.14, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 41–43, EL −1.49 to EL −1.14; Bluebeam 0.14 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					42.391,
+					-1.486,
+					-2.832
+				],
+				[
+					41.991,
+					-1.486,
+					-2.832
+				],
+				[
+					41.991,
+					-1.136,
+					-2.832
+				],
+				[
+					42.391,
+					-1.136,
+					-2.832
+				]
+			],
+			"area": 0.14,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-FHGAHAGBFGAFECDG"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 41–42 / AC–AD · EL −1.56 to EL −0.91",
+			"no": "BW0013",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-13",
+				"text": "Chipped 2026.11.13 (night), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 41–42, EL −1.56 to EL −0.91; Bluebeam 0.33 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					41.714,
+					-1.564,
+					-2.832
+				],
+				[
+					41.214,
+					-1.564,
+					-2.832
+				],
+				[
+					41.214,
+					-0.914,
+					-2.832
+				],
+				[
+					41.714,
+					-0.914,
+					-2.832
+				]
+			],
+			"area": 0.33,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-FDEFBDCBCIBHBIGE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 42–44 / AC–AD · EL −1.51 to EL −0.92",
+			"no": "BW0015",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-14",
+				"text": "Chipped 2026.11.14, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 42–44, EL −1.51 to EL −0.92; Bluebeam 0.39 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					43.172,
+					-1.515,
+					-2.832
+				],
+				[
+					42.522,
+					-1.515,
+					-2.832
+				],
+				[
+					42.522,
+					-0.915,
+					-2.832
+				],
+				[
+					43.172,
+					-0.915,
+					-2.832
+				]
+			],
+			"area": 0.39,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-ADCBDEFBBHDACDAE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 55–56 / AC–AD · EL −1.65 to EL −1.07",
+			"no": "BW0017",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-14",
+				"text": "Chipped 2026.11.14, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 55–56, EL −1.65 to EL −1.07; Bluebeam 0.21 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					55.455,
+					-1.652,
+					-2.832
+				],
+				[
+					55.085,
+					-1.652,
+					-2.832
+				],
+				[
+					55.085,
+					-1.072,
+					-2.832
+				],
+				[
+					55.455,
+					-1.072,
+					-2.832
+				]
+			],
+			"area": 0.21,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BDEEJCBAAHGEIADF"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 56–58 / AC–AD · EL −2.25 to EL +1.26",
+			"no": "CW0018",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 56–58, EL −2.25 to EL +1.26; Bluebeam 3.25 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					57.605,
+					-2.254,
+					-2.832
+				],
+				[
+					56.965,
+					-2.254,
+					-2.832
+				],
+				[
+					56.965,
+					-1.552,
+					-2.832
+				],
+				[
+					56.214,
+					-1.549,
+					-2.832
+				],
+				[
+					56.212,
+					-0.104,
+					-2.832
+				],
+				[
+					56.96,
+					-0.098,
+					-2.832
+				],
+				[
+					56.975,
+					1.259,
+					-2.832
+				],
+				[
+					57.431,
+					1.256,
+					-2.832
+				],
+				[
+					57.441,
+					0.665,
+					-2.832
+				],
+				[
+					57.615,
+					0.667,
+					-2.832
+				]
+			],
+			"area": 3.25,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-CEHEDBDFFFDBJJEA"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 51–53 / AC–AD · EL −1.98 to EL +0.31",
+			"no": "BW0016",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-15",
+				"text": "Chipped 2026.11.15, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 51–53, EL −1.98 to EL +0.31; Bluebeam 2.97 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					52.892,
+					-1.981,
+					-2.832
+				],
+				[
+					51.303,
+					-1.981,
+					-2.832
+				],
+				[
+					51.297,
+					-0.938,
+					-2.832
+				],
+				[
+					51.697,
+					-0.938,
+					-2.832
+				],
+				[
+					51.701,
+					0.308,
+					-2.832
+				],
+				[
+					52.644,
+					0.308,
+					-2.832
+				],
+				[
+					52.644,
+					-0.434,
+					-2.832
+				],
+				[
+					52.9,
+					-0.435,
+					-2.832
+				]
+			],
+			"area": 2.97,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BACFEHHJEECFDCAC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 32–36 / AC–AD · EL −0.58 to EL +0.68",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 32–36, EL −0.58 to EL +0.68; Bluebeam 2.25 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					34.107,
+					0.323,
+					-2.832
+				],
+				[
+					34.11,
+					-0.578,
+					-2.832
+				],
+				[
+					32.503,
+					-0.578,
+					-2.832
+				],
+				[
+					32.503,
+					0.323,
+					-2.832
+				],
+				[
+					33.056,
+					0.326,
+					-2.832
+				],
+				[
+					33.05,
+					0.676,
+					-2.832
+				],
+				[
+					35.355,
+					0.667,
+					-2.832
+				],
+				[
+					35.355,
+					0.32,
+					-2.832
+				]
+			],
+			"area": 2.25,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-JBFEJDABBBCDBCGI"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 30–33 / AC–AD · EL −1.76 to EL −0.51",
+			"no": "BW0009",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-13",
+				"text": "Chipped 2026.11.13 (night), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 30–33, EL −1.76 to EL −0.51; Bluebeam 1.27 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					32.106,
+					-1.761,
+					-2.832
+				],
+				[
+					30.798,
+					-1.761,
+					-2.832
+				],
+				[
+					30.798,
+					-0.96,
+					-2.832
+				],
+				[
+					31.6,
+					-0.962,
+					-2.832
+				],
+				[
+					31.607,
+					-0.514,
+					-2.832
+				],
+				[
+					32.106,
+					-0.514,
+					-2.832
+				]
+			],
+			"area": 1.27,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-CEHGBDCFGADCFEFA"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 12–15 / AC–AD · EL −1.63 to EL +0.10",
+			"no": "BW0002",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-15",
+				"text": "Chipped 2026.11.15, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 12–15, EL −1.63 to EL +0.10; Bluebeam 2.26 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					14.154,
+					-1.629,
+					-2.832
+				],
+				[
+					12.757,
+					-1.629,
+					-2.832
+				],
+				[
+					12.757,
+					0.098,
+					-2.832
+				],
+				[
+					13.416,
+					0.102,
+					-2.832
+				],
+				[
+					13.412,
+					-0.106,
+					-2.832
+				],
+				[
+					14.158,
+					-0.124,
+					-2.832
+				]
+			],
+			"area": 2.26,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BCFFFCAHADFEJFFF"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 8–11 / AC–AD · EL −1.87 to EL +0.89",
+			"no": "BW0001",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 8–11, EL −1.87 to EL +0.89; Bluebeam 2.31 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					9.729,
+					-1.866,
+					-2.832
+				],
+				[
+					8.932,
+					-1.866,
+					-2.832
+				],
+				[
+					8.934,
+					-1.512,
+					-2.832
+				],
+				[
+					8.781,
+					-1.511,
+					-2.832
+				],
+				[
+					8.784,
+					-0.562,
+					-2.832
+				],
+				[
+					8.928,
+					-0.557,
+					-2.832
+				],
+				[
+					8.928,
+					0.389,
+					-2.832
+				],
+				[
+					9.127,
+					0.389,
+					-2.832
+				],
+				[
+					9.132,
+					0.894,
+					-2.832
+				],
+				[
+					9.428,
+					0.891,
+					-2.832
+				],
+				[
+					9.431,
+					0.389,
+					-2.832
+				],
+				[
+					9.73,
+					0.384,
+					-2.832
+				],
+				[
+					9.727,
+					0.098,
+					-2.832
+				],
+				[
+					10.035,
+					0.09,
+					-2.832
+				],
+				[
+					10.033,
+					-0.618,
+					-2.832
+				],
+				[
+					9.722,
+					-0.611,
+					-2.832
+				]
+			],
+			"area": 2.31,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BEAEEHDCEEEFBGIE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 35–37 / AC–AD · EL −0.90 to EL +0.50",
+			"no": "BW0011",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 35–37, EL −0.90 to EL +0.50; Bluebeam 1.4 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					36.798,
+					-0.902,
+					-2.832
+				],
+				[
+					35.798,
+					-0.902,
+					-2.832
+				],
+				[
+					35.798,
+					0.498,
+					-2.832
+				],
+				[
+					36.798,
+					0.498,
+					-2.832
+				]
+			],
+			"area": 1.4,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-AFEGFCAJBBABDHCC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				-1
+			],
+			"zone": "c31",
+			"face": "east wall (AA side)",
+			"grid": "Grid 18–20 / AC–AD · EL −1.72 to EL +0.19",
+			"no": "BW0004",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-14",
+				"text": "Chipped 2026.11.14, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section B (east wall), grid 18–20, EL −1.72 to EL +0.19; Bluebeam 2.35 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					19.619,
+					-1.72,
+					-2.832
+				],
+				[
+					18.2,
+					-1.72,
+					-2.832
+				],
+				[
+					18.205,
+					-1.061,
+					-2.832
+				],
+				[
+					18.313,
+					-1.061,
+					-2.832
+				],
+				[
+					18.31,
+					-0.416,
+					-2.832
+				],
+				[
+					18.66,
+					-0.419,
+					-2.832
+				],
+				[
+					18.66,
+					0.186,
+					-2.832
+				],
+				[
+					19.619,
+					0.183,
+					-2.832
+				]
+			],
+			"area": 2.35,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-JHFEDAACGIEBJCFE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 53–56 / AH–AJ · EL −0.74 to EL +1.06",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 53–56, EL −0.74 to EL +1.06; Bluebeam 3.6 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					53.434,
+					-0.736,
+					-7.17
+				],
+				[
+					55.434,
+					-0.736,
+					-7.17
+				],
+				[
+					55.434,
+					1.064,
+					-7.17
+				],
+				[
+					53.434,
+					1.064,
+					-7.17
+				]
+			],
+			"area": 3.6,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-DABBAFGFBJBEBADC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 54–61 / AH–AJ · EL −2.24 to EL −1.49",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 54–61, EL −2.24 to EL −1.49; Bluebeam 4.43 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					54.615,
+					-2.239,
+					-7.17
+				],
+				[
+					60.528,
+					-2.239,
+					-7.17
+				],
+				[
+					60.519,
+					-1.489,
+					-7.17
+				],
+				[
+					54.615,
+					-1.489,
+					-7.17
+				]
+			],
+			"area": 4.43,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-AJIAEFDBIDEFIIBG"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 46–49 / AH–AJ · EL −2.00 to EL −1.49",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 46–49, EL −1.99 to EL −1.49; Bluebeam 0.89 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					46.741,
+					-1.993,
+					-7.17
+				],
+				[
+					48.441,
+					-1.993,
+					-7.17
+				],
+				[
+					48.441,
+					-1.493,
+					-7.17
+				],
+				[
+					46.741,
+					-1.493,
+					-7.17
+				],
+				[
+					46.75,
+					-1.773,
+					-7.17
+				],
+				[
+					46.574,
+					-1.778,
+					-7.17
+				],
+				[
+					46.571,
+					-1.995,
+					-7.17
+				]
+			],
+			"area": 0.89,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-ABDACJHGFAEDCCEH"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 43–46 / AH–AJ · EL −2.00 to EL −0.40",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 43–46, EL −2.00 to EL −0.40; Bluebeam 2.06 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					45.026,
+					-2.001,
+					-7.17
+				],
+				[
+					43.027,
+					-2.001,
+					-7.17
+				],
+				[
+					43.027,
+					-0.951,
+					-7.17
+				],
+				[
+					43.477,
+					-0.951,
+					-7.17
+				],
+				[
+					43.477,
+					-0.401,
+					-7.17
+				],
+				[
+					44.226,
+					-0.401,
+					-7.17
+				],
+				[
+					44.226,
+					-1.051,
+					-7.17
+				],
+				[
+					43.977,
+					-1.051,
+					-7.17
+				],
+				[
+					43.992,
+					-1.401,
+					-7.17
+				],
+				[
+					45.008,
+					-1.401,
+					-7.17
+				]
+			],
+			"area": 2.06,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-CGBDBDADAJAFIBEG"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 41–43 / AH–AJ · EL +0.20 to EL +0.40",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 41–43, EL +0.20 to EL +0.40; Bluebeam 0.06 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					41.817,
+					0.198,
+					-7.17
+				],
+				[
+					42.115,
+					0.198,
+					-7.17
+				],
+				[
+					42.115,
+					0.398,
+					-7.17
+				],
+				[
+					41.817,
+					0.398,
+					-7.17
+				]
+			],
+			"area": 0.06,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-EAEGEFEBFFDIFCFC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 40–41 / AH–AJ · EL −0.17 to EL +0.50",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 40–41, EL −0.17 to EL +0.50; Bluebeam 0.41 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					40.06,
+					0.502,
+					-7.17
+				],
+				[
+					40.06,
+					0.177,
+					-7.17
+				],
+				[
+					40.36,
+					0.177,
+					-7.17
+				],
+				[
+					40.36,
+					-0.173,
+					-7.17
+				],
+				[
+					40.66,
+					-0.173,
+					-7.17
+				],
+				[
+					40.96,
+					-0.173,
+					-7.17
+				],
+				[
+					40.96,
+					0.177,
+					-7.17
+				],
+				[
+					40.66,
+					0.177,
+					-7.17
+				],
+				[
+					40.66,
+					0.504,
+					-7.17
+				]
+			],
+			"area": 0.41,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BEIJFBHJCEBFCFEH"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 33–34 / AH–AJ · EL −1.79 to EL −0.89",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 33–34, EL −1.79 to EL −0.89; Bluebeam 0.41 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					33.398,
+					-1.79,
+					-7.17
+				],
+				[
+					33.848,
+					-1.79,
+					-7.17
+				],
+				[
+					33.848,
+					-0.89,
+					-7.17
+				],
+				[
+					33.398,
+					-0.89,
+					-7.17
+				]
+			],
+			"area": 0.41,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-IACGEABCEEJABECH"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 34–36 / AH–AJ · EL −1.89 to EL −0.39",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-15",
+				"text": "Chipped 2026.11.15, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 34–36, EL −1.89 to EL −0.39; Bluebeam 1.38 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					34.605,
+					-1.892,
+					-7.17
+				],
+				[
+					35.805,
+					-1.892,
+					-7.17
+				],
+				[
+					35.805,
+					-1.042,
+					-7.17
+				],
+				[
+					35.155,
+					-1.042,
+					-7.17
+				],
+				[
+					35.155,
+					-0.393,
+					-7.17
+				],
+				[
+					34.605,
+					-0.393,
+					-7.17
+				]
+			],
+			"area": 1.38,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-AAEEJCBABJFFGIIC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0.0034,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 21–24 / AH–AJ · EL −2.09 to EL −0.53",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 21–24, EL −2.09 to EL −0.53; Bluebeam 1.12 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					21.629,
+					-0.537,
+					-7.174
+				],
+				[
+					21.629,
+					-0.887,
+					-7.173
+				],
+				[
+					22.429,
+					-0.887,
+					-7.173
+				],
+				[
+					22.429,
+					-2.087,
+					-7.169
+				],
+				[
+					23.078,
+					-2.087,
+					-7.169
+				],
+				[
+					23.078,
+					-0.887,
+					-7.173
+				],
+				[
+					22.579,
+					-0.89,
+					-7.173
+				],
+				[
+					22.579,
+					-0.53,
+					-7.174
+				]
+			],
+			"area": 1.12,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-GCDHJJAGAGEDABCH"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 31–33 / AH–AJ · EL −1.91 to EL −0.90",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 31–33, EL −1.91 to EL −0.90; Bluebeam 0.77 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					32.572,
+					-0.9,
+					-7.17
+				],
+				[
+					32.947,
+					-0.9,
+					-7.17
+				],
+				[
+					32.947,
+					-1.275,
+					-7.17
+				],
+				[
+					32.572,
+					-1.275,
+					-7.17
+				],
+				[
+					32.578,
+					-1.908,
+					-7.17
+				],
+				[
+					31.824,
+					-1.912,
+					-7.17
+				],
+				[
+					31.823,
+					-1.275,
+					-7.17
+				],
+				[
+					32.182,
+					-1.275,
+					-7.17
+				],
+				[
+					32.169,
+					-0.905,
+					-7.17
+				]
+			],
+			"area": 0.77,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-AHAFCABCBABCBEIF"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 29–31 / AH–AJ · EL −1.93 to EL −1.28",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-16",
+				"text": "Chipped 2026.11.16, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 29–31, EL −1.93 to EL −1.28; Bluebeam 0.97 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					29.183,
+					-1.927,
+					-7.17
+				],
+				[
+					29.183,
+					-1.578,
+					-7.17
+				],
+				[
+					29.733,
+					-1.578,
+					-7.17
+				],
+				[
+					29.733,
+					-1.278,
+					-7.17
+				],
+				[
+					30.933,
+					-1.278,
+					-7.17
+				],
+				[
+					30.933,
+					-1.927,
+					-7.17
+				]
+			],
+			"area": 0.97,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-DCBFGECCCECGEFCF"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0.0034,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 9–11 / AH–AJ · EL −2.26 to EL −0.66",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 9–11, EL −2.26 to EL −0.66; Bluebeam 1.16 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					9.775,
+					-2.256,
+					-7.168
+				],
+				[
+					9.775,
+					-1.316,
+					-7.172
+				],
+				[
+					10.724,
+					-1.316,
+					-7.172
+				],
+				[
+					10.724,
+					-0.656,
+					-7.174
+				],
+				[
+					10.904,
+					-0.656,
+					-7.174
+				],
+				[
+					10.904,
+					-2.226,
+					-7.168
+				],
+				[
+					9.828,
+					-2.255,
+					-7.168
+				]
+			],
+			"area": 1.16,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-AFEEDEEEECGHJGGE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0.0034,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 20–21 / AH–AJ · EL −2.11 to EL −1.40",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 20–21, EL −2.11 to EL −1.40; Bluebeam 0.52 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					20.124,
+					-2.109,
+					-7.169
+				],
+				[
+					20.859,
+					-2.109,
+					-7.169
+				],
+				[
+					20.859,
+					-1.399,
+					-7.171
+				],
+				[
+					20.124,
+					-1.399,
+					-7.171
+				]
+			],
+			"area": 0.52,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BACFFDJABACCCGEC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 30–32 / AH–AJ · EL −1.92 to EL −1.27",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 30–32, EL −1.92 to EL −1.27; Bluebeam 0.58 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					30.937,
+					-1.922,
+					-7.17
+				],
+				[
+					31.824,
+					-1.922,
+					-7.17
+				],
+				[
+					31.824,
+					-1.268,
+					-7.17
+				],
+				[
+					30.928,
+					-1.268,
+					-7.17
+				]
+			],
+			"area": 0.58,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-CBIEIEIADHJCEIBF"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 39–40 / AH–AJ · EL +0.88 to EL +1.25",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 39–40, EL +0.87 to EL +1.24; Bluebeam 0.09 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					39.717,
+					0.875,
+					-7.17
+				],
+				[
+					39.947,
+					0.875,
+					-7.17
+				],
+				[
+					39.947,
+					1.245,
+					-7.17
+				],
+				[
+					39.717,
+					1.245,
+					-7.17
+				]
+			],
+			"area": 0.09,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BDGBAHFHICFAHAEE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 40–41 / AH–AJ · EL +0.70 to EL +1.22",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 40–41, EL +0.70 to EL +1.22; Bluebeam 0.28 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					40.277,
+					0.699,
+					-7.17
+				],
+				[
+					40.802,
+					0.699,
+					-7.17
+				],
+				[
+					40.802,
+					1.224,
+					-7.17
+				],
+				[
+					40.277,
+					1.224,
+					-7.17
+				]
+			],
+			"area": 0.28,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-BBGDFFCAJAGIEEBF"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 41–42 / AH–AJ · EL +0.78 to EL +1.25",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 41–42, EL +0.78 to EL +1.25; Bluebeam 0.19 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					41.212,
+					0.781,
+					-7.17
+				],
+				[
+					41.622,
+					0.781,
+					-7.17
+				],
+				[
+					41.622,
+					1.251,
+					-7.17
+				],
+				[
+					41.212,
+					1.251,
+					-7.17
+				]
+			],
+			"area": 0.19,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-DGAAAEJEFFFAGJEG"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 45–46 / AH–AJ · EL +0.62 to EL +1.19",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 45–46, EL +0.62 to EL +1.19; Bluebeam 0.27 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					45.023,
+					0.619,
+					-7.17
+				],
+				[
+					45.493,
+					0.619,
+					-7.17
+				],
+				[
+					45.493,
+					1.189,
+					-7.17
+				],
+				[
+					45.023,
+					1.189,
+					-7.17
+				]
+			],
+			"area": 0.27,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-ADDHEDBBJCAACBBA"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 49–53 / AH–AJ · EL −2.14 to EL −0.91",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 49–53, EL −2.14 to EL −0.91; Bluebeam 2.89 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					49.946,
+					-1.558,
+					-7.17
+				],
+				[
+					49.946,
+					-2.138,
+					-7.17
+				],
+				[
+					52.646,
+					-2.138,
+					-7.17
+				],
+				[
+					52.646,
+					-1.258,
+					-7.17
+				],
+				[
+					51.657,
+					-0.906,
+					-7.17
+				],
+				[
+					50.767,
+					-0.906,
+					-7.17
+				]
+			],
+			"area": 2.89,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-JGAFGGAJGFADJBEG"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 54–56 / AH–AJ · EL −1.58 to EL −0.74",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 54–56, EL −1.58 to EL −0.74; Bluebeam 0.52 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					54.59,
+					-1.577,
+					-7.17
+				],
+				[
+					55.245,
+					-1.485,
+					-7.17
+				],
+				[
+					55.261,
+					-0.745,
+					-7.17
+				],
+				[
+					54.586,
+					-0.758,
+					-7.17
+				]
+			],
+			"area": 0.52,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-DECBJBDFHBHAEFGA"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				0,
+				1
+			],
+			"zone": "c31",
+			"face": "west wall (AJ side)",
+			"grid": "Grid 56–58 / AH–AJ · EL +0.44 to EL +1.21",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-17",
+				"text": "Chipped 2026.11.17, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST007 Section A (west wall), grid 56–58, EL +0.44 to EL +1.21; Bluebeam 0.53 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					56.304,
+					1.203,
+					-7.17
+				],
+				[
+					56.304,
+					0.573,
+					-7.17
+				],
+				[
+					56.724,
+					0.573,
+					-7.17
+				],
+				[
+					56.724,
+					0.443,
+					-7.17
+				],
+				[
+					57.064,
+					0.443,
+					-7.17
+				],
+				[
+					57.064,
+					1.213,
+					-7.17
+				]
+			],
+			"area": 0.53,
+			"src": "2026.11.17 progress",
+			"at": 1795040643780,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-IHDDDCBBHGEBDJHC"
 		},
 		{
 			"v": 2,
@@ -2719,7 +5351,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 basement B1 plan, grid 62–64 / AF–AH; Bluebeam 0.99 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 basement B1 plan, grid 62–64 / AF–AH; Bluebeam 0.99 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2745,9 +5377,9 @@
 				]
 			],
 			"area": 0.99,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400024,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-ELVPUNMFDNKLJOCF"
 		},
@@ -2768,7 +5400,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 basement B1 plan, grid 0–2 / AG–AJ; Bluebeam 0.99 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 basement B1 plan, grid 0–2 / AG–AJ; Bluebeam 0.99 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2794,9 +5426,9 @@
 				]
 			],
 			"area": 0.99,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-CCCFAHHBGCHABCBA"
 		},
@@ -2817,35 +5449,35 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 18–19 / AC–AE; Bluebeam 0.72 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 18–19 / AC–AE; Bluebeam 0.72 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
-					18.195,
+					18.173,
 					4.26,
-					-2.376
+					-2.116
 				],
 				[
-					18.995,
+					18.973,
 					4.26,
-					-2.376
+					-2.116
 				],
 				[
-					18.995,
+					18.973,
 					4.26,
-					-3.276
+					-3.016
 				],
 				[
-					18.195,
+					18.173,
 					4.26,
-					-3.276
+					-3.016
 				]
 			],
 			"area": 0.72,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BBFDEABFFHBEBFEB"
 		},
@@ -2859,42 +5491,42 @@
 			],
 			"zone": "ground",
 			"face": "ground floor slab",
-			"grid": "Grid 20–21 / AC–AE · EL +4.26",
+			"grid": "Grid 20–21 / AC–AD · EL +4.26",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 20–21 / AC–AE; Bluebeam 0.35 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 20–21 / AC–AD; Bluebeam 0.35 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
-					20.066,
+					20.077,
 					4.26,
-					-2.576
+					-2.045
 				],
 				[
-					20.566,
+					20.577,
 					4.26,
-					-2.576
+					-2.045
 				],
 				[
-					20.566,
+					20.577,
 					4.26,
-					-3.276
+					-2.744
 				],
 				[
-					20.066,
+					20.077,
 					4.26,
-					-3.276
+					-2.744
 				]
 			],
 			"area": 0.35,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BABGCDHADFEFBBAG"
 		},
@@ -2915,7 +5547,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 23–25 / AC–AD; Bluebeam 0.6 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 23–25 / AC–AD; Bluebeam 0.6 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2941,9 +5573,9 @@
 				]
 			],
 			"area": 0.6,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FGCHGAEJAEGHAHDE"
 		},
@@ -2964,7 +5596,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 24–26 / AC–AD; Bluebeam 0.16 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 24–26 / AC–AD; Bluebeam 0.16 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -2990,9 +5622,9 @@
 				]
 			],
 			"area": 0.16,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BEHAIGCFHCCCEABF"
 		},
@@ -3013,7 +5645,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 25–27 / AC–AD; Bluebeam 0.56 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 25–27 / AC–AD; Bluebeam 0.56 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3039,9 +5671,9 @@
 				]
 			],
 			"area": 0.56,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FBIGGAABDAJBFDAG"
 		},
@@ -3055,93 +5687,54 @@
 			],
 			"zone": "ground",
 			"face": "ground floor slab",
-			"grid": "Grid 27–28 / AC–AD · EL +4.26",
+			"grid": "Grid 26–28 / AB–AD · EL +4.26",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 27–28 / AC–AD; Bluebeam 0.32 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 26–28 / AB–AD; Bluebeam 0.47 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
-					27.004,
+					27.002,
 					4.26,
-					-2.048
+					-1.98
 				],
 				[
-					27.704,
+					27.702,
 					4.26,
-					-2.048
+					-1.98
 				],
 				[
-					27.704,
+					27.702,
 					4.26,
-					-2.498
+					-2.429
 				],
 				[
-					27.004,
+					27.349,
 					4.26,
-					-2.498
+					-2.428
+				],
+				[
+					27.347,
+					4.26,
+					-2.877
+				],
+				[
+					26.994,
+					4.26,
+					-2.877
 				]
 			],
-			"area": 0.32,
-			"src": "2026.11.10 progress",
+			"area": 0.47,
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-GGDADJIICCJEIGFD"
-		},
-		{
-			"v": 2,
-			"kind": "area",
-			"n": [
-				0,
-				1,
-				0
-			],
-			"zone": "ground",
-			"face": "ground floor slab",
-			"grid": "Grid 26–28 / AC–AD · EL +4.26",
-			"f": {
-				"type": "Exposed rebar",
-				"depth": null,
-				"depthMm": null,
-				"status": "Chipped / hydro-demo",
-				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 26–28 / AC–AD; Bluebeam 0.16 m²."
-			},
-			"photos": [],
-			"pts": [
-				[
-					26.999,
-					4.26,
-					-2.5
-				],
-				[
-					27.349,
-					4.26,
-					-2.5
-				],
-				[
-					27.349,
-					4.26,
-					-2.95
-				],
-				[
-					26.999,
-					4.26,
-					-2.95
-				]
-			],
-			"area": 0.16,
-			"src": "2026.11.10 progress",
-			"at": 1794246594887,
-			"upd": 1794409808824,
-			"by": null,
-			"id": "prog-DHCCADGCJFFBCAJF"
 		},
 		{
 			"v": 2,
@@ -3160,7 +5753,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 29–32 / AC–AD; Bluebeam 1.04 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 29–32 / AC–AD; Bluebeam 1.04 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3186,9 +5779,9 @@
 				]
 			],
 			"area": 1.04,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DCFAJCDHEHBGCFCJ"
 		},
@@ -3209,7 +5802,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 36–38 / AC–AD; Bluebeam 1.05 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 36–38 / AC–AD; Bluebeam 1.05 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3235,9 +5828,9 @@
 				]
 			],
 			"area": 1.05,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EFDCEFHFJFEIIEGB"
 		},
@@ -3258,7 +5851,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 59–61 / AC–AD; Bluebeam 0.2 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 59–61 / AC–AD; Bluebeam 0.2 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3284,9 +5877,9 @@
 				]
 			],
 			"area": 0.2,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-IFEAEBDBEDBEGCFJ"
 		},
@@ -3307,7 +5900,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 56–58 / AC–AD; Bluebeam 0.42 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 56–58 / AC–AD; Bluebeam 0.42 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3333,9 +5926,9 @@
 				]
 			],
 			"area": 0.42,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-CEAECJFFAFBFJAEB"
 		},
@@ -3356,7 +5949,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 54–56 / AC–AD; Bluebeam 0.22 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 54–56 / AC–AD; Bluebeam 0.22 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3382,9 +5975,9 @@
 				]
 			],
 			"area": 0.22,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DFDCDFACFDBIIFJF"
 		},
@@ -3405,7 +5998,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 59–61 / AH–AJ; Bluebeam 0.62 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 59–61 / AH–AJ; Bluebeam 0.62 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3431,9 +6024,9 @@
 				]
 			],
 			"area": 0.62,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-HJAHGCHJDAFDJFGC"
 		},
@@ -3454,7 +6047,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 53–58 / AG–AJ; Bluebeam 1.57 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 53–58 / AG–AJ; Bluebeam 1.57 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3480,9 +6073,9 @@
 				]
 			],
 			"area": 1.57,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FCDJIGGDEHFDIGBE"
 		},
@@ -3503,7 +6096,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 34–36 / AG–AJ; Bluebeam 0.57 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 34–36 / AG–AJ; Bluebeam 0.57 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3529,9 +6122,9 @@
 				]
 			],
 			"area": 0.57,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DJDJBJEACGECFBAF"
 		},
@@ -3552,7 +6145,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 13–14 / AG–AL; Bluebeam 1.05 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 13–14 / AG–AL; Bluebeam 1.05 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3578,9 +6171,9 @@
 				]
 			],
 			"area": 1.05,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BHEFGIHCBEFECJBE"
 		},
@@ -3601,7 +6194,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 9–11 / AB–AD; Bluebeam 0.54 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 9–11 / AB–AD; Bluebeam 0.54 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3627,9 +6220,9 @@
 				]
 			],
 			"area": 0.54,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-JICBBCEAFECAJCFE"
 		},
@@ -3650,7 +6243,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 10–11 / AC–AE; Bluebeam 0.19 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 10–11 / AC–AE; Bluebeam 0.19 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3676,9 +6269,9 @@
 				]
 			],
 			"area": 0.19,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BCFFIEGFDAHGEFAB"
 		},
@@ -3699,7 +6292,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 12–14 / AC–AE; Bluebeam 0.19 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 12–14 / AC–AE; Bluebeam 0.19 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3725,9 +6318,9 @@
 				]
 			],
 			"area": 0.19,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EHEGBBABBACJDGBE"
 		},
@@ -3748,7 +6341,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 14–15 / AC–AE; Bluebeam 0.22 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 14–15 / AC–AE; Bluebeam 0.22 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3774,9 +6367,9 @@
 				]
 			],
 			"area": 0.22,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-CIHBEEEBJCCDDGDH"
 		},
@@ -3790,42 +6383,42 @@
 			],
 			"zone": "ground",
 			"face": "ground floor slab",
-			"grid": "Grid 28–29 / AC–AD · EL +4.26",
+			"grid": "Grid 28–29 / AC–AE · EL +4.26",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 28–29 / AC–AD; Bluebeam 0.11 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 28–29 / AC–AE; Bluebeam 0.11 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
-					28.272,
+					28.176,
 					4.26,
-					-2.108
+					-2.684
 				],
 				[
-					28.572,
+					28.476,
 					4.26,
-					-2.108
+					-2.684
 				],
 				[
-					28.572,
+					28.476,
 					4.26,
-					-2.458
+					-3.034
 				],
 				[
-					28.272,
+					28.176,
 					4.26,
-					-2.458
+					-3.034
 				]
 			],
 			"area": 0.11,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-HDDHAICBFGBDCAGA"
 		},
@@ -3839,42 +6432,42 @@
 			],
 			"zone": "ground",
 			"face": "ground floor slab",
-			"grid": "Grid 28–30 / AC–AE · EL +4.26",
+			"grid": "Grid 28–30 / AC–AD · EL +4.26",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 28–30 / AC–AE; Bluebeam 0.22 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 28–30 / AC–AD; Bluebeam 0.22 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
-					28.625,
+					28.729,
 					4.26,
-					-2.562
+					-2.13
 				],
 				[
-					29.125,
+					29.229,
 					4.26,
-					-2.562
+					-2.13
 				],
 				[
-					29.125,
+					29.229,
 					4.26,
-					-3.012
+					-2.58
 				],
 				[
-					28.625,
+					28.729,
 					4.26,
-					-3.012
+					-2.58
 				]
 			],
 			"area": 0.22,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-IDGDHDBBBBCBJEHB"
 		},
@@ -3895,7 +6488,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 22–23 / AC–AD; Bluebeam 0.15 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 22–23 / AC–AD; Bluebeam 0.15 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -3921,9 +6514,9 @@
 				]
 			],
 			"area": 0.15,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-CAIJAFJFIGCBCCCE"
 		},
@@ -3944,35 +6537,35 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 31–32 / AC–AD; Bluebeam 0.14 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 31–32 / AC–AD; Bluebeam 0.14 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
-					31.573,
+					31.556,
 					4.26,
-					-2.625
+					-2.141
 				],
 				[
-					31.973,
+					31.956,
 					4.26,
-					-2.625
+					-2.141
 				],
 				[
-					31.973,
+					31.956,
 					4.26,
-					-2.974
+					-2.491
 				],
 				[
-					31.573,
+					31.556,
 					4.26,
-					-2.974
+					-2.491
 				]
 			],
 			"area": 0.14,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-ADEICAJIDAACAJBC"
 		},
@@ -3993,7 +6586,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 32–33 / AC–AD; Bluebeam 0.32 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 32–33 / AC–AD; Bluebeam 0.32 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4019,9 +6612,9 @@
 				]
 			],
 			"area": 0.32,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FHEDAHAEADBCHJHG"
 		},
@@ -4042,7 +6635,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 34–36 / AC–AD; Bluebeam 0.48 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 34–36 / AC–AD; Bluebeam 0.48 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4068,9 +6661,9 @@
 				]
 			],
 			"area": 0.48,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-JFECCCDJDABEGBJF"
 		},
@@ -4091,7 +6684,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 38–40 / AC–AD; Bluebeam 0.49 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 38–40 / AC–AD; Bluebeam 0.49 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4117,9 +6710,9 @@
 				]
 			],
 			"area": 0.49,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BDACJJIAAEIAFDFB"
 		},
@@ -4140,7 +6733,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-09",
-				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 41–42 / AC–AD; Bluebeam 0.23 m²."
+				"text": "Chipped 2026.11.09, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 41–42 / AC–AD; Bluebeam 0.23 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4166,9 +6759,9 @@
 				]
 			],
 			"area": 0.23,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-CAFGFJFFJFCABBHE"
 		},
@@ -4189,7 +6782,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 39–42 / AC–AD; Bluebeam 0.59 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 39–42 / AC–AD; Bluebeam 0.59 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4225,9 +6818,9 @@
 				]
 			],
 			"area": 0.59,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BFHBEACHGIIAFFBE"
 		},
@@ -4248,7 +6841,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-10",
-				"text": "Chipped 2026.11.10, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 19–35 / AH–AJ; Bluebeam 5.32 m²."
+				"text": "Chipped 2026.11.10, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 19–35 / AH–AJ; Bluebeam 5.32 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4274,9 +6867,9 @@
 				]
 			],
 			"area": 5.32,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-CECFABBCCECFIIDB"
 		},
@@ -4297,7 +6890,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-10",
-				"text": "Chipped 2026.11.10, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST005 ground floor plan, grid 35–39 / AH–AJ; Bluebeam 0.83 m²."
+				"text": "Chipped 2026.11.10, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 35–39 / AH–AJ; Bluebeam 0.83 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4323,11 +6916,207 @@
 				]
 			],
 			"area": 0.83,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794409808824,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-BEECHDGIADICFEBE"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				1,
+				0
+			],
+			"zone": "ground",
+			"face": "ground floor slab",
+			"grid": "Grid 52–54 / AG–AJ · EL +4.26",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-12",
+				"text": "Chipped 2026.11.12, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 52–54 / AG–AJ; Bluebeam 0.42 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					52.99,
+					4.26,
+					-6.845
+				],
+				[
+					53.887,
+					4.26,
+					-6.845
+				],
+				[
+					53.894,
+					4.26,
+					-7.31
+				],
+				[
+					52.993,
+					4.26,
+					-7.31
+				]
+			],
+			"area": 0.42,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-EIFCIDJHFHDAAEAC"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				1,
+				0
+			],
+			"zone": "ground",
+			"face": "ground floor slab",
+			"grid": "Grid 49–52 / AG–AJ · EL +4.26",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-12",
+				"text": "Chipped 2026.11.12, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 49–52 / AG–AJ; Bluebeam 1.1 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					49.996,
+					4.26,
+					-6.843
+				],
+				[
+					51.996,
+					4.26,
+					-6.843
+				],
+				[
+					51.996,
+					4.26,
+					-7.393
+				],
+				[
+					49.996,
+					4.26,
+					-7.393
+				]
+			],
+			"area": 1.1,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-GECHDDEDDHFFJFEJ"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				1,
+				0
+			],
+			"zone": "ground",
+			"face": "ground floor slab",
+			"grid": "Grid 24–26 / AH–AK · EL +4.26",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-12",
+				"text": "Chipped 2026.11.12, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 24–26 / AH–AK; Bluebeam 0.53 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					24.126,
+					4.26,
+					-7.439
+				],
+				[
+					25.005,
+					4.26,
+					-7.439
+				],
+				[
+					25.005,
+					4.26,
+					-8.039
+				],
+				[
+					24.126,
+					4.26,
+					-8.039
+				]
+			],
+			"area": 0.53,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-DDAHJDFFDIIDEFCA"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				0,
+				1,
+				0
+			],
+			"zone": "ground",
+			"face": "ground floor slab",
+			"grid": "Grid 16–17 / AH–AJ · EL +4.26",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-12",
+				"text": "Chipped 2026.11.12, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST005 ground floor plan, grid 16–17 / AH–AJ; Bluebeam 0.2 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					16.521,
+					4.26,
+					-7.093
+				],
+				[
+					16.921,
+					4.26,
+					-7.093
+				],
+				[
+					16.921,
+					4.26,
+					-7.593
+				],
+				[
+					16.521,
+					4.26,
+					-7.593
+				]
+			],
+			"area": 0.2,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-EEDHFDFEHDCCEGGC"
 		},
 		{
 			"v": 2,
@@ -4346,7 +7135,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST006 basement B2 plan, grid 1–3 / AK–AM; Bluebeam 0.44 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST006 basement B2 plan, grid 1–3 / AK–AM; Bluebeam 0.44 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4372,9 +7161,9 @@
 				]
 			],
 			"area": 0.44,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400026,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EIOMKRAORINGTNJO"
 		},
@@ -4395,7 +7184,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST006 basement B2 plan, grid 1–3 / AX–AZ; Bluebeam 0.44 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST006 basement B2 plan, grid 1–3 / AX–AZ; Bluebeam 0.44 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4421,9 +7210,9 @@
 				]
 			],
 			"area": 0.44,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400027,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EEGMMGXLLVWKYRIG"
 		},
@@ -4444,7 +7233,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST006 basement B2 plan, grid 4–6 / AA–AC; Bluebeam 1 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST006 basement B2 plan, grid 4–6 / AA–AC; Bluebeam 1 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4470,9 +7259,9 @@
 				]
 			],
 			"area": 1,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400028,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-RCYEIIRMNYAORQLB"
 		},
@@ -4493,7 +7282,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST006 basement B2 plan, grid 2–4 / BN–BP; Bluebeam 0.2 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST006 basement B2 plan, grid 2–4 / BN–BP; Bluebeam 0.2 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4519,9 +7308,9 @@
 				]
 			],
 			"area": 0.2,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DCAHFAFACFBJJFCE"
 		},
@@ -4542,7 +7331,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST006 basement B2 plan, grid 2–4 / BK–BL; Bluebeam 0.27 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST006 basement B2 plan, grid 2–4 / BK–BL; Bluebeam 0.27 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4568,9 +7357,9 @@
 				]
 			],
 			"area": 0.27,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-JBBEDIBGJHDGEJCI"
 		},
@@ -4584,42 +7373,43 @@
 			],
 			"zone": "c32",
 			"face": "north wall",
-			"grid": "Grid 3–4 / AJ–AK · EL −3.70 to EL −3.25",
+			"grid": "Grid 3–4 / AJ–AK · EL −4.64 to EL −4.19",
+			"no": "AW0023",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid AJ–AK, EL −3.70 to EL −3.25; Bluebeam 0.25 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid AJ–AK, EL −4.64 to EL −4.19; Bluebeam 0.25 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
 					3.96,
-					-3.702,
-					-8.821
+					-4.639,
+					-8.696
 				],
 				[
 					3.96,
-					-3.702,
-					-8.271
+					-4.639,
+					-8.146
 				],
 				[
 					3.96,
-					-3.252,
-					-8.271
+					-4.189,
+					-8.146
 				],
 				[
 					3.96,
-					-3.252,
-					-8.821
+					-4.189,
+					-8.696
 				]
 			],
 			"area": 0.25,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400029,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-DYGRHCBCJOXKLKVP"
 		},
@@ -4634,13 +7424,14 @@
 			"zone": "c32",
 			"face": "north wall",
 			"grid": "Grid 3–4 / AK–AM · EL −4.50 to EL −3.29",
+			"no": "AW0022",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid AK–AM, EL −4.50 to EL −3.29; Bluebeam 0.91 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid AK–AM, EL −4.50 to EL −3.29; Bluebeam 0.91 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4686,9 +7477,9 @@
 				]
 			],
 			"area": 0.91,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400030,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-RCCZVNZWWYQRPUDB"
 		},
@@ -4702,42 +7493,63 @@
 			],
 			"zone": "c32",
 			"face": "north wall",
-			"grid": "Grid 3–4 / AP–AR · EL −3.33 to EL −1.73",
+			"grid": "Grid 3–4 / AP–AR · EL −3.34 to EL −1.43",
+			"no": "AW0021",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid AP–AR, EL −3.33 to EL −1.73; Bluebeam 1.84 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid AP–AR, EL −3.34 to EL −1.43; Bluebeam 1.99 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
 					3.96,
-					-3.334,
-					-14.448
+					-3.339,
+					-14.408
 				],
 				[
 					3.96,
-					-3.334,
-					-13.298
+					-3.339,
+					-13.259
 				],
 				[
 					3.96,
-					-1.734,
-					-13.298
+					-1.739,
+					-13.259
 				],
 				[
 					3.96,
-					-1.734,
-					-14.448
+					-1.737,
+					-13.571
+				],
+				[
+					3.96,
+					-1.433,
+					-13.567
+				],
+				[
+					3.96,
+					-1.439,
+					-14.062
+				],
+				[
+					3.96,
+					-1.742,
+					-14.062
+				],
+				[
+					3.96,
+					-1.739,
+					-14.408
 				]
 			],
-			"area": 1.84,
-			"src": "2026.11.10 progress",
+			"area": 1.99,
+			"src": "2026.11.17 progress",
 			"at": 1793750400031,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-OGUYUZNTJGMQGIAW"
 		},
@@ -4751,42 +7563,43 @@
 			],
 			"zone": "c32",
 			"face": "north wall",
-			"grid": "Grid 3–4 / AT–AV · EL −2.30 to EL −1.70",
+			"grid": "Grid 3–4 / AS–AT · EL −2.66 to EL −2.06",
+			"no": "AW0020",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid AT–AV, EL −2.30 to EL −1.70; Bluebeam 0.33 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid AS–AT, EL −2.66 to EL −2.06; Bluebeam 0.33 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
 					3.96,
-					-2.3,
-					-18.277
+					-2.656,
+					-16.722
 				],
 				[
 					3.96,
-					-2.3,
-					-17.727
+					-2.656,
+					-16.172
 				],
 				[
 					3.96,
-					-1.699,
-					-17.727
+					-2.056,
+					-16.172
 				],
 				[
 					3.96,
-					-1.699,
-					-18.277
+					-2.056,
+					-16.722
 				]
 			],
 			"area": 0.33,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400032,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-JATUQWSGMPCJDAPA"
 		},
@@ -4800,44 +7613,45 @@
 			],
 			"zone": "c32",
 			"face": "north wall",
-			"grid": "Grid 3–4 / BA–BB · EL −0.68 to EL +0.17",
+			"grid": "Grid 3–4 / AY–BA · EL −0.94 to EL −0.10",
+			"no": "AW0018",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BA–BB, EL −0.68 to EL +0.17; Bluebeam 0.57 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid AY–BA, EL −0.95 to EL −0.10; Bluebeam 0.57 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
 					3.96,
-					-0.68,
-					-24.854
+					-0.945,
+					-23.651
 				],
 				[
 					3.96,
-					-0.68,
-					-24.184
+					-0.945,
+					-22.981
 				],
 				[
 					3.96,
-					0.17,
-					-24.184
+					-0.095,
+					-22.981
 				],
 				[
 					3.96,
-					0.17,
-					-24.854
+					-0.095,
+					-23.651
 				]
 			],
 			"area": 0.57,
-			"src": "2026.11.10 progress",
-			"at": 1793750400033,
-			"upd": 1794409808824,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
 			"by": null,
-			"id": "prog-PYFCBMFVOSRKNLYD"
+			"id": "prog-FEFIDBJGJEACIGAJ"
 		},
 		{
 			"v": 2,
@@ -4849,44 +7663,45 @@
 			],
 			"zone": "c32",
 			"face": "north wall",
-			"grid": "Grid 3–4 / BC–BF · EL −0.04 to EL +1.36",
+			"grid": "Grid 3–4 / BA–BD · EL −0.49 to EL +0.91",
+			"no": "AW0017",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BC–BF, EL −0.04 to EL +1.36; Bluebeam 2.8 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid BA–BD, EL −0.49 to EL +0.91; Bluebeam 2.8 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
 					3.96,
-					-0.041,
-					-28.245
+					-0.491,
+					-26.446
 				],
 				[
 					3.96,
-					-0.041,
-					-26.246
+					-0.491,
+					-24.446
 				],
 				[
 					3.96,
-					1.359,
-					-26.246
+					0.909,
+					-24.446
 				],
 				[
 					3.96,
-					1.359,
-					-28.245
+					0.909,
+					-26.446
 				]
 			],
 			"area": 2.8,
-			"src": "2026.11.10 progress",
-			"at": 1793750400034,
-			"upd": 1794409808824,
+			"src": "2026.11.17 progress",
+			"at": 1793750400033,
+			"upd": 1795041998678,
 			"by": null,
-			"id": "prog-YVIWYMLLSFBVVAFU"
+			"id": "prog-PYFCBMFVOSRKNLYD"
 		},
 		{
 			"v": 2,
@@ -4899,13 +7714,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / AH–AK · EL −4.84 to EL −3.59",
+			"no": "AW0010",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid AH–AK, EL −4.84 to EL −3.59; Bluebeam 0.92 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid AH–AK, EL −4.84 to EL −3.59; Bluebeam 0.92 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4941,9 +7757,9 @@
 				]
 			],
 			"area": 0.92,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-IDECDEBHCDABECEE"
 		},
@@ -4958,13 +7774,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / AN–AP · EL −3.44 to EL −2.79",
+			"no": "AW0009",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid AN–AP, EL −3.44 to EL −2.79; Bluebeam 0.42 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid AN–AP, EL −3.44 to EL −2.79; Bluebeam 0.42 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -4990,9 +7807,9 @@
 				]
 			],
 			"area": 0.42,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400036,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-WQTFLDDKFIBSHRPL"
 		},
@@ -5007,13 +7824,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / AS–AT · EL −2.49 to EL −1.54",
+			"no": "AW0008",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid AS–AT, EL −2.49 to EL −1.54; Bluebeam 0.57 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid AS–AT, EL −2.49 to EL −1.54; Bluebeam 0.57 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5039,9 +7857,9 @@
 				]
 			],
 			"area": 0.57,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400037,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-EPSKDNTTYSSAFREM"
 		},
@@ -5056,13 +7874,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / AT–AU · EL −1.09 to EL −0.79",
+			"no": "AW0007",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid AT–AU, EL −1.09 to EL −0.79; Bluebeam 0.09 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid AT–AU, EL −1.09 to EL −0.79; Bluebeam 0.09 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5088,9 +7907,9 @@
 				]
 			],
 			"area": 0.09,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400038,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-JCVGLLFJMILYLXVZ"
 		},
@@ -5105,13 +7924,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / AX–AY · EL −1.37 to EL −0.77",
+			"no": "AW0006",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid AX–AY, EL −1.37 to EL −0.77; Bluebeam 0.57 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid AX–AY, EL −1.37 to EL −0.77; Bluebeam 0.57 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5137,9 +7957,9 @@
 				]
 			],
 			"area": 0.57,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400039,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-ZTMITDPUEDYLZTWA"
 		},
@@ -5154,13 +7974,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / BR–BV · EL +2.68 to EL +3.78",
+			"no": "AW0001",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid BR–BV, EL +2.68 to EL +3.78; Bluebeam 1.48 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid BR–BV, EL +2.68 to EL +3.78; Bluebeam 1.48 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5196,9 +8017,9 @@
 				]
 			],
 			"area": 1.48,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400040,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-TGXVOCBUMDMVJMHJ"
 		},
@@ -5213,13 +8034,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / BM–BP · EL +2.23 to EL +2.83",
+			"no": "AW0002",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid BM–BP, EL +2.23 to EL +2.83; Bluebeam 0.67 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid BM–BP, EL +2.23 to EL +2.83; Bluebeam 0.67 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5245,9 +8067,9 @@
 				]
 			],
 			"area": 0.67,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400041,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-TRMNTMBIGYHOWAQU"
 		},
@@ -5262,13 +8084,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / BM–BN · EL +2.99 to EL +3.29",
+			"no": "AW0003",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid BM–BN, EL +2.99 to EL +3.29; Bluebeam 0.14 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid BM–BN, EL +2.99 to EL +3.29; Bluebeam 0.14 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5294,9 +8117,9 @@
 				]
 			],
 			"area": 0.14,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400042,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-OCVCDZYADVDGRYHF"
 		},
@@ -5311,13 +8134,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / BL–BM · EL +2.20 to EL +2.60",
+			"no": "AW0004",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid BL–BM, EL +2.20 to EL +2.60; Bluebeam 0.19 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid BL–BM, EL +2.20 to EL +2.60; Bluebeam 0.19 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5343,9 +8167,9 @@
 				]
 			],
 			"area": 0.19,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400043,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-GEIFQLXSQWXLUDIP"
 		},
@@ -5360,13 +8184,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / BJ–BL · EL +1.82 to EL +2.43",
+			"no": "AW0005",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid BJ–BL, EL +1.83 to EL +2.43; Bluebeam 0.51 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid BJ–BL, EL +1.83 to EL +2.43; Bluebeam 0.51 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5402,9 +8227,9 @@
 				]
 			],
 			"area": 0.51,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400044,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-UWSAXJEMMFRQNLVF"
 		},
@@ -5419,13 +8244,14 @@
 			"zone": "c32",
 			"face": "north wall",
 			"grid": "Grid 3–4 / BU–BV · EL +3.49 to EL +3.72",
+			"no": "AW0011",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BU–BV, EL +3.49 to EL +3.72; Bluebeam 0.15 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid BU–BV, EL +3.49 to EL +3.72; Bluebeam 0.15 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5451,9 +8277,9 @@
 				]
 			],
 			"area": 0.15,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400045,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-TKECAWMOJDIDSOIC"
 		},
@@ -5468,13 +8294,14 @@
 			"zone": "c32",
 			"face": "north wall",
 			"grid": "Grid 3–4 / BP–BT · EL +2.60 to EL +3.77",
+			"no": "AW0012",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BP–BT, EL +2.60 to EL +3.77; Bluebeam 2.39 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid BP–BT, EL +2.60 to EL +3.77; Bluebeam 2.39 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5550,9 +8377,9 @@
 				]
 			],
 			"area": 2.39,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400046,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-ADILGSGJRMGRAJYB"
 		},
@@ -5566,140 +8393,43 @@
 			],
 			"zone": "c32",
 			"face": "north wall",
-			"grid": "Grid 3–4 / BN–BP · EL +2.79 to EL +3.56",
+			"grid": "Grid 3–4 / BL–BM · EL +2.67 to EL +3.44",
+			"no": "AW0013",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BN–BP, EL +2.79 to EL +3.56; Bluebeam 0.42 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid BL–BM, EL +2.67 to EL +3.44; Bluebeam 0.42 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
 					3.96,
-					2.785,
-					-36.651
+					2.673,
+					-34.784
 				],
 				[
 					3.96,
-					2.785,
-					-36.107
+					2.673,
+					-34.24
 				],
 				[
 					3.96,
-					3.555,
-					-36.107
+					3.443,
+					-34.24
 				],
 				[
 					3.96,
-					3.555,
-					-36.651
+					3.443,
+					-34.784
 				]
 			],
 			"area": 0.42,
-			"src": "2026.11.10 progress",
-			"at": 1793750400047,
-			"upd": 1794409808824,
-			"by": null,
-			"id": "prog-JTZYVZHYDXWOKKTM"
-		},
-		{
-			"v": 2,
-			"kind": "area",
-			"n": [
-				-1,
-				0,
-				0
-			],
-			"zone": "c32",
-			"face": "north wall",
-			"grid": "Grid 3–4 / BM–BP · EL +2.24 to EL +2.51",
-			"f": {
-				"type": "Exposed rebar",
-				"depth": null,
-				"depthMm": null,
-				"status": "Chipped / hydro-demo",
-				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BM–BP, EL +2.24 to EL +2.51; Bluebeam 0.34 m²."
-			},
-			"photos": [],
-			"pts": [
-				[
-					3.96,
-					2.239,
-					-36.916
-				],
-				[
-					3.96,
-					2.239,
-					-35.67
-				],
-				[
-					3.96,
-					2.509,
-					-35.67
-				],
-				[
-					3.96,
-					2.509,
-					-36.916
-				]
-			],
-			"area": 0.34,
-			"src": "2026.11.10 progress",
-			"at": 1793750400048,
-			"upd": 1794409808824,
-			"by": null,
-			"id": "prog-ITHQHHJRYNCPLKAH"
-		},
-		{
-			"v": 2,
-			"kind": "area",
-			"n": [
-				-1,
-				0,
-				0
-			],
-			"zone": "c32",
-			"face": "north wall",
-			"grid": "Grid 3–4 / BL–BM · EL +3.10 to EL +3.45",
-			"f": {
-				"type": "Exposed rebar",
-				"depth": null,
-				"depthMm": null,
-				"status": "Chipped / hydro-demo",
-				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BL–BM, EL +3.10 to EL +3.45; Bluebeam 0.21 m²."
-			},
-			"photos": [],
-			"pts": [
-				[
-					3.96,
-					3.099,
-					-34.663
-				],
-				[
-					3.96,
-					3.099,
-					-34.063
-				],
-				[
-					3.96,
-					3.449,
-					-34.063
-				],
-				[
-					3.96,
-					3.449,
-					-34.663
-				]
-			],
-			"area": 0.21,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400049,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-SLPWHTDKLWRQBMMZ"
 		},
@@ -5713,42 +8443,93 @@
 			],
 			"zone": "c32",
 			"face": "north wall",
-			"grid": "Grid 3–4 / BJ–BL · EL +1.57 to EL +2.52",
+			"grid": "Grid 3–4 / BJ–BK · EL +2.99 to EL +3.34",
+			"no": "AW0015",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BJ–BL, EL +1.57 to EL +2.52; Bluebeam 1.19 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid BJ–BK, EL +2.99 to EL +3.34; Bluebeam 0.21 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
 					3.96,
-					1.572,
-					-33.431
+					2.987,
+					-32.796
 				],
 				[
 					3.96,
-					1.572,
-					-32.181
+					2.987,
+					-32.196
 				],
 				[
 					3.96,
-					2.522,
-					-32.181
+					3.337,
+					-32.196
 				],
 				[
 					3.96,
-					2.522,
-					-33.431
+					3.337,
+					-32.796
+				]
+			],
+			"area": 0.21,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-CIACJEGCCAFADEGB"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				-1,
+				0,
+				0
+			],
+			"zone": "c32",
+			"face": "north wall",
+			"grid": "Grid 3–4 / BH–BK · EL +1.44 to EL +2.39",
+			"no": "AW0016",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-02",
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid BH–BK, EL +1.44 to EL +2.39; Bluebeam 1.19 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					3.96,
+					1.437,
+					-32.284
+				],
+				[
+					3.96,
+					1.437,
+					-31.034
+				],
+				[
+					3.96,
+					2.387,
+					-31.034
+				],
+				[
+					3.96,
+					2.387,
+					-32.284
 				]
 			],
 			"area": 1.19,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400050,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-NBCOHMWJFUTNSTOK"
 		},
@@ -5762,42 +8543,43 @@
 			],
 			"zone": "c32",
 			"face": "north wall",
-			"grid": "Grid 3–4 / BM–BN · EL +2.95 to EL +3.50",
+			"grid": "Grid 3–4 / BK–BL · EL +2.84 to EL +3.39",
+			"no": "AW0014",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid BM–BN, EL +2.95 to EL +3.50; Bluebeam 0.25 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid BK–BL, EL +2.84 to EL +3.39; Bluebeam 0.25 m²."
 			},
 			"photos": [],
 			"pts": [
 				[
 					3.96,
-					2.954,
-					-35.635
+					2.841,
+					-33.768
 				],
 				[
 					3.96,
-					2.954,
-					-35.185
+					2.841,
+					-33.318
 				],
 				[
 					3.96,
-					3.504,
-					-35.185
+					3.391,
+					-33.318
 				],
 				[
 					3.96,
-					3.504,
-					-35.635
+					3.391,
+					-33.768
 				]
 			],
 			"area": 0.25,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1793750400051,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-MVTTTVSKYEWSVWGT"
 		},
@@ -5812,13 +8594,14 @@
 			"zone": "c32",
 			"face": "south wall",
 			"grid": "Grid 0–1 / BG–BH · EL +2.88 to EL +3.30",
+			"no": "AW0024",
 			"f": {
 				"type": "Exposed rebar",
 				"depth": null,
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-04",
-				"text": "Chipped 2026.11.04 (day shift), rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid BG–BH, EL +2.88 to EL +3.30; Bluebeam 0.19 m²."
+				"text": "Chipped 2026.11.04 (day shift), rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid BG–BH, EL +2.88 to EL +3.30; Bluebeam 0.19 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5844,9 +8627,9 @@
 				]
 			],
 			"area": 0.19,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-JDGBHCCICDGGHCDA"
 		},
@@ -5867,7 +8650,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid AC–AF, EL −5.69 to EL −4.44; Bluebeam 2.68 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid AC–AF, EL −5.69 to EL −4.44; Bluebeam 2.68 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5893,9 +8676,9 @@
 				]
 			],
 			"area": 2.68,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FABAACEAEAABFAEE"
 		},
@@ -5916,7 +8699,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid AA–AB, EL −4.87 to EL −4.42; Bluebeam 0.23 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid AA–AB, EL −4.87 to EL −4.42; Bluebeam 0.23 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5942,9 +8725,9 @@
 				]
 			],
 			"area": 0.23,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-HGBAHJAFFECAFIAC"
 		},
@@ -5965,7 +8748,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-02",
-				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section D (C32 north wall), grid AE–AJ, EL −6.08 to EL −3.58; Bluebeam 6.62 m²."
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid AE–AJ, EL −6.08 to EL −3.58; Bluebeam 6.62 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -5991,9 +8774,9 @@
 				]
 			],
 			"area": 6.62,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-FEEBFADCHDAJGHIE"
 		},
@@ -6014,7 +8797,7 @@
 				"depthMm": null,
 				"status": "Chipped / hydro-demo",
 				"chipped": "2026-11-05/08",
-				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.10 progress markup: ST008 Section E (south wall & C32), grid AD–AF, EL −3.99 to EL −3.27; Bluebeam 0.61 m²."
+				"text": "Chipped 2026.11.05 to 11.08, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section E (south wall & C32), grid AD–AF, EL −3.99 to EL −3.27; Bluebeam 0.61 m²."
 			},
 			"photos": [],
 			"pts": [
@@ -6040,12 +8823,62 @@
 				]
 			],
 			"area": 0.61,
-			"src": "2026.11.10 progress",
+			"src": "2026.11.17 progress",
 			"at": 1794246594887,
-			"upd": 1794409808824,
+			"upd": 1795041998678,
 			"by": null,
 			"id": "prog-AEBJACGJAIFFAGEF"
+		},
+		{
+			"v": 2,
+			"kind": "area",
+			"n": [
+				-1,
+				0,
+				0
+			],
+			"zone": "c32",
+			"face": "north wall",
+			"grid": "Grid 3–4 / AW–AX · EL −1.71 to EL −1.01",
+			"no": "AW0019",
+			"f": {
+				"type": "Exposed rebar",
+				"depth": null,
+				"depthMm": null,
+				"status": "Chipped / hydro-demo",
+				"chipped": "2026-11-02",
+				"text": "Chipped 2026.11.02 and before, rebar exposed; condition not assessed yet. From 2026.11.17 progress markup: ST008 Section D (C32 north wall), grid AW–AX, EL −1.71 to EL −1.01; Bluebeam 0.31 m²."
+			},
+			"photos": [],
+			"pts": [
+				[
+					3.96,
+					-1.71,
+					-20.512
+				],
+				[
+					3.96,
+					-1.71,
+					-20.062
+				],
+				[
+					3.96,
+					-1.01,
+					-20.062
+				],
+				[
+					3.96,
+					-1.01,
+					-20.512
+				]
+			],
+			"area": 0.31,
+			"src": "2026.11.17 progress",
+			"at": 1795022058932,
+			"upd": 1795041998678,
+			"by": null,
+			"id": "prog-JEEBBFFFGCFAACCB"
 		}
 	],
-	"progress": "2026.11.10 progress"
+	"progress": "2026.11.17 progress"
 }

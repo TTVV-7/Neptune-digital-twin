@@ -14,8 +14,9 @@ import { addHitFilter, isTyping } from './walk.js';
 // doesn't sink onto itself.
 //
 // Rows in the Show panel: "Ground over your models" (its eye off is U on); "Google 3D map", whose
-// eye hides Google's tiles altogether, drawn or solid, so only your models and earthworks are left
-// to see and fly into; and "Solid models", whose eye off makes your models see-through (a closed
+// eye hides Google's tiles, so only your models and earthworks are left to see and fly into (walking,
+// its ground is still there to stand on, unseen, and cut away over your models as U cuts it); and
+// "Solid models", whose eye off makes your models see-through (a closed
 // gallery or tunnel seen from above shows what's in it), except parts whose node says xraySolid
 // in its glTF extras (the B2D2 model's repair areas). They're remembered in this browser,
 // as the panel's rows are, and none follows Before / After.
@@ -58,7 +59,7 @@ bool twinInHole( vec3 p ) {
 }
 `;
 
-export function setUpUnderground( { tiles, models, camera, toast, onUpdate, addMapEdit, layers } ) {
+export function setUpUnderground( { tiles, models, camera, controls, driver, toast, onUpdate, addMapEdit, layers } ) {
 
 	// Nothing to be under without Google's tiles: the stand-in ground leaves models alone.
 	if ( ! tiles ) return null;
@@ -115,7 +116,10 @@ export function setUpUnderground( { tiles, models, camera, toast, onUpdate, addM
 	} );
 	// Not while a model snaps to the ground: that's Google's ground as it is, hole or not, map
 	// shown or not.
-	addHitFilter( hit => models.snapping || ! hit.object.userData.googleTile || ! ( mapHidden || ( holes.length > 0 && inHole( hit.point ) ) ) );
+	// With the map hidden, walking still has Google's ground to stand on (not drawn), cut away over
+	// your models as U cuts it, so you can walk down into them; flying passes through it anywhere.
+	const walking = () => controls?.mode === 'walk' && ! driver?.active;
+	addHitFilter( hit => models.snapping || ! hit.object.userData.googleTile || ! ( ( mapHidden && ! walking() ) || ( holes.length > 0 && inHole( hit.point ) ) ) );
 	addMapEdit?.( () => holes.length > 0 );
 
 	// Your own models: not library items (vehicles, site pieces) or kinds (earthworks, areas).
@@ -202,7 +206,7 @@ export function setUpUnderground( { tiles, models, camera, toast, onUpdate, addM
 
 		const eye = camera.position;
 		let chosen;
-		if ( manual ) chosen = yours().sort( ( a, b ) => a.pivot.position.distanceToSquared( eye ) - b.pivot.position.distanceToSquared( eye ) );
+		if ( manual || ( mapHidden && walking() ) ) chosen = yours().sort( ( a, b ) => a.pivot.position.distanceToSquared( eye ) - b.pivot.position.distanceToSquared( eye ) );
 		else {
 
 			const around = yours().filter( entry => inside( entry, eye ) );
@@ -246,7 +250,8 @@ export function setUpUnderground( { tiles, models, camera, toast, onUpdate, addM
 		if ( on === mapHidden ) return;
 		mapHidden = on;
 		tiles.group.visible = ! on;
-		if ( say ) toast( on ? 'Google\'s 3D map is hidden: only your models and earthworks are left, and nothing stops you flying into them' : 'Google\'s 3D map is back' );
+		timer = 0;
+		if ( say ) toast( on ? 'Google\'s 3D map is hidden: only your models and earthworks are left. Flying, nothing stops you going into them; walking, the ground is still there (unseen), open over your models' : 'Google\'s 3D map is back' );
 
 	};
 

@@ -14,13 +14,16 @@
 	days before the period shown, which the Worker sends added up. Charts drawn as plain SVG here, with
 	nothing loaded from anywhere else.
 	And where people drop in (docs/world-drive.md, "Where people drop in"): GET /api/admin/dropins,
-	the cells about a kilometre each way that drop-ins were at, as a heat map of the Earth or the Moon
-	and a table of the top places, for today, the week, the month or longer. The maps are the game's
-	own files: Natural Earth's land and sea (/sea/mask.bin, as src/drive-app/sea.js reads it) and the
-	Moon's picture (/moon/colour.webp), fetched only when that map is first shown.
-	And challenges (docs/world-drive.md, "Challenges"): GET /api/admin/challenges, the six live and
-	the six next up, and POST to choose any period's challenge by hand, put one back to the rotation,
-	and approve busy drop-in places for the rotation (worker/drive/challenges.js).
+	the cells about a kilometre each way that drop-ins were at, as a heat map of the Earth, the Moon,
+	Mars, Vesta or Ceres and a table of the top places, for today, the week, the month or longer. The
+	maps are the game's own files: Natural Earth's land and sea (/sea/mask.bin, as
+	src/drive-app/sea.js reads it) and the other worlds' pictures (/moon/colour.webp,
+	/mars/colour.webp, /vesta/colour.webp, /ceres/colour.webp), each fetched only when its map is
+	first shown.
+	And challenges (docs/world-drive.md, "Challenges"): GET /api/admin/challenges, the fifteen live
+	(three on each world) and the fifteen next up, and POST to choose any period's challenge by hand, put
+	one back to the rotation, and approve busy drop-in places for the rotation
+	(worker/drive/challenges.js).
 	And achievements (docs/world-drive.md, "Achievements and rewards"): GET /api/admin/achievements,
 	how many players have each achievement, and of how many (worker/drive/achievements.js). Counts
 	only, nothing of who.
@@ -171,7 +174,7 @@
 			<div class="seg" id="places-days" role="group" aria-label="Period of the map"><button type="button" data-days="1">Today</button><button type="button" data-days="7">Week</button><button type="button" data-days="30">Month</button><button type="button" data-days="90">90 days</button><button type="button" data-days="365">Year</button></div>
 		</div>
 		<div class="places-bar">
-			<div class="seg" id="places-world" role="group" aria-label="World"><button type="button" data-world="earth">Earth <span></span></button><button type="button" data-world="moon">Moon <span></span></button></div>
+			<div class="seg" id="places-world" role="group" aria-label="World"><button type="button" data-world="earth">Earth <span></span></button><button type="button" data-world="moon">Moon <span></span></button><button type="button" data-world="mars">Mars <span></span></button><button type="button" data-world="vesta">Vesta <span></span></button><button type="button" data-world="ceres">Ceres <span></span></button></div>
 			<span class="muted small" id="places-range"></span>
 		</div>
 		<div class="map">
@@ -198,7 +201,7 @@
 		<form class="ch-form" id="ch-form">
 			<label>Period <select name="period" id="ch-period"></select></label>
 			<div class="row"><label class="day">Or another day <input type="date" name="date" id="ch-date"></label><label class="narrow">Its <select name="dateKind" id="ch-date-kind"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label></div>
-			<label>World <select name="world" id="ch-world"><option value="earth">Earth</option><option value="moon">Moon</option></select></label>
+			<label>World <select name="world" id="ch-world"><option value="earth">Earth</option><option value="moon">Moon</option><option value="mars">Mars</option><option value="vesta">Vesta</option><option value="ceres">Ceres</option></select></label>
 			<label>Kind <select name="kind" id="ch-kind"><option value="sprint">Checkpoint sprint</option><option value="collect">Collect them all</option><option value="landmark">Drive to a landmark</option></select></label>
 			<label class="full">Place <select name="place" id="ch-place"></select></label>
 			<div class="full row" id="ch-custom" hidden>
@@ -213,13 +216,13 @@
 		</form>
 		<h3>Busy drop-in places for the rotation</h3>
 		<div id="ch-busy"></div>
-		<p class="note">The rotation goes round the game's own places (the start spots, the places' pages and the Moon's places) and the busy drop-in places approved here, a new order each time round, one a period; a period's challenge is fixed the first time anyone asks for it, so nothing changed here changes a live one, unless you change that one, which starts a new board (the old one is kept apart). Busy places are where people drop in that aren't the game's own: anyone with many addresses can push one up the list, so none goes into the rotation without your approval. Your own runs (this page's accounts) are taken but kept off the boards, as you know each place and kind before it's live, and choose them. Back to the rotation on a live one the rotation chose leaves it as it is (it's the rotation's already).</p>
+		<p class="note">The rotation goes round the game's own places (the start spots, the places' pages and the other worlds' places) and the busy drop-in places approved here, a new order each time round, one a period; a period's challenge is fixed the first time anyone asks for it, so nothing changed here changes a live one, unless you change that one, which starts a new board (the old one is kept apart). Busy places are where people drop in that aren't the game's own: anyone with many addresses can push one up the list, so none goes into the rotation without your approval. Your own runs (this page's accounts) are taken but kept off the boards, as you know each place and kind before it's live, and choose them. Back to the rotation on a live one the rotation chose leaves it as it is (it's the rotation's already).</p>
 	</section>
 	<section class="card achievements" id="achievements" aria-labelledby="achievements-title" hidden>
 		<h2 id="achievements-title">Achievements</h2>
 		<p class="muted small" id="ach-total"></p>
 		<div id="ach-list"></div>
-		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, Moon drives, Garage changes, rides tried), each held to a day's worth. A construction ride comes with the achievement beside it.</p>
+		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, drives on the Moon, Mars, Vesta and Ceres, Garage changes, rides tried), each held to a day's worth. A construction ride comes with the achievement beside it.</p>
 	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
@@ -242,13 +245,29 @@
 	// The funnel's steps after the visit itself (src/drive-app/stats-protocol.js, FUNNEL).
 	const FUNNEL = [ [ 'globe', 'Globe shown' ], [ 'pin', 'A place pinned' ], [ 'dropin', 'A drop-in started' ], [ 'driving', 'Driving' ], [ 'drove_1m', 'Drove 1 min' ], [ 'drove_10m', 'Drove 10 min' ], [ 'drove_30m', 'Drove 30 min' ] ];
 	const DEVICES = [ [ 'phone', 'Phone' ], [ 'tablet', 'Tablet' ], [ 'computer', 'Computer' ] ];
-	const SEARCHES = [ [ 'earth', 'Map searches' ], [ 'moon', 'Moon searches' ], [ 'coordinates', 'Coordinates typed' ], [ 'nothing', 'Found nothing' ] ];
-	const PROBLEMS = [ [ 'no_ground', 'No ground at a drop-in' ], [ 'ride_failed', 'A ride didn\'t load' ], [ 'moon_failed', 'The Moon didn\'t load' ], [ 'map_failed', 'Google\'s map didn\'t load' ], [ 'map_session_ended', 'Map session ended' ], [ 'drop_abandoned', 'Drop-in left for the globe' ] ];
+	// The worlds (src/drive-app/worlds.js, which this page, importing nothing, keeps its own copy of):
+	// each one's name as a label, in a sentence ("the Moon", but "Mars"), its radius (m, as
+	// src/drive-app/dropin-cells.js has it: how big a cell is on its map) and the picture its map is
+	// drawn on (the Earth's is its land and sea instead). One the Worker names that isn't here (a newer
+	// Worker's) is called by its id, on a plain map.
+	const WORLDS = {
+		earth: { name: 'Earth', the: 'the Earth', radius: 6371008.8 },
+		moon: { name: 'Moon', the: 'the Moon', radius: 1737400, picture: '/moon/colour.webp' },
+		mars: { name: 'Mars', the: 'Mars', radius: 3389500, picture: '/mars/colour.webp' },
+		vesta: { name: 'Vesta', the: 'Vesta', radius: 262700, picture: '/vesta/colour.webp' },
+		ceres: { name: 'Ceres', the: 'Ceres', radius: 470000, picture: '/ceres/colour.webp' },
+	};
+	const OFF_EARTH = Object.keys( WORLDS ).filter( world => world !== 'earth' );
+	const worldOf = id => WORLDS[ id ] ?? { name: pretty( String( id ) ), the: pretty( String( id ) ), radius: WORLDS.earth.radius };
+	// "the Moon" as a sentence starts it: "The Moon".
+	const capital = words => words[ 0 ].toUpperCase() + words.slice( 1 );
+	const SEARCHES = [ [ 'earth', 'Map searches' ], ...OFF_EARTH.map( world => [ world, `${ WORLDS[ world ].name } searches` ] ), [ 'coordinates', 'Coordinates typed' ], [ 'nothing', 'Found nothing' ] ];
+	const PROBLEMS = [ [ 'no_ground', 'No ground at a drop-in' ], [ 'ride_failed', 'A ride didn\'t load' ], ...OFF_EARTH.map( world => [ `${ world }_failed`, `${ capital( WORLDS[ world ].the ) } didn't load` ] ), [ 'map_failed', 'Google\'s map didn\'t load' ], [ 'map_session_ended', 'Map session ended' ], [ 'drop_abandoned', 'Drop-in left for the globe' ] ];
 	// What each metric is, for the chart of any metric by day.
 	const NAMES = {
-		visit: 'Visits', visit_kind: 'Visits by where they went (Earth, or the Moon over a cap)', visit_hour: 'Visits by UTC hour', load: 'Loads by referring site', load_time: 'Load time (buckets)', load_ms: 'Load time (ms, all together)',
+		visit: 'Visits', visit_kind: 'Visits by where they went (Earth, a link to another world, or the Moon over a cap)', visit_hour: 'Visits by UTC hour', load: 'Loads by referring site', load_time: 'Load time (buckets)', load_ms: 'Load time (ms, all together)',
 		dropin: 'Drop-ins by place', ride: 'Drop-ins by ride', play: 'Play time by ride (s)', play_with_others: 'Play with others (s)', play_world: 'Play time by world (s)',
-		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the Moon',
+		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the other worlds',
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups', ad: 'Ad on the globe (visits it showed in, and blocked in)',
 		challenge: 'Challenges (opened, started, finished, posted; the word while driving said, and its button pressed; a friend\'s link shared, opened, and a run started from it)',
 		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New accounts (Google or username)', purchases: 'Passes by status', revenue: 'Revenue (smallest unit)',
@@ -325,7 +344,8 @@
 		const comparable = !! previous.from && previous.first?.visit === previous.from;
 		const comparableNew = comparable && previous.first?.funnel === previous.from;
 		// The tiles from the newer counts, and those from the Worker's own tables (always comparable).
-		const NEWER = [ 'Visits that drove', 'Drove 10 min or more', 'On the Moon', 'Searches', 'Problems' ];
+		const ON = OFF_EARTH.map( world => [ world, `On ${ WORLDS[ world ].the }` ] );
+		const NEWER = [ 'Visits that drove', 'Drove 10 min or more', ...ON.map( ( [ , label ] ) => label ), 'Searches', 'Problems' ];
 		const TABLES = [ 'New players', 'New accounts', 'Passes bought' ];
 		const compared = label => TABLES.includes( label ) || ( NEWER.includes( label ) ? comparableNew : comparable );
 
@@ -335,7 +355,6 @@
 		const garageOpens = total( 'garage_open' );
 		const searches = total( 'search' ) - total( 'search', 'nothing' );
 		const searchesBefore = earlier( 'search' ) - earlier( 'search', 'nothing' );
-		const moonPlay = total( 'play_world', 'moon' );
 		const worldPlay = total( 'play_world' );
 		const moneyNow = money( keys( 'revenue' ) );
 		// [ label, value, change ]: change is [ now, before ] compared as a change in per cent, or for a
@@ -353,7 +372,7 @@
 			[ 'Visits that drove', percent( total( 'funnel', 'driving' ), visits ), [ share( total( 'funnel', 'driving' ), visits ), share( earlier( 'funnel', 'driving' ), earlier( 'visit' ) ), 'points' ] ],
 			[ 'Drove 10 min or more', percent( total( 'funnel', 'drove_10m' ), visits ), [ share( total( 'funnel', 'drove_10m' ), visits ), share( earlier( 'funnel', 'drove_10m' ), earlier( 'visit' ) ), 'points' ] ],
 			[ 'With others', percent( total( 'play_with_others' ), play ), [ share( total( 'play_with_others' ), play ), share( earlier( 'play_with_others' ), earlier( 'play' ) ), 'points' ] ],
-			[ 'On the Moon', percent( moonPlay, worldPlay ), [ share( moonPlay, worldPlay ), share( earlier( 'play_world', 'moon' ), earlier( 'play_world' ) ), 'points' ] ],
+			...ON.map( ( [ world, label ] ) => [ label, percent( total( 'play_world', world ), worldPlay ), [ share( total( 'play_world', world ), worldPlay ), share( earlier( 'play_world', world ), earlier( 'play_world' ) ), 'points' ] ] ),
 			[ 'Searches', num( searches ), [ searches, searchesBefore ] ],
 			[ 'Problems', num( total( 'problem' ) ), [ total( 'problem' ), earlier( 'problem' ) ], true ],
 			[ 'Mean load', loads ? `${ ( total( 'load_ms' ) / loads / 1000 ).toFixed( 1 ) } s` : '-', [ loads ? total( 'load_ms' ) / loads : 0, earlier( 'load_time' ) ? earlier( 'load_ms' ) / earlier( 'load_time' ) : 0 ], true ],
@@ -384,7 +403,7 @@
 				<div class="tile today"><div class="label">Today so far (UTC)</div><div class="value">${ esc( num( today( 'visit' ) ) ) }</div><div class="change muted">visits · ${ esc( hours( today( 'play' ) ) ) } played</div></div>
 				${ tiles.map( ( [ label, value, change, fewerIsBetter ] ) => `<div class="tile"><div class="label">${ esc( label ) }</div><div class="value">${ esc( value ) }</div>${ compared( label ) ? changeOf( change, fewerIsBetter ) : '' }</div>` ).join( '' ) }
 			</div>
-			${ comparable ? comparableNew ? '' : '<p class="note" style="margin:-6px 0 12px">The newer counts (how far visits get, the Moon, searches, problems) don\'t cover all of the period before this one, so they have no ▲ or ▼.</p>' : '<p class="note" style="margin:-6px 0 12px">The counts don\'t cover all of the period before this one (they start later), so the play figures have no ▲ or ▼.</p>' }
+			${ comparable ? comparableNew ? '' : '<p class="note" style="margin:-6px 0 12px">The newer counts (how far visits get, the other worlds, searches, problems) don\'t cover all of the period before this one, so they have no ▲ or ▼.</p>' : '<p class="note" style="margin:-6px 0 12px">The counts don\'t cover all of the period before this one (they start later), so the play figures have no ▲ or ▼.</p>' }
 			${ firstDay && firstDay > from ? `<p class="note" style="margin:-6px 0 12px">Counts start on ${ esc( firstDay ) }: nothing before it.</p>` : '' }
 			<div class="card wide">
 				<h2>Each day</h2>
@@ -396,15 +415,18 @@
 			<div class="grid">
 				<div class="card wide"><h2>How far visits get</h2>${ bars( new Map( funnelRows.map( ( [ name, n ] ) => [ name, n ] ) ), num, 8, false, new Map( funnelRows.map( ( [ name, , note ] ) => [ name, note ] ) ) ) }<p class="note">Each step's share of the visits, then of the step before. Each is counted once a visit, as it's reached, and the minutes are the visit's driving, not paused. A party's Join can drop in without a pin, so a step can be more than the one before.</p></div>
 				<div class="card"><h2>Devices</h2>${ bars( named( 'device', DEVICES ), num, 3, false, shares( named( 'device', DEVICES ) ) ) }<p class="note">A fine pointer (a mouse, a trackpad) is a computer; a touch screen is a tablet when its shorter side is 600 px or more, else a phone.</p></div>
-				<div class="card"><h2>Earth and Moon</h2>${ facts( [
+				<div class="card"><h2>The worlds</h2>${ facts( [
 					[ 'Play on the Earth', hours( total( 'play_world', 'earth' ) ), percent( total( 'play_world', 'earth' ), worldPlay ) ],
-					[ 'Play on the Moon', hours( moonPlay ), percent( moonPlay, worldPlay ) ],
-					[ 'Turns to the Moon', num( total( 'world', 'moon' ) ), comparableNew ? changeText( [ total( 'world', 'moon' ), earlier( 'world', 'moon' ) ] ) : '' ],
-					[ 'Drop-ins on the Moon', num( total( 'dropin', 'moon' ) ), total( 'dropin' ) ? percent( total( 'dropin', 'moon' ), total( 'dropin' ) ) + ' of drop-ins' : '' ],
+					...OFF_EARTH.flatMap( world => [
+						[ `Play on ${ WORLDS[ world ].the }`, hours( total( 'play_world', world ) ), percent( total( 'play_world', world ), worldPlay ) ],
+						[ `Turns to ${ WORLDS[ world ].the }`, num( total( 'world', world ) ), comparableNew ? changeText( [ total( 'world', world ), earlier( 'world', world ) ] ) : '' ],
+						[ `Drop-ins on ${ WORLDS[ world ].the }`, num( total( 'dropin', world ) ), total( 'dropin' ) ? percent( total( 'dropin', world ), total( 'dropin' ) ) + ' of drop-ins' : '' ],
+						[ `Visits opened on a link to ${ WORLDS[ world ].the }`, num( total( 'visit_kind', `${ world }_link` ) ), '' ],
+					] ),
 				] ) }</div>
-				<div class="card"><h2>Searches</h2>${ bars( named( 'search', SEARCHES ), num, 4, false ) }<p class="note">Found nothing: ${ esc( percent( total( 'search', 'nothing' ), total( 'search', 'earth' ) + total( 'search', 'moon' ) ) ) } of map and Moon searches. Never what was typed.</p></div>
+				<div class="card"><h2>Searches</h2>${ bars( named( 'search', SEARCHES ), num, SEARCHES.length, false ) }<p class="note">Found nothing: ${ esc( percent( total( 'search', 'nothing' ), sum( Object.keys( WORLDS ).map( world => total( 'search', world ) ) ) ) ) } of map and other worlds' searches. Never what was typed.</p></div>
 				<div class="card"><h2>Drop-in time <span class="muted">(Drive here to driving)</span></h2>${ bars( new Map( DROPIN_ORDER.map( k => [ k, total( 'dropin_time', k ) ] ) ), num, 5, false, shares( new Map( DROPIN_ORDER.map( k => [ k, total( 'dropin_time', k ) ] ) ) ) ) }</div>
-				<div class="card"><h2>Problems</h2>${ bars( named( 'problem', PROBLEMS ), num, 6 ) }<p class="note">Map ones once a visit at most; the others each time.</p></div>
+				<div class="card"><h2>Problems</h2>${ bars( named( 'problem', PROBLEMS ), num, PROBLEMS.length ) }<p class="note">Map ones once a visit at most; the others each time.</p></div>
 				<div class="card"><h2>Leaderboard, pass and levels</h2>${ facts( [
 					[ 'Leaderboard opened', num( total( 'board', 'open' ) ), '' ],
 					[ 'Nicknames picked', num( total( 'board', 'named' ) ), '' ],
@@ -432,7 +454,7 @@
 				<div class="card"><h2>Where they come from</h2>${ bars( keys( 'load' ), num, 10 ) }</div>
 				<div class="card"><h2>Play time by ride</h2>${ bars( renamed( 'play' ), hours, 12 ) }</div>
 				<div class="card"><h2>Rides dropped in with</h2>${ bars( renamed( 'ride' ), num, 12 ) }</div>
-				<div class="card"><h2>Start spots dropped in at</h2>${ bars( new Map( [ ...keys( 'dropin' ) ].map( ( [ k, v ] ) => [ k === 'other' ? 'Elsewhere (search or pin)' : k === 'moon' ? 'The Moon' : pretty( k ), v ] ) ), num, 12 ) }</div>
+				<div class="card"><h2>Start spots dropped in at</h2>${ bars( new Map( [ ...keys( 'dropin' ) ].map( ( [ k, v ] ) => [ k === 'other' ? 'Elsewhere (search or pin)' : OFF_EARTH.includes( k ) ? capital( WORLDS[ k ].the ) : pretty( k ), v ] ) ), num, 12 ) }</div>
 				<div class="card"><h2>Garage changes by part <span class="muted">(${ num( garageOpens ) } opens)</span></h2>${ bars( renamed( 'garage_edit' ), num, 10 ) }</div>
 				<div class="card"><h2>Load time</h2>${ bars( new Map( LOAD_ORDER.map( k => [ k, total( 'load_time', k ) ] ) ), num, 5, false ) }</div>
 				<div class="card wide" id="any">
@@ -652,15 +674,14 @@
 	//
 	// GET /api/admin/dropins?days=: each world's most dropped-in cells (their middles, the most
 	// first) and its top places named, drawn as a heat map over the game's own map of the Earth's
-	// land and sea or the Moon's picture, in a view the owner can move and zoom (the whole world as
-	// it is on a flat map, longitude across and latitude up, as both files are kept), with the top
+	// land and sea or another world's picture, in a view the owner can move and zoom (the whole world
+	// as it is on a flat map, longitude across and latitude up, as the files are kept), with the top
 	// places as a table under it. Its period is its own (today, the week, the month or longer),
 	// starting at the page's and following it when that changes.
 
 	const PLACES_DAYS = [ 1, 7, 30, 90, 365 ];
-	// Metres to a degree of latitude on each world (its radius as src/drive-app/dropin-cells.js has
-	// it), for how big a cell is on the map.
-	const DEGREE = { earth: 6371008.8 * Math.PI / 180, moon: 1737400 * Math.PI / 180 };
+	// Metres to a degree of latitude on `world` (its radius, WORLDS'), for how big a cell is on the map.
+	const degree = world => worldOf( world ).radius * Math.PI / 180;
 	// How far across a view is zoomed in at the most, and a place shown from the table (m): the
 	// Earth's map is squares of about 5 km (24 to a degree), and a view much narrower than this would
 	// be a few dozen of them, as the Moon's picture is pixels of about 2.7 km. The map is to see where
@@ -668,12 +689,12 @@
 	const MOST_ACROSS = 150000;
 	const SHOW_ACROSS = 300000;
 	// The heat's colours, few to many: a scale of heat, yellow to deep red, which stands out on the
-	// pale or dark land and sea and on the Moon's greys alike (the legend under the map says which way
-	// it runs). And the base maps' own colours, in the page's light and dark.
+	// pale or dark land and sea and on the Moon's, Vesta's and Ceres's greys and Mars's rust alike (the
+	// legend under the map says which way it runs). And the base maps' own colours, in the page's light and dark.
 	const HEAT_STOPS = [ [ 0, [ 242, 176, 53 ] ], [ 0.4, [ 239, 138, 42 ] ], [ 0.72, [ 215, 48, 31 ] ], [ 1, [ 140, 29, 24 ] ] ];
 	const BASE = {
-		light: { sea: [ 214, 224, 234 ], land: [ 244, 241, 233 ], coast: [ 228, 231, 232 ], space: [ 236, 239, 242 ], moonTint: 'rgba( 255, 255, 255, 0.3 )', ink: '#16191d', ring: '#ffffff', text: '#4a525b', halo: 'rgba( 255, 255, 255, 0.85 )' },
-		dark: { sea: [ 21, 28, 35 ], land: [ 48, 54, 60 ], coast: [ 35, 42, 48 ], space: [ 26, 30, 34 ], moonTint: 'rgba( 0, 0, 0, 0.3 )', ink: '#111417', ring: '#eef1f4', text: '#c3cbd3', halo: 'rgba( 17, 20, 23, 0.85 )' },
+		light: { sea: [ 214, 224, 234 ], land: [ 244, 241, 233 ], coast: [ 228, 231, 232 ], space: [ 236, 239, 242 ], tint: 'rgba( 255, 255, 255, 0.3 )', ink: '#16191d', ring: '#ffffff', text: '#4a525b', halo: 'rgba( 255, 255, 255, 0.85 )' },
+		dark: { sea: [ 21, 28, 35 ], land: [ 48, 54, 60 ], coast: [ 35, 42, 48 ], space: [ 26, 30, 34 ], tint: 'rgba( 0, 0, 0, 0.3 )', ink: '#111417', ring: '#eef1f4', text: '#c3cbd3', halo: 'rgba( 17, 20, 23, 0.85 )' },
 	};
 	const HEAT_COLOURS = heatColours();
 	// Natural Earth's towns (drive/public/places/towns.tsv, the Worker names places by them too),
@@ -953,14 +974,15 @@
 		}
 
 		pressed( places.world, 'world', placesState.world );
-		const shown = worlds[ placesState.world ];
+		// (A world the Worker didn't send, an older one's, as none counted.)
+		const shown = worlds[ placesState.world ] ?? { dropins: 0, places: 0, heat: [], top: [] };
 		const since = first === null ? ' · none counted yet' : first > from ? ` · counted from ${ first }` : '';
 		// The drop-ins counted (each visitor once a day in each cell, so not people: one visitor at three
 		// places is three), and how many 1 km cells they were in (a start spot's cells are one place in
 		// the table, but each a cell here).
 		places.range.textContent = `${ from === to ? `${ to } so far` : `${ from } to ${ to } (today so far)` }, UTC · ${ count( shown.dropins, 'drop-in' ) } counted in ${ count( shown.places, 'cell' ) } (1 km)${ since }`;
 		places.most.textContent = shown.heat.length ? `the most in one 1 km cell: ${ num( shown.heat[ 0 ][ 2 ] ) }${ shown.heat.length < shown.places ? ` · the map has the ${ num( shown.heat.length ) } cells with the most` : '' }` : '';
-		places.empty.textContent = `No drop-ins on the ${ placesState.world === 'moon' ? 'Moon' : 'Earth' } in this period.`;
+		places.empty.textContent = `No drop-ins on ${ worldOf( placesState.world ).the } in this period.`;
 		places.empty.hidden = shown.heat.length > 0;
 		places.top.innerHTML = topTable( shown );
 		drawMap();
@@ -1067,7 +1089,7 @@
 	// The most `world`'s map zooms in: MOST_ACROSS across.
 	function mostZoom( world ) {
 
-		return 360 * DEGREE[ world ] / MOST_ACROSS;
+		return 360 * degree( world ) / MOST_ACROSS;
 
 	}
 
@@ -1104,7 +1126,7 @@
 
 		const place = placesState.data?.worlds[ placesState.world ]?.top[ i ];
 		if ( ! place ) return;
-		placesState.views[ placesState.world ] = { lon: place.lon, lat: place.lat, zoom: 360 * DEGREE[ placesState.world ] / SHOW_ACROSS };
+		placesState.views[ placesState.world ] = { lon: place.lon, lat: place.lat, zoom: 360 * degree( placesState.world ) / SHOW_ACROSS };
 		clampView( view(), canvas.clientWidth, canvas.clientHeight );
 		// The whole map in view, its buttons too (its top, should it be taller than the screen).
 		const map = canvas.parentElement;
@@ -1196,7 +1218,7 @@
 		if ( ! ( world in placesState.bases ) ) loadBase( world );
 		const base = placesState.bases[ world ];
 		if ( base && world === 'earth' ) paintEarth( ctx, W, H, v, scale, base, colours );
-		else if ( base ) paintMoon( ctx, W, H, v, scale, base, colours );
+		else if ( base ) paintPicture( ctx, W, H, v, scale, base, colours );
 		else {
 
 			ctx.fillStyle = rgb( world === 'earth' ? colours.sea : colours.space );
@@ -1205,7 +1227,7 @@
 		}
 
 		const shown = placesState.data?.worlds[ world ];
-		if ( shown ) paintHeat( ctx, W, H, v, scale, shown.heat, DEGREE[ world ] / ( placesState.data.cell || 1000 ) );
+		if ( shown ) paintHeat( ctx, W, H, v, scale, shown.heat, degree( world ) / ( placesState.data.cell || 1000 ) );
 		const towns = world === 'earth' ? paintTowns( ctx, v, width, height, dpr, colours ) : [];
 		const ranks = shown ? paintRanks( ctx, v, width, height, dpr, shown.top, colours ) : [];
 		paintScale( ctx, v, width, height, dpr, world, colours );
@@ -1214,8 +1236,8 @@
 	}
 
 	// Fetches `world`'s base map, then draws the map again: Natural Earth's land and sea for the
-	// Earth (as sea.js reads it), the Moon's picture for the Moon. One that doesn't come is a plain
-	// background, and the heat is drawn on that.
+	// Earth (as sea.js reads it), another world's picture for it (WORLDS'). One that doesn't come, or
+	// a world with none, is a plain background, and the heat is drawn on that.
 	function loadBase( world ) {
 
 		if ( placesState.loading[ world ] ) return;
@@ -1223,10 +1245,11 @@
 			? fetch( '/sea/mask.bin' ).then( res => res.ok ? res.arrayBuffer() : Promise.reject( new Error( res.status ) ) ).then( buffer => readLand( new Uint8Array( buffer ) ) )
 			: new Promise( ( resolve, reject ) => {
 
+				if ( ! worldOf( world ).picture ) return reject( new Error( 'No picture' ) );
 				const picture = new Image();
 				picture.onload = () => resolve( picture );
 				picture.onerror = reject;
-				picture.src = '/moon/colour.webp';
+				picture.src = worldOf( world ).picture;
 
 			} ) ).catch( () => null ).then( base => {
 
@@ -1363,9 +1386,10 @@
 
 	}
 
-	// The Moon's picture in view (its columns from 180° W, rows from 90° N), a copy of it for each
-	// time the view goes round, softened a little towards the page's light or dark.
-	function paintMoon( ctx, W, H, v, scale, picture, colours ) {
+	// A world's picture in view (the Moon's, Mars's, Vesta's, Ceres's: its columns from 180° W, rows
+	// from 90° N), a copy of it for each time the view goes round, softened a little towards the
+	// page's light or dark.
+	function paintPicture( ctx, W, H, v, scale, picture, colours ) {
 
 		ctx.fillStyle = rgb( colours.space );
 		ctx.fillRect( 0, 0, W, H );
@@ -1385,7 +1409,7 @@
 
 		}
 
-		ctx.fillStyle = colours.moonTint;
+		ctx.fillStyle = colours.tint;
 		ctx.fillRect( 0, 0, W, H );
 
 	}
@@ -1553,7 +1577,7 @@
 	// view's middle latitude (east to west a degree is shorter towards the poles).
 	function paintScale( ctx, v, width, height, dpr, world, colours ) {
 
-		const perKm = scaleOf( v, width ) / ( DEGREE[ world ] / 1000 * Math.max( 0.05, Math.cos( v.lat * Math.PI / 180 ) ) );
+		const perKm = scaleOf( v, width ) / ( degree( world ) / 1000 * Math.max( 0.05, Math.cos( v.lat * Math.PI / 180 ) ) );
 		const km = SCALE_KM.reduce( ( best, length ) => Math.abs( length * perKm - SCALE_PX ) < Math.abs( best * perKm - SCALE_PX ) ? length : best );
 		const across = km * perKm;
 		const [ x, y ] = [ 12, height - 14 ];
@@ -1608,19 +1632,26 @@
 
 	// --- Challenges ---------------------------------------------------------------------------
 	//
-	// GET /api/admin/challenges: the six live (the day's, the week's and the month's on each world) and
-	// the six next up, as they'd be fixed now (the owner's pick or the rotation's), the owner's picks
-	// from the live periods on (however far ahead: each with Change and Back to the rotation), the
-	// approved busy places and the featured and busy places to choose from. POST to choose a
-	// period's challenge (a featured place, a busy place by its cell, or coordinates and a name), back
-	// to the rotation, or approve or unapprove a busy place. A live one changes only after a warning
+	// GET /api/admin/challenges: the fifteen live (the day's, the week's and the month's on each
+	// world) and the fifteen next up, as they'd be fixed now (the owner's pick or the rotation's), the
+	// owner's picks from the live periods on (however far ahead: each with Change and Back to the
+	// rotation), the approved busy places and the featured and busy places to choose from. POST to
+	// choose a period's challenge (a featured place, a busy place by its cell, or coordinates and a
+	// name), back to the rotation, or approve or unapprove a busy place. A live one changes only after a warning
 	// (with times on it, its board starts again; without, anyone driving it is turned away).
 
 	const DAY = 86400000;
 	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
 	const KINDS = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark' };
 	const PERIODS = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
-	const WORLDS = { earth: 'Earth', moon: 'Moon' };
+	// Each world's name as the tables show it, and in a sentence ("the Moon", but "Mars"), as the
+	// page above has them; one the Worker names that isn't here (a newer Worker's) by its id.
+	const WORLDS = {
+		earth: { name: 'Earth', the: 'the Earth' }, moon: { name: 'Moon', the: 'the Moon' }, mars: { name: 'Mars', the: 'Mars' },
+		vesta: { name: 'Vesta', the: 'Vesta' }, ceres: { name: 'Ceres', the: 'Ceres' },
+	};
+	const nameOf = world => esc( WORLDS[ world ]?.name ?? world );
+	const theWorld = world => esc( WORLDS[ world ]?.the ?? world );
 	const $ = id => document.getElementById( id );
 	const section = $( 'challenges' );
 	const form = $( 'ch-form' );
@@ -1681,7 +1712,7 @@
 	function table( rows, live ) {
 
 		return `<table class="ch-table"><thead><tr><th>World</th><th>Period</th><th>Challenge</th><th class="wide-only">${ live ? 'Board' : 'Starts' }</th><th class="act"></th></tr></thead><tbody>${ rows.map( row => '<tr>'
-			+ `<td>${ WORLDS[ row.world ] }</td><td>${ PERIODS[ row.period ] }<div class="muted small key">${ esc( row.key ) }</div></td>`
+			+ `<td>${ nameOf( row.world ) }</td><td>${ PERIODS[ row.period ] }<div class="muted small key">${ esc( row.key ) }</div></td>`
 			+ `<td><b>${ esc( row.place ) }</b><span class="ch-tag ${ row.source === 'owner' ? 'owner' : '' }">${ row.source === 'owner' ? 'yours' : 'rotation' }</span><div class="muted small">${ esc( KINDS[ row.kind ] ) }${ row.region ? ` · ${ esc( row.region ) }` : '' }</div></td>`
 			+ `<td class="wide-only small">${ row.extra }</td>`
 			+ `<td class="act"><button type="button" data-change="${ esc( row.key ) }" data-world="${ row.world }" data-kind="${ row.kind }">Change</button></td></tr>` ).join( '' ) }</tbody></table>`;
@@ -1694,7 +1725,7 @@
 
 		if ( ! data.picks.length ) return '<p class="muted">None: every period ahead is the rotation\'s.</p>';
 		return `<table class="ch-table"><thead><tr><th>World</th><th>Period</th><th>Challenge</th><th class="act"></th></tr></thead><tbody>${ data.picks.map( pick => '<tr>'
-			+ `<td>${ WORLDS[ pick.world ] }</td><td>${ PERIODS[ pick.period.slice( 0, pick.period.indexOf( ':' ) ) ] }<div class="muted small">${ esc( pick.period ) }${ liveOne( pick.period, pick.world ) ? ' · live now' : '' }</div></td>`
+			+ `<td>${ nameOf( pick.world ) }</td><td>${ PERIODS[ pick.period.slice( 0, pick.period.indexOf( ':' ) ) ] }<div class="muted small">${ esc( pick.period ) }${ liveOne( pick.period, pick.world ) ? ' · live now' : '' }</div></td>`
 			+ `<td><b>${ esc( pick.place ) }</b><div class="muted small">${ esc( KINDS[ pick.kind ] ) }${ pick.region ? ` · ${ esc( pick.region ) }` : '' }</div></td>`
 			+ `<td class="act two"><button type="button" data-change="${ esc( pick.period ) }" data-world="${ pick.world }" data-kind="${ pick.kind }">Change</button> <button type="button" data-unpick="${ esc( pick.period ) }" data-world="${ pick.world }">Back to the rotation</button></td></tr>` ).join( '' ) }</tbody></table>`;
 
@@ -1752,8 +1783,8 @@
 		const select = $( 'ch-place' );
 		const option = ( value, label ) => `<option value="${ esc( value ) }">${ esc( label ) }</option>`;
 		const approved = data.approved.filter( p => p.world === world );
-		const busy = data.busy[ world ].filter( p => p.cell && ! approved.some( a => a.cell === p.cell ) );
-		select.innerHTML = `<optgroup label="The game's places">${ data.featured[ world ].map( p => option( `featured:${ p.id }`, `${ p.name }${ p.region ? `, ${ p.region }` : '' }` ) ).join( '' ) }</optgroup>`
+		const busy = ( data.busy?.[ world ] ?? [] ).filter( p => p.cell && ! approved.some( a => a.cell === p.cell ) );
+		select.innerHTML = `<optgroup label="The game's places">${ ( data.featured?.[ world ] ?? [] ).map( p => option( `featured:${ p.id }`, `${ p.name }${ p.region ? `, ${ p.region }` : '' }` ) ).join( '' ) }</optgroup>`
 			+ ( approved.length ? `<optgroup label="Busy places you've approved">${ approved.map( p => option( `cell:${ p.cell }`, p.name ) ).join( '' ) }</optgroup>` : '' )
 			+ ( busy.length ? `<optgroup label="Busy drop-in places (the last 30 days)">${ busy.map( p => option( `cell:${ p.cell }`, `${ p.name } (${ p.n })` ) ).join( '' ) }</optgroup>` : '' )
 			+ `<optgroup label="Anywhere">${ option( 'custom', 'Coordinates and a name...' ) }</optgroup>`;
@@ -1766,10 +1797,10 @@
 	function busyTable() {
 
 		const rows = [];
-		for ( const world of Object.keys( WORLDS ) ) {
+		for ( const world of new Set( [ ...Object.keys( WORLDS ), ...Object.keys( data.busy ?? {} ) ] ) ) {
 
-			for ( const p of data.approved.filter( p => p.world === world ) ) rows.push( `<tr><td>${ WORLDS[ world ] }</td><td><b>${ esc( p.name ) }</b><span class="ch-tag owner">approved</span><div class="muted small">${ esc( p.region ) }</div></td><td class="num wide-only"></td><td class="act"><button type="button" data-unapprove="${ esc( p.cell ) }" data-world="${ world }">Unapprove</button></td></tr>` );
-			for ( const p of data.busy[ world ].filter( p => p.cell && ! data.approved.some( a => a.cell === p.cell ) ) ) rows.push( `<tr><td>${ WORLDS[ world ] }</td><td><b>${ esc( p.name ) }</b><div class="muted small">${ esc( p.region ) }</div></td><td class="num wide-only">${ p.n } in ${ p.days } day${ p.days === 1 ? '' : 's' }</td><td class="act"><button type="button" data-approve="${ esc( p.cell ) }" data-world="${ world }">Approve</button></td></tr>` );
+			for ( const p of data.approved.filter( p => p.world === world ) ) rows.push( `<tr><td>${ nameOf( world ) }</td><td><b>${ esc( p.name ) }</b><span class="ch-tag owner">approved</span><div class="muted small">${ esc( p.region ) }</div></td><td class="num wide-only"></td><td class="act"><button type="button" data-unapprove="${ esc( p.cell ) }" data-world="${ world }">Unapprove</button></td></tr>` );
+			for ( const p of ( data.busy?.[ world ] ?? [] ).filter( p => p.cell && ! data.approved.some( a => a.cell === p.cell ) ) ) rows.push( `<tr><td>${ nameOf( world ) }</td><td><b>${ esc( p.name ) }</b><div class="muted small">${ esc( p.region ) }</div></td><td class="num wide-only">${ p.n } in ${ p.days } day${ p.days === 1 ? '' : 's' }</td><td class="act"><button type="button" data-approve="${ esc( p.cell ) }" data-world="${ world }">Approve</button></td></tr>` );
 
 		}
 
@@ -1833,7 +1864,7 @@
 		const what = drivers
 			? `<b>This challenge is live</b>, and ${ drivers } driver${ drivers === 1 ? ' has a time' : 's have times' } on it. Changing it now changes what the times mean, so it starts a new board; the old one is kept apart, with its places.`
 			: '<b>This challenge is live</b>, though nobody has a time on it yet. Changing it now turns away anyone driving it (their runs won\'t count), and it starts on a board of its own.';
-		warn.innerHTML = `<p>${ what } (${ esc( body.period ) }, the ${ WORLDS[ body.world ] }.)</p><div class="row"><button type="button" id="ch-anyway">Change it anyway</button><button type="button" id="ch-keep">Keep it</button></div>`;
+		warn.innerHTML = `<p>${ what } (${ esc( body.period ) }, ${ theWorld( body.world ) }.)</p><div class="row"><button type="button" id="ch-anyway">Change it anyway</button><button type="button" id="ch-keep">Keep it</button></div>`;
 		warn.hidden = false;
 		say( '' );
 
@@ -1866,7 +1897,7 @@
 		if ( res.status === 409 && answer.reason === 'live' ) return warnLive( body, answer.drivers );
 		if ( ! res.ok ) return say( res.status === 429 ? 'Asked too often just now: try again in a minute.' : res.status === 400 ? 'That isn\'t one the Worker takes: check the period (today\'s or later) and the place.' : res.status === 409 ? answer.error ?? 'That can\'t be done.' : `Something went wrong (${ res.status }).` );
 		// Which period it was, said: the form can name one by a day typed in.
-		say( body.action === 'pick' ? `Saved for ${ body.period }, the ${ WORLDS[ body.world ] }.` : body.action === 'unpick' ? `Back to the rotation for ${ body.period }, the ${ WORLDS[ body.world ] }.` : 'Saved.' );
+		say( body.action === 'pick' ? `Saved for ${ body.period }, ${ WORLDS[ body.world ]?.the ?? body.world }.` : body.action === 'unpick' ? `Back to the rotation for ${ body.period }, ${ WORLDS[ body.world ]?.the ?? body.world }.` : 'Saved.' );
 		show( answer );
 
 	}

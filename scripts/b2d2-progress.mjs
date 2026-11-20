@@ -55,6 +55,13 @@ const COLOURS = [
 	{ rgb: [ 1, 0.502, 1 ], date: '2026-11-05/08', label: '2026.11.05 to 11.08' },
 	{ rgb: [ 0, 0, 1 ], date: '2026-11-09', label: '2026.11.09' },
 	{ rgb: [ 1, 1, 0 ], date: '2026-11-10', label: '2026.11.10' },
+	{ rgb: [ 0, 0.502, 0 ], date: '2026-11-11', label: '2026.11.11' },
+	{ rgb: [ 0.502, 0, 1 ], date: '2026-11-12', label: '2026.11.12' },
+	{ rgb: [ 0.502, 0.251, 0 ], date: '2026-11-13', label: '2026.11.13 (night)' },
+	{ rgb: [ 0.502, 0, 0.251 ], date: '2026-11-14', label: '2026.11.14' },
+	{ rgb: [ 0, 0, 0.502 ], date: '2026-11-15', label: '2026.11.15' },
+	{ rgb: [ 1, 0, 0.502 ], date: '2026-11-16', label: '2026.11.16' },
+	{ rgb: [ 0, 0, 0 ], date: '2026-11-17', label: '2026.11.17' },
 ];
 
 // Where each view is on its sheet (page points from the top left: x = ax + bx × p, y = ay + by × q,
@@ -404,15 +411,21 @@ for ( const poly of polys ) {
 
 // Ids: an area already in the snapshot keeps its id: facing the same way, its middle within 0.6 m
 // (--match; more where the drawing's outline was moved) and the nearest, closest pairs first, so a
-// new area beside an old one doesn't take its id.
+// new area beside an old one doesn't take its id. Only an area chipped the same day: a day's
+// colour doesn't change from one drawing to the next, so a new day's area beside an old one is new.
 const centre = m => m.pts.reduce( ( s, p ) => s.map( ( c, i ) => c + p[ i ] / m.pts.length ), [ 0, 0, 0 ] );
 const taken = new Set();
 const pairs = [];
 for ( const m of made ) for ( const o of before ) {
 
-	const facing = o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
-	const distance = Math.hypot( ...centre( o ).map( ( v, i ) => v - centre( m )[ i ] ) );
-	if ( facing && distance < Number( opts.match ) ) pairs.push( { m, o, distance } );
+	// A ground floor plan area that was put on the underside of C31's downstand for a while is back on
+	// the slab's top: the same area, turned over.
+	const turned = /downstand/.test( o.face ) && m.face === 'ground floor slab';
+	const facing = turned || o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
+	// (In plan, for one turned over: it went down to the downstand as well.)
+	const distance = Math.hypot( ...centre( o ).map( ( v, i ) => turned && i === 1 ? 0 : v - centre( m )[ i ] ) );
+	const sameDay = ! o.f?.chipped || o.f.chipped === m.f.chipped;
+	if ( facing && sameDay && distance < Number( opts.match ) ) pairs.push( { m, o, distance } );
 
 }
 

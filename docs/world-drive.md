@@ -2,7 +2,8 @@
 
 World Drive is the second app in this repository: pick anywhere on Earth from a globe of Google's
 photorealistic 3D tiles, drop in and drive the real world, arcade style; or switch the globe to
-[the Moon](#the-moon) and drive that. It shares `src/` with the
+[the Moon](#the-moon), [Mars](#mars) or the asteroids [Vesta and Ceres](#vesta-and-ceres) and drive
+that ([worlds](#worlds)). It shares `src/` with the
 construction app (the tiles, the models, the driving) but has its own page, build, Worker and
 address, and the construction app is unchanged by it.
 
@@ -55,8 +56,10 @@ address, and the construction app is unchanged by it.
    water's surface ([the open sea](#the-open-sea)). Where there's nothing at all to drive on, it
    says so and goes back to the globe.
 5. **M** (or the **Globe** button) goes back to the globe, from driving or from a drop-in on its way
-   down. Pick somewhere else and drop in again: as often as you like, without reloading.
-6. **Challenges** (under **Earth | Moon** on the panel, and in the pause menu): a daily, a weekly
+   down. Pick somewhere else and drop in again: as often as you like, without reloading. On the
+   globe, **M** (or **Worlds**, at the top of the panel) opens the Solar System to pick another
+   world from ([picking a world](#picking-a-world-the-orrery)).
+6. **Challenges** (under **Worlds** on the panel, and in the pause menu): a daily, a weekly
    and a monthly one on each world, a checkpoint sprint, a hunt for stars or a drive to a landmark
    against the clock, each with its own board ([Challenges](#challenges)).
 
@@ -66,14 +69,14 @@ address, and the construction app is unchanged by it.
 | --- | --- |
 | W / S | Gas; brake, and reverse once stopped |
 | A / D | Steer |
-| Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
-| Shift (or B) | Booster: flat out for a moment, overdrive |
-| F | Fly: hold to lift off, let go to glide down |
+| Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to jump (about 5 m, over a car or a barrier) |
+| Shift (or B) | Booster: hold for overdrive while the gauge lasts; let go to save the rest |
+| F or T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); again bails out (a parachute near the ground), or lands it low down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on (on water too) |
 | C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
-| M | Back to the globe |
+| M | Back to the globe; on the globe, the [worlds](#picking-a-world-the-orrery) (and M again closes them) |
 | H | Horn, for those [driving with you](#driving-with-others) (only while that's on) |
 | Esc | Pause: keep driving, change ride, or back to the globe |
 
@@ -81,8 +84,8 @@ The keys card shows as each drive starts; **?** brings it back. Under the place'
 a slim bar shows your [level](#levels) and the XP to the next, with small "+46 XP" pop-ups under it. Flying, the booster, drifts, stunts,
 water and R come from `src/drive.js`, which World Drive starts with `fly`, `booster` and `drift` on,
 `crash: 'launch'` and its `water` (the construction app leaves them off: its crashes stop the
-vehicle dead, and nothing there is water), and on the Moon its `gravity` (a share of the Earth's:
-[the Moon](#driving-there)).
+vehicle dead, and nothing there is water), and on another world its `gravity` (a share of the
+Earth's: [the Moon](#driving-there), [Mars](#mars), [Vesta and Ceres](#driving-on-them)).
 
 On a touch screen the globe's panel is a sheet along the bottom, and driving has on-screen buttons
 (the driving HUD's, `src/drive-hud.js`): steering bottom left; **Gas** with **Drift** over it at the
@@ -133,13 +136,89 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   then pink after 0.7, 1.5 and 2.5 s). Let go for a short, strong boost. Space held before you
   steer waits for the steering rather than hopping; a quick tap hops.
 
+### Plane mode
+
+**F** or **T** turns whatever you're driving into a little plane (F is the way into the air: there's no flying a car on F any more): wings swing down from its sides with a jet
+under each, a fin rises at the back, and on a model car the wheels fold out flat as fans. It lifts
+a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
+of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and
+**Shift** comes down. **T** again **bails out**: the wings fold away and the car falls, no faster
+than a skydiver (55 m/s, its speed across the ground easing off to the ride's own), and a
+**parachute** opens as it nears the ground (30 m over it, or 0.8 s of the fall over it, falling
+faster: `PARACHUTE` in `src/plane.js`), sinking at 5 m/s, steered a little with **A**/**D**, and
+righting it to land on its wheels, driving on at the speed it landed with (never more than the
+booster's). Press **T** while falling to be a plane again. Within 12 m of the ground, **T** flies it
+down by itself instead and folds it back into a car on the ground (**T** on the way down flies on).
+Others driving with you see the plane fold away and the car come down, without the parachute.
+On a touch screen the ✈ button under CAM is T, FLY is up and BOOST is down.
+
+**Faster the higher you fly.** Just off the ground it goes up to twice the ride's own top speed
+(`CAR_SHARE`: 320 km/h in the pickup), a plane's speed even low down. Higher up the table below
+takes over where it's faster, and climbing and coming down get quicker too (`SPEEDS` and `CLIMB` in
+`src/plane.js`):
+
+| Height over the ground | Top speed |
+| --- | --- |
+| 0 m | 60 km/h |
+| 30 m | 100 km/h |
+| 150 m | 250 km/h |
+| 600 m | 500 km/h |
+| 2 km | 900 km/h |
+| 6 km | 1,800 km/h |
+| 12 km (the ceiling) | 2,700 km/h |
+
+Coming down, it eases off to the top speed for its height. It
+never goes below 0.8 m over the ground (a slope is flown up), stops short of a wall ("Bonk!") and
+never climbs through a roof or a bridge. Over the ceiling it comes back down to it: where the scene
+stays where you dropped in (the Earth, the Moon, Mars), the world curves away under you, and a long
+level flight would otherwise climb out of reach of the others (on the Moon, after about 250 km at
+the ceiling). Its speed goes to others as it is (up to 790 m/s, under the room's 800: `MAX_SPEED`
+in `live.js`), so a plane at 2,700 km/h is seen flying between updates, not jumping 150 m at a time.
+
+**It's for looking round, not for points.** It's kept apart from everything scored:
+
+- **No challenges.** T does nothing during a challenge's countdown or run ("No plane during a
+  challenge run"), so no board's time is ever flown. Times are still checked against the fastest
+  anything drives along the ground (`FASTEST` in `challenge-rules.js`), which the plane isn't.
+- **No stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
+  out. As a plane there's no hop, drift, booster or tricks. Once it's down, a **new stunt run**
+  starts (the last one's place may be far behind).
+- **No levels.** Its distance, air and the areas it flies over don't count for XP (`driven` in
+  `main.js`).
+
+**Google's tiles.** Google bills by the session (one a page load: see the top of `main.js`), not
+by the tile, so flying high or far costs no more there. What a fast plane costs is your device's
+download and drawing, so flying fast it makes do with coarser tiles: their screen-space error
+target goes up to 2.5 times the usual from 30 m/s to 250 m/s (`PLANE_TILE_ERROR` in `main.js`).
+Driving, the tiles are as sharp as ever.
+
+**Driving with others.** They see you as a plane too: each state you send carries `FLAGS.plane`
+(`live-protocol.js`) while your wings are out, and their copy of your car unfolds the same kit at
+the same pace, flies with you, and folds it away as you fold yours (`planeOf` in `ghosts.js`). A
+plane's states go up to 800 m/s (`TOP_SPEED` there) and, flying fast, more than `TELEPORT` m apart
+are still flown between rather than jumped (`teleported`).
+
+**Wheels.** The model cars' wheels (`cars.js`) and the go-kart's (`kart.js`) fold out flat as
+fans. The other code-built rides (coupe, bus, monster truck, hovercraft) get the wings but keep
+their wheels as they are.
+
+**Not yet:** flying high enough to come out on the globe and pick somewhere else.
+
 ### Boosting
 
-- **The booster** (**Shift**, or **B**) fires the whole gauge, 2.5 s of it (it needs 15 % to light), pushing you up
+- **The booster** (**Shift**, or **B**, or the BOOST button) burns while it's held: a full gauge lasts
+  2.5 s (it needs 15 % to light), and letting go puts it out with the rest saved, pushing you up
   to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
   each), and so do boost pads (once they're switched on). What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles, confetti, music notes or cherry blossom, or
   with the pass (or, for some, a level) one of seventeen more.
+- **In the air it pushes the way the nose points.** On the road it pushes you forward. Off the
+  ground (a jump, a launch, flying on **F**) it pushes along the car as it's turned: nose up and it
+  climbs (adding up to 20 m/s upward, `BOOST_CLIMB`), nose down and it dives, pointing back mid-spin
+  and it slows you and then sends you backwards. Along the ground it still never takes you past
+  twice the top speed, so challenge times are checked the same way. Flying on **F**, only the part
+  along the way you're heading counts, since flying follows your heading. (`pushAlongNose` in
+  `src/drive.js`.)
 - **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
   you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you, a flash and a jolt, the edges of the view flashing white), streaks of
   air streaming back past you, the view 9° wider and **OVERDRIVE** by the speed. It lasts, boosting
@@ -322,7 +401,7 @@ the water. It's gone, at the owner's asking, and with it the Driver's splash, it
 ground to go back to and the HUD's splash word and fade. The measurements in this section (how
 water is told, the open sea, the big lakes) were made while it was a splash, which is why they
 speak of splashes and of the way back; `water.js` tells water the same way still, for three things
-(all on the Earth: the Moon has none):
+(all on the Earth: the other worlds have none):
 
 - **The hovercraft** rides on water as every ride does, but throws up spray behind it there. It
   says `floats: true` in its tuning, and under it the Driver looks for water every 0.2 s while it's
@@ -929,15 +1008,15 @@ a gentler one you can be up to 1.5 m under it first, and are lifted onto it. Off
 bed is the gentler kind (1.3 m down in 100 from the pier's water, 1.0 m under the sea's height, to
 7.6 m under it 500 m off), so there you'd be lifted. Every ride the same, the hovercraft throwing up
 spray on it; R out there puts you a few metres on, on it; from then on it's the open sea's surface
-as above, gone out over land past its reach. On the Moon nothing's looked at. The sea's height and
-the map are only fetched (once a drop-in) when the ground looked at is lower than any water could
-be there (86 m over the ellipsoid, or a big lake's height over that in its box) less 1.5 m; on
-higher ground a look is three rays down and nothing more. On the test pad such a look took 0.02 to
-0.09 ms in software rendering (three rays, and the map and the sea's height read); on Google's tiles
-a ray takes 0.03 to 0.07 ms, so four looks a second are a few tenths of a millisecond a second.
-(On the test pad, driving, its sea, 2 m under its land, is at the water's height: Google's water by
-a coast. A drop-in instead takes the pad for ground at the water's surface wherever it's put, as
-above.)
+as above, gone out over land past its reach. On the other worlds nothing's looked at. The sea's
+height and the map are only fetched (once a drop-in) when the ground looked at is lower than any
+water could be there (86 m over the ellipsoid, or a big lake's height over that in its box) less 1.5
+m; on higher ground a look is three rays down and nothing more. On the test pad such a look took
+0.02 to 0.09 ms in software rendering (three rays, and the map and the sea's height read); on
+Google's tiles a ray takes 0.03 to 0.07 ms, so four looks a second are a few tenths of a millisecond
+a second. (On the test pad, driving, its sea, 2 m under its land, is at the water's height: Google's
+water by a coast. A drop-in instead takes the pad for ground at the water's surface wherever it's
+put, as above.)
 
 **Beside another driver.** Go to or Join beside someone out on that surface, or in the air over it
 (a hop, a trick, flying: every ride can fly), puts you on it with them. You're put 5 m to the right
@@ -975,9 +1054,9 @@ look above lays it for a vehicle at any height over it. Then:
   beside a rider, and beside a flier with yours laid (built up, below); before the ninth change your
   scene laid it there at 5 to 7 of the 7 beside a rider or a flier with none laid, but the drop-in
   beside a rider, from the globe, didn't (it asked whether it's built up first).
-- **Beside someone riding on it**, with none of it laid where you are (from the globe, from the
-  Moon, from a page just opened, from another place, or with none in your scene), it's laid for you
-  there too, and you start on it beside them, as you'd see them on it: where their wheels are on
+- **Beside someone riding on it**, with none of it laid where you are (from the globe, from the Moon
+  or Mars, from a page just opened, from another place, or with none in your scene), it's laid for
+  you there too, and you start on it beside them, as you'd see them on it: where their wheels are on
   something (live.js's grounded flag in what their page sends; or, with no word of their car, the
   place they dropped in, which they started on), at the water's height there to within 0.5 m, with
   Google's ground under their car, and under the spot beside them, more than 1.5 m under that
@@ -999,14 +1078,14 @@ look above lays it for a vehicle at any height over it. Then:
   (by the equator; 45 km at mid-latitudes). It's well under 1.5 m, so whoever it takes is a metre or
   more clear of the ground under them. In a channel between banks or moles standing over the water,
   it's laid where a quarter of the way round is clear out to 75 m, as with yours laid (next): in one
-  130 m wide or more, everywhere; 120 m, all but one spot of 30 across it (8 m off its middle);
-  100 m, 13 of 25 (the half nearer its banks, and 20 m off its middle); 80 m, 2 of 20, by a bank;
-  60 m or narrower, nowhere. Where it isn't laid you start on its bed under them, as for none above:
-  in your scene, where Google draws that bed less than about 3 m under them, you're put on it there,
+  130 m wide or more, everywhere; 120 m, all but one spot of 30 across it (8 m off its middle); 100
+  m, 13 of 25 (the half nearer its banks, and 20 m off its middle); 80 m, 2 of 20, by a bank; 60 m
+  or narrower, nowhere. Where it isn't laid you start on its bed under them, as for none above: in
+  your scene, where Google draws that bed less than about 3 m under them, you're put on it there,
   under their water (Go to takes ground within 3 m of their height, as anywhere); otherwise it's a
-  drop-in, which starts on it as a pin there does (a bed less than 15 m under the sea). (Before
-  12 November 2026's change, joined from the globe beside someone riding on a surface of their own
-  over a lake's shelf, a sandy bed or an inlet, you started on that bed under the water; and in your
+  drop-in, which starts on it as a pin there does (a bed less than 15 m under the sea). (Before 12
+  November 2026's change, joined from the globe beside someone riding on a surface of their own over
+  a lake's shelf, a sandy bed or an inlet, you started on that bed under the water; and in your
   scene, beside one over a sandy bed 2 m down, on that bed. Then for a while that day it was looked
   at out to 75 m with the rays down alone, and beside a rider in a street 25 m from a crossing you
   were put on the surface among the houses, in your scene and from the globe; then out to 100 m,
@@ -1063,7 +1142,7 @@ look above lays it for a vehicle at any height over it. Then:
   Santa Monica beside someone flying 20 m over a field 3 m under the sea at New Orleans (in a
   coast's square), you start on the field. (Until 12 November 2026 the sea's counted wherever it
   was laid, and there you started on the sea over the field, which then covered the city's streets
-  round it within its reach.) From the globe or the Moon you have none laid, and it's as for none
+  round it within its reach.) From the globe or another world you have none laid, and it's as for none
   above: beside someone flying over a lake's shelf, the drop-in starts on the shelf; beside someone
   riding on it there, on its surface.
 
@@ -1369,23 +1448,271 @@ pair of jetties and the marina, 12 to 26 m short of it, the look casting no rays
 water 260 m past the edge, and flown it was laid 85 to 120 m past it). Without the map, off Santa
 Monica Pier, the kart drove on down the slope.
 
+## Worlds
+
+At the top of the globe's panel, **Worlds** (with the world you're on, and how many drive there
+now) opens the Solar System, where the five worlds you can drive on are picked: the Earth,
+the Moon, Mars, Vesta and Ceres ([picking a world](#picking-a-world-the-orrery)). The Earth is
+Google's tiles; [the Moon](#the-moon), [Mars](#mars) and the asteroids
+[Vesta and Ceres](#vesta-and-ceres) are made in the page from NASA's maps (`src/drive-app/body.js`),
+and are made the same way, so most of what's said of the Moon below is true of the others too, and of
+any world added after them. Vesta and Ceres are small and far from round, which takes two things more
+of them: an up of their own (a [level](#the-level-frame), not straight out from the middle) and a
+scene that [follows the car](#the-moving-recentre) as it drives. Which worlds there are, and what's
+different about each, is one list: `src/drive-app/worlds.js`.
+
+### The list
+
+`worlds.js` is plain data and a few small functions, with no imports, so the page, its first
+script (`boot.js`), the Worker, the site's build and the tests all share it. `WORLDS[ id ]` (`earth`,
+`moon`, `mars`, `vesta`, `ceres`) says of each: its name as a heading ("Mars") and in a sentence
+("the Moon", "Mars"); its radius (the sphere its heights are over: 1,737.4 km for the Moon, 3,389.5 km
+for Mars, 262.7 km for Vesta, 470 km for Ceres; the Earth's mean, 6,371 km, for its [drop-in
+cells](#how-a-place-is-rounded)); whether it's free; the prefix of its start spots' ids (`moon-`,
+`mars-`, `vesta-`, `ceres-`); its gravity, as a share of the Earth's 9.81 m/s² (the Moon's 1.62 m/s²,
+0.165; Mars's 3.71 m/s², 0.378; Vesta's 0.25 m/s², 0.0255; Ceres's 0.284 m/s², 0.029); its heights
+(`/<id>/height.bin`, how many columns and rows, and Vesta's `step`, 2 m: its heights are kept in
+steps of 2 m, too far apart for metres) and its picture (`/<id>/colour.webp`); the lowest and the
+highest its ground can be, made-up craters in (the Moon −12 to +12 km, Mars −9.5 to +22.5 km, Vesta
+−52 to +32 km, Ceres −29 to +18.5 km); its credit; how its ground is made up below what its heights
+show (`ground`, [below](#how-its-made)); and where its globe first looks (the Moon 12° N 18° E, Mars
+5° S 80° W, Vesta 20° S 0°, Ceres 20° N 120° W). A small world far from round has two more: its
+`level`, the spheroid whose surface is level there ([the level frame](#the-level-frame): Vesta's
+285 × 229 km, Ceres's 482 × 446 km), and `recentre`, how far the car goes before the scene follows
+it (Vesta 1,000 m, Ceres 1,500 m: [the moving recentre](#the-moving-recentre)). `WORLD_IDS` is the
+five, `OFF_EARTH` the four made in the page, and `FALLBACK` the Moon, where a visit with no Earth
+drive left opens. `worldOf( place )` says which world a place is on (the Earth's places carry no
+`world`; one that isn't a world is none), `spotWorld( id )` whose spot an id is (by its prefix), and
+`onWorld`, `OnWorld` and `TheWorld` say it in words ("on Mars", "On the Moon", "The Moon"), and
+`listOf( ids )` a list of them ("the Moon, Mars, Vesta and Ceres", or with "or"), so every list of the
+free worlds in the page's words (the used-up notice, the free-worlds word, the pass's perk) keeps up as
+worlds are added.
+
+How each looks is the page's alone (the Worker needs none of it): `LOOKS[ id ]` in body.js. How much
+lower than under the camera the ground may be all the way to a square for the square to count as
+over the horizon (150 m on the Moon, 400 m on Mars, for its canyons, 3 km on Vesta and 2 km on Ceres,
+whose relief is huge for their size); the ground's light (the sun's, the light from all round where
+the sun doesn't reach, Lommel-Seeliger's share, and a tint on the picture's colours); a haze and a sky
+of its own, for a world with air; where the sun is while driving; the vehicles' light; the glow round
+it from space; the colour of its dust; and what hangs in its sky. The Moon's look is the one it
+always had.
+
+### What every world but the Earth has
+
+- **It's made in the page** from NASA's maps: its heights at a grid of points and a picture of the
+  whole world, two files fetched the first time it's picked, and everything smaller made up, the
+  same on every visit (`body-height.js`'s `createGround`, which the Worker uses too, so challenges'
+  routes are checked on the ground the page drives on). Its ground is a quadtree of squares
+  (`createBody( id )`); the stars and the grit are made once, the first time a world needs them, and
+  shared by every world; and a world left for another lets go of every square but its six roots
+  (`release`), so only the world in view keeps its fine ground.
+- **It's free and never limited**: its ground is our own files, so it costs nothing to stream and
+  needs no Maps key (it's the real world under `npm run dev:drive` too). A visit there costs a robot
+  check and nothing else ([what a visit costs](#what-a-visit-costs-and-how-its-capped)).
+- **Driving with others, in rooms of its own**: its own areas (a grid sized to the world, about
+  11 km across), cars sent in its own frame, its own day's budget, its own **Driving now** and dots
+  on its own globe, and parties across every world ([on every world](#on-every-world)).
+- **No water, no sea** (`water.none`), and boost pads by the Moon's rules (`MOON_RULES`), for open
+  ground with no roofs or banks.
+- **Its own gravity** (`driver.gravity`, the world's `gravity`), with what throws a vehicle up
+  multiplied by its square root (`driver.leap`), so jumps go as high as on the Earth, and scores fair
+  to the Earth's ([driving there](#driving-there)). The ground is looked for 400 m down divided by the
+  gravity, and a vehicle fallen 200 m divided by it under where it last stood is put back there, but
+  never from further down than 1.5 km (`FALL_MOST` in drive.js: the Moon's 1.2 km and Mars's 530 m are
+  under it, so only Vesta and Ceres meet it). Sparks and bits from a hit, and what falls of a boost's
+  flames and bursts, fall by it too.
+- **Its own places**: its start spots and the places its search finds, all in the page (no map
+  service knows them: `<world>-places.js`, gathered in `world-places.js`'s `SPOTS_ON` and
+  `PLACES_ON`), searched by `place-search.js` (names and other names, accents and apostrophes not
+  minded); typed coordinates its own ("Mars coordinates"); six recent places of its own
+  (`world-drive.recent-<id>`; the Earth's are `world-drive.recent`); its words on the panel (`WORDS`
+  in `panel.js`); and NASA's credit where Google's would be (`#moon-credit`, `#mars-credit`,
+  `#vesta-credit`, `#ceres-credit`, each `.world-credit`).
+- **Links**: `/?spot=<id>-<name>` (one of its spots) or `/?at=<lat>,<lon>&world=<id>` turns the globe
+  to it and pins the place, and a page opened on one asks for that world's free visit and opens there
+  with the Earth closed (main.js's `earthClosed`, which was `moonOnly`); a `world=` that isn't a
+  world is the Earth's. Each start spot has a page of its own at `/<id>/<slug>/` ([the Moon's
+  pages](#the-moons-pages), [Mars's](#marss-pages), [Vesta's and Ceres's](#vestas-and-ceress-pages)).
+- **The drop-in** has no tiles to wait for: the ground's height at the pin is worked out, so the
+  scene is centred on it at once, and the ground round it is built on the way down (main.js's
+  `dropInBody`). **M** goes back to its own globe.
+- **It's counted as its own**: its drop-ins (`dropin:<id>`, and the cell of its own grid in [where
+  people drop in](#where-people-drop-in)), its play time (`play_world:<id>`), each turn of the globe to
+  it (`world:<id>`), its searches (`search:<id>`) and its not loading (`problem:<id>_failed`); visits
+  opened on a link to it (`visit_kind:<id>_link`); its drives, for its
+  [achievements](#achievements-and-rewards); and three [challenges](#challenges) of its own, laid out
+  on its own heights.
+
+### Picking a world: the orrery
+
+**Worlds**, at the top of the globe's panel (`.worlds-open`), is one button: the world you're on
+with its icon ("Mars"), how many drive there now when there's anyone ("3 driving", the shown
+world's count from [who's driving now](#on-the-globe-whos-driving-now)), and "Worlds ›". Its label
+says it all to a screen reader ("Change world. On Mars now, 3 driving"); while a world's files are
+coming it reads "Loading Mars…" ("Loading the Moon…"), busy (`aria-busy`). It opens **the orrery**:
+the Solar System, the Sun with Mercury, Venus, the Earth and the Moon, Mars, the asteroid belt with
+Vesta and Ceres, and Jupiter, Saturn (with its rings), Uranus and Neptune, not to scale, the planets
+going round and turning (none of it with the system asking for less motion), drawn over the page's
+stars. It opens on the whole of it; a world picked (its button, its tag or its body in the scene,
+which a drag turns and a scroll or pinch zooms) is flown to, with a sheet beside it (under it on a
+phone): what it is, its radius and gravity, how many are driving there now, up to four of its start
+spots (each flying the globe to it there), your party's friends there (**Join**, or "on its globe"
+for one looking at it from its globe), and **Drive on Mars** (or **Back to the Earth** for the
+world you're on, which also stops a switch to another still loading). Mercury and Venus are "not in
+the game yet", the giants have "no ground to drive on": their sheets say so, with no Drive. While
+this visit's Earth drives are spent the Earth's sheet says so ("The Earth is used up for today"),
+and its Drive shows the [used-up notice](#what-a-visit-costs-and-how-its-capped) as the Earth
+always does.
+
+- **Opening it.** **Worlds**; **M** on the globe; the panel's **On other worlds** row ([who's driving
+  now](#on-the-globe-whos-driving-now), when two or more other worlds have drivers); or a link with
+  `?worlds=1`, which opens it as the page loads and is then taken out of the address (never over a
+  challenge link's card). Never on a plain load, nor off the globe, nor over another open dialog
+  (the Garage, the leaderboard, challenges and the rest). On the dev server
+  `window.worldDriveOrreryTest = { onLoad: true }` does what `?worlds=1` does, for the tests.
+- **Closing it.** Esc (first back from an other body's sheet to the whole Solar System, then
+  closed), **M**, its ✕, a Drive, a spot or a **Join**, and anything that leaves the globe (a
+  drop-in: main.js's `setMode` closes it first). The focus goes back to what opened it, or to
+  **Worlds** if that's gone. It closes before a Drive, spot or Join acts, so the panel's back first.
+- **For the keyboard and screen readers.** It's a native modal `<dialog id="orrery">`
+  (`showModal()`: the page behind it inert, as every other dialog here), titled "Pick a world". The
+  five worlds you can drive on are a radio group ("Worlds you can drive on"), the one you're on
+  checked and focused as it opens: the arrow keys (round from one end to the other), Home and End
+  move along them and show each one's sheet, Space picks, Enter drives there; only the one picked is
+  in the tab order. Each says its count in its name ("Mars, 3 driving now"; with driving with others
+  off there, or unknown, just "Mars"), never in a live region; the rest are buttons ("Saturn, no
+  ground to drive on"). Everything on the canvas is in the dialog's buttons; the floating tags are
+  for the mouse (`aria-hidden`). Keys stop at the dialog (and main.js's key handler does nothing
+  while it's open or opening), so none reaches the game behind it.
+- **What's counted.** The header's "N driving now" and each world's count are who's driving now's
+  own numbers, as the panel shows them (`online.worlds`, with this page taken off the world it just
+  left), so the orrery and the panel agree; the sheet says what counts ("Counted: drivers in an
+  area's room, who show themselves to drivers nearby. Not anyone on a globe, or only in a party.").
+  It asks the Worker for nothing of its own.
+- **How it's drawn.** By the page's own renderer into its own canvas (no second WebGL context, no
+  context lost beside Google's tiles): while it's open main.js's frame loop calls `orrery.render( dt
+  )` in place of drawing the scene (and the globe's `capture`), everything else going on as before,
+  the globe's controls off. It sets and puts back the renderer's target, clear colour and `autoClear`
+  round each draw, and with the system asking for less motion draws only when something changed (a
+  pick, a resize, the counts, the world you're on). The dialog and its backdrop are clear; while
+  it's open `body[data-orrery='open']` hides the panel, the tags, the pin and the credits
+  (`visibility`, so the ad's slot keeps its size). **The ad** isn't asked for while it's open
+  (`ads.js` waits for it to close, watching `data-orrery` as it watches the panel); one already
+  shown is hidden under it and back as it closes.
+- **Phones.** Up to 760 px wide the five are one row at the top (each at least 44 px, as every
+  button in it is), the rest a row that scrolls sideways under them, and the sheet at the bottom,
+  half the height at most, its words scrolling and Drive kept in view; on its side (520 px tall or
+  less) the sheet runs down the right, 42% of the width. A touch screen's hint says "Drag to turn,
+  pinch to zoom".
+- **Its files.** It's a chunk of its own, script and styles (`src/drive-app/orrery.js`,
+  `orrery.css`, its bodies' facts in `orrery-bodies.js`, the drivable ones' names, radii and
+  gravity from worlds.js), loaded the first time it's opened, so nothing of it is in the page's first
+  load; its pictures are fetched then too, from `/orrery/`: `earth.webp`, `moon.webp`, `mars.webp`,
+  `vesta.webp` and `ceres.webp`, 1024 × 512 each, and Vesta's and Ceres's shapes
+  (`vesta-height.bin`, `ceres-height.bin`, 360 × 180 signed 16-bit heights a degree apart, 129,600
+  bytes each, in each world's own steps), about 640 kB in all, and none of any world's own files.
+  `node scripts/make-orrery.mjs` makes them: the Moon's, Mars's, Vesta's and Ceres's from the
+  game's own pictures and heights (`drive/public/<world>/`, so the same NASA maps with the same
+  credits), and the Earth's from NASA's Blue Marble (NASA Visible Earth, public domain) as the
+  three-globe package (2.45.6, on npm) has it, fetched by the script, or a copy given with
+  `--earth=`: in the game the Earth is Google's tiles, which can't be used as a picture like that.
+  Mercury, Venus and the giants are drawn in the page. The scene is built the first time it opens
+  and kept for the visit (freed as the page goes, `pagehide`).
+- **The world.** A Drive is main.js's `setWorld`, as the switch before it was: under reduced
+  motion the globe's put at the world's orbit at once rather than flown in over 2.2 s.
+  `window.drive.orrery` (`open()`, `close()`, `isOpen`) is there for the tests.
+
+**How it's tested**: `npm run test:drive-orrery-ui` (`scripts/test-drive-orrery-ui.mjs`, on
+`TEST_VITE_PORT`, 5601 if unset), fourteen tests in Chromium on the test pad: never open on a plain
+load, and nothing of it nor of the other worlds fetched until it opens, then one WebGL context
+still; opened by **Worlds** (the focus back on it as it closes), by **M** (and closed by M, not
+opened again), by `?worlds=1` (then out of the address) and the dev server's seam, and closed by a
+drop-in; Esc, with the focus left on the scene too, the pin kept; the eleven bodies, the five a
+radio group in the game's order and the rest named for why not; an other body's sheet with no
+Drive, Esc back to the whole of it, then closed; the arrows (round), Home and End, Space and Enter;
+each world picked and driven to, and a sheet's spot flying the globe there; "Loading Mars…" on
+**Worlds** while Mars comes, and **Back to the Earth** stopping it; the Earth used up; each world's
+count in its name, the total, the sheet, **Worlds**' label and the **On other worlds** row opening
+it (the focus back on the row), from a stand-in `/api/online`; 360 × 640 and 740 × 360 with nothing
+wider than the screen, every target 44 px or more and Drive in view; nothing drawn while still under
+reduced motion; and the ad not asked for under it and not lost to it. `scripts/worlds-ui.mjs` is
+how every other UI test picks a world (**Worlds**, then the world, then Drive).
+
+(Before, the panel had a button a world, a pill of five radio buttons, `.worlds`.)
+
+### Adding a world
+
+1. **The list**: an entry in `WORLDS` (worlds.js). Its id is five letters at most (a drop-in's cell is
+   `<world>:<row>:<column>`) and never changes; nor does its radius once anything's been counted on
+   it, as the drop-in grid and the challenges' places are on a sphere of it. A world far from round
+   gets a `level` and a `recentre` too ([Vesta and Ceres](#vesta-and-ceres)), and a world whose
+   heights reach further from its sphere than 32.7 km a `step`.
+2. **Its files**: a script like `scripts/make-mars.mjs` or `scripts/make-asteroids.mjs` (with an
+   `npm run make-<id>`) making `drive/public/<id>/height.bin` (signed 16-bit little-endian metres, or
+   steps, over the sphere, twice as many columns as rows, from 90° N and 180° W, each the middle of its
+   cell) and `colour.webp` (the whole world, twice as wide as tall, from 180° W).
+3. **Its places**: `src/drive-app/<id>-places.js`, its spots (ids starting with its prefix) and the
+   places its search finds, each with `world: '<id>'`, in `world-places.js`'s `SPOTS_ON` and
+   `PLACES_ON`; and its words in panel.js's `WORDS`.
+4. **Its look**: `LOOKS[ id ]` in body.js.
+5. **The page**: its icon in `drive/index.html`'s **Worlds** button (`.worlds-open`, an
+   `<svg data-icon="<id>">`), its credit (`#<id>-credit`, with the class `world-credit`), and a
+   word of it in the panel's words, the FAQ and About. **The orrery**: its entry in
+   `orrery-bodies.js` (`DRIVE_BODIES` follows `WORLD_IDS`; its icon in `ICONS`, where it is in the
+   Solar System) and its picture, `drive/public/orrery/<id>.webp` (`scripts/make-orrery.mjs`, and a
+   `-height.bin` for a world far from round).
+6. **Its pages**: `drive/site/<id>.js` with its pages' words and its `<WORLD>_SITE`, in `build.js`'s
+   `WORLD_SITES` (the build stops if a world in `OFF_EARTH` has none), a `<!-- <id> places -->`
+   marker in `drive/index.html`, and its cards (`WORLD_CARDS` and its shots in
+   `scripts/drive-site-images.mjs`, which stops if a world in `OFF_EARTH` has no `WORLD_CARDS`). The
+   dev server's routes and the sitemap follow from `OFF_EARTH`.
+7. **The admin page** (`drive/public/admin.html`, which imports nothing): the copies of the list in
+   its scripts, the world's name, its name in a sentence, its radius and its picture, and its button
+   over the heat map and its option in the challenge form's **World**, which are in its HTML. (A
+   world it doesn't know, from a newer Worker, shows by its id on a plain map, and nothing breaks.)
+   And how far off its places name a drop-in's cell (`NEAR` in worker/drive/dropins.js; with none,
+   its cells are named by their coordinates alone).
+8. **Challenges**: its routes' sizes (`SHAPES` in challenge-rules.js: Mars's are the Moon's, Vesta's
+   and Ceres's the Moon's with gentler turns). The Worker's featured places for it (`FEATURED`) and
+   its ground for checking routes (`GROUNDS`) come from the list and its places by themselves. A new
+   world's three more boards may want `CHALLENGE_MISSES` raised (wrangler.drive.jsonc) and its routes
+   another ask at a period's start ([how they're picked](#how-theyre-picked)).
+9. **Achievements**: its drives' count (added by name in achievement-rules.js and
+   worker/drive/achievements.js, and its icon in achievements.js's `ICONS`; progress.js and the page's
+   grid follow the list) and its three badges.
+10. **Driving with others**: a new world's live play needs **a new version of the protocol**
+    (`worlddrive-live.v4`): the worlds each version knows (`KNOWN_WORLDS` in `live-protocol.js`)
+    are written out, never `WORLD_IDS`, so a page or room of today's never takes a sixth world's
+    places or cars for anything ([old pages](#on-every-world)). Then its grid (`CELL_DEGS`: an area
+    about 11 km across, and its rooms' prefix, the world's id), its car's band (`STATE_RADII`: from
+    3 km under its lowest to its highest and as high as a car can fly, apart from every other
+    world's) and its places' heights (`PLACE_HEIGHTS`); its day's budget (`LIVE_<ID>_DAILY_BUDGET`
+    in wrangler.drive.jsonc, `DEFAULT_BUDGETS` and `BUDGET_VARS` in worker/drive/live.js) and its
+    table in `DriveLimits` (`live_<id>`, `liveTable`); and `LIVE_WORLD_IDS`. main.js's
+    `LIVE_WORLDS` is `WORLD_IDS`: a world left out of it is one you drive alone on (away to the
+    rooms, its live parts hidden by `body[data-live='off']`).
+11. **Tests**: a UI test of its own (`test-drive-mars-ui.mjs` is the one to copy, or
+    `test-drive-asteroids-ui.mjs` for a world with a level), its values in the search pages' test
+    (`WORLD_CHECKS`), and its heights for the Worker's tests.
+
 ## The Moon
 
-The globe's panel has **Earth** and **Moon** at its top. The Moon is a whole Moon, made in the page
-(`src/drive-app/moon.js`) rather than streamed: its shapes are the real Moon's down to a few
-kilometres, from NASA's Lunar Reconnaissance Orbiter, its colours LRO's photographs of the whole
-Moon, and everything smaller made up, the same on every visit. It needs no Google tiles and no Maps
-key, so it's the real Moon under `npm run dev:drive` too.
+**The Moon**, picked in the orrery that the globe panel's **Worlds** opens, turns the globe to the Moon: a whole Moon, made in the page
+(`src/drive-app/body.js`, as every [world](#worlds) but the Earth is) rather than streamed: its
+shapes are the real Moon's down to a few kilometres, from NASA's Lunar Reconnaissance Orbiter, its
+colours LRO's photographs of the whole Moon, and everything smaller made up, the same on every
+visit. It needs no Google tiles and no Maps key, so it's the real Moon under `npm run dev:drive` too.
 
 ### Going there
 
-- **Earth | Moon.** The first time, the Moon's two files are fetched (never before: the Earth never
-  asks for them, nor makes its stars), the heights (`/moon/height.bin`, 2.1 MB) and the picture
-  (`/moon/colour.webp`, 0.7 MB), the Moon button dimmed meanwhile; if they don't come, a word says so
-  and the globe stays on the Earth. Earth, or a place or a drop-in on the Earth, while they're on
-  their way stays on the Earth. Then the globe turns to the Moon, coming in from further out, over the Apollo sites
-  (12° N, 18° E) the first time, else where it was looking when it left; the Earth's tiles are
-  hidden and not updated, so none load under it. Earth turns back, to where it was.
+- **The Moon**, picked in [the orrery](#picking-a-world-the-orrery) (**Worlds**). The first time, the Moon's two files are fetched (never
+  before: the Earth never asks for them, nor makes its stars, nor does the orrery), the heights (`/moon/height.bin`, 2.1
+  MB) and the picture (`/moon/colour.webp`, 0.7 MB), **Worlds** saying "Loading the Moon…" meanwhile; if they don't
+  come, a word says so and the globe stays on the world it was on. **Back to the Earth** in the orrery, or a place or a drop-in on
+  the Earth, while they're on their way stays on the Earth. Then the globe turns to the Moon, coming
+  in from further out, over the Apollo sites (12° N, 18° E) the first time, else where it was looking
+  when it left; the Earth's tiles are hidden and not updated, so none load under it, and a world left
+  (Mars, say) lets go of its ground but its coarsest. The Earth, picked again, turns back to where it was.
 - **Start spots**: a dozen (`MOON_SPOTS` in `src/drive-app/moon-places.js`): Tranquility Base
   (Apollo 11), Hadley Rille (Apollo 15), the Taurus-Littrow valley (Apollo 17), Tycho, Copernicus,
   Aristarchus, Plato, Mons Huygens, Shackleton crater's rim by the south pole, Mare Orientale,
@@ -1395,16 +1722,18 @@ key, so it's the real Moon under `npm run dev:drive` too.
   and about forty more (`MOON_PLACES`: the other landing sites, the seas, more craters and mountains,
   the poles, the highest and lowest places), by their names or others ("Sea of Rains" is Mare
   Imbrium, "Apollo 11" Tranquility Base), accents and apostrophes not minded ("schroteri",
-  "change 4"). Typed coordinates are the Moon's. A tap on the globe drops a pin.
+  "change 4"; `place-search.js`, every world's search). Typed coordinates are the Moon's ("Moon
+  coordinates"). A tap on the globe drops a pin.
 - **Recent places** are kept apart, six of the Moon's own (`world-drive.recent-moon`), and the
   panel shows the world's. The Earth's are untouched.
 - **A link**: `/?spot=moon-tycho` (any Moon spot's id), or `/?at=-43.31,-11.36&world=moon`, turns the
   globe to the Moon and pins the place, as an Earth spot's link does. Each spot has a page of its
   own, `/moon/<slug>/`, whose **Drive here** is that link, and the home page's words list them (a
   tap there turns the globe to the Moon too): see [The Moon's pages](#the-moons-pages).
-- On the Moon the panel says "Pick anywhere on the Moon", has no search credit (it's not
-  OpenStreetMap's), and none of [driving with others](#on-the-moon-you-drive-on-your-own); NASA's
-  credit is in the corner where Google's would be.
+- On the Moon the panel says "Pick anywhere on the Moon" and has no search credit (it's not
+  OpenStreetMap's); [driving with others](#driving-with-others-on-the-moon) is the Moon's own there,
+  its **Driving now** and dots the Moon's drivers. NASA's credit is in the corner where Google's
+  would be (`#moon-credit`).
 
 ### Driving there
 
@@ -1414,22 +1743,31 @@ key, so it's the real Moon under `npm run dev:drive` too.
   is up. The vehicle faces the way with the most open ground round it (`Ground.heading`, as on the
   Earth). In Chromium's software renderer (no GPU) a drop-in took 13 to 18 s.
 - **Gravity** is the Moon's, 1.62 m/s², a sixth of the Earth's: `driver.gravity = 0.165`
-  (`src/drive.js`). What throws a vehicle up (a hop, a hit's throw, a crest's climb, a wipeout's
-  tumble, a bounce on soft springs) is multiplied by its square root, 0.41 (`driver.leap`), so each
-  goes as high as on the Earth and stays up two and a half times as long (what a landing's speed is
-  measured against, for a hard one losing speed or soft springs bouncing, too): a hop 2.5 m up for 3.5 s
-  (1.43 s on the Earth). Thrown as hard as on the Earth they'd go six times as high and stay up six
-  times as long: a hit's throw 52 m up, a hop 8.6 s. A drift's little hop is as short as on the
-  Earth. The ground is looked for 2.4 km down rather than 400 m, and a vehicle fallen 1.2 km under
-  where it last stood with no ground found is put back there (200 m on the Earth), as long jumps go
-  higher over ground falling away. Sparks and bits from a hit fall as slowly.
+  (`src/drive.js`; main.js sets it from the world's `gravity` at each drive). What throws a vehicle
+  up (a hop, a hit's throw, a crest's climb, a wipeout's tumble, a bounce on soft springs) is
+  multiplied by its square root, 0.41 (`driver.leap`), so each goes as high as on the Earth and
+  stays up two and a half times as long (what a landing's speed is measured against, for a hard one
+  losing speed or soft springs bouncing, too): a hop 5.1 m up for 5 s (2.04 s on the Earth).
+  Thrown as hard as on the Earth they'd go six times as high and stay up six times as long: a hit's
+  throw 52 m up, a hop 12.3 s. A drift's little hop is as short as on the Earth. The ground is looked
+  for 2.4 km down rather than 400 m, and a vehicle fallen 1.2 km under where it last stood with no
+  ground found is put back there (200 m on the Earth), as long jumps go higher over ground falling
+  away. Leaving the ground going down a slope (falling more than 35 cm under it in a frame), a vehicle keeps
+  its speed down it: only a climb is multiplied by `leap` (until Vesta and Ceres the speed down was
+  too, so a car off a steep downslope fell at 0.41 of it and sailed on, on Mars at 0.615). Sparks and
+  bits from a hit fall as slowly, and so, since Vesta and Ceres, does what falls of a boost's flames
+  and bursts (`Batch.gravity` in drive-boosts.js, set by drive-fx.js: smoke and flame that rise rise
+  as on the Earth); before, they fell at the Earth's 9.81 m/s² on every world.
 - **Scores** are fair to the Earth's: big air counts the time the same jump would have taken on the
   Earth (the air time × 0.41), so a plain hop is no more big air than on the Earth, and a spin, a
   flip or a roll is worth 0.41 of its points (to the nearest 10), there being that much longer to
   turn in each jump (not while flying, which lasts as long anywhere); wall bounces are as they are. The leaderboard has the place as "Tycho crater
   (Moon)", or for a pin "Moon, 43.31° S, 11.36° W", never the board of a place on the Earth with the
   same name or at the same latitude and longitude, and a run's longest air is posted up to the
-  Worker's 120 s.
+  Worker's 120 s. A name too long for the board's 60 characters with its world is cut short to leave
+  room for the world (`placeLabel` in main.js), so " (Moon)" is never what's lost (it was, before
+  Mars: a name of 60 characters lost its " (Moon)", and with it went on the board of the Earth's
+  place of that name).
 - **The sky** is black with stars (a picture all round, turned with the Moon) and the Earth hangs in
   it over the near side, where the Moon always faces it: 1.9° across as it really is, drawn at 2.5°
   (a body low in the sky looks bigger than it is), lit by the same sun, so it shows a phase. The sun
@@ -1444,20 +1782,243 @@ key, so it's the real Moon under `npm run dev:drive` too.
   bumpy to 40 cm round the pad, reached over ground rising or falling up to 3 m every 7 m (a crater's
   rim), up to 40 m over or under where the vehicle last stood, and while it's up to 60 m over the
   ground in its long jumps. The Earth's rules keep pads off roofs and banks, and the Moon has none.
-- **M** goes back to the Moon's globe, **Earth** on the panel to the Earth's.
+  (Every other world's pads go down by these rules too.)
+- **M** goes back to the Moon's globe (and there, **M** again opens the orrery, for another world).
 
-### On the Moon you drive on your own
+### Driving with others on the Moon
 
-Driving with others is the Earth's: its rooms are areas of the Earth, its cars are placed on the
-Earth. On the Moon nothing is sent to a room (it's as if you were on the globe, away: the others see
-you "on the globe"), the others' ghosts aren't drawn, the panel's "Driving now" and its dots, the
-party banner, the pause menu's friends and the horn aren't shown, and no trick's points go to the
-room. **Join** on a party's word that someone went somewhere ("Sam went to Monaco"), from the Moon,
-goes back to the Earth and drops in beside them. Levels count driving, air, drifts, pads and tricks there as anywhere, but not areas or
-start spots (those are the Earth's) nor driving with others. A drop-in there is counted in the
-[play stats](#play-stats) as the Moon's (`dropin:moon`, which never says where), with its cell, to
-about a kilometre, in [where people drop in](#where-people-drop-in); its driving as the Moon's play
-time, and each turn of the globe to the Moon (and the Moon not loading) is counted too.
+[Driving with others](#driving-with-others) is on the Moon as on the Earth: the Moon is never
+limited (its ground is our own and costs nothing to stream), and a minute's drive alone on a grey
+plain is where most visits ended, so it's where company helps most. Everything the Earth has, the
+Moon has, in rooms of its own. It was the first world after the Earth to have it, and what follows
+is how it was done; Mars, Vesta and Ceres have it the same way since, each in rooms of its own, and
+what differs is in [on every world](#on-every-world):
+
+- **Nearby, in the Moon's own areas.** Its areas are rooms of their own, `moon:BAND.COL` (and
+  `moon:BAND.COL#1` to `#3` for their shards), so a Moon driver only ever shares an area's room
+  with Moon drivers. They're the Earth's size: bands 0.36° of latitude tall (10.9 km on the Moon's
+  1,737.4 km sphere, as 0.1° is 11.1 km of the Earth), cut into columns about as wide, the same
+  grid sums as the Earth's (`cellOf( lat, lon, 'moon' )` in `live-protocol.js`). Drive into the next
+  area and stay 5 s, and the room follows, as on the Earth.
+- **Their cars on the Moon's ground.** Positions and turns are sent Moon-centred, in the Moon's own
+  frame (moon.js's: Z through its north pole, X through 0° N 0° E), and each page draws them through
+  the Moon's group's matrix as it is now, as an Earth car is drawn through the tiles'. A car is
+  where its own page has it, on the ground it drives (moon-height.js's ground, the same on every
+  page), so it sits on the ground on everyone's screen (in the tests, within 3 m of where it is and
+  1.5 m of the ground under it, a car having just stopped); with their ride, Garage look and name
+  tag, a construction ride shown only with the achievement that unlocks it, as on the Earth. A state is checked against the Moon's ground (from
+  12 km under its sphere to 30 km over: the deepest crater to well over the highest summit, flying)
+  and a place's height to ±12 km; one in another world's frame is no car and is dropped.
+- **The globe.** On the Moon's globe, the panel's **Driving now** is the Moon's ("3 driving on the
+  Moon now"), its areas named after the Moon's start spots ("Near Tranquility Base"), and the dots
+  are over the Moon (`/api/online?world=moon`): tap one, **Drive here**, and you're in their room. On
+  the Earth's globe the list ends with a line **On the Moon** with how many drive there, and the
+  Moon's with **On the Earth**: a tap turns the globe to the other world (with drivers on two or more
+  other worlds, one line, **On other worlds**, that opens [the orrery](#picking-a-world-the-orrery)
+  with each world's count). With nobody on this world
+  and some on another, the panel says so ("Nobody driving on the Earth right now: 2 drivers on the
+  Moon.") rather than "be the first" over that line. With this world's budget for the day spent, its
+  dots go but the line to the other worlds stays while anyone's there ("2 drivers on the Moon right
+  now."), as the Worker's answer that's off still says how many are on each. Just back on the
+  globe from driving on one world and turned to the other, the page takes itself off the other's
+  count, as it does off an area's. A visit with no Earth (a link to the Moon, Mars, Vesta or Ceres,
+  or today's Earth drives used up) has no **On the Earth** line: it would lead only to the used-up screen.
+- **Parties span every world.** A party's room has its members wherever they are: one on another
+  world is "on the Moon" (or "on the Earth", "on Mars") in the list and the party's members, and their place's
+  name says it too ("Ana is driving at Tranquility Base (Moon)"). **Go to**, **Join** on the banner
+  and **Join** on a toast ("Sam went to Tycho crater (Moon).") go to them across worlds: the globe
+  turns to their world (its files loaded the first time, as picking it in the orrery does),
+  then a drop-in beside them, 5 m to their right, facing their way. On the Moon (and Mars), within 10 km, **Go
+  to** puts you there straight away, on the ground under them (on Vesta and Ceres only within their
+  recentre's 1 or 1.5 km, where the ground's already fine; farther, a drop-in). From a page opened with no Earth
+  this visit (a link to the Moon, Mars, Vesta or Ceres, or today's Earth drives used up), a friend on the Earth is the way
+  the **Earth** button is: a reload without the link, or the used-up screen. The party's banner
+  shows on the Moon's globe, the pause menu has **Drive with friends**, the horn and tricks' points
+  go to the room, and a party counts for its achievements (**Party time**, **Party regular**) there
+  the same way.
+- **What a page does with friends on another world.** Its car is no use to them to see, so it
+  goes once every 2 s (for their **Join**, as with friends on the globe), and 5 times a second only
+  for those on its own world; they're not drawn, nor heard.
+- **Levels** count minutes driving with others there too (with others on the Moon); still not the
+  Earth's areas or start spots, which are the Earth's.
+
+**Why the Moon's budget is its own.** The day's budget is the Durable Objects bill itself (see
+[The day's budget](#the-days-budget)): on the Free plan, past 100,000 requests a day every Durable
+Object fails, `DriveLimits` too, and then nobody could start a drive, the Moon's visits included.
+So the Moon's rooms can't go unbounded; but they mustn't be shut by the Earth's being spent either.
+They keep a day's budget of their own, `LIVE_MOON_DAILY_BUDGET` (**20,000**), counted the same way
+in a table of its own in `DriveLimits` (`live_moon`): spending the Earth's switches off only the
+Earth's rooms (and in a party, only those on the Earth: the others drive on), and the Moon's only
+the Moon's. The two together leave 40,000 of the Free plan's 100,000 for visits, names and scores
+(30,000 with Mars's, Vesta's and Ceres's since: [on every world](#on-every-world)).
+A connection counts against the world it's on (an area's own; in a party, where its page last said
+it was), and a room's own alarms and reports against its world (a party's against the Earth's
+unless everyone in it is on one world: [who pays](#on-every-world)). `/api/config` says both: `live` (and `liveReason`) for the
+Earth, `liveMoon` (and `liveMoonReason`, `budget` or `unknown`, none when it's only switched off
+there) for the Moon (and now every world, `liveWorlds`), its ask counted against the Earth's while that's open and else the Moon's. A
+page whose world's budget is spent is alone there ("Lots of drivers on the Earth today: driving
+with others there is back after midnight UTC. You can still drive with others on the Moon, Mars,
+Vesta and Ceres."), and with others on the other worlds; with every world spent, it's over for the
+visit as before. A world switched off (its budget of 0) closes there without a word: it isn't lots
+of drivers. On Workers Paid each can be raised.
+
+**Nobody drives on a world that's closed, even in a party.** A party's connection is let in on the
+budget of the world its page says it's on (`?world=`), and in the room a driver's world is wherever
+its page says it is (its hello, a place, back on a world's globe). So a page let in on the Moon,
+or a script saying it's on the Moon, could otherwise say hello at the Furka Pass and drive with the
+party on an Earth whose budget is spent, until the room's next report a minute on; and again on a
+fresh connection, each costing the Earth requests the Moon's budget never saw. So `DriveLimits`'
+`liveOpen` also says whether every other world's day is spent (looked at, not counted), `/api/live`
+hands that to the room (`X-Live-Closed`), the room keeps it in each connection's attachment
+(through hibernation, for that UTC day) along with every world its reports have heard is spent,
+and a party's driver who says it's on a closed world (hello, place or a world's globe) is closed
+there and then (`CLOSE.off`, `budget`), before anyone hears where; on a world switched off,
+`CLOSE.off` with `world off` when only that world is (its budget is 0: a v3 page closes that world
+alone and drives with others on the rest), or `off` when every world is (`LIVE=off`, or every
+budget 0: the end of driving with others for the visit). What such a connection spent counts against the world it was let in on (the
+room keeps it, `admitted`), as does what a connection still on a spent world's ground had spent
+when the room closes it, if it was let in on the other, still open: the Moon's budget bounds what
+connections let in on the Moon cost. And a connection's spend, as it goes, is carried by one on the
+same world if there is one; with nobody left on that world (a party with only another world's
+drivers in it), one on the other carries it apart from its own, in its attachment (so it outlasts
+hibernation), as that world's: either way it's counted against the world it was spent on, never the
+other's.
+
+**Bounded per address, as the Earth's are.** The Earth's visits are capped at 8 a day for each
+address (30 a day for a supporter, counted by account; the owner's not at all), and so are their
+connections (each visit's 20 a minute and 200 a day, one room at a time).
+The Moon's visits aren't capped (anyone gets one for each robot check they pass), nor are those
+opened from a link to Mars, Vesta or Ceres, so a visit not counted against the Earth's caps (one of
+those; never the owner's) connects to rooms from one address
+(an IPv6 one by its /48) with at most `LIVE_ADDRESS_VISITS` (**20**) others a day: the next is
+turned away (429, "Too many drivers from here today") before any room is touched, and remembered by
+that Worker instance. Each such visit has every visit's own limits too. `DriveLimits` keeps only a
+hash of the day's salt with the address's keyed hash (the challenges' `lookKey`, an HMAC of its /48
+and the day with a key from the Worker's secret) and one of the salt with the visit's id
+(`live_addresses`, deleted with the day): neither an address nor a visit can be read from it, nor
+linked to the next day. So one address has at most 8 Earth visits a day (30 for a supporter, by
+account) and 20 other visits (the Moon's, Mars's, Vesta's or Ceres's), each with one room at a time.
+
+But a count of visits doesn't bound what each connection spends: one may send 20 messages a second,
+each a twentieth of a request whatever it is (even keepalives, even alone in its room), about
+3,700 requests an hour. Twenty Moon visits from one address would spend the Moon's 20,000 in about
+16 minutes, and its 8 Earth visits and 20 Moon visits (which can drive on the Earth too) the Earth's
+40,000 in about 23, closing that world for everyone until midnight UTC. So **each address may spend only its share of each world's day**: the budget
+over `LIVE_ADDRESS_SHARE` (**8**), 5,000 requests on the Earth and 2,500 on the Moon (about five
+and a half hours of driving with others on the Earth, nearly three on the Moon, and many more alone),
+but never less than `LIVE_ADDRESS_FLOOR` (**1,000**, which only Mars's, Vesta's and Ceres's smaller
+budgets meet: [on every world](#on-every-world)).
+Every visit but the owner's counts, Earth and Moon visits alike, on whichever world it's driving. A
+room's reports say what each address's connections spent themselves (by the same keyed hash,
+`from`: never what one carries for another as it goes), `DriveLimits` adds each up for the day under
+a hash of the day's salt with it (`live_address_spent`, deleted with the day, as `live_addresses`)
+and says which are past their share on a world; the room closes those addresses' connections on that
+world (a page since Mars, Vesta and Ceres have drivers, v3, with `CLOSE.off` and the reason `share`:
+it closes that world alone for the visit, "You've driven with others a lot on the Moon today. You
+can still drive with others on the Earth, Mars, Vesta and Ceres.", and drives with others on the
+rest; an older page with `CLOSE.rate`, which it takes as a dropped connection), and `/api/live`
+turns that address away there for the rest of the day (429, "Too many drivers from here today"),
+remembered by the Worker instance until midnight UTC, so the next visit from it isn't another ask of
+`DriveLimits` (the same for an address past its Moon visits). An address is closed within about a
+minute of passing its share (its rooms report once a minute while they've that much to say), so it
+can go past it by what its connections send in that minute (up to about 1,200 requests with all 20
+Moon visits flat out, about 1,700 with its 28 visits on the Earth): so it takes about six addresses
+(or /48s) to spend either world's day flat out, and eight at the least.
+In a party, an address's connection let in on one world's share could drive on the other once its
+address had spent that one's, and come back on a fresh connection let in on the first: so
+`DriveLimits`' `liveOpen` also says, for a party's room, whether the address is past its share of
+each other world (`over`, looked at, not counted), `/api/live` hands that to the room
+(`X-Live-Over`, never for the owner's), the room keeps it in the connection's attachment along with
+every world its reports have said the address is past, and a driver who says it's on such a world
+is closed there and then (as at a report). What a connection spent itself before it
+went is kept by address in the attachment of one still in the room (up to 8 addresses each), so it
+outlasts hibernation, as what's carried for the budget does; and a connection the room closes with
+nobody left in it (too many messages, say) has the room report there and then, rather than keep it
+in memory until the page answers the close, which a script needn't ever do. Only what a report says
+beyond 64 addresses (a room has far fewer) is counted against the world's budget but not its
+address's.
+An address past its share on one world is turned away there, and a page turned away 8 times in a
+row on a world while the Worker says that world is on closes that world alone for the visit,
+quietly (a page can't tell why it was turned away), and drives with others on the rest; it stops
+for the rest of the visit only once every world it could drive with others on is closed or has
+turned it away so (see [When it stops](#what-you-see-and-do)). (Before Mars, Vesta and Ceres had
+drivers, 8 refusals ended it on both worlds.)
+
+**Old pages.** The Moon brought a new version of the protocol, `worlddrive-live.v2` (PLACE and
+PLAYER with a `world`, an away with the world of its globe, the Moon's areas and frame), offered as
+`[ 'worlddrive-live.v2', 'worlddrive-live.v1', <token> ]`, so a room still running the old code for
+a few minutes after a deploy answered v1, and the page then stayed on the globe as far as that room
+knew while it was on the Moon (as a page from before did). A page from before (v1) gets on as ever:
+it's never let into a Moon area (400), and in a party a Moon driver is on the globe to it, with no
+place, car, trick or honk (the room's `seenBy`); a place it sends is always the Earth's. Today's
+pages speak v3, which knows all five worlds ([on every world](#on-every-world)); a v2 page is to
+them what a v1 page is to a v2 one.
+
+**What's kept:** nothing more than on the Earth: a room keeps nothing once it empties, a Moon
+area's dots go to `live_online` like the Earth's (positions to about a kilometre and counts), and the
+budget and address counts are deleted with the day. A drop-in on the Moon is counted in the [play
+stats](#play-stats) as the Moon's (`dropin:moon`, which never says where), with its cell, to about a
+kilometre, in [where people drop in](#where-people-drop-in); its driving as the Moon's play time
+(with others or not), and each turn of the globe to the Moon (and the Moon not loading) is counted
+too.
+
+**What it costs:** a Moon driver is billed as an Earth one (900 requests an hour with others, about
+93 alone, [What it costs](#what-it-costs)), and the globe's Moon dots are the same asks as the
+Earth's, counted against the Moon's budget, kept 30 s apart from the Earth's (their own cache key).
+The default 20,000 a day is about 20 driver-hours with others on the Moon. Nothing is added to the
+page's first load (it's all in the game's own code, which loads with the globe), and alone on the
+Moon a page sends nothing but its keepalive, as on the Earth, and draws no ghost. Before, a page on
+the Moon had no car for driving with others; now each frame works out where its car is in the
+Moon's frame (a few matrix sums, as on the Earth): measured in Node on its own (`live.update` 200,000
+times, a shared machine), 0.6 to 1.2 µs a frame, against 0.1 µs with no car, so well under a
+microsecond more, a hundred-thousandth of a 60 fps frame even on a phone several times slower. The
+others' cars (`ghosts.update`) and the dots (`online.update`, nothing while driving) loop over
+nothing when alone, as before. Frame time in Chromium's software renderer can't show that: on a
+phone on its side (760 × 390), a frame with five others' cars drawn took within about 5% either way
+of a frame alone, which is the noise of a shared machine (the middle of 12 frames each, measured in
+`test-drive-live-ui.mjs`, the Moon's ground being nearly all of it there; 0.94 to 1.05 times as long
+across nine runs). What a frame takes in itself depends on how loaded
+the shared machine was: from about 0.6 s to 1.3 s alone across those runs (1,033 ms both alone and
+with five in the last). Five cars cost nothing that shows, and that comparison was only
+made on the new code. The game's code (loaded with the globe, after the robot check, as
+before) is 3.7 kB bigger, 1.5 kB gzipped; the page's first script 0.1 kB.
+
+**How it's tested:** `npm run test:drive-live` has the protocol's Moon (an area as big as the
+Earth's, Moon-centred metres and back, a dot on its sphere, states and places checked against its
+ground), the rooms under `wrangler dev` (a Moon area's drivers seeing each other's cars and never the
+Earth's area at the same numbers, a v1 page turned away, states in the Earth's frame dropped; a
+party on the Moon counted for its players' achievement, a friend going to the Moon heard of with
+its world; the Earth's budget spent and a Moon area and a Moon party let in, an Earth party not,
+a page let in on the Moon saying hello at the Furka Pass closed at once, and a Moon driver going to
+Monaco the same, `/api/config` saying `liveMoon: true`, `/api/online` off with the Moon's count; a Moon visit's address held to 2 visits, an IPv6 /48 as one,
+the Earth's and the owner's visits not), the room on a stand-in runtime (a Moon area's frame, a party
+across worlds as v2 and v1 pages hear it, each world's spend to its own budget and a spent world
+closing only its own drivers, a Moon area's dots, a Moon budget of 0; with the Earth's spent, a
+party's driver let in on the Moon closed as its hello, place or globe says the Earth, what it spent
+the Moon's, and a report saying so remembered through hibernation and until the next day),
+`DriveLimits` on SQLite (the Moon's dots apart, each world's budget, `liveOpen` saying the other
+world is spent without counting it, the address table as hashes only, a new day) and
+`/api/online?world=moon` on stand-ins (an answer that's off with the other world's count), the
+page's `live.js` on stand-ins (the subprotocols, the Moon's area, a party told it's on the Moon, an
+old room on the Moon, friends on the other world, a world closed and then both, the Moon switched off
+closing quietly), and `online.js` on stand-ins (nobody here and two on the Moon, the Earth spent with
+its line to the Moon kept, no **On the Earth** on a visit with no Earth, the page itself not counted
+on the world it's just left). `npm run test:drive-worker` has `/api/config`'s `liveMoon` and
+`liveMoonReason`. And `npm run
+test:drive-live-ui`: two pages at Tranquility Base seeing each other's car on the Moon's ground
+within 3 m of where it is and 1.5 m of the ground; a page on the Earth's globe with **On the Moon · 2
+drivers**, turned to the Moon by it, its dot and **Driving now** there, and **Drive here** into
+their room; a party made on the Moon whose link opened on a phone on the Earth shows the banner, and
+**Join** drops in beside her on the Moon; the banner on the Moon's globe; a friend gone to the Earth
+told of with **Join** and "on the Earth" in the list, one gone to the Moon told of on the Earth,
+**Join** across worlds, and **Go to** on the Moon; driving on the Earth with the party's only other
+driver on the Moon not counted as with others in the play stats; a phone on its side with five others' cars drawn,
+its frame time measured. Screenshots `moon-live-*`.
+
+**Mars, Vesta and Ceres** have all of this the same way, each in rooms of its own, with its own
+frame, budget, dots and globe: see [on every world](#on-every-world). (Until November 2026 you
+drove on them on your own: nothing was sent to a room from them and the party saw you on the Earth's
+or the Moon's globe.)
 
 ### How it's made
 
@@ -1470,12 +2031,15 @@ time, and each turn of the globe to the Moon (and the Moon not loading) is count
   (compressed it would be 1.4 MB; it's kept plain, as the sea's tables are). The page reads between
   its points with smooth (Catmull-Rom) curves, across a pole from the row on the other side, the last
   stretch to a pole easing to the polar row's mean (else every column would meet there at its own
-  height).
+  height): `src/drive-app/body-height.js`, every world's, which was moon-height.js's.
 - **The picture** is LRO's wide-angle camera's mosaic in colour, with the polar mosaics filled in
   (`lroc_color_poles_4k.tif`), as WebP at quality 72: `drive/public/moon/colour.webp`, 4096 × 2048,
   674,590 bytes. Read by each point's direction, so it has no seam where squares meet; across the
   180th meridian its gradients are taken from a copy that doesn't jump.
-- **The made-up detail** (`src/drive-app/moon-height.js`): craters of thirteen sizes, from 12.8 km
+- **The made-up detail** (`createGround` in `src/drive-app/body-height.js`, with the Moon's numbers,
+  `MOON_GROUND` in worlds.js; `moon-height.js` is now the Moon's one ground made with it, kept by that
+  name for the Worker and what else asks for it so, and it's the same Moon to the bit: the same
+  heights at 250,000 points before and after the move): craters of thirteen sizes, from 12.8 km
   across down to 3 m, as many of each as the Moon has (about four times as many each time the size
   halves). For each size space is cut into cubes (32 km down to 7.8 m, each size turned another way
   so they don't line up), and each may hold one crater centred in its middle 40 %, its ball reaching
@@ -1493,19 +2057,21 @@ time, and each turn of the globe to the Moon (and the Moon not loading) is count
   same size all over a face), each face a quadtree: a square of 32 × 32 squares of ground is split
   into four where the camera (or the vehicle) is nearer its middle than 1.2 times its size, and
   joined again past 1.4 times, so it's a point every 1.3 m by the vehicle (squares 41.6 m across,
-  the finest), every 13 to 26 m a kilometre off, and six squares for the whole Moon from space. A
-  square surely over the horizon (from ground 150 m lower than under the camera all the way, to its
-  own highest ground) isn't split. Each square's points are kept round its middle, so they're
-  precise to the millimetre so far from the Moon's middle; where a fine square meets a coarse one a
-  skirt hangs from their edges to fill the gap. Each is a plain mesh with its own bounding volume
-  hierarchy (`raycast.js`), so the Driver, Ground, the boost pads and the globe's taps hit it as they
-  hit Google's tiles; only the squares drawn are where they're raycast (`moon.terrain`: three.js's
-  raycasts don't look at `visible`). Driving, about 240 squares are drawn, 2,304 triangles each
-  with their skirts (about 550,000, of which about 400,000 were in view in the tests); squares are
-  built 5 ms a frame at most, 40 ms while the loading screen is up. A square's smaller squares are
-  only looked into once all four are built, so the ground comes down a size a frame, and the drop-in
-  waits until a frame wants nothing more built.
-- **Its look** is a shader of its own: the picture, brighter where moon-height.js says (fresh
+  the finest, 16 splits down: body.js works out how deep from the world's size, `DEEPEST`), every 13
+  to 26 m a kilometre off, and six squares for the whole Moon from space. A square surely over the
+  horizon (from ground 150 m lower than under the camera all the way, to its own highest ground: the
+  look's `horizon`) isn't split. Each square's points are kept round its middle, so they're precise
+  to the millimetre so far from the Moon's middle; where a fine square meets a coarse one a skirt
+  hangs from their edges to fill the gap. Each is a plain mesh with its own bounding volume
+  hierarchy (`raycast.js`), so the Driver, Ground, the boost pads and the globe's taps hit it as
+  they hit Google's tiles; only the squares drawn are where they're raycast (the body's `terrain`,
+  named `moon-terrain`: three.js's raycasts don't look at `visible`). Driving, about 240 squares are
+  drawn, 2,304 triangles each with their skirts (about 550,000, of which about 400,000 were in view
+  in the tests); squares are built 5 ms a frame at most, 40 ms while the loading screen is up. A
+  square's smaller squares are only looked into once all four are built, so the ground comes down a
+  size a frame, and the drop-in waits until a frame wants nothing more built.
+- **Its look** is a shader of its own (every world's, by its `LOOKS`): the picture, brighter where
+  body-height.js says (fresh
   craters), Lambert's light with a share of Lommel-Seeliger's (how the Moon's dust really scatters
   light: its edge as bright as its middle at full Moon), a little earthshine where the sun doesn't
   reach, and within 220 m fine grit and gravel (a tile of speckle 4 m and 32 m across, triplanar by
@@ -1521,11 +2087,431 @@ time, and each turn of the globe to the Moon (and the Moon not loading) is count
 its words, NASA's credit, the Earth hidden), its search (names, other names, accents, coordinates,
 nothing found), a drop-in at Tranquility Base (on its ground to 30 cm, the Moon's gravity, the
 stars and the Earth in the sky, no water and no sea, the Moon's pad rules, its ground the only thing
-driven on and at its finest by the vehicle), a hop as high as on the Earth that stays up 3 to 4.2 s
+driven on and at its finest by the vehicle), a hop as high as on the Earth that stays up about 5 s
 and scores nothing, M back to the Moon's globe with its own recent places, back to the Earth
-(driving there as it was: its gravity, its water), `?spot=moon-tycho`, and a phone's sheet. The
+(driving there as it was: its gravity, its water), `?spot=moon-tycho`, **Worlds** saying "Loading
+the Moon…" (busy) while its files come, and a phone's sheet with **Worlds** at its top and the Moon
+tapped in the orrery. The
 tests drive the go-kart: the Moon's ground is heavy drawing without a GPU, about a frame a second
 in Chromium's software renderer at 800 × 500.
+
+## Mars
+
+**Mars**, picked in the orrery (**Worlds**, on the globe's panel), turns the globe to Mars: a whole planet made in the page as the Moon
+is ([worlds](#worlds): the same `body.js` and `body-height.js`, with Mars's numbers in worlds.js and
+its look in `LOOKS.mars`). Its shapes are the real Mars's down to a few kilometres, from the laser
+altimeter on NASA's Mars Global Surveyor (MOLA), its colours the Viking orbiters' photographs of the
+whole planet, and everything smaller made up, the same on every visit. It needs no Google tiles and
+no Maps key either.
+
+### Going there
+
+- **Mars**, picked in [the orrery](#picking-a-world-the-orrery). The first time, its two files are fetched (never before,
+  nor any of the Moon's), the heights (`/mars/height.bin`, 8.3 MB) and the picture
+  (`/mars/colour.webp`, 1.05 MB), **Worlds** saying "Loading Mars…" meanwhile; if they don't come, a word says so ("Mars
+  didn't load ..."), and the globe stays on the world it was on. Then the globe turns to Mars,
+  coming in from further out, over Valles Marineris with the Tharsis volcanoes to the west (5° S,
+  80° W) the first time, else where it was looking when it left, and a world left lets go of its
+  ground but its coarsest.
+- **Start spots**: a dozen (`MARS_SPOTS` in `src/drive-app/mars-places.js`): Olympus Mons (on its
+  summit caldera's floor, 18.3° N 133.0° W, 18 km up: the volcano's middle, by the Gazetteer, is
+  down its western flank), Valles Marineris (on Coprates Chasma's floor, both walls in reach),
+  Bradbury Landing (Curiosity, 2012, in Gale crater), Mount Sharp, Jezero crater (Perseverance,
+  2021), Hellas Planitia, Chryse Planitia (Viking 1, 1976), Meridiani Planum (Opportunity, 2004),
+  Gusev crater (Spirit, 2004), Noctis Labyrinthus, Arsia Mons (the middle of its caldera, 9.1° S
+  120.6° W: the Gazetteer's middle of the volcano is at the caldera's northern edge, on ground the
+  Viking mosaic has pale) and Korolev crater, 82 km across and full of ice, in the far north.
+  Latitudes are planetocentric, north positive, and longitudes east positive from −180 to 180 (so
+  226.2° E is −133.8), as the IAU's coordinates for Mars have them: craters and mountains by their
+  middles (the USGS's Gazetteer of Planetary Nomenclature), the landing sites where the landers came
+  down (NASA's), each checked against more than one source (the Gazetteer, NASA's landing
+  coordinates, HiRISE's pictures, MOLA's heights).
+- **Search** finds Mars's own places, all in the page: the spots and 43 more (`MARS_PLACES`, 55 in
+  all: the other landers' sites, Viking 2, Mars Pathfinder, Phoenix, InSight, Zhurong and Beagle 2;
+  more volcanoes; Valles Marineris's chasmata; flood channels; the great basins and plains; more
+  craters; old regions; both polar caps; the highest place, Olympus Mons's summit, 17.34° N 133.03° W,
+  and the lowest, Badwater crater in Hellas), by their names or others ("Curiosity" is Bradbury
+  Landing, "Nix Olympica" Olympus Mons, "Mars 3" Ptolemaeus crater, "lowest point" Badwater).
+  Typed coordinates are Mars's ("Mars coordinates").
+- **Recent places**: six of its own (`world-drive.recent-mars`).
+- **A link**: `/?spot=mars-olympus-mons` (any Mars spot's id), or `/?at=-4.59,137.44&world=mars`,
+  turns the globe to Mars and pins the place. Each spot has a page of its own, `/mars/<slug>/`
+  ([Mars's pages](#marss-pages)).
+- On Mars the panel says "Pick anywhere on Mars", its search "A volcano, a crater, or lat, lon"
+  (and, finding nothing, to try Olympus Mons or Curiosity), and NASA's credit, "Mars: NASA MGS MOLA,
+  Viking (USGS)" (`#mars-credit`), is in the corner where Google's would be.
+
+### Driving there
+
+- **The drop-in** is the Moon's: the height at the pin worked out, the scene centred at once, the
+  ground built on the way down. In Chromium's software renderer it took about 21 s.
+- **Gravity** is Mars's, 3.71 m/s², 38% of the Earth's: `driver.gravity = 0.378`, `driver.leap =
+  0.615`. A jump goes as high as on the Earth and stays up about 1.6 times as long: a hop 5.1 m up
+  for 3.3 s (2.04 s on the Earth). The ground is looked for 1.06 km down, and a vehicle fallen 530 m
+  with no ground found is put back (400 m and 200 m divided by the gravity, as on the Moon).
+- **Scores** are fair to the Earth's as on the Moon (air × 0.615, tricks × 0.615 to the nearest 10),
+  and the leaderboard has "Olympus Mons (Mars)", or for a pin "Mars, 4.59° S, 137.44° E".
+- **The sky** is Mars's own (`LOOKS.mars.sky`): a sphere round the camera drawn first, over the
+  stars, darker overhead (`0x8c6a52`) and pale toward the horizon (`0xd6b28c`), with a paler glow round
+  the sun (`0xe6ddd0`), all of it by the ground and fading out between 8 km and 70 km over it, so
+  from space it's the stars. Its dust hides half of what's 30 km off in a haze (`0xc7a07a`), on the
+  ground and fading out with the sky on the way up; none of it on the globe. **The sun** is fixed in
+  the scene, from the south-west and about 34° up (the Moon's is 20° up), and on the globe over the
+  viewer's left shoulder as on the Moon.
+  **Phobos**, the nearer of its two moons, hangs to the north-east: a lumpy dark grey-brown body
+  (27 × 22 × 18 km, reflecting 7% of the light), 0.21° across overhead as it really is, drawn at
+  0.32°, fixed in the scene as the sun is and lit by it, so it shows a phase. Where it is in the sky
+  is made up; past 69° of latitude it isn't drawn (the real one orbits so low over the equator that
+  from there it's always under the horizon).
+- **Its light.** The ground is the Viking picture's colours times a tint (`[ 1.08, 0.97, 0.78 ]`:
+  the mosaic is pinker and bluer than the butterscotch ground the rovers see), lit by the sun at 2.0
+  and by the dusty sky where the sun doesn't reach (`[ 0.2, 0.135, 0.085 ]`, where the Moon's is a
+  faint grey), with less of Lommel-Seeliger's light (0.05; the Moon's 0.15). The vehicles get the
+  sun at 2.6 and a sky of `0xe0b48a` over ground of `0x6e4430` at 0.75 (the Moon keeps the Earth's
+  colours, at 3 and 0.3). **Dust** is Mars's red-brown (`0xb87a55`): a landing's puffs, and the
+  tyres' smoke while drifting or burning out, which on the Earth and the Moon stays white
+  (`driver.dust`, drive-fx.js's `dust`).
+- **From space** Mars has a thin dusty glow round it (`[ 0.86, 0.6, 0.42 ]`, reaching 1.2% of its
+  radius past it), shown from 160 km up and coming in over the next 1,064 km (the Earth's 300 km and
+  2,000 km, scaled to its size). (The glow's height used to be measured from the Earth's radius,
+  whatever the body: the Moon has no glow, so it never showed.)
+- **No water**, and **boost pads** by the Moon's rules, as on the Moon.
+- **M** goes back to Mars's globe.
+
+### Driving with others on Mars
+
+As on the Moon ([driving with others on the Moon](#driving-with-others-on-the-moon)), in Mars's own
+rooms ([on every world](#on-every-world)): its areas are `mars:BAND.COL`, bands 0.18° of latitude
+tall (10.6 km on its 3,389.5 km sphere), the cars sent Mars-centred in its own frame and drawn on its
+ground, its own **Driving now** and dots on Mars's globe (`/api/online?world=mars`), and a party's
+friend there is "on Mars" with **Go to** and **Join**. Its day's budget is its own,
+`LIVE_MARS_DAILY_BUDGET` (**4,000**: about 4 driver-hours with others, less what its rooms cost
+themselves). Levels count minutes with others there too, and the play stats its time with others.
+A drop-in is counted as Mars's (`dropin:mars`, with its cell of
+Mars's grid), its driving as Mars's play time (`play_world:mars`), and each turn of the globe to
+Mars (`world:mars`) and Mars not loading (`problem:mars_failed`) too.
+
+### How it's made
+
+- **The heights** are MOLA's, as the Planetary Data System's Geosciences Node has them (its gridded
+  topography, `megt90n000eb.img`: 16 to the degree, metres over or under the areoid, Mars's "sea
+  level"). `scripts/make-mars.mjs` (`npm run make-mars`) averages each 2 × 2 of them to 8 to the
+  degree (7.4 km apart at the equator, as the Moon's are 7.6), turns them to start at 180° W, and
+  rounds them to the metre as signed 16-bit integers: `drive/public/mars/height.bin`, 2880 × 1440 from
+  90° N and 180° W, each the middle of its cell, 8,294,400 bytes (rows of differences, gzipped, would
+  be 4.4 MB; it's kept plain, as the Moon's is). They're laid on a sphere of Mars's mean radius,
+  3,389.5 km, from Badwater crater's floor in Hellas, 8,135 m under the areoid in this grid, to Olympus
+  Mons's summit, 21,159 m over it (MOLA's own grid has −8,177 m and 21,171 m; read between its points
+  with the made-up detail in, the summit's 21.2 km).
+- **The picture** is the Viking orbiters' mosaic of the whole planet in colour, as the USGS has it
+  (the Viking MDIM 2.1 colourised global mosaic, NASA Ames's colour over the USGS's mosaic: 232 m a
+  pixel, 92,160 × 46,080, 12.7 GB uncompressed), which the script reads over the network a quarter
+  of a gigabyte at a time, averages 8 × 8 as it comes and makes 4096 × 2048, as WebP at quality 72:
+  `drive/public/mars/colour.webp`, 1,050,320 bytes. It took about half an hour here, nearly all of
+  it the mosaic, as fast as the network brings it (through a proxy, Node needs
+  `NODE_USE_ENV_PROXY=1`).
+- **The made-up detail** is the Moon's sum with Mars's numbers (`MARS_GROUND` in worlds.js), and its
+  own made-up ground (seed 1; the Moon's is 0). The same thirteen sizes, but fewer small craters, as
+  Mars's air stops the smallest bodies and wind and dust fill and wear the rest: a share of the cubes
+  holding one going from 0.25 for the biggest down to 0.08 for the smallest (the Moon's go up from
+  0.3 to 0.8). Most are old and worn (how fresh, 0.12 + 0.6 × u^2.5 of an even u), and the fresh ones
+  are darker than their ground (by 0.45), not brighter, as a fresh crater blasts away the bright
+  dust. Bowls 0.17 as deep as they're wide, 0.08 from 1.5 km across (the Moon's 0.19 and 0.11 from 3
+  km), flat floors from 300 m across (600 m on the Moon: Mars's gravity is more than twice the Moon's),
+  a rim 0.03 as high; and rougher rolling ground, worn by the wind: 16 m over 1,500 m, 4 m over 420 m,
+  0.8 m over 95 m and 0.16 m over 22 m. Measured every 2 m over 800 m square at Bradbury Landing: 27 m
+  between the highest and lowest, half the ground sloping under 1.9° and one point in a hundred over
+  5.8°; on Chryse Planitia 19 m and 1.0°; in Coprates Chasma 38 m and 2.2°. A point costs about
+  1.4 µs, measured in Node.
+- **The ground** is the Moon's quadtree, on Mars's sphere: 17 splits down (squares 40.6 m across, a
+  point every 1.27 m), and a square counts as over the horizon only past ground 400 m lower than
+  under the camera all the way (the Moon's 150 m), for its canyons. **Its look** is the same shader
+  with Mars's light, tint and haze. Its frame is a sphere of 3,389.5 km (3d-tiles-renderer's
+  `Ellipsoid` with three equal radii), recentred on the place driven, as the Moon's is.
+
+### How Mars is tested
+
+`npm run test:drive-mars-ui` (on `TEST_VITE_PORT`, 5581 if unset), nine tests: the globe turned to
+Mars (its files fetched only then and none of the Moon's, no other world's credit shown, its thin glow from space, the stars, no
+sky and no Phobos from space); its search (names, missions, "lowest", coordinates as "Mars
+coordinates · ...", nothing found, nothing asked of anyone); a drop-in at Bradbury Landing (on its
+ground to 30 cm, Mars's gravity, its sky, Phobos, the haze and its dust's colour, no water, the
+Moon's pad rules, its ground (`mars-terrain`) the only thing driven on and 17 splits down by the
+vehicle, Phobos not drawn at 80° of latitude, NASA's credit, the cell and `dropin:mars` and
+`world:mars` posted, never where); a hop as high as the Earth's (5.1 m) and in the air about 3.3 s, scoring nothing; M
+back to Mars's globe with its recent places in `world-drive.recent-mars` alone; to the Moon (Mars
+let go of: none of its squares drawn, its six roots kept) and back to the Earth (its gravity, its
+water, no dust colour); `?spot=mars-olympus-mons` (the summit over 18 km up) and
+`?at=...&world=mars`; **Worlds** saying "Change world. On Mars now", and in [the
+orrery](#picking-a-world-the-orrery) the arrow keys (round from the Earth to Ceres and back, then on
+to Vesta and Mars, the tab order, none of it changing the game's world) and Enter driving to Mars; a
+phone's orrery with the five in one row, each at least 44 px; and a Mars challenge from a link: a free visit (`{
+token, world: 'mars' }`), on Mars at once, "On Mars" first and the Earth's saying **Needs an Earth
+drive**, its gate on Mars's own heights within a metre, driven through and posted with the visit. It
+takes 3 to 4 minutes in Chromium's software renderer.
+
+## Vesta and Ceres
+
+**Vesta** and **Ceres**, picked in the orrery (**Worlds**, on the globe's panel), turn the globe to the two biggest bodies of the
+asteroid belt (Ceres a dwarf planet too), each made in the page as the Moon and Mars are
+([worlds](#worlds): the same `body.js` and `body-height.js`, with their numbers in worlds.js and their
+looks in `LOOKS.vesta` and `LOOKS.ceres`). Their shapes are the real ones down to about a kilometre,
+from the cameras on NASA's Dawn, which orbited Vesta in 2011 and 2012 and Ceres from 2015 (the DLR's
+shape models of them), their colours Dawn's photographs of each, and everything smaller made up, the
+same on every visit. They need no Google tiles and no Maps key either.
+
+They're small (Vesta 525 km across, Ceres 940), so the horizon is a kilometre or two off and the
+ground curves away a few metres in a kilometre, and Vesta is far from round (572 × 557 × 446 km),
+its ground tens of kilometres over and under any sphere. So each has two things the Moon and Mars
+don't: up isn't straight out from the middle but along a spheroid its gravity holds level ([the level
+frame](#the-level-frame)), and the scene's frame is moved to the car as it drives, every kilometre
+or so ([the moving recentre](#the-moving-recentre)).
+
+### Going there
+
+- **Vesta** or **Ceres**, picked in [the orrery](#picking-a-world-the-orrery). The first time, the world's two files are
+  fetched (never before, nor any other world's), the heights (`/vesta/height.bin` and
+  `/ceres/height.bin`, 8.3 MB each) and the picture (`/vesta/colour.webp`, 0.44 MB;
+  `/ceres/colour.webp`, 0.78 MB), **Worlds** saying "Loading Vesta…" meanwhile; if they don't come, a word says so,
+  and the globe stays on the world it was on. Then the globe turns to it, coming in from further
+  out, the first time over Vesta's Snowman craters and the equator's troughs with Rheasilvia's rim to
+  the south (20° S 0°), or over Ceres's Occator and its bright spots (20° N 120° W), else where it was
+  looking when it left. From afar the globe is a sphere, as any other's: the view only turns to the
+  level's up in the last few hundred metres of a drop-in ([the level frame](#the-level-frame)).
+- **Start spots**: eleven each. On Vesta (`VESTA_SPOTS` in `src/drive-app/vesta-places.js`):
+  Rheasilvia's central peak (the highest place near the basin's middle in the heights, rising some
+  20 km over its floor), Rheasilvia itself, Marcia (the biggest of the Snowman's three craters),
+  Calpurnia, Divalia Fossae (the troughs round the equator), Matronalia Rupes (a scarp on
+  Rheasilvia's rim), Veneneia (an older basin), Saturnalia Fossae (the northern troughs), Vestalia
+  Terra, Cornelia and Claudia (the crater its longitudes start from). On Ceres (`CERES_SPOTS` in
+  `ceres-places.js`): Occator, Cerealia Facula (its brightest spot), Ahuna Mons (a lone ice volcano,
+  4 km high), Kerwan (the biggest crater), Yalode, Urvara, Dantu, Haulani, Ernutet, Juling and Kait
+  (the crater its longitudes start from). Latitudes are planetocentric, north positive, and
+  longitudes east positive from −180 to 180, as the IAU's coordinates and Dawn's maps have them;
+  Vesta's in the "Claudia double-prime" frame the maps are in (Dawn-era papers' longitudes are 150°
+  off it).
+- **Search** finds each world's own places, all in the page: the spots, the poles and every feature
+  the IAU has named (the USGS's Gazetteer of Planetary Nomenclature, each by its middle), 109 on Vesta
+  and 151 on Ceres (`VESTA_PLACES`, `CERES_PLACES`), by their names or others ("Snowman" is Marcia,
+  "highest" Rheasilvia's central peak, "ice volcano" Ahuna Mons). Typed coordinates are the world's
+  ("Vesta coordinates").
+- **Recent places**: six of each's own (`world-drive.recent-vesta`, `world-drive.recent-ceres`).
+- **A link**: `/?spot=vesta-snowman` or `/?spot=ceres-ahuna-mons` (any spot's id), or
+  `/?at=-71.951,86.303&world=vesta`, turns the globe there and pins the place. Each spot has a page of
+  its own, `/vesta/<slug>/` and `/ceres/<slug>/` ([their pages](#vestas-and-ceress-pages)).
+- On Vesta the panel says "Pick anywhere on Vesta", its search "A crater, a trough, or lat, lon"
+  (and, finding nothing, to try Rheasilvia, Marcia or Divalia Fossae); on Ceres "A crater, a
+  mountain, or lat, lon" (Occator, Ahuna Mons, Kerwan); and NASA's credit, "Vesta: NASA Dawn (DLR,
+  USGS)" or "Ceres: NASA Dawn (DLR, USGS)" (`#vesta-credit`, `#ceres-credit`), is in the corner
+  where Google's would be.
+
+### Driving on them
+
+- **The drop-in** is the Moon's: the height at the pin worked out, the scene centred at once (level
+  there: [the level frame](#the-level-frame)), the ground built on the way down. In Chromium's
+  software renderer Vesta's ground draws at about a frame and a half a second.
+- **Gravity** is Vesta's 0.25 m/s² (2.5% of the Earth's: `driver.gravity = 0.0255`, `driver.leap =
+  0.16`) and Ceres's 0.284 m/s² (2.9%: 0.029 and 0.17). A jump goes as high as on the Earth and stays
+  up about six times as long: a hop 5.1 m up for about 12.8 s on Vesta and 12 s on Ceres (2.04 s on
+  the Earth), the hardest throw of a hit about 20 s. The ground is looked for 15.7 km down on Vesta
+  and 13.8 km on Ceres (400 m divided by the gravity), and a vehicle fallen 1.5 km with no ground
+  found is put back (`FALL_MOST`: 200 m divided by the gravity would be 7.8 km and 6.9 km, minutes of
+  falling with nothing under it). Leaving a slope going down keeps the speed down it ([on the
+  Moon](#driving-there)): before, a car off a 20° slope at full speed on Vesta fell at 6.8 m/s rather
+  than 43 and came down two and a half minutes later.
+- **Scores** are fair to the Earth's as on the Moon (air × 0.16 or 0.17, tricks × 0.16 or 0.17 to
+  the nearest 10), and the leaderboard has "Marcia (Vesta)", or for a pin "Ceres, 10.48° S, 43.80°
+  W". A run's longest air is posted up to the Worker's 120 s as anywhere.
+- **The sky** is black with stars, day and night (no air, no haze, no glow from space), with nothing
+  hanging in it: neither has a moon. **The sun** is fixed in the scene from the south-west, about
+  25° up, so every rim and rock has its light and its shade; the real one is smaller and dimmer
+  there (2.4 and 2.8 times as far off as from the Earth), but the light is kept near the Moon's so
+  the ground can be seen. As the scene follows the car ([the moving
+  recentre](#the-moving-recentre)) the sun stays where it is in it while the stars turn with the
+  world: a quarter of the way round Vesta, the stars have turned 90° under a sun that hasn't moved.
+- **Their light.** Dawn's pictures are grey and evened out alike to the Moon's picture's spread, so
+  a tint makes each world's brightness: Vesta's pale rock a little brighter and warmer than the
+  Moon's (`[ 1.06, 1.03, 0.97 ]`), Ceres's dark ground darker (`[ 0.6, 0.6, 0.62 ]`: it reflects
+  about a tenth of the light), lit by the sun at 2.2, with Lommel-Seeliger's light at 0.15 and 0.12
+  and a faint grey where the sun doesn't reach. The vehicles get the sun at 2.6 and the Earth's sky
+  colours at 0.2. **Dust** is Vesta's grey-tan (`0xb4ab9c`) and Ceres's dark grey (`0x5f5d59`).
+- **No water**, and **boost pads** by the Moon's rules, as on the Moon.
+- **M** goes back to the world's globe, over where the scene is now (it has followed the car), not
+  where it was dropped in.
+
+### Driving with others on Vesta and Ceres
+
+As on the Moon and Mars, each in rooms of its own ([on every world](#on-every-world)): areas
+`vesta:BAND.COL` (bands 2.4° tall, 11.0 km on Vesta's 262.7 km sphere) and `ceres:BAND.COL` (1.25°,
+10.3 km), the cars sent in the world's own frame, its own **Driving now** and dots on its globe, and
+parties across every world. Their days' budgets are their own, `LIVE_VESTA_DAILY_BUDGET` and
+`LIVE_CERES_DAILY_BUDGET` (**3,000** each). What's different is that the scene moves under the car:
+a car is sent where it is on the world (its frame's, never the scene's), each page draws the others
+through the world's group as it is now, so [the moving recentre](#the-moving-recentre), its own or
+the driver's, never makes a car jump (the others' effects and how a ghost's turned are carried by
+the move, `ghosts.transform`: in the tests a ghost stayed within half a metre of where it was on
+Vesta across a viewer's move of over 100 m, and within 3 m of the driver's car across the driver's).
+Go to a friend on Vesta or Ceres faces their way along the [level](#the-level-frame), and puts you
+there straight away only within the world's recentre (1 km, 1.5 km); farther, it's a drop-in beside
+them, which brings the ground in first. A drop-in is counted as the world's (`dropin:vesta`,
+`dropin:ceres`, with its cell of the world's grid), its driving as its play time
+(`play_world:vesta`), and each turn of the globe to it (`world:vesta`) and its not loading
+(`problem:vesta_failed`) too, and the same for Ceres.
+
+### The level frame
+
+On the Earth, the Moon and Mars up is straight out from the middle of the sphere their heights are
+over (the Earth's: WGS84's normal), and the scene's frame at a place is that sphere's (`placeEarth`).
+Vesta's gravity holds its ground level along a spheroid 285 km round its equator and 229 km to its
+poles, not a sphere: at its mid-latitudes level ground leans up to 12.4° from what a sphere would say
+(Ceres's, 482 × 446 km, 4.4°). So a world with a `level` (worlds.js) has its up along that
+spheroid's normal where the place is: `src/drive-app/level.js`, plain arrays and no three.js, shared
+by the page and the Worker:
+
+- `levelled( world )` says whether a world has a level; `levelFrame( world, lat, lon, height )` is the
+  frame there, `{ origin, east, north, up }` in the world's own frame (Z through the north pole, X
+  through 0° N 0° E, as 3d-tiles-renderer's `Ellipsoid` has a body), up the spheroid's normal, east
+  along the parallel and north the rest; `pointOn( world, lat, lon, height )` a place on the sphere;
+  and `inFrame( frame, point )` where a point is in a frame, `[ east, north, up ]`.
+- **Places stay on the sphere.** Latitude, longitude and height are as the maps have them,
+  planetocentric and over the sphere (the body's `Ellipsoid`, the globe's picking, its controls and
+  every place are the sphere's as before); only which way is up, and so the scene's frame, turns.
+- **The scene.** main.js's `placeFrame` puts the world's group so the place is at the scene's middle
+  with the level's up as +Y (`placeBody` in `test-globe.js`, the level's frame turned as
+  `placeEarth`'s is: +X west, +Z north), for a drop-in, a turn to the world and each [moving
+  recentre](#the-moving-recentre); the other worlds keep `placeEarth`, the same to the bit.
+- **The globe** is the sphere's from afar. Within 320 m of the point it looks at, its view turns
+  from the sphere's up toward the level's, wholly so by 40 m (`LEVEL_NEAR` in globe.js, by the
+  distance's logarithm): a drop-in's last flight comes down from 320 m to the car, so it hands the
+  camera over level with the scene, its horizon not rolled. Its far plane reaches past the horizon by
+  the horizon of the world's relief (226 km on Vesta, 216 km on Ceres), and its controls' too
+  (`farMargin`, half Vesta's radius), so peaks far over the sphere aren't cut off.
+- **The ground** (body.js): its squares are split until their points are no more than 1.6 m apart
+  even at the bulge of the equator, 14 splits on both (`DEEPEST`, from the level's equatorial radius:
+  a point every 0.85 m at Vesta's equator, 1.44 m at Ceres's), and a square's bounds are how far its
+  furthest point really is from its middle (`lumpy`), as a coarse square can hold tens of kilometres
+  of Rheasilvia's wall, so it's never taken for over the horizon while some of it can be seen.
+- **Challenges** measure in it too: a ghost's frame is the level's at the route's start
+  (`localOf` in ghost-rules.js, `sceneToStart` in challenge-ghost.js), and the Worker checks a route's
+  slopes against the level, as the car drives them, not against the sphere
+  ([challenges](#the-kinds-and-their-routes)).
+
+### The moving recentre
+
+On the Earth, the Moon and Mars the scene's frame is put on the place dropped in at and stays there
+while you drive (driven 10 km from it, the ground's curve leans 0.3° on the Moon). On Vesta a
+kilometre is already a third of a degree (its level's sharpest curve, along a meridian at the
+equator, is 184 km across), so the frame follows the car (main.js's `follow`):
+
+- **When.** While driving (not paused, not on the globe), at the top of a frame before the car's
+  update, once the car is more than the world's `recentre` across the ground from the scene's middle:
+  1,000 m on Vesta, 1,500 m on Ceres. Between moves the frame leans at most a third of a degree on
+  Vesta (a fifth on Ceres) from level where the car is, and the flat-frame code (down is −Y, the wheel
+  rays, leaving the ground at 35 cm) holds as it does at a drop-in.
+- **Where to.** The scene's new middle is where the car stands (its pivot's latitude and longitude on
+  the sphere), at the ground's height there, and its frame is the level's there (`placeBody`).
+- **What moves.** `shiftTo( place )` moves the world's group and works out the move M (a Matrix4, a
+  turn and a shift: the scene before to the scene after), and everything in the scene is carried by
+  it, so nothing is seen to jump and a run goes on as it was, mid-air or mid-drift:
+  - the camera, by `globe.capture()` and `restore()` round the move, as a drop-in's recentre does;
+  - the car (`Driver.transform`): where it is (in the air with stunts on, the middle of its box), how
+    it's turned, its velocity (its speed along its new course and vy the rest), its course, its
+    view and its lean's last course (each a way along the ground, turned and laid flat again), where
+    R and a fall put it back, a scrape's place, the chase camera's last base, a wall bounced off and
+    a righting under way;
+  - its effects (`fx.transform`): the smoke, sparks, bits (their floor taken again under them), the
+    trails, the foam, every boost's and burst's particles (`Batch.transform`, and a comet's tail by
+    its `onTransform`) and where the exhaust was a frame ago;
+  - the boost pads down (`pads.transform`; where the car was a frame ago is forgotten, so one frame's
+    sweep is lost rather than a sweep along a line a kilometre long);
+  - a parked car, while paused (`carryParked`, its saved state and how it was parked kept in step);
+  - a challenge's run (`challenges.recentred`, below);
+  - and the others' cars ([driving with others](#driving-with-others-on-vesta-and-ceres)): only what
+    each has in the scene (its effects, which way it was last drawn turned, its splash's level,
+    `ghosts.transform`), as where each is comes in the world's own frame and is drawn through the
+    world's group as it is each frame.
+
+  Then the middle (`origin`) is the new place, and a count goes up (`recentres`). `window.drive` has
+  `shiftTo`, `origin`, `recentres` and `recentring` (the world's distance, or null) for the tests.
+- **A run across a recentre.** The run's recording so far is moved (`recorder.transform`, its
+  samples and its last), so its ghost is one path in the start's frame
+  ([ghosts](#ghosts-and-challenge-a-friend)); where it started is moved as a place and a way to face;
+  where the finish card held the car is let go (it's held again at once where it stands); its gates
+  are placed again from their latitude, longitude and the height they were placed at, passed or not as
+  they were, and faced again; the rings, stars and chevrons are put where they now are and the course
+  laid again; and a ghost being raced is put into the scene again. **Retry** first moves the scene
+  back to the route's start (`app.shiftTo`, which moves the run with it), then puts the car there,
+  so the start, kilometres behind several moves ago, is the scene's middle again.
+- **The sky, the view and clipping** are measured from the ground under the camera on these worlds,
+  not from the place dropped in at (driven 20 km up a Vesta scarp, the near plane would otherwise be
+  20 m out, cutting the car off). **M** flies to the globe over the scene's middle.
+- **Its cost.** A move is done in one frame, with nothing loaded or built: only what's in the scene
+  is turned and shifted. The chase camera is carried rigidly, then levelled to the new up as it
+  follows the car: a turn of a third of a degree at most, at once, not eased.
+- The other worlds never move (`recentring` is null there, `shiftTo` does nothing and says null).
+
+### How they're made
+
+- **The heights** are the DLR's shape models from Dawn's framing cameras, as the USGS has them
+  (`https://planetarymaps.usgs.gov/mosaic/`): Vesta's HAMO global DTM
+  (`Vesta_Dawn_HAMO_DTM_DLR_Global_48ppd.tif`: 48 to the degree, about 93 m apart, 17280 × 8640
+  32-bit radii in metres, 570 MB) and Ceres's (`Ceres_Dawn_FC_HAMO_DTM_DLR_Global_60ppd_Oct2016.tif`:
+  60 to the degree, 21600 × 10800 signed 16-bit metres over a 470 km sphere).
+  `scripts/make-asteroids.mjs` (`npm run make-asteroids`, `vesta`, `ceres` or both; each map is a few
+  hundred MB, fetched whole into memory, or given as copies with `--vesta-dtm=` and the like) takes
+  the mean of what's under each cell, weighted by how much of it covers the cell, to 8 to the degree,
+  as Mars's (573 m apart at Vesta's equator, 1,025 m at Ceres's): 2880 × 1440 from 90° N and 180° W,
+  each the middle of its cell, signed 16-bit, 8,294,400 bytes each. Ceres's are metres over the
+  470 km sphere its map is over, from 27.9 km under it (by its poles: it's flattened) to 17.0 km over.
+  Vesta's are over its mean radius, 262.7 km, from 50.7 km under it (Rheasilvia's floor) to 30.3 km
+  over: 81 km, more than 16-bit metres hold, so they're kept in steps of 2 m (worlds.js's
+  `heights.step`), and body-height.js reads them as they come times the step (copying 4 million to
+  metres would take the Worker hundreds of milliseconds, past a request's 10). Over the level
+  spheroid, as Dawn's team gives them, they're −22.4 to +19.6 km on Vesta and −7.3 to +9.4 km on
+  Ceres; the script prints those and a few known places to see they read right.
+- **The pictures** are Dawn's: Vesta's HAMO global mosaic (`Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif`,
+  60 m a pixel, 26704 × 13352) and Ceres's Survey global mosaic
+  (`Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif`, 400 m a pixel, 7383 × 3691), averaged the same way to
+  4096 × 2048 and evened out to the Moon's picture's spread (a mean of 140 and a deviation of 30 in
+  255: stretched to their full range Dawn's mosaics, with a low sun's long shadows in them, are far
+  harsher than the ground the page shades itself), greyscale WebP at quality 72:
+  `drive/public/vesta/colour.webp`, 444,068 bytes, and `drive/public/ceres/colour.webp`, 781,442
+  bytes. How bright each world is, is its look's tint.
+- **The made-up detail** is the Moon's sum with each's numbers (`VESTA_GROUND`, `CERES_GROUND` in
+  worlds.js; seeds 2 and 3): Dawn's maps have the craters bigger than about a kilometre (Vesta's) or
+  two (Ceres's), so the made-up ones start at 2 km cubes on Vesta and 1 km on Ceres (none from the
+  bigger sizes). Vesta's are battered all over and deep for their size in its weak gravity (bowls
+  0.2 as deep as they're wide, 0.14 from 3 km), with shorter rolling ground (6 m over 600 m down to
+  6 cm over 14 m) for a horizon a kilometre or two off; Ceres's are fewer and gentler (0.16 and 0.09
+  from 2 km), as its ice creeps and fills them, with 7 m over 800 m down to 7 cm over 16 m.
+- **The ground** is the Moon's quadtree on each sphere, 14 splits down ([the level
+  frame](#the-level-frame)), and a square counts as over the horizon only past ground 3 km (Vesta)
+  or 2 km (Ceres) lower than under the camera all the way. **Its look** is the same shader with each
+  world's light and tint.
+
+### How Vesta and Ceres are tested
+
+`npm run test:drive-asteroids-ui` (on `TEST_VITE_PORT`, 5591 if unset), nine tests: the orrery's
+five worlds in order (nothing of any world's files fetched by it) and the globe turned to Vesta (its two files fetched only then, and later
+Ceres's alone; its spots, words and credit, the others' hidden; the stars; `recentring` 1,000);
+its search (names, other names, "highest", "fossae", nothing found, coordinates as "Vesta
+coordinates · ..." with the pin's height deep in Rheasilvia); a drop-in at Marcia (the scene's up
+within 0.05° of the level's at the car and more than 1° from the sphere's, Vesta's gravity, on the
+ground to 30 cm, the scene's middle at the spot, no water, `vesta-terrain` driven on, NASA's credit);
+a hop as high as the Earth's (5.1 m, from `JUMP_SPEED`: scripts/worlds-ui.mjs's `HOP`), in the air
+5.5 to 7 times the Earth's 2.04 s; the moving recentre (the car put
+15 m short of it at 30 m/s: one move, the car under 6 m from the new middle, and across that frame
+its place on Vesta moving under 5 m, its height under 1 m, its way under 1° and its speed under
+1.5 m/s, the scene level at the car on every frame); M to the globe and on to Ceres (its own files
+and words, a drop-in at Occator level by Ceres's spheroid, `recentring` 1,500) and back to the
+Earth (its gravity and water, `shiftTo` doing nothing there); a 360 px phone's orrery with the five
+in one row; the orrery's arrow keys round from the Earth to Ceres, Enter driving there, and
+`?spot=ceres-ahuna-mons`; and a
+challenge on Vesta, a sprint to a gate 1,150 m north driven across a recentre, its time and ghost
+posted with the visit and taken by `checkPasses` and `ghostFault`, then **Retry** moving the scene
+back to the start with the gate where it was, not passed. It takes about 7 minutes in Chromium's
+software renderer, Vesta's ground drawing at about a frame and a half a second, so the car is moved
+by setting its speed and way rather than with held keys.
 
 ## Driving with others
 
@@ -1537,14 +2523,20 @@ others:
 - **Nearby** (the default). After you drop in, you're in the room for the area you're in (about
   11 km across) and see everyone else driving there, so a popular spot is busy.
 - **A party.** **Invite friends** makes a link (`https://worlddrive.app/?party=CODE`); whoever
-  opens it is in your party wherever on Earth each of you is, and can join you where you are.
+  opens it is in your party wherever each of you is, on any of the five worlds, and can join you
+  where you are.
+
+On the Moon, Mars, Vesta and Ceres it's the same, each in rooms of its own (see [Driving with others
+on the Moon](#driving-with-others-on-the-moon), the first, and [on every world](#on-every-world)).
 
 And on the globe, **who's driving now**: a glowing dot wherever people are driving in an area's
 room, with how many (see [On the globe: who's driving now](#on-the-globe-whos-driving-now)).
 
-It's only on when the Worker says so (`live: true` in `/api/config`: the `LIVE` setting below, and
-[the day's budget](#the-days-budget) not spent) and the visit has a token, which only visits on
-Google's map get. When it's off, nothing of it appears: no chip, no **Drive with friends**, no H in
+It's only on when the Worker says so (each world's `open` in `/api/config`'s `liveWorlds`: the
+`LIVE` setting below, that world's budget not 0, and [the day's budget](#the-days-budget) of that
+world not spent) and the visit has a token, which every visit the Worker hands out has (an Earth
+one, a free world's and the owner's; the test pad has none). It's on every world, each apart: one
+closed (spent or switched off) leaves the others on. When it's off, nothing of it appears: no chip, no **Drive with friends**, no H in
 the keys card, no horn button, no dots or **Driving now** on the globe, and driving alone is as it
 always was.
 
@@ -1621,11 +2613,18 @@ always was.
   it's dropped. It stops for the rest of the visit when another tab with the same visit takes over
   ("Driving with others moved to another tab."), when the visit runs out after 6 hours ("Driving
   with others has ended for this visit (after 6 hours). It's on again on your next visit."), when
-  the day's budget is spent ("Lots of drivers today: driving with others is back after midnight
-  UTC.", once), when it's turned away at the door 8 times in a row while the Worker says it's on
-  ("Driving with others couldn't connect from here, so you're driving on your own.": a network
-  that blocks WebSockets, say), or, without a word, when it's switched off. Then none of it shows.
-  Driving alone carries on. A party's link opened while the day's budget is spent says the same.
+  every world's day's budget is spent ("Lots of drivers today: driving with others is back after midnight
+  UTC.", once), when it's turned away at the door 8 times in a row on every world it could drive
+  with others on while the Worker says they're on ("Driving with others couldn't connect from
+  here, so you're driving on your own.": a network that blocks WebSockets, say), or, without a
+  word, when it's switched off everywhere. Then none of it shows. Driving alone carries on. A
+  party's link opened while the day's budget is spent says the same. **One world** closing leaves
+  the others on: its day's budget spent ("Lots of drivers on Mars today: driving with others there
+  is back after midnight UTC. You can still drive with others on the Earth, the Moon, Vesta and
+  Ceres."), this address past [its share](#on-every-world) of that world's day ("You've driven with
+  others a lot on Mars today. ..."), that world switched off, or turned away 8 times there: on that
+  world you drive alone for the rest of the visit, and a party goes on through another
+  ([on every world](#on-every-world)).
 
 ### What others can see about you
 
@@ -1709,17 +2708,18 @@ near ("Near Golden Gate Bridge"), as text only.
   is taken to be in the area nearest where it last knew their car to be (or where they dropped in),
   if there's one within 5 km, so others in the room driving in dots of their own don't stop it.
 
-**Timing.** A new driver shows within about a minute: their room says where its drivers are at
-its next report, which goes when they've changed (someone joined, left, went to the globe, came
-back, or a dot moved to another rounded spot) as soon as a report may, 50 to 60 s after the last
-(a room's first comes a minute after its first driver connected), even with little else to
-report. Then `/api/online` is kept up to 30 s, and a page asks when the globe shows and every
-minute while it's showing and the tab can be seen, but not while the Garage is open over it, nor
-once nobody has touched the page (a click, tap, key or wheel) for 10 minutes: a tab left on the
-globe on a second screen stops asking, and asks again at once at the next touch. One who's gone
-goes the same way within about a minute, or at once when their room empties (its last report says
-none); a room that went without a word (a restart) is left out once its last report is 12 minutes
-old.
+**Timing.** A new driver shows within about half a minute: their room says where its drivers are
+in a report 3 s after they've changed (someone joined, left, went to the globe or came back), but
+no sooner than 15 s after its last report (a room's first, 15 s after its first driver connected),
+so a page coming and going can't have a room report more than four times a minute; a dot moving to another rounded spot waits for the room's next report as
+before (50 to 60 s after the last). Then `/api/online` is kept up to 30 s, and a page asks when the
+globe shows and every 20 s while it's showing and the tab can be seen, but not while the Garage is
+open over it, nor once nobody has touched the page (a click, tap, key or wheel) for 10 minutes: a
+tab left on the globe on a second screen stops asking, and asks again at once at the next touch.
+One who's gone goes the same way within about half a minute, or at once when their room empties
+(its last report says none); a room that went without a word (a restart) is left out once its last
+report is 12 minutes old. (Until November 2026 a room's first report came a minute after its first
+driver, and a page asked once a minute: up to about 2½ minutes.)
 
 **How it works.** Each area's room puts its dots (`live-protocol.js`'s `dotsOf`) in the reports of
 what it has spent that it makes to `DriveLimits` anyway (`liveSpent`), which keeps them in a table
@@ -1727,11 +2727,18 @@ of its own, `live_online`: one row a room, replaced at each report, deleted when
 none (or as it reports with the day's budget spent, as it then closes everyone); a row older than 12
 minutes (the TTL: a room still there reports at least every 10 minutes and its next alarm) is left
 out and deleted. A room knows what it last reported from what its connections keep through
-hibernation, so waking up doesn't make it report again. `GET /api/online` answers
-`{ on, total, areas: [ { lat, lon, height, count } ] }`: at most 200 areas, busiest first (those of
-an area's rooms at the same spot as one), and `total` counting them all. It's kept 30 s in
-Cloudflare's cache (the Cache API, `caches.default`, under the address without its query, so a query
-can't get round it; each Cloudflare location has its own), and by browsers for what's left of that
+hibernation, so waking up doesn't make it report again. `GET /api/online` answers the Earth's
+`{ on, total, areas: [ { lat, lon, height, count } ], moon, worlds }`, `GET /api/online?world=moon`
+the Moon's, `{ on, total, areas, earth, worlds }`, and `?world=mars` (`vesta`, `ceres`) that
+world's, `{ on, total, areas, worlds }`: at most 200 areas, busiest first (those of an area's rooms
+at the same spot as one), `total` counting them all, `moon` (or `earth`) how many are driving on the
+other of the two, as its rooms last said (only those two: a page from before Mars had drivers
+reads it), and `worlds`, every world's `{ on, total }` from the same ask (`on: false` for a world
+closed today, its total 0). The page takes itself off the world it's just left in `worlds` as in
+`total`, so the orrery and the panel say the same. It's kept 30 s in Cloudflare's cache (the Cache API,
+`caches.default`, under the address without its query but for `?world=<id>` of a world other than the
+Earth, each of which has a key of its own, so no other query can get round it; each Cloudflare
+location has its own), and by browsers for what's left of that
 (`Cache-Control: public, max-age=30` and the `Date` it was made), and by each Worker instance
 (as plain values: what it last heard, answered with the same `Date`). Only a request that finds none
 kept asks `DriveLimits` (`liveOnline`), which counts that ask against the day's budget in the same
@@ -1739,12 +2746,19 @@ go, as any Durable Object request. Cloudflare's cache doesn't make requests arri
 for one another (each that finds nothing kept would ask), so while a Worker instance has an ask
 out, the others it gets are answered with what it last heard, a little old and kept nowhere
 (`max-age=0`), and an ask that doesn't come back within 5 s (its request cancelled) is given up on;
-`/api/config`'s ask has the same guard. `on: false` once the budget is spent or with `LIVE` off, asking
-nothing then (a Worker instance remembers a spent day, as for `/api/config`, and an answer that it's
-off for the day is kept no later than midnight UTC: a page told it's off shows none of it for the
-rest of its visit). If `DriveLimits` can't say, it's `on: true` with nobody, kept 10 s: never an
+`/api/config`'s ask has the same guard. `on: false` (with total 0 and no areas) once that world's
+budget is spent or switched off, asking nothing for it then (a Worker instance remembers a spent
+day, as for `/api/config`, and an answer that it's off for the day is kept no later than midnight
+UTC: a page told it's off shows none of that world's dots for the rest of its visit, though it goes
+on asking for the others' counts). Unless every world is off, an answer that's off still says
+how many are driving on the others (`worlds`, and the Earth's or the Moon's partner key), as the
+first other open world's own answer does (in the five's order; from wherever that's kept, or
+asked for as a request for it would be, and charged as that one is), so the page can point
+there. If `DriveLimits` can't say, it's `on: true` with nobody, kept 10 s: never an
 error. The same-origin checks every route has apply. On the page it's `src/drive-app/online.js` (the
-dots, projected each frame through the globe's ellipsoid and the Earth's matrix as it is then) and
+dots, projected each frame through the shown world's ellipsoid and frame as it is then; a dot's
+place carries its world, so a Mars dot's **Drive here** stays on Mars, and it's named after that
+world's nearest start spot) and
 the panel's part in `panel.js`; `window.drive.online` has what it shows, for the tests.
 
 **What it costs.** No Durable Object requests of its own from the rooms: the dots ride on reports
@@ -1752,39 +2766,51 @@ they already make. The only extra is a report when a quiet room's dots change (a
 room reports a minute after they arrive rather than a few minutes later), at most one a minute, as
 ever: a request and a row written, and the dots' own row in `DriveLimits` (an upsert or a delete
 for each report of an area's room). An answer not kept is a `DriveLimits` request, counted against
-the day's budget: about two a minute in each Worker instance where someone's on the globe (those
+the day's budget (the Earth's or the Moon's for theirs; for Mars's, Vesta's or Ceres's globe the
+Earth's while it's open, else the Moon's, and only with both spent the world's own: [who
+pays](#on-every-world)): about two a minute in each Worker instance where someone's on the globe (those
 in one Cloudflare location share its cache when their requests are spread out, and a burst in one
 instance asks once), and none at all while nobody looks. So a page alone on the globe in its
-location is an ask a minute, about 60 an hour (a lone driver's room is about 93), and however many
+location is an ask every 40 s or so (each 20 s ask, every other one answered from the 30 s kept), about 90 an hour (a lone driver's room is about 93), and however many
 watch in one location it's about 120 an hour there; it stops once nobody has touched the page for
 10 minutes, so a tab forgotten on the globe costs 10 minutes' worth. Each such ask reads a row for
 each area's room with drivers (rows read: Free 5 million a day). Every ask that reaches the Worker
-is a Worker request (Free: 100,000 a day): a page on the globe asks once a minute, and the browser
+is a Worker request (Free: 100,000 a day): a page on the globe asks every 20 s, and the browser
 answers any ask within 30 s of the last itself.
 
 ### The rooms
 
 Each room is one Durable Object (`DriveRoom`, `worker/drive/live.js`) on the WebSocket Hibernation
-API: `party:CODE`, or `near:BAND.COL` for an area (bands 0.1° of latitude tall, cut into columns
-about as wide) and `near:BAND.COL#1` to `#3` for its other shards. What's said is
-`src/drive-app/live-protocol.js`, which the page and the Worker both import:
+API: `party:CODE`, or `near:BAND.COL` for an area of the Earth (bands 0.1° of latitude tall, cut
+into columns about as wide) and `near:BAND.COL#1` to `#3` for its other shards, and `moon:`,
+`mars:`, `vesta:` and `ceres:BAND.COL` for the other worlds' ([on every world](#on-every-world)).
+What's said is `src/drive-app/live-protocol.js`, which the page and
+the Worker both import:
 
-- The page opens `GET /api/live?room=<room>` with the subprotocols `[ 'worlddrive-live.v1', <visit
-  token> ]` (a browser can't set headers on a WebSocket, and a token in the address would end up in
-  logs). Before the room is touched the Worker turns away anything that isn't a WebSocket (426), from
+- The page opens `GET /api/live?room=<room>` (with `&world=<id>` for a party from any world but
+  the Earth) with the subprotocols `[ 'worlddrive-live.v3', 'worlddrive-live.v2',
+  'worlddrive-live.v1', <visit token> ]` (a page from before Mars, Vesta and Ceres had drivers
+  `[ 'worlddrive-live.v2', 'worlddrive-live.v1', <visit token> ]`, and from before the Moon had
+  them `[ 'worlddrive-live.v1', <visit token> ]`; see [old pages](#on-every-world)), as a browser
+  can't set headers on a WebSocket, and a
+  token in the address would end up in logs. Before the room is touched the Worker turns away anything that isn't a WebSocket (426), from
   another site (403: the Origin must be worlddrive.app's own, as WebSockets have no CORS), while
   `LIVE` is off (503), to a room that isn't one (400), without the protocol (400), without a good
   visit token (401: forged, changed or run out), from a visit connecting more than 20 times a
   minute (429, on Cloudflare's rate limiter, `LIVE_CONNECTS`, which costs no Durable Object
   request) or more than 200 times a day (429, `LIVE_VISIT_CONNECTS`) or once the day's budget is
   spent (503 with `reason: 'budget'`, asked of `DriveLimits` only after everything else checks
-  out). The room gets only what was checked. A visit is in one room at a time: `DriveLimits` keeps
+  out; a free world's visit's address is held to its day's visits then too, 429; an address past
+  its share of that world's day, 429). A page asking for an area, or a `world`, its version doesn't
+  know (a v1 page and the Moon, a v2 page and Mars), or a `world` that isn't one, is 400. The room gets only what was checked. A visit is in
+  one room at a time: `DriveLimits` keeps
   each visit's room today (a `live_visits` table, deleted with the day), and when it connects to
   another the Worker has the room it was in let go of it first (4002, as another tab in the same
   room would be; one of its connections still on its way in there is turned away too), so one
   visit can't be in a hundred rooms at once.
 - Positions are Earth-centred (ECEF metres) and turns a quaternion in that frame, so two pages
-  centred on different places agree on where a car is. A page sends its car 5 times a second while
+  centred on different places agree on where a car is; on any other world, centred on it in its
+  own frame (Z through its north pole, X through 0° N 0° E, on its sphere). A page sends its car 5 times a second while
   it moves, once every 2 s while it's still (and once more at 5 a second as it stops, so where it
   stopped isn't what waits), and at once when what it's doing changes (at most 14 messages a second
   on average and 24 at once, under the room's limit). **Alone in its room it sends none**: they'd
@@ -1804,7 +2830,10 @@ about as wide) and `near:BAND.COL#1` to `#3` for its other shards. What's said i
   (4004), keepalives and honks included (a honk within 0.8 s of the last is dropped, but counts);
   a message it can't take (4000); the visit run out (4005); another connection with the same visit,
   in this room or another (4002, the older goes); a full room (a `full` message, then 4001);
-  switched off (4006), or the day's budget spent (4006 with the reason `budget`). A state no car
+  switched off (4006: `off` when it's off everywhere, `world off` when only this world is, its
+  budget 0), the day's budget spent (4006 with the reason `budget`), or this address past its share
+  of the world's day (4006 with `share` to a v3 page; 4004, as a too-fast connection, to an older
+  one). A state no car
   could be in is dropped, not closed on, and a place's name that isn't text is no name. The room
   answers the keepalive itself (`ping`, `pong`), not with the runtime's auto-response: that would
   answer it without the room seeing it, so it could be neither counted nor held to the rate.
@@ -1815,6 +2844,117 @@ about as wide) and `near:BAND.COL#1` to `#3` for its other shards. What's said i
   wouldn't stop has to connect again, a request, to carry on.
 - A room stores nothing but its alarm (about once a minute while anyone's in it: the limits above,
   and adding what it has spent to the day's), and deletes that when it empties.
+
+### On every world
+
+Since November 2026 every world has driving with others, each the way [the
+Moon](#driving-with-others-on-the-moon) first had it: rooms, cars, horns, tricks, parties and who's
+driving now, in rooms of its own, with a day's budget of its own and its own dots on its own globe.
+Before, Mars, Vesta and Ceres were on your own.
+
+**The rooms and the cars.** Each world's areas are about the Earth's 11 km, on a grid of its own
+(`CELL_DEGS` and `cellOf( lat, lon, world )` in `live-protocol.js`), and a car is checked against
+its own world's shell: from 3 km under its lowest ground to as high as one can fly over its highest
+(`STATE_RADII`; the five are apart, so a car can't be taken for another world's), and a place's
+height against its own lowest and highest (`PLACE_HEIGHTS`).
+
+| World | Rooms | Bands | Area | A car between (from the middle) | Day's budget |
+| --- | --- | --- | --- | --- | --- |
+| Earth | `near:BAND.COL` | 0.1° | 11.1 km | 6,340 to 6,400 km | `LIVE_DAILY_BUDGET`, 40,000 |
+| Moon | `moon:BAND.COL` | 0.36° | 10.9 km | 1,725.4 to 1,767.4 km | `LIVE_MOON_DAILY_BUDGET`, 20,000 |
+| Mars | `mars:BAND.COL` | 0.18° | 10.6 km | 3,377 to 3,442 km | `LIVE_MARS_DAILY_BUDGET`, 4,000 |
+| Vesta | `vesta:BAND.COL` | 2.4° | 11.0 km | 207.7 to 334.7 km | `LIVE_VESTA_DAILY_BUDGET`, 3,000 |
+| Ceres | `ceres:BAND.COL` | 1.25° | 10.3 km | 438 to 528.5 km | `LIVE_CERES_DAILY_BUDGET`, 3,000 |
+
+An area's shards are `#1` to `#3` on every world; a party (`party:CODE`) is one room across all of
+them. Columns are about as wide as a band is tall, but no narrower than at about 87° of latitude (`cos`
+held to 0.05), so near Vesta's poles they're wide. Off the Earth a position is in the world's own
+frame on its sphere (`toFrame( …, world )`, the same sum to the bit as level.js's `pointOn`): the
+level's tilt and [the moving recentre](#the-moving-recentre) are only in the page's scene, never on
+the wire.
+
+**The protocol, v3.** Today's pages speak `worlddrive-live.v3` and offer `[ v3, v2, v1, <token> ]`;
+the Worker takes exactly `[ v1, token ]`, `[ v2, v1, token ]` or `[ v3, v2, v1, token ]`, and the
+room answers in the version it was asked in, which the page reads back (`versionOf( ws.protocol )`)
+and speaks for that connection. Which worlds each version knows is written out, never the list of
+worlds (`KNOWN_WORLDS`: v1 the Earth, v2 the Earth and the Moon, v3 all five; `knows( version,
+world )`), so a world added later needs a v4 ([adding a world](#adding-a-world)). Both sides read
+every `world` through it: to a v2 page in a party, a driver on Mars is on the globe, with no place,
+car, trick or honk (the room's `seenBy`), as a Moon driver is to a v1 page; a place on a world a page
+doesn't know is taken as the Earth's; and v1 and v2 pages are never let into Mars's, Vesta's or
+Ceres's areas (400). `away` says which globe a driver's looking at (`{ t: 'away', world, globe }`
+from a v3 page; the room passes `globe` on only to v3 pages), so a friend who drove on the Earth and
+turned to Mars's globe is "on Mars's globe" in the list. (A v2 page shows a friend on Mars's globe
+as on the Earth's: it can't know Mars.) **Old pages and old rooms**: a room still on the code from
+before for a few minutes after a deploy answers a v3 page in v1 (it knows only v2 and v1), so for
+that connection the page is a v1 page, the Moon included; an old Worker's 400 for a far area counts
+as a refusal on that world alone. Page and Worker ship as one Worker, so only rooms run old code,
+and only for those minutes (unless a gradual deployment sends some requests to an older Worker,
+which would answer 400 to every v3 page).
+
+**Who pays** (worker/drive/live.js, with the charging inside `DriveLimits`):
+
+- A connection, and what it sends: the world it's on (an area's own; in a party, where its page
+  says it is, `?world=`).
+- An area's room's own alarms and reports: its world. A party's room's: the world everyone in it is
+  on; with them on several, the Earth's, or, with the Earth's budget 0, the open world most of them
+  are on (a tie to the first in `earth, moon, mars, vesta, ceres`).
+- What isn't driving is never a far world's while the Earth or the Moon is open: `/api/config`'s
+  ask (a page load) is counted against the Earth's, else the Moon's, every other world only looked
+  at in the same request; a globe's `/api/online` ask against the Earth's (or the Moon's, for the
+  Moon's globe) and for Mars's, Vesta's or Ceres's globe the Earth's while it's open, else the
+  Moon's, else the world's own. With the Earth's and the Moon's both spent, a Worker instance asks
+  `/api/config`'s question again at most once every 10 minutes (`FAR_OPEN_MS`) while a far world is
+  still open, not every 30 s; with every world known spent or off, not at all.
+- Mars's, Vesta's and Ceres's tables (`live_mars`, `live_vesta`, `live_ceres` in `DriveLimits`,
+  beside `live` and `live_moon`) are written only when a report has something for them, as rows
+  written are a Free-plan limit too.
+
+So a far world's budget pays for its own rooms and drivers only: an area's room with drivers moving
+is 120 an hour itself (about 2,880 a day kept busy all day), and each driver with others in sight
+about 900 an hour, so Mars's 4,000 is about two hours of two driving together (1,920 an hour), and
+Vesta's or Ceres's 3,000 about an hour and a half. All five come to **70,000 a day**, leaving
+30,000 of the Free plan's 100,000 for visits, names and scores: the owner chose the Free plan with
+these. On Workers Paid they can be raised; 10,000 each on the three would cost at most about $0.05
+a month more.
+
+**Each address's share, per world.** One address's connections may spend a world's budget over
+`LIVE_ADDRESS_SHARE` (8) in a day, but never less than `LIVE_ADDRESS_FLOOR` (**1,000**; 0 for no
+floor): 5,000 on the Earth and 2,500 on the Moon as before, and 1,000 on Mars, Vesta and Ceres (an
+eighth of Vesta's would be 375, under half an hour with others in sight). The floor isn't held under
+the budget, so it takes three or four addresses to spend a far world's day. An address past its
+share is closed on that world alone (a v3 page with `CLOSE.off` and `share`, toasting "You've driven
+with others a lot on Vesta today. You can still drive with others on the Earth, the Moon, Mars and
+Ceres.", or with none left open "…: it's back after midnight UTC."; an older page with
+`CLOSE.rate`) and turned away there (429); it drives with others on the rest. In a party, the room
+is told which worlds the address is past (`X-Live-Over`) and which are spent (`X-Live-Closed`), for
+every world, and closes a driver who says it's on one.
+
+**A world closed, the rest on.** `/api/config`'s `liveWorlds` says each world's state (`{ open,
+reason? }`, `reason` `budget` or `unknown`); a page reads only that (from an older Worker, the Earth
+and the Moon from `live` and `liveMoon`, the others off). A world closes for the visit when its day
+is spent (`CLOSE.off`, `budget`: "Lots of drivers on Mars today: …"), when it's switched off alone
+(`CLOSE.off`, `world off`, quietly), when this address is past its share there, or after 8 refusals
+in a row there while the Worker says it's on (quietly); `off`, every world switched off, still ends
+it all. On a closed world you drive alone: no car sent, none drawn, no area room, no dots. But a
+party isn't dropped for a budget it needn't use: the page's rooms go through the last world it was
+on that's still open (else the first open one), where it's away, looking at the closed world's globe
+(`globe`), and comes back as soon as it's on an open world. In `live.js`: `live.world` is that world
+(`here()`), `live.gameWorld` the game's, `live.closedHere` whether the game's world is closed,
+`live.closedWorlds` and `live.openWorlds()`; `budgetToast( world, open )` and `SHARE_TOAST` in
+friends.js. The page's live parts (the chip, the horn, **Drive with friends** and the rest) show by
+`body[data-live]`, which main.js sets from `LIVE_WORLDS` (every world), so a world taken out again is
+one line.
+
+**Parties across worlds.** A friend on another world is "· on Mars" in the list, and "Ana is
+driving at Bradbury Landing (Mars)" on the banner; **Go to**, **Join** and a toast's **Join** turn
+the globe to their world (its files fetched the first time) and drop in beside them; a friend on a
+globe is "on Mars's globe". [The orrery](#picking-a-world-the-orrery)'s sheet for a world lists your
+party's friends there, with **Join**.
+
+**What it costs a page.** Nothing more in its first load: the orrery is a chunk of its own, and the
+rest is the game's own code, which loads with the globe. Driving on Mars, Vesta or Ceres, a frame
+works out where the car is in the world's frame, as on the Moon (a microsecond or so).
 
 ### Switching it off
 
@@ -1834,7 +2974,12 @@ of each day once it has spent that day's budget (below).
 | Setting | Default | What it is |
 | --- | --- | --- |
 | `LIVE` | `on` (in `vars`) | `off` switches driving with others off |
-| `LIVE_DAILY_BUDGET` | 40000 (in `vars`) | The Durable Object requests a day it may use; 0 is off |
+| `LIVE_DAILY_BUDGET` | 40000 (in `vars`) | The Durable Object requests a day it may use on the Earth; 0 is off there |
+| `LIVE_MOON_DAILY_BUDGET` | 20000 (in `vars`) | The Moon's, apart; 0 is off on the Moon |
+| `LIVE_MARS_DAILY_BUDGET`, `LIVE_VESTA_DAILY_BUDGET`, `LIVE_CERES_DAILY_BUDGET` | 4000, 3000, 3000 (in `vars`) | Mars's, Vesta's and Ceres's, each apart; 0 is off on that world ([on every world](#on-every-world)) |
+| `LIVE_ADDRESS_VISITS` | 20 (unset) | The most visits not counted by the Earth's caps (opened from a link to the Moon, Mars, Vesta or Ceres) connecting from one address a day |
+| `LIVE_ADDRESS_SHARE` | 8 (unset) | One address's connections may spend each world's budget over this in a day (5,000 on the Earth, 2,500 on the Moon); the owner's aren't counted |
+| `LIVE_ADDRESS_FLOOR` | 1000 (in `vars`) | But an address's share of a world's day is never less than this (Mars's, Vesta's and Ceres's are 1,000); 0 for no floor |
 | `LIVE_PARTY_MAX` | 8 (unset) | The most in a party |
 | `LIVE_NEARBY_MAX` | 20 (unset) | The most in each of an area's rooms |
 | `LIVE_VISIT_CONNECTS` | 200 (unset) | The most connections to rooms a visit makes in a day |
@@ -1846,7 +2991,12 @@ On the Free plan, once all of an account's Durable Objects together have made 10
 a day, every one of them fails until 00:00 UTC, `DriveLimits` included: `/api/visit` would fail
 and nobody could start a drive. It isn't known which plan the account is on, so driving with others
 keeps to a budget of its own, `LIVE_DAILY_BUDGET` billed requests a day (**40,000** in
-`wrangler.drive.jsonc`), and leaves the rest for visits, names, scores and searches:
+`wrangler.drive.jsonc`), and the Moon's rooms to theirs, `LIVE_MOON_DAILY_BUDGET` (**20,000**,
+counted the same way and apart, so neither world's shuts the other's: see [Driving with others on
+the Moon](#driving-with-others-on-the-moon)), and Mars's, Vesta's and Ceres's to theirs (**4,000**,
+**3,000** and **3,000**: [on every world](#on-every-world)), and leaves the rest (30,000) for
+visits, names, scores and searches. What follows is the Earth's; every world's is the same, but for
+who pays for page loads and globes ([who pays](#on-every-world)):
 
 - **What's counted**, in billed requests as Cloudflare counts them (below): each connection (1),
   each message a room is sent (1/20 each, keepalives included, and those a closed connection goes
@@ -1865,8 +3015,15 @@ keeps to a budget of its own, `LIVE_DAILY_BUDGET` billed requests a day (**40,00
   next report, within the minute for rooms with drivers moving, within a few for quiet ones.
   `/api/live` turns new connections away (503 with
   `reason: 'budget'`) and `/api/config` says `live: false` with `liveReason: 'budget'`, so new page
-  loads show none of it. A page turned off this way toasts once, "Lots of drivers today: driving
-  with others is back after midnight UTC.", hides it all and drives on alone. At 00:00 UTC it's a
+  loads show none of it. A page turned off this way (every world spent) toasts once, "Lots of drivers today: driving
+  with others is back after midnight UTC.", hides it all and drives on alone. With only one world's
+  spent (the Earth's, say), it says so ("Lots of drivers on the Earth today: driving with others
+  there is back after midnight UTC. You can still drive with others on the Moon, Mars, Vesta and
+  Ceres."), hides it on that world (the chip, the list, the banner, **Driving now**'s areas and
+  its dots: only its line to the other worlds stays, while anyone's there; a party goes on through
+  another world, so its list and **Drive with friends** stay) and has it on the others; a
+  party's link opened then says the same. A world switched off (its budget of 0) closes the same way
+  without a word. At 00:00 UTC it's a
   fresh day: pages loaded after that have it again. Once a Worker instance has heard the day is
   spent it stops asking until the next day.
 - **If `DriveLimits` can't say**, a room carries on as if it's open (and adds what it couldn't
@@ -1875,8 +3032,8 @@ keeps to a budget of its own, `LIVE_DAILY_BUDGET` billed requests a day (**40,00
   others that's turned away keeps trying, asking `/api/config` the first time and then every 5
   minutes (each time while the Worker can't be reached at all).
 - The count runs a minute behind (up to 10 for quiet rooms, with less than 5 each to add), which is
-  why the budget isn't all of what's left: 60,000 of the Free plan's requests are left for the rest
-  of the site, and for the last minutes' driving.
+  why the budget isn't all of what's left: 30,000 of the Free plan's requests are left for the rest
+  of the site (with the other worlds' 30,000), and for the last minutes' driving.
   On Workers Paid, going over costs money rather than switching everything off, so it can be
   raised there (see what that costs below).
 
@@ -1907,11 +3064,11 @@ Worked through:
 | A driver with others, an hour on the move (5 a second) | 18,000 | 900 |
 | With others, parked, an hour (once every 2 s); or on the move with only those on the globe | 1,800 | 90 |
 | The keepalives of a page with nothing else to say (alone, or on the globe in a party), an hour | 144 | about 7 |
-| A room with drivers moving in it, an hour (an alarm and a report to `DriveLimits` each minute) | | 120, and 120 rows written |
+| A room with drivers moving in it, an hour (an alarm and a report to `DriveLimits` each minute) | | 120, and 120 rows written (and one more a report for each address its drivers come from, its share's count) |
 | A driver alone in a room, an hour, all told (its keepalives, the room's alarm about every 50 s, a report every 5 minutes or so) | 144 | about 93 (110 for a tab in the background, keepalives once a minute) |
 | Connecting to a room (the Worker's ask, the connection, and an alarm 10 s later for its hello) | | 3 (and 2 rows written), 1 more on a change of room |
 | A page load (`/api/config`'s ask, at most one every 30 s in each Worker instance) | | 0 or 1 |
-| A page on the globe, an hour (`/api/online` once a minute, kept 30 s; none after 10 minutes untouched, or with the Garage open) | | about 60 alone in its Cloudflare location; about 120 a location however many watch |
+| A page on the globe, an hour (`/api/online` every 20 s, kept 30 s; none after 10 minutes untouched, or with the Garage open) | | about 90 alone in its Cloudflare location; about 120 a location however many watch |
 
 So the default budget of 40,000 a day is about **40 driver-hours with others** (two driving
 together for an hour is 2 × 900 + 120 = 1,920), or about 430 hours of drivers each alone in their
@@ -1935,6 +3092,20 @@ reconnects are Worker requests too, as every `/api/` call is. Limits that matter
 connection through hibernation (its count of what it has spent included) is under 1 kB of the
 16,384 bytes allowed, and a Durable Object holds up to 32,768 hibernating WebSockets, far more than
 a room lets in.
+
+**On the Moon** everything above costs the same, counted against the Moon's own budget,
+`LIVE_MOON_DAILY_BUDGET` (20,000 a day: about 20 driver-hours with others, or about 215 hours of
+drivers each alone in their area's room), so the Earth's and the Moon's together are at most 60,000
+of the Free plan's 100,000 a day, 40,000 left for the rest of the site. On Workers Paid both are at
+most 1.8 million a month, 0.8 million past the included million: $0.12 a month at most; each 100,000
+a day more on either is $0.45 a month. A Moon dot's ask (`/api/online?world=moon`) is kept 30 s
+apart from the Earth's, so a page on the Moon's globe is the same ask a minute.
+
+**On Mars, Vesta and Ceres** the same again, each against its own budget (4,000, 3,000 and 3,000 a
+day), which pays only for its own rooms and drivers: their globes' asks and page loads are the
+Earth's (or the Moon's), as [who pays](#on-every-world) says. All five come to at most 70,000 a day,
+30,000 of the Free plan's 100,000 left. On Workers Paid all five are at most 2.1 million a month,
+1.1 million past the included million: about $0.17 a month at most.
 
 ### How it's tested
 
@@ -1991,6 +3162,54 @@ checks `/api/config` asking (at most every 30 s, one at a time for 20 at once, a
 the day's spent, or when it's off; `liveReason: 'unknown'` when `DriveLimits` fails) on a stand-in
 `DriveLimits`.
 
+What's tested of the Moon's rooms, budget and pages is in [Driving with others on the
+Moon](#driving-with-others-on-the-moon). Of [every world](#on-every-world)'s, `npm run
+test:drive-live` has: the protocol (v3 offered first and each version's worlds written out, frozen;
+every world's areas about 11 km and their rooms' names round the grid and back; no room, world or
+frame of one that isn't, never the Earth's instead; the five cars' shells apart, each world's car
+good only there; `toFrame` the same to the bit as `pointOn` on the Moon, Mars, Vesta and Ceres;
+places' heights per world; dots per world); the room on its stand-in runtime (a v3 Mars area
+answering v3 and dropping the Earth's, the Moon's and Vesta's cars and places; a party across five
+worlds as v3, v2 and v1 pages hear it, `globe` to v3 only, a v2 page saying Mars placed on the Earth;
+a Vesta area spending only Vesta's budget, with every budget and the floor in its report; Mars spent
+leaving it be, Vesta spent closing it `budget`, Ceres at 0 `world off`, every world at 0 `off`; past
+the share, v3 closed `share` and v2 `CLOSE.rate`, an Earth driver past its Mars share closed as it
+drops in on Mars; who pays for a party's room, everyone on Vesta, mixed, the Earth at 0 and a tie;
+`/api/live`'s 400 for v1 and v2 pages in a far area and for a bad v3 offer, `?world=` per version,
+the room told v3 and the world, the ask carrying every budget, the floor and the share, Mars at 0
+turned away without asking while Vesta's let in); `DriveLimits` on SQLite (a Mars-only report
+leaving the Earth's and the Moon's tables alone and writing no Vesta or Ceres row, no Mars dot in the
+Earth's answer, `worlds`' counts, a Vesta area's dots gone once Vesta's spent, a far globe's ask
+charged to the Earth's, then the Moon's, then its own, `/api/config`'s to the Earth's then the
+Moon's with the far worlds only looked at, a connection to its own world with the others listed
+closed or over, and the floor: Vesta's share 1,000, not 375); `/api/online?world=mars` and `vesta`
+on stand-ins (each its own answer and cache key, `worlds`, off answers taking the Earth's counts,
+nothing with every world off); the page's `live.js` (`worldsOf`, a v3 Mars area and its hello,
+friends' worlds and globes read by what the room's version knows, the car in Mars's frame, a party's
+`&world=mars`, away with world and globe; an old room answering v1 or v2 seeing it away on Mars; 8
+refusals on Mars closing Mars alone; `world off`, `share`, `budget` each closing one world and `off`
+ending it; on a spent Vesta the rooms going through Mars, the last world it was on, then the Earth,
+then the Moon, then over) and `online.js` (Mars's dots as Mars places named after its spots, **On
+other worlds** for two or more with its row handed to `onOthers`, `worlds` without the page itself,
+kept when off and gone when the visit ends, `onCounts` only on a change); and under `wrangler dev`
+a v3 driver at Gale in Mars's area, not in the Earth's dots nor its `moon` count, in `worlds.mars`
+and in `?world=mars`'s dots; two v3 pages on Mars seeing each other in Mars's frame, the Earth's
+area at the same numbers another room; a car 30 km over Vesta relayed; and a party of a v3 driver on
+Mars, a v3 friend who sees his car and a v2 one who sees him away. `npm run test:drive-worker`
+checks `/api/config`'s `liveWorlds`, the ask carrying every budget, all five at 0 asking nothing, the
+far worlds open with the Earth's and the Moon's at 0, `DriveLimits` failing (a world off here still
+off, the rest `unknown`), and asking again only every 10 minutes once the Earth and the Moon are
+spent while a far world's open, and not at all once all five are. `npm run test:drive-live-ui`
+has two pages at Bradbury Landing in one `mars:` room, each drawing the other's car within 3 m of
+where it is and 1.5 m of Mars's ground; a party made on Mars, its link opened on the Earth ("Ana ⭐ is
+driving at Bradbury Landing (Mars)"), **Join** dropping in 2 to 12 m from her on Mars, "· on the
+Earth" and "· on Mars" in the two lists, **Go to** back to Mars; Vesta at Cornelia across a recentre,
+the driver's (her car where it was on Vesta, the other's ghost of it within 3 m and never jumping)
+and the viewer's (its ghost within half a metre of where it was on Vesta, carried by exactly the
+move); a page told Mars is spent alone there and in Vesta's room; the budget toast ending "…on the
+Moon, Mars, Vesta and Ceres."; and every **M** it presses checked to be from a drive, as on the globe
+**M** opens the orrery. About 50 minutes in all, a quarter of it the five-world part.
+
 `npm run test:drive-live-ui` (`scripts/test-drive-live-ui.mjs`): two to four pages in Chromium on
 the test pad, against the real Worker under `wrangler dev` behind Vite's proxy (the test pad has no
 visit, so a dev-only seam in `main.js`, `window.worldDriveLiveTest = { visit }`, hands each page a
@@ -2013,8 +3232,9 @@ only the page's own origin through the proxy; and the Worker restarted with `LIV
 page stopping without a word and a new one showing none of it, both driving as ever. A page alone
 in its room sends no states (as Playwright sees its frames go) and a second driver joining sees it
 within 1.5 s; the following is measured at 5 a second, and that A sent at that rate. And the Worker
-with a budget of 40, spent by connecting: a page turned away toasting once and showing none of it,
-a party's link on a new page saying why, both driving as ever. Who's driving now: a driver dropping
+with an Earth budget of 40, spent by connecting: a page turned away toasting once that it's spent on
+the Earth (and that you can still drive with others on the Moon) and showing none of it there, a party's link on a new page
+saying why, both driving as ever. Who's driving now: a driver dropping
 in at Golden Gate Park in `/api/online` within 70 s (her room's first report), and on a
 second page's globe, its **Driving now** saying "11 driving now." with the 5 busiest named after
 their start spots (the test's own drivers parked at Times Square, Shibuya, the Arc de Triomphe and
@@ -2048,7 +3268,7 @@ the Worker both import, so the page shows what the Worker counts.
 | Each second in the air off a jump (not flying) | 3 |
 | Each drift boost paid out | 8 |
 | Each boost pad driven over | 4 |
-| Each minute driving with others in your room (someone else there and not on the globe) | 6 |
+| Each minute driving with others in your room (someone else there, driving on the same world: not on the globe, nor a party friend on another world) | 6 |
 | The first drive in an area (live-protocol.js's `cellOf`, about 11 km across), once you've driven a km in it | 100 |
 | Each start spot, the first time (driving within 300 m of it, 100 m into the drive) | 250 |
 | The day's first drive (UTC days), once you've driven 250 m | 100, and 25 more for each day in a row before it, up to 200 from the fifth |
@@ -2199,7 +3419,7 @@ level-only colours.
   by your name the next time the page says hello to a room (moving to another area's room, or
   connecting again): saying hello again for each level would have them see you leave and join.
   Without a nickname, the first says "Pick a nickname to save your progress", once (only where a
-  nickname can be picked: a drive on Google's map).
+  nickname can be picked: a drive with a visit's token, on any world).
 - **The globe's panel**: a profile card under the search: your nickname (or "You"), the level badge
   (its ring steel, then bronze at 10, silver at 20, gold at 30, platinum at 40 and rainbow at 50),
   "Lv 9 · Drifter", the bar to the next level, "Next: Racing stripes at Lv 9", a **Title** picker
@@ -2226,11 +3446,21 @@ level-only colours.
 ### Saving it, and claiming it
 
 - **With a nickname**, XP is kept with the leaderboard player in D1 (`players.xp`), so it's yours
-  wherever that nickname is. A player linked to a Google account (signing in for the pass links the
-  browser's player, `accounts.js`) shows the level of the account's best player: sign in on another
-  device and pick a nickname there, and it shows the account's level until its own XP passes it.
-  (Each player's XP is its own, and the caps below are each player's: an account's players added up
-  would let several players' caps add up too.) The page reports what it drove every 2 minutes while
+  wherever that nickname is. **One account, one player:** signed in (Google or a username), every
+  browser drives as the account's player, its oldest (`accounts.js`'s `accountPlayer`,
+  `POST /api/player/mine`). The first browser signed in gives the account its player; any other is
+  handed that player with a secret of its own (`player_keys`; the player's own secret stays the
+  first browser's), and a nickname made there before signing in is folded into it and deleted: the
+  higher XP of the two (never the sum), the later streak, the achievements' counts the more of each,
+  and all of both's discoveries, achievements, scores, challenge times and visits, the account's
+  player's kept where both have one (a best score keeps the higher). Its name is free again. A
+  player that's another account's is left alone, and a key is never used to move a player to
+  another account. A browser's key goes as it signs out (the page sends it with
+  `DELETE /api/session`, and forgets the player), and every key of the account as it signs out
+  everywhere: a shared computer doesn't go on driving as you. Accounts with several players from before still
+  show the level of their best (`xpOf`) until each browser has signed in once more. (Each player's
+  XP is its own, and the caps below are each player's: an account's players added up would let
+  several players' caps add up too.) The page reports what it drove every 2 minutes while
   driving, as it pauses, as it goes back to the globe, and as the page goes (`pagehide`, with
   `fetch( ..., { keepalive: true } )`: `navigator.sendBeacon` can't send JSON with the right
   Content-Type). What hasn't been reported is kept in the browser (`world-drive.progress`), and so
@@ -2257,7 +3487,7 @@ token as scores are posted (`visits.js`'s `readVisit`) and the player's secret. 
 was driven since the last: `{ id, km, air, drifts, pads, together, tricks, areas: [ cellOf names ],
 spots: [ SPOTS ids ], daily, days?, feats? }`: id the page's own for the report (8 to 40 letters, digits,
 `_` or `-`), tricks the landed runs' XP, and only in a claim, days `{ xp, streak, day }`, the days'
-bonuses counted in the browser before the nickname; feats `{ moon, looks, rides }`, when there's
+bonuses counted in the browser before the nickname; feats `{ moon, mars, vesta, ceres, looks, rides }`, when there's
 anything in it, the [achievements'](#achievements-and-rewards) counts only the page can tell. Anything the page couldn't send (a negative or
 non-number amount, a count that isn't whole, an area that isn't one, a spot that isn't one, over 200
 of either, an id or days that aren't) is a 400; a forged, changed, expired or another player's
@@ -2701,7 +3931,7 @@ bottom of the bodywork, from nose to tail, with a pinstripe over it.
 
 **Underglow** (`src/drive-app/underglow.js`) is a neon glow on the ground under the ride and round
 it, on every ride: the kart, the built rides, the cars and the library's trucks (paint or not), on
-the Earth and the Moon, on the turntable and under the others' ghosts. It isn't a light, which would
+every world, on the turntable and under the others' ghosts. It isn't a light, which would
 cost every car a pass over the whole scene: it's one flat mesh in the ride's own frame, 5 cm over the
 ground its wheels stand on, drawn additively (no depth written) with a soft picture that's brightest
 at the edge of the footprint and fades out past it, so it's one draw call whatever the ride. It's
@@ -2915,7 +4145,7 @@ and times on every device, and driving and the leaderboard never need it.
   for a buyer brought back from Stripe before its webhook arrived (that tab starts a visit of its own,
   counted by the address until the pass is known). Once the account there has the pass, the visit
   is asked for again, once: a supporter who has had their 30 sees the screen, saying who's signed in.
-  (Already driving on the Moon from that screen, the page reloads instead.)
+  (Already driving on another world from that screen, the page reloads instead.)
 - Wherever Google's button is, **Or use a username and password** opens the account panel, to sign
   in or create an account without Google ([Username and password
   accounts](#username-and-password-accounts)); signed in, **Account** in the account line opens it.
@@ -2945,6 +4175,13 @@ and times on every device, and driving and the leaderboard never need it.
   [Username and password accounts](#username-and-password-accounts)).
 - `POST /api/player/link { id, secret }`, signed in: the leaderboard player (proved by its secret, as
   a rename is) becomes the account's (`players.account_id`); 20 a day from one visitor.
+- `POST /api/player/mine { id?, secret? }`, signed in: `{ player: { id, name, secret? } | null,
+  merged? }`, the account's player for this browser. With no player, the account takes this
+  browser's (as `/api/player/link`); with one that isn't this browser's, it's handed over with a
+  `secret` of this browser's own, and this browser's player (unlinked, or the same account's) is
+  folded into it (`merged`). A player sent that doesn't check out is as none. 401 signed out; 20 a
+  day from one visitor (with `/api/player/link`). The page asks once for each player and account
+  (`world-drive.linked.2`).
 - **Stripe's webhook**, `POST /api/stripe/webhook` (`worker/drive/supporter.js`): the one route without
   the same-origin and JSON checks (it comes from Stripe's servers, not a page) and without a session.
   It proves itself with its `Stripe-Signature`, checked by the code the construction app's webhook
@@ -3526,23 +4763,31 @@ starts one. World Drive is built so that one page load is one session, however m
   **PER_VISITOR_DAILY** for each visitor (1: one free Earth drive a day; a supporter signed in has
   **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account). Both start again at midnight UTC.
   The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all.
-- **The Moon is never limited.** Its ground is our own (moon.js), so it costs nothing to stream.
-  A page opened on a link to the Moon (`?spot=moon-...`, or `?at=` with `world=moon`) asks for a
-  visit with `world: 'moon'`: after the robot check it gets `{ moon: true, visit }`, no key, and
-  nothing is counted. It opens on the Moon with the Earth closed (main.js's `moonOnly`): picking the
-  Earth reloads the page without the link, which asks for one of the day's Earth drives as usual.
-- **Over a cap the page opens on the Moon by itself**: the 429 carries a visit (for scores and
-  stats), the game starts on the Moon's globe without a key, loading nothing from Google, and a
-  toast says why (*You've had today's free Earth drive, so you're on the Moon...*, or *Today's free
-  Earth drives are all taken...* when it's the cap for everyone). Picking the Earth there shows
-  **You've had today's free Earth drive** (or **Today's free Earth drives are used up**), with how
-  long until fresh ones and **Drive on the Moon** to go back; over the visitor's own cap it also has
-  a sign-in, so a supporter on a new browser, or back from paying before Stripe's webhook, signs in
-  and the page reloads once to ask for an Earth drive as theirs.
+- **Every world but the Earth is never limited** (the Moon, Mars, Vesta and Ceres: worlds.js's `free`). Their
+  ground is our own (body.js), so it costs nothing to stream. A page opened on a link to one
+  (`?spot=moon-...`, `?spot=mars-...` and the like, or `?at=` with `world=moon`, `world=mars` and so on, or a challenge's
+  link on one) asks for a visit with that `world`: after the robot check it gets `{ moon: true,
+  free: true, world, visit }` (`moon: true` as the answer always was, for a page from before Mars
+  still in a browser's cache), no key, and nothing is counted against the caps. It opens on that
+  world with the Earth closed (main.js's `earthClosed`, which was `moonOnly`): picking the Earth
+  reloads the page without the link, which asks for one of the day's Earth drives as usual. A
+  `world` that isn't a free world (one that isn't a world at all, or `earth`) asks for an Earth
+  visit.
+- **Over a cap the page opens on the Moon by itself** (worlds.js's `FALLBACK`; the other free worlds
+  are picked in the orrery, from **Worlds**): the 429 carries a visit (for scores and stats), the game starts on the Moon's globe
+  without a key, loading nothing from Google, and a toast says why (*You've had today's free Earth
+  drive, so you're on the Moon: free and unlimited, as Mars, Vesta and Ceres are...*, the others
+  listed by worlds.js's `listOf`, or *Today's free Earth drives
+  are all taken...* when it's the cap for everyone). Picking the Earth there shows **You've had
+  today's free Earth drive** (or **Today's free Earth drives are used up**), with how long until
+  fresh ones and **Drive on the Moon** to go back; over the visitor's own cap it also has a sign-in,
+  so a supporter on a new browser, or back from paying before Stripe's webhook, signs in and the
+  page reloads once to ask for an Earth drive as theirs.
 - **Every visit is counted for the admin page**, those over a cap too: `visit` for all of them, and
-  `visit_kind` by where it went (`earth`, `earth_supporter`, `owner`, `moon_link`, and
-  `moon_daily_cap` or `moon_visitor_cap` for one sent to the Moon). The admin page shows **Earth
-  drives** and **Over a cap, sent to the Moon** beside **Visits**. (Before this, a visit turned away
+  `visit_kind` by where it went (`earth`, `earth_supporter`, `owner`, `moon_link`, `mars_link`,
+  `vesta_link` and `ceres_link` for a page opened on a link to one, and `moon_daily_cap` or `moon_visitor_cap` for one sent to the
+  Moon). The admin page shows **Earth drives** and **Over a cap, sent to the Moon** beside
+  **Visits**, and each world's link visits in its card **The worlds**. (Before this, a visit turned away
   wasn't counted at all, so the visits seemed to stop at `DAILY_VISITS`.) A failed robot check shows **We couldn't check you're a person**
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
   to drive, which costs nothing).
@@ -3592,15 +4837,16 @@ see. There's no sign-up: a nickname is all it takes.
   or a better place on today's board.
 - **Names** are 3 to 16 letters (any alphabet), numbers, spaces, _ or -, with nothing invisible in
   them, unique whatever their case and accents, with spaces, _ and - alike, and letters that look
-  the same counted as one ("Speed Demon", "speed_demon" and "Ѕрееd Dеmоn" in Cyrillic letters are one
-  name; so are "Alice" and "AIice"). A small built-in filter turns away slurs and obvious abuse,
+  the same counted as one ("Speed Demon", "speed_demon" and "Ѕрееd Dеmоn" in Cyrillic letters are
+  one name; so are "Alice" and "AIice"). A small built-in filter turns away slurs and obvious abuse,
   through the usual disguises (0 for o, 1 for i, Cyrillic or Greek letters for Latin ones, letters
   doubled, spaces between them), and names passing for World Drive (admin, worlddrive, moderator,
-  staff...). **Rename** is in the panel. A name is picked on a drive on Google's map (it takes the
-  visit's token, as a score does; the test pad has none). The name is kept in this browser (an id and
-  a secret): in another browser, or after clearing the site's data, you pick a new one.
+  staff...). **Rename** is in the panel. A name is picked on a drive with a visit, on any world (it
+  takes the visit's token, as a score does; the test pad has none). The name is kept in this browser
+  (an id and a secret): in another browser, or after clearing the site's data, you pick a new one.
 - **Days** start at midnight UTC and **weeks** on Monday, as the free drives' counts do.
-- Only drives on Google's map post scores: the test pad (maps off, or the dev server) doesn't.
+- Only drives with a visit post scores, on any world (a place on another world is a board of its
+  own: [the Moon](#driving-there)): the test pad (maps off, or the dev server) doesn't.
 - A bad connection never gets in the way: a post that doesn't get through is tried again a couple
   of times, and the drive carries on regardless.
 
@@ -3613,15 +4859,16 @@ cheating cost something and keep the boards believable (`worker/drive/scores.js`
   "v1.<visit id>.<expiry>.<signature>", an HMAC-SHA256 of the id and the expiry whose key is derived
   (HKDF) from `TURNSTILE_SECRET`, so there's no new secret to set, and good for 6 hours. The id is
   21 random letters and one saying the kind of visit: `e` for a visit the Earth's caps let through,
-  `o` for the owner's (`ADMIN_EMAILS`, on either world) and `m` for the Moon's and one turned away
-  by the caps; it says which [drop-in places](#where-people-drop-in) the visit may post (the Earth's
-  and the Moon's, the Moon's alone, or none for the owner). The signature covers the id, so the kind
+  `o` for the owner's (`ADMIN_EMAILS`, on any world) and `m` for a free world's (any but the
+  Earth's: `free` in `visits.js`, which was `moon` when the Moon was the only one) and one turned away
+  by the caps; it says which [drop-in places](#where-people-drop-in) the visit may post (any
+  world's, the free worlds' alone, or none for the owner). The signature covers the id, so the kind
   can't be changed. It's in the id, not a field of its own, so a token is written as it always was:
   the Worker before kinds (20bf893) takes these tokens as its own, so rolling back to it leaves
   every open page's visit working ([Deploying](#deploying)). A token from before kinds, whose id is
   16 random bytes, always ends in `A`, `Q`, `g` or `w` (base64url's last letter of 16 bytes has two
   bits of them and four of nothing), never a kind's letter, so it's taken until it runs out, as a
-  Moon visit's. A signature is taken written one way only (base64url's last letter has two spare
+  free world's visit's. A signature is taken written one way only (base64url's last letter has two spare
   bits). So every score comes from a visit that passed Turnstile and was counted against the day's
   caps: a script can't post without spending a drive. A new name takes the token too, and one visit
   makes one player and posts for that player only (the first to use it), so one robot check can't
@@ -3692,38 +4939,41 @@ Cloudflare WAF rule if it comes to that.
 ## Play stats
 
 The owner's page of how World Drive is played: **`https://worlddrive.app/admin.html`**, for a Google
-account in `ADMIN_EMAILS`, signed in on worlddrive.app (the globe's panel). It shows the last 7, 30 or
-90 days or the year (UTC days, the last of them today so far), each figure with ▲ or ▼ against the
-as many days just before (in per cent, or in points for a share; green for better and red for worse,
-fewer being better for problems and load times). A figure is compared only when its counts cover the
-period before from its first day: the play figures from the first day with visits counted, the
-funnel's, the Moon's, searches' and problems' from the first with the funnel counted (they began a
-deploy later), so a period before the counts began, or only partly after, shows no false rise; the
-page says which have no ▲ or ▼, and why. The facts from the Worker's own tables are always compared. On it:
+account in `ADMIN_EMAILS`, signed in on worlddrive.app (the globe's panel). It shows the last 7, 30
+or 90 days or the year (UTC days, the last of them today so far), each figure with ▲ or ▼ against
+the as many days just before (in per cent, or in points for a share; green for better and red for
+worse, fewer being better for problems and load times). A figure is compared only when its counts
+cover the period before from its first day: the play figures from the first day with visits counted,
+the funnel's, the other worlds', searches' and problems' from the first with the funnel counted
+(they began a deploy later; Mars's are counted from the deploy that brought Mars, and Vesta's and
+Ceres's from theirs, so their first periods show them rising from none, which they did), so a period before the counts began, or only partly
+after, shows no false rise; the page says which have no ▲ or ▼, and why. The facts from the Worker's
+own tables are always compared. On it:
 
 - **Tiles**: today so far (visits and play time), visits, play time, play per visit, drop-ins, the
   share of visits that drove and that drove 10 minutes or more, the share of play with others and on
-  the Moon, searches, problems, the mean load time, new players, new accounts, passes bought and the
-  revenue.
+  each other world (**On the Moon**, **On Mars**, **On Vesta**, **On Ceres**), searches, problems, the mean load time, new
+  players, new accounts, passes bought and the revenue.
 - **Each day**: visits as bars and play time as a line; and **any count by day**, picked from what
   the period has (all of a metric's keys together, or one), today's bar paler.
 - **How far visits get** (the funnel): visits, then the globe shown, a place pinned, a drop-in
   started, driving, and driving 1, 10 and 30 minutes, each with its share of the visits and of the
   step before. Where the shares drop is where visitors give up.
-- **Devices**: phones, tablets and computers. **Earth and Moon**: play on each, turns to the Moon and
-  drop-ins there. **Searches** by kind, and how many found nothing. **Drop-in time**, from Drive here
-  to driving, in buckets. **Problems.** **The leaderboard, the pass and levels**: the boards opened,
-  nicknames picked, the pass's sheet opened and its Buy followed to Stripe, levels reached, parties
-  made and joined.
+- **Devices**: phones, tablets and computers. **The worlds**: play on each, and for each other world
+  the turns to it, the drop-ins there and the visits opened on a link to it
+  (`visit_kind:<id>_link`). **Searches** by kind, and how many found nothing. **Drop-in time**, from
+  Drive here to driving, in buckets. **Problems.** **The leaderboard, the pass and levels**: the
+  boards opened, nicknames picked, the pass's sheet opened and its Buy followed to Stripe, levels
+  reached, parties made and joined.
 - **From the leaderboard and the pass** (the Worker's own tables, below): new players, new bests, new
   accounts (Google and username), passes by status and the revenue; and now, the players, the accounts, the accounts
   with the pass and the passes nobody has signed in for yet.
 - As before: visits by hour of the day (counted in UTC hours, shown in the viewer's time), where
   people come from, play time by ride, the rides dropped in with and the start spots dropped in at,
   the Garage's changes by part, and load time.
-- **Where people drop in**: a heat map of the Earth and of the Moon, and the top places, for today,
-  the week, the month or longer ([its own section](#where-people-drop-in)), between **Each day** and
-  the rest.
+- **Where people drop in**: a heat map of each world, the Earth, the Moon, Mars, Vesta and Ceres, and the top
+  places, for today, the week, the month or longer ([its own section](#where-people-drop-in)),
+  between **Each day** and the rest.
 - **Download CSV**: the period's rows, `day,metric,key,n`, counts and the Worker's facts alike.
 
 Referrers, countries, browsers and page speed in more detail are Cloudflare Web Analytics', in
@@ -3739,12 +4989,12 @@ share), a day, as `metric:key`:
 | `load_time`, `load_ms` | a bucket (under 2 s to over 20 s); `total` | From asking for the page to the globe showing, and the milliseconds together for the mean |
 | `funnel` | `globe`, `pin`, `dropin`, `driving`, `drove_1m`, `drove_10m`, `drove_30m` | How far a visit gets, each step once a visit as it's reached: the globe shown, a place first pinned (a spot, a search result, a recent place, a link, a tap, an area of people driving), a drop-in first started, the first drive, and the visit's driving (not paused) passing 1, 10 and 30 minutes. A party's Join drops in without a pin, so a step can be more than the one before |
 | `device` | `phone`, `tablet`, `computer` | What the visit's on (once): a fine main pointer (a mouse, a trackpad) is a computer's, whatever its screen; a coarse one (a finger, `pointer: coarse`) is a tablet's when the screen's shorter side is 600 CSS px or more, else a phone's. A laptop with a touch screen is a computer, and so is a tablet with a trackpad |
-| `dropin`, `ride` | a start spot's id, `other` or `moon`; a ride | Where drop-ins are and in what: this key never says where off a start spot; the drop-in's cell, to about a kilometre, goes to [where people drop in](#where-people-drop-in) |
+| `dropin`, `ride` | a start spot's id, `other`, or a world's id off the Earth (`moon`, `mars`, `vesta`, `ceres`); a ride | Where drop-ins are and in what: this key never says where off a start spot; the drop-in's cell, to about a kilometre, goes to [where people drop in](#where-people-drop-in) |
 | `dropin_time` | under 5 s, 5-10 s, 10-20 s, 20-40 s, over 40 s | How long each drop-in took, from Drive here to driving |
-| `play`, `play_world`, `play_with_others` | a ride; `earth` or `moon`; `all` | Seconds driven, not paused: by ride, by world, and with others in the room |
-| `world` | `moon` | Each time the globe turns to the Moon |
-| `search` | `earth`, `moon`, `coordinates`, `nothing` | Searches made: of the map, of the Moon's places, coordinates typed; and, as well, each map or Moon search that found nothing. Never what was typed |
-| `problem` | `no_ground`, `ride_failed`, `moon_failed`, `map_failed`, `map_session_ended`, `drop_abandoned` | What went wrong: no ground at a drop-in (no 3D map there, or the Moon's ground not loading), a ride's model not loading (whether the go-kart was driven instead or not), the Moon not loading, Google's map not loading at all, Google refusing the visit's tiles (its map session over), and a drop-in left for the globe before it was driving. The two map ones once a visit; the others each time |
+| `play`, `play_world`, `play_with_others` | a ride; a world (`earth`, `moon`, `mars`, `vesta`, `ceres`); `all` | Seconds driven, not paused: by ride, by world, and with others driving on the same world (as levels count together: not those on the globe, nor a party friend on another world; on Mars, Vesta and Ceres too from the release that brought driving with others to them, November 2026, and never before it). From the release that brought driving with others to the Moon (November 2026), `play_with_others` means that: before, it counted any time with anyone else in the room (a party friend on the globe too) and never the Moon, so the admin page's **With others** row against the period before it compares two meanings, not a trend |
+| `world` | `moon`, `mars`, `vesta`, `ceres` | Each time the globe turns to another world |
+| `search` | `earth`, `moon`, `mars`, `vesta`, `ceres`, `coordinates`, `nothing` | Searches made: of the map, of another world's places (by its id), coordinates typed; and, as well, each map or world's search that found nothing. Never what was typed |
+| `problem` | `no_ground`, `ride_failed`, `moon_failed`, `mars_failed`, `vesta_failed`, `ceres_failed`, `map_failed`, `map_session_ended`, `drop_abandoned` | What went wrong: no ground at a drop-in (no 3D map there, or another world's ground not loading), a ride's model not loading (whether the go-kart was driven instead or not), another world not loading, Google's map not loading at all, Google refusing the visit's tiles (its map session over), and a drop-in left for the globe before it was driving. The two map ones once a visit; the others each time |
 | `garage_open`, `garage_edit` | `all`; a part (colour, finish, decal, rim, glow, boost, flame, trail, smoke, horn) | The Garage opened, and each change made in it |
 | `party` | `made`, `joined` | Parties made (Invite friends) and joined (a party's link) |
 | `board`, `pass`, `level_up` | `open`, `named`; `open`, `buy`; `all` | The leaderboard opened and a nickname picked (a new player); the Supporter Pass's sheet opened (from anywhere) and its Buy followed to Stripe; a level reached |
@@ -3819,9 +5069,10 @@ from the deploy that brought them; the Worker's facts go back as far as its tabl
 The [play stats](#play-stats) say how far a visit gets: most visits drop in and drive, and most of
 those leave after about a minute. To see *where* they go (which places draw people, which start
 spots nobody uses, where the next featured spot or challenge should be), each drop-in's place is
-counted too, rounded to about a kilometre, and the owner's admin page draws it as a heat map of the
-Earth and of the Moon with a table of the top places. What's kept is counts of places a day, never
-who: no player, account, visit or address goes with a place, and no place is finer than its cell.
+counted too, rounded to about a kilometre, and the owner's admin page draws it as a heat map of each
+world (the Earth, the Moon, Mars, Vesta and Ceres) with a table of the top places. What's kept is counts of places
+a day, never who: no player, account, visit or address goes with a place, and no place is finer than
+its cell.
 
 ### What the owner sees
 
@@ -3831,36 +5082,36 @@ people drop in**:
 - **Today**, **Week**, **Month**, **90 days** and **Year**: the last 1, 7, 30, 90 or 365 UTC days,
   each ending with today so far, as the rest of the page's are. It starts at the page's own period
   and follows it when that changes.
-- **Earth** and **Moon**, each with its count in the period: the **drop-ins counted**, each visitor
-  once a day in each cell (and once for each visit). That isn't a count of people: one visitor at
-  Golden Gate, Times Square and Lyon on one day is three, and one at the same place every day of a
-  month is thirty. They're fewer than the **Drop-ins** tile above, which counts every drop-in. The
-  line over the map says "356 drop-ins counted in 86 cells (1 km)": cells, not places, as a start
-  spot's cells are one place in the table but each a cell on the map. One place's count is its
-  **visitors** over one day (Today: each counted once there) and its **visitor-days** over longer
-  (each visitor once a day, added up), and the table's column and the map's notes say which.
+- **Earth**, **Moon**, **Mars**, **Vesta** and **Ceres**, each with its count in the period: the **drop-ins counted**,
+  each visitor once a day in each cell (and once for each visit). That isn't a count of people: one
+  visitor at Golden Gate, Times Square and Lyon on one day is three, and one at the same place every
+  day of a month is thirty. They're fewer than the **Drop-ins** tile above, which counts every
+  drop-in. The line over the map says "356 drop-ins counted in 86 cells (1 km)": cells, not places,
+  as a start spot's cells are one place in the table but each a cell on the map. One place's count
+  is its **visitors** over one day (Today: each counted once there) and its **visitor-days** over
+  longer (each visitor once a day, added up), and the table's column and the map's notes say which.
 - **The heat map**: the world as a flat map (longitude across, latitude up), the Earth's land and
   sea from the game's own Natural Earth map (`/sea/mask.bin`, as `src/drive-app/sea.js` reads it),
-  the Moon from its own picture (`/moon/colour.webp`), each fetched only when its map is first
-  shown, in the page's light or dark. Each cell is a soft spot, darker as it has more visitors (on a
-  log scale, so one still shows beside a hundred), the spots adding up where they're close, and
-  coloured from yellow to deep red, with a legend saying which way it runs and the most in one 1 km
-  cell. The top ten places with more than one have their table numbers beside them (a number on each
-  single visitor would say nothing). Drag to move it; click it, then scroll to zoom (or Ctrl and
-  scroll, as a trackpad's pinch is), double-click, or **+**, **−** and **⤢** (the whole map). On a
-  phone: pinch, or two fingers moved together, or the buttons; on the whole map one finger drags
-  sideways (up and down scrolls the page), zoomed in it drags every way. It zooms in to a view 150
-  km across at the most, and a place shown from the table is 300 km across: the Earth's map is
-  squares of about 5 km (24 to a degree) and the Moon's picture pixels of about 2.7 km, so closer
-  than that it would be a mosaic of a few dozen; **Drive ↗** is how to see the streets. Zoomed in on
-  the Earth, the towns are named (more of them the further in, at most 80, none over another:
-  Natural Earth's towns, below), and a scale bar says how far is how far. Resting the mouse on a
-  cell, or tapping it, says what it is and how many visitors or visitor-days (for one of a start
-  spot's cells, its own and the spot's in all: "2 visitor-days here, 6 at the place"). The map has
-  the period's 2,000 cells with the most; the rest (single visitors scattered about) are only in its
-  totals, and the page says so. It's never taller than about two thirds of the screen (`65svh`), so
-  on a phone on its side there's page beside it to scroll by, and a place shown from the table
-  scrolls the whole map, its buttons too, into view.
+  the other worlds from their own pictures (`/moon/colour.webp`, `/mars/colour.webp` and so on), each fetched
+  only when its map is first shown, in the page's light or dark. Each cell is a soft spot, darker as
+  it has more visitors (on a log scale, so one still shows beside a hundred), the spots adding up
+  where they're close, and coloured from yellow to deep red, with a legend saying which way it runs
+  and the most in one 1 km cell. The top ten places with more than one have their table numbers
+  beside them (a number on each single visitor would say nothing). Drag to move it; click it, then
+  scroll to zoom (or Ctrl and scroll, as a trackpad's pinch is), double-click, or **+**, **−** and
+  **⤢** (the whole map). On a phone: pinch, or two fingers moved together, or the buttons; on the
+  whole map one finger drags sideways (up and down scrolls the page), zoomed in it drags every way.
+  It zooms in to a view 150 km across at the most, and a place shown from the table is 300 km
+  across: the Earth's map is squares of about 5 km (24 to a degree), the Moon's picture pixels of
+  about 2.7 km and Mars's of about 5.2 km (Vesta's 0.4 km and Ceres's 0.7 km), so closer than that it would be a mosaic of a few dozen;
+  **Drive ↗** is how to see the streets. Zoomed in on the Earth, the towns are named (more of them
+  the further in, at most 80, none over another: Natural Earth's towns, below), and a scale bar says
+  how far is how far. Resting the mouse on a cell, or tapping it, says what it is and how many
+  visitors or visitor-days (for one of a start spot's cells, its own and the spot's in all: "2
+  visitor-days here, 6 at the place"). The map has the period's 2,000 cells with the most; the rest
+  (single visitors scattered about) are only in its totals, and the page says so. It's never taller
+  than about two thirds of the screen (`65svh`), so on a phone on its side there's page beside it to
+  scroll by, and a place shown from the table scrolls the whole map, its buttons too, into view.
 - **Top places**: the 25 with the most, each with its name and region, its visitors or visitor-days,
   their share of the world's (one under 1% shows as "<1%"), on how many of the period's days it had
   any, and **Drive ↗**, which opens the game there in a new tab. Those with more than one are listed
@@ -3870,8 +5121,9 @@ people drop in**:
   place page's is the game's own link to it (`/?spot=golden-gate`, or the page's `/?at=...`), marked
   **in the game**, and is one row however many of its cells were dropped in at (below); any other
   place's pins the cell's middle by name (`/?at=45.83862,4.95052&name=12 km NE of Lyon&region=...`,
-  with `world=moon` on the Moon), and the drop-in finds the street, or the sea's surface, there as
-  for any pin. A place's name shows it on the map, zoomed in on it, saying what it is.
+  with `world=moon` on the Moon, `world=mars` on Mars and so on), and the drop-in finds the street, or the
+  sea's surface, there as for any pin. A place's name shows it on the map, zoomed in on it, saying
+  what it is.
 - Asked too often (`ADMIN_LOOKS`, below), the stats and the map each say "Asked too often just now:
   try again in a minute." Whatever goes wrong (that, the server not reached, an error), the map says
   it too, over the map, and nothing of the last answer is left (the worlds' counts, the table, the
@@ -3888,20 +5140,22 @@ How a place is named, by the Worker (`nameCell` and `placesOf` in `worker/drive/
 cost per look:
 
 1. A featured place is a start spot (`places.js`), a place's page with its own pin
-   (`drive/site/places.js`: the Eiffel Tower, the Colosseum...) or one of the Moon's places
-   (`moon-places.js`, its spots and the places its search finds). Its cells are the one its pin is
-   in and any its pin is within 250 m of: a drop-in there starts within 60 m of the pin (the street
-   or a bridge's deck found nearest it: `spawn.js`), and a search of the same landmark pins a little
-   off, so a pin by its cell's edge has its drop-ins on both sides of it (the Arc de Triomphe's is 5 m
-   from the next row). Those cells are the place, by its name, and one row in the top places: their
-   visitors added up, at the place's own pin, on as many days as its busiest cell (the place had
-   visitors on at least that many), with its cells' middles in `cells`.
-2. Else the nearest town or featured place within 50 km (300 km on the Moon, which has only its
-   featured places): a town's own name within 2 km ("Lyon"), else how far and which way, of the
-   compass's eight ("12 km NE of Lyon", "1 km S of Golden Gate Bridge", "91 km N of Copernicus
-   crater"), with the region on the Earth ("Rhône-Alpes, France"; a Moon place's words, "93 km
-   across", aren't said of a place beside it). A featured place's neighbours are always "1 km ... of"
-   it, so a search a kilometre from a spot isn't counted as the spot.
+   (`drive/site/places.js`: the Eiffel Tower, the Colosseum...) or one of another world's places
+   (`moon-places.js`, `mars-places.js`, `vesta-places.js`, `ceres-places.js`: its spots and the places its search finds, `PLACES_ON`). Its
+   cells are the one its pin is in and any its pin is within 250 m of: a drop-in there starts within
+   60 m of the pin (the street or a bridge's deck found nearest it: `spawn.js`), and a search of the
+   same landmark pins a little off, so a pin by its cell's edge has its drop-ins on both sides of it
+   (the Arc de Triomphe's is 5 m from the next row). Those cells are the place, by its name, and one
+   row in the top places: their visitors added up, at the place's own pin, on as many days as its
+   busiest cell (the place had visitors on at least that many), with its cells' middles in `cells`.
+2. Else the nearest town or featured place within 50 km (300 km on the Moon and 500 km on Mars,
+   about twice the Moon's size, 70 km on Vesta and 100 km on Ceres, all of which have only their
+   featured places, Vesta's and Ceres's thick on the ground: `NEAR`): a town's own name within 2
+   km ("Lyon"), else how far and which way, of the compass's eight ("12 km NE of Lyon", "1 km S of
+   Golden Gate Bridge", "91 km N of Copernicus crater"), with the region on the Earth ("Rhône-Alpes,
+   France"; another world's place's words, "93 km across", aren't said of a place beside it). A
+   featured place's neighbours are always "1 km ... of" it, so a search a kilometre from a spot
+   isn't counted as the spot.
 3. Else its coordinates, to two decimals ("0.00° N, 150.00° W").
 
 The towns are Natural Earth's populated places at 1:10 million (public domain): 7,342 towns and
@@ -3921,11 +5175,16 @@ a fuller atlas.
 
 Each world is cut into a grid of cells about a kilometre each way (`src/drive-app/dropin-cells.js`,
 which the page, the Worker and the tests share): rows 1 km tall from the south pole to the north, on
-a sphere of the world's radius (6,371 km for the Earth, 1,737.4 km for the Moon), a whole number of
-them from pole to pole (20,015 on the Earth, 5,458 on the Moon), and each row cut into as many
-cells as fit 1 km wide round its middle (40,030 round the Earth's equator, 10,916 round the Moon's,
-fewer towards the poles). So a cell is a kilometre across to within a metre, except within about
-70 km of the poles (73 km on the Earth, 66 km on the Moon), where it's within 5%: the rows nearest
+a sphere of the world's radius (6,371 km for the Earth, 1,737.4 km for the Moon, 3,389.5 km for
+Mars, 262.7 km for Vesta and 470 km for Ceres: worlds.js), a whole number of them from pole to pole
+(20,015 on the Earth, 5,458 on the Moon, 10,648 on Mars, 825 on Vesta, 1,477 on Ceres), and each row
+cut into as many cells as fit 1 km wide round its middle (40,030 round the Earth's equator, 10,916
+round the Moon's, 21,297 round Mars's, 1,651 round Vesta's, 2,953 round Ceres's, fewer towards the
+poles). On Vesta and Ceres the cells are on the sphere their places are on, not their level
+spheroid, so a kilometre of a cell is a kilometre of the sphere: over Rheasilvia's floor, 50 km
+under it, about 0.8 km of ground. So a
+cell is a kilometre across to within a metre, except within about 70 km of the poles (73 km on the
+Earth and Mars, 66 km on the Moon), where it's within 5%: the rows nearest
 each pole hold 3, 9, 16, 22, 28... cells, 1,047, 1,047, 982, 1,000, 1,010... m wide. Never a sliver
 a few metres wide by a pole, as rounded degrees would be (the Moon's Shackleton start spot, 20 km
 from its south pole, is in a row of cells 1.5 m off a kilometre), and anywhere in a cell is within
@@ -3949,11 +5208,14 @@ the precise place never leaves the browser.
 - **What the Worker takes** (`checkPlaces`, then `recordPlaces` in `worker/drive/dropins.js`): a
   list of at most 6, or the whole post is a 400; each a cell of the grid (anything else, coordinates
   among them, is left out); and no more on a world than the drop-ins the same post counts there
-  (`dropin:moon` on the Moon, the others on the Earth), so a place can't come without its drop-in.
-  An **Earth** place only from a visit whose token says the Earth's caps let it through (`e`: the
-  visit token, [above](#how-cheating-is-limited)); a Moon visit, one turned away by the caps and an
-  old token post the Moon's places alone, and the owner's (`o`) none. Then **DriveLimits** says which
-  to count (`places` in `worker/drive/limits.js`), all in one go:
+  (`dropin:moon` on the Moon, `dropin:mars` on Mars and so on, any other on the Earth), so a place can't come
+  without its drop-in, and a world whose room isn't known takes none (with only the Earth's and the
+  Moon's rooms, as before Mars, a Mars cell would have been taken with no drop-in at all, and a
+  `dropin:mars` counted as room on the Earth). An **Earth** place only from a visit whose token says
+  the Earth's caps let it through (`e`: the visit token, [above](#how-cheating-is-limited)); a free
+  world's visit (`m`: any but the Earth's), one turned away by the caps and an old token post the
+  free worlds' places alone, and the owner's (`o`) none. Then **DriveLimits** says which to count
+  (`places` in `worker/drive/limits.js`), all in one go:
   - a cell counts **once a day for each visitor** (an address; an IPv6 address by its **/48**, not
     the /64 the visit caps count by: one free tunnel broker's /48 holds 65,536 /64s, which would
     otherwise be as many visitors), whichever of their visits posts it, **and once for each visit**,
@@ -3962,8 +5224,8 @@ the precise place never leaves the browser.
   - **no faster than one each 10 s of the visit** (a drop-in takes that long at least: the flight
     down, the ground loading), so a script with a fresh visit can't post a visit's worth at once;
   - at most **10 a visit**, **30 a visitor** and **1,500 a day on each world**
-    (`DROPIN_PLACES_PER_VISIT`, `DROPIN_PLACES_PER_VISITOR`, `DROPIN_PLACES_DAILY`), the Earth's and
-    the Moon's apart, so neither can crowd out the other's;
+    (`DROPIN_PLACES_PER_VISIT`, `DROPIN_PLACES_PER_VISITOR`, `DROPIN_PLACES_DAILY`), each world's
+    apart, so none can crowd out another's;
   - a visit is heard **20 times a day** at most (`DROPIN_ASKS_PER_VISIT`, twice its places: an
     honest page asks once a post with new places).
   DriveLimits says when a visit can add no more (its places counted, its visitor's, or its asks) and
@@ -3973,24 +5235,24 @@ the precise place never leaves the browser.
   and cell. The post's answer is the play stats' 204 whatever was counted, and a place that can't be
   counted (DriveLimits or D1 not answering) is only logged: never in the stats' way.
 
-**Making it hard to poison.** Every place needs a visit that passed Turnstile (the visit's token),
-a drop-in counted with it, and time: one place each 10 s of the visit, 10 a visit. A cell counts
-once a day for each address (an IPv6 /48) and once for each visit, so adding one to a cell takes both
-a new visit and a new address: one robot check and its token, replayed from a block of addresses,
-add a cell once, and a /48's 65,536 /64s are one visitor. An Earth place takes an Earth visit, one of
+**Making it hard to poison.** Every place needs a visit that passed Turnstile (the visit's token), a
+drop-in counted with it, and time: one place each 10 s of the visit, 10 a visit. A cell counts once
+a day for each address (an IPv6 /48) and once for each visit, so adding one to a cell takes both a
+new visit and a new address: one robot check and its token, replayed from a block of addresses, add
+a cell once, and a /48's 65,536 /64s are one visitor. An Earth place takes an Earth visit, one of
 the day's capped drives (`DAILY_VISITS`, 300, and `PER_VISITOR_DAILY`, 1 an address): pushing an
 Earth place up the table by 50 a day spends 50 of the day's drives from 50 addresses, each passing
-the robot check. Moon visits aren't capped (the Moon costs nothing to stream), so a Moon place can be
-pushed by many robot checks from many addresses (IPv4 addresses or /48s); its day's 1,500 are its
-own, so that can't crowd out the Earth's. `days` in the answer (on how many days a place had
-visitors) tells a place busy one day from one busy every day, but a script run daily is busy every
-day too.
+the robot check. Visits to the other worlds aren't capped (they cost nothing to stream), so a place
+on either can be pushed by many robot checks from many addresses (IPv4 addresses or /48s); each
+world's day's 1,500 are its own, so that can't crowd out the Earth's. `days` in the answer (on how
+many days a place had visitors) tells a place busy one day from one busy every day, but a script run
+daily is busy every day too.
 
 So the ranking **isn't proof against many addresses** (a Sybil attack): someone with a few hundred
-addresses and robot checks a day (solving services sell them for a few dollars a thousand) can put
-a 1 km cell of their choosing, a private address say, at the top of the Moon's places, and of the
-Earth's at the cost of the day's drives. What it can't stop is many addresses passing the robot
-check, as for the leaderboard. The owner reads the map knowing that; and challenges picked by
+addresses and robot checks a day (solving services sell them for a few dollars a thousand) can put a
+1 km cell of their choosing, a private address say, at the top of another world's places, and
+of the Earth's at the cost of the day's drives. What it can't stop is many addresses passing the
+robot check, as for the leaderboard. The owner reads the map knowing that; and challenges picked by
 themselves from it take only featured places (`topPlaces`' `featuredOnly`, below) or cells the owner
 has approved, with the busy cells that aren't featured offered to the owner to choose from rather
 than picked. The owner's own visits post none, so what the owner looks at isn't pushed up by
@@ -4046,7 +5308,7 @@ account, as `/api/admin/stats` is: `worker/drive/admin.js`):
 
 ```
 { from, to, first, cell: 1000, kept: 730,
-  worlds: { earth: WORLD, moon: WORLD } }
+  worlds: { earth: WORLD, moon: WORLD, mars: WORLD, vesta: WORLD, ceres: WORLD } }
 WORLD: { dropins, places, heat: [ [ lat, lon, n ] ],
   top: [ { lat, lon, n, days, cells: [ [ lat, lon ] ], name, region, link, featured } ] }
 ```
@@ -4055,9 +5317,10 @@ WORLD: { dropins, places, heat: [ [ lat, lon, n ] ],
 before it). `dropins` is the period's visitors on the world and `places` how many cells they were
 in; `heat` the period's 2,000 cells with the most (each cell's middle, the most first), and `top` its
 25 top places, named, a featured place's cells as one (at its pin, `cells` their middles). One batch
-of three queries: each world's cells, which reads that world's rows for the period once (its totals
-counted over every cell with window functions, before the 2,000 are taken), and the first day (each
-world's key's first row).
+of a query for each world's cells, which reads that world's rows for the period once (its totals
+counted over every cell with window functions, before the 2,000 are taken), and one for the first
+day (each world's key's first row): six, with five worlds (a batch counts as one of D1's queries
+an invocation, however many it holds).
 
 The answer is kept in the Worker instance that worked it out, for that period and day: 10 minutes,
 or an hour for a period longer than a month (90 days, the year), at most 8 of them, today's only
@@ -4073,14 +5336,15 @@ rotation, or choose for a period by hand, and nothing from them goes in by itsel
 
 In `worker/drive/dropins.js`, for picking challenges from where people go:
 
-- `topPlaces( db, { world, from, to, most, featuredOnly }, towns )`: `world`'s most dropped-in places
-  from the UTC day `from` to `to` (both included, `'2026-11-16'`), at most `most` (25 if not given),
-  as the admin page's top places are: a featured place's cells as one, named, with the game's link
-  there (`[ { lat, lon, n, days, cells, name, region, link, featured } ]`), the most first, then
-  those on the most days; with `featuredOnly: true`, the featured places alone (the start spots, the
-  places' pages' and the Moon's places), busiest first. `towns` is `townsFor( env, url )`'s (or null,
-  to name by the featured places alone); `townsFor( env )` works without a request too, as in a
-  scheduled handler (the site's own address stands in: the `ASSETS` binding goes by the path).
+- `topPlaces( db, { world, from, to, most, featuredOnly }, towns )`: `world`'s most dropped-in
+  places from the UTC day `from` to `to` (both included, `'2026-11-16'`), at most `most` (25 if not
+  given), as the admin page's top places are: a featured place's cells as one, named, with the
+  game's link there (`[ { lat, lon, n, days, cells, name, region, link, featured } ]`), the most
+  first, then those on the most days; with `featuredOnly: true`, the featured places alone (the
+  start spots, the places' pages' and the other worlds' places), busiest first. `towns` is
+  `townsFor( env, url )`'s (or null, to name by the featured places alone); `townsFor( env )` works
+  without a request too, as in a scheduled handler (the site's own address stands in: the `ASSETS`
+  binding goes by the path).
 - `topCells( db, { world, from, to, most } )`: the cells themselves, at most `most` (up to 2,000), as
   `[ { world, row, column, lat, lon, n, days } ]`, the most first, then those on the most days.
 - `nameCell( world, lat, lon, towns )` names one cell, with the game's link there.
@@ -4101,45 +5365,49 @@ itself) rather than calling again for each request.
   code are never loaded by it.
 - **Durable Objects**: one DriveLimits request for each stats post that carries new places (at most
   one a drop-in, fewer when several fall in one post's 3 minutes): at about 300 Earth visits a day
-  and the Moon's besides, with a drop-in or two each, a few hundred a day of the Free plan's 100,000
-  (which the visits and driving with others share). At worst, a script posting all it can: 20 a
-  visit a day (`DROPIN_ASKS_PER_VISIT`), and once a visit can add no more each Worker instance stops
-  asking (one more for each other instance it reaches); none for an Earth place from a Moon visit,
-  nor for a world whose day is full. So using up the day's requests this way takes about 5,000 robot
-  checks a day.
+  and the other worlds' besides, with a drop-in or two each, a few hundred a day of the Free
+  plan's 100,000 (which the visits and driving with others share). At worst, a script posting all it
+  can: 20 a visit a day (`DROPIN_ASKS_PER_VISIT`), and once a visit can add no more each Worker
+  instance stops asking (one more for each other instance it reaches); none for an Earth place from
+  a free world's visit, nor for a world whose day is full. So using up the day's requests this way
+  takes about 5,000 robot checks a day.
 - **D1**: one row written for each place counted (at most 1,500 a day on each world; a few hundred
-  at today's traffic) of the Free plan's 100,000 a day, and a Moon visit from someone signed in
-  reads their session (a row or two) to tell whether it's the owner's (signed out, nothing). An
+  at today's traffic) of the Free plan's 100,000 a day, and a free world's visit from someone signed
+  in reads their session (a row or two) to tell whether it's the owner's (signed out, nothing). An
   admin look reads each world's rows for the period once: with a few hundred places a day, a month
-  is about 10,000 rows read and a year about 110,000, of the 5 million a day. At both worlds' caps
-  every day (someone posting all they can, which on the Earth spends the day's drives, and on the
-  Moon takes a few hundred robot checks a day from 50 addresses or /48s) a month's look reads 90,000
-  rows, 90 days' 270,000 and a year's 1.1 million. A look is kept in the Worker instance for 10
-  minutes (an hour past a month), and the page keeps each period's for 10 minutes, so clicking
-  between periods, or the same one again, reads nothing more; but at those caps, four year-long
-  looks in a day each worked out afresh would be most of a Free day's reads. A monthly roll-up of
-  each month's 2,000 busiest cells would bound a year's look at about 110,000 rows a world whatever
-  is posted, but the period's totals would then no longer be exact (how many cells a year's drop-ins
-  were in can't be added up from months' busiest 2,000, and at a few hundred places a day a month
-  can have more than 2,000 cells), so it's left until the counts come near it: then the daily cap
-  (`DROPIN_PLACES_DAILY`) is the lever. Kept for two years at a few hundred a day, the table is a
-  few hundred thousand rows of about 40 bytes: well under 50 MB of the 5 GB free.
+  is about 10,000 rows read and a year about 110,000, of the 5 million a day. At every world's cap
+  every day (1,500 a world: someone posting all they can, which on the Earth spends the day's
+  drives, and on the other worlds takes a few hundred robot checks a day from 50 addresses or /48s)
+  a month's look reads 225,000 rows, 90 days' 675,000 and a year's 2.7 million (with the Earth and
+  the Moon alone it was 90,000, 270,000 and 1.1 million, with Mars too 135,000, 405,000 and 1.6
+  million). A look is kept in the Worker instance for
+  10 minutes (an hour past a month), and the page keeps each period's for 10 minutes, so clicking
+  between periods, or the same one again, reads nothing more; but at those caps, two year-long
+  looks in a day each worked out afresh would be more than a Free day's reads (three, with three
+  worlds, were nearly all of them). A monthly roll-up
+  of each month's 2,000 busiest cells would bound a year's look at about 110,000 rows a world
+  whatever is posted, but the period's totals would then no longer be exact (how many cells a year's
+  drop-ins were in can't be added up from months' busiest 2,000, and at a few hundred places a day a
+  month can have more than 2,000 cells), so it's left until the counts come near it: then the daily
+  cap (`DROPIN_PLACES_DAILY`) is the lever. Kept for two years at a few hundred a day, the table is
+  a few hundred thousand rows of about 40 bytes: well under 50 MB of the 5 GB free.
 - **Workers Paid**: all of that is well within what the plan includes (50 million D1 rows written
   and 25 billion read a month, a million Durable Object requests a month).
-- **The admin page**: the Earth's map (250 KB) and the Moon's picture (675 KB) when each is first
-  shown, the towns (262 KB, 116 KB compressed) once zoomed in: the site's own files, from
-  Cloudflare's cache, at no cost. Drawing the map with 2,000 places takes about 23 ms for the whole
-  world, 11 ms zoomed in a little and 2 to 3 ms on a region (measured in headless Chromium on the
-  development machine, a desktop's window and a phone's alike; the canvas is drawn at no more than
-  twice the screen's pixels), once a frame at most while it's dragged.
+- **The admin page**: the Earth's map (250 KB), the Moon's picture (675 KB), Mars's (1,050 KB),
+  Vesta's (444 KB) and Ceres's (781 KB) when each is first shown, the towns (262 KB, 116 KB compressed) once zoomed in: the site's own
+  files, from Cloudflare's cache, at no cost. Drawing the map with 2,000 places takes about 23 ms
+  for the whole world, 11 ms zoomed in a little and 2 to 3 ms on a region (measured in headless
+  Chromium on the development machine, a desktop's window and a phone's alike; the canvas is drawn
+  at no more than twice the screen's pixels), once a frame at most while it's dragged.
 
 ### How it's tested
 
-- `npm run test:drive-worker`: the grid (a kilometre each way at every latitude on both worlds,
+- `npm run test:drive-worker`: the grid (a kilometre each way at every latitude on every world,
   within a few per cent at the poles, anything in a cell within 0.75 km of its middle, both sides of
   the 180th meridian one cell); only the grid's cells taken, each with its drop-in, at most 6 a post;
   naming from the game's places (a start spot's own cells, and its neighbours as "1 km W of" it),
-  the towns and coordinates, across the 180th meridian; `topCells` and `topPlaces` on the migration's
+  the towns and coordinates, across the 180th meridian, and on Mars up to 500 km from its places,
+  its links with `world=mars`; `topCells` and `topPlaces` on the migration's
   table (the most first, then on the most days; each end of the period; each world's own, read by
   the table's key and nothing else, in SQLite's own plan of the query; 1 to 2,000; a start spot's
   cells as one); DriveLimits by itself (its storage node:sqlite's) hearing a visit its 20 (here 3)
@@ -4149,10 +5417,13 @@ itself) rather than calling again for each request.
   counted once a day for each visitor (another visit from the same address too), none without its
   drop-in or on the wrong world, a post with too many or not a list turned away whole, no visit or
   one run out a 403; one each 10 s of a visit, its 10 (here 4), a visitor's 30 (here 6) and each
-  world's day's 1,500 (here 12, the Moon's still counted with the Earth's full), the stats counted
-  all the same, and the next day afresh; one visit's token from six addresses adding a cell once and
-  its 4 in all; a Moon visit's, an over-the-caps visit's and an old token's Earth places refused and
-  their Moon places counted, and the owner's visits' (on either world) none at all; two /64s of one
+  world's day's 1,500 (here 12, the Moon's still counted with the Earth's full, and Mars's its own:
+  its cells in its own total, full when that reaches the day's), the stats counted all the same, and
+  the next day afresh; one visit's token from six addresses adding a cell once and its 4 in all; a
+  Moon visit's, an over-the-caps visit's and an old token's Earth places refused and their Moon
+  places counted, a Mars visit's cells counted under `mars` as its drop-ins are under `dropin:mars`,
+  a Mars cell needing a Mars drop-in in the same post whatever else the post counts (and a cell of
+  a world with no room in it none), and the owner's visits' (on any world) none at all; two /64s of one
   IPv6 /48 adding a cell once and sharing a visitor's places, another /48 another visitor, and the
   visit caps still each /64's; a visit heard `DROPIN_ASKS_PER_VISIT` times (here 5) and no more, and
   not asked about again once it's done (read from DriveLimits' storage); D1's table holding only day,
@@ -4192,7 +5463,7 @@ itself) rather than calling again for each request.
   scrolling the page; and nothing for someone signed out. Pictures of it are saved
   (`admin-places-*.png`).
 - `npm run test:drive-moon-ui`: a drop-in at Tranquility Base posts its cell of the Moon's grid with
-  `dropin:moon`.
+  `dropin:moon`; `npm run test:drive-mars-ui`, at Bradbury Landing, Mars's with `dropin:mars`.
 
 **The owner's steps.** Deploy (`npm run deploy:drive` applies `0005_dropins.sql` first, and the new
 `ADMIN_LOOKS` rate limiter comes with `wrangler.drive.jsonc`). Places are counted from that deploy;
@@ -4206,16 +5477,20 @@ the page's busiest days stop growing at 1,500 places a world).
 
 The [play stats](#play-stats) say most visits drop in and drive, and almost everyone leaves after
 about a minute. Challenges give a reason to stay, and to come back: a **daily**, a **weekly** and a
-**monthly** challenge on the Earth and on the Moon, six live at once, each a place and a route the
-same for everyone in its period, with its own board of each player's best time.
+**monthly** challenge on each world (the Earth, the Moon, Mars, Vesta and Ceres), fifteen live at once, each a place
+and a route the same for everyone in its period, with its own board of each player's best time.
 
 ### What players see
 
-- **Challenges**, under **Earth | Moon** at the top of the globe's panel and in the pause menu. Its
-  code is a chunk of its own (`src/drive-app/challenges.js` with `challenges.css`), fetched the first
-  time it's pressed: nothing of it is in the page's first load ([what it costs](#what-challenges-cost)).
-  Without a Worker (the dev server alone) the button isn't there, as the trophy isn't.
-- **The list**: the six, the current world's three first ("On the Earth", "On the Moon"). Each card
+- **Challenges**, under **Earth | Moon | Mars | Vesta | Ceres** at the top of the globe's panel and in the pause
+  menu. Its code is a chunk of its own (`src/drive-app/challenges.js` with `challenges.css`),
+  fetched the first time it's pressed: nothing of it is in the page's first load ([what it
+  costs](#what-challenges-cost)). Without a Worker (the dev server alone) the button isn't there, as
+  the trophy isn't.
+- **The list**: the fifteen, the current world's three first, then the others' in the list's order,
+  each world's under its heading ("On the Earth", "On the Moon", "On Mars", "On Vesta", "On Ceres"; a world with none
+  listed has none, and at a period's first ask a world can have fewer than three:
+  [below](#how-theyre-picked)). Each card
   says **Daily**, **Weekly** or **Monthly** with the time it has left, ticking ("5 h 12 m left", "2
   d 5 h left", "12 m 30 s left"), the place and its region, the kind and what it is ("Checkpoint
   sprint · 6 gates · 1.5 km", "Collect them all · 6 stars · 260 m round", "Drive to a landmark · To
@@ -4246,38 +5521,53 @@ same for everyone in its period, with its own board of each player's best time.
   that and look at what the toasts say.
 - **Start** goes back to the globe if you're driving (a run going is left), turns the globe to the
   challenge's world and drops in at its start, as any drop-in there does: an Earth challenge needs
-  an Earth drive, a Moon one none. A sprint's and a hunt's start is the place itself, named so; a
-  landmark's is a pin kilometres from it, so it's a **Dropped pin** to everything that names places
-  (a stunt score's board, others in the room: by its coordinates, as `placeLabel` names a pin), "On
-  the way to Eiffel Tower" on the top bar and the loading screen, and not one of the recent places
-  (`recent: false`: picking it there later would drop you kilometres from the landmark). Pressed as
-  its period ends (the list a moment behind), a challenge that's over doesn't start: the list says
-  why ("That challenge has ended, so a run of it wouldn't count. Here are the new ones."). With
-  today's Earth drives used up (or a page opened on a link to the Moon: main.js's `moonOnly`), the
-  Earth's cards say **Needs an Earth drive**, which shows why (the used-up screen, or for a page
-  opened on the Moon, the reload to the Earth); the Moon's start there as anywhere, from the used-up
-  screen's **Drive on the Moon** too.
+  an Earth drive, one on another world none. A sprint's and a hunt's start is the place itself,
+  named so; a landmark's is a pin kilometres from it, so it's a **Dropped pin** to everything that
+  names places (a stunt score's board, others in the room: by its coordinates, as `placeLabel` names
+  a pin), "On the way to Eiffel Tower" on the top bar and the loading screen, and not one of the
+  recent places (`recent: false`: picking it there later would drop you kilometres from the
+  landmark). Pressed as its period ends (the list a moment behind), a challenge that's over doesn't
+  start: the list says why ("That challenge has ended, so a run of it wouldn't count. Here are the
+  new ones."). With today's Earth drives used up (or a page opened on a link to another world:
+  main.js's `earthClosed`), the Earth's cards say **Needs an Earth drive**, which shows why (the
+  used-up screen, or for a page opened on another world, the reload to the Earth); the other
+  worlds' start there as anywhere, from the used-up screen's **Drive on the Moon** too.
 - **The run.** The car comes down at the start and a countdown, **3, 2, 1, GO!**, holds it there:
   the gas can be held down, ready, and nothing moves till GO. The visit's first time on a computer,
   the keys card is shown over the countdown, which is longer then (6 s, "Get ready" till the 3), and
   put away at GO (or after 10 s, for a run left before it): a first drive may well start as a
   challenge, that card is how a first-timer learns the keys, and nothing covers the road while the
-  clock runs. Then the timer runs on the HUD with
-  how many are passed ("2 / 6", "3 / 6 ★", or a landmark's name) and an arrow to the next one (the
-  nearest star not taken), turned as it lies from where the camera looks, with how far it is. A
-  sprint's gates are rings standing across the way, a landmark's one ring, collectibles spinning
-  stars; each has a beam of light up from the ground, seen from a long way off (twice as tall on the
-  Moon), the next gate's yellow, the last green, the rest blue, stars gold. A gate goes as it's
+  clock runs. Then the timer runs on the HUD with how many are passed ("2 / 6", "3 / 6 ★", or a
+  landmark's name) and an arrow to the next one (the nearest star not taken), turned as it lies from
+  where the camera looks, with how far it is. A sprint's gates are rings standing across the way, a
+  landmark's one ring, collectibles spinning stars; each has a beam of light up from the ground,
+  seen from a long way off (twice as tall on the other worlds), the next gate's yellow, the last
+  green, the rest blue, stars gold. The next gate's beam is wider and its ring breathes, and a
+  marker sits over it on the screen (a diamond with how far it is), held at the screen's edge with
+  an arrow pointing the way when it's off the screen or behind you. On the other worlds, whose
+  heights are known everywhere, the course is laid on the ground too: glowing chevrons on the
+  ground (leaned up a little, so they read from a low view) every 18 m on the line to the next gate
+  (from the car up to 720 m ahead, a wave of
+  light running along them toward it) and dim ones on the first 260 m of the leg after it, so the
+  turn coming shows; for a star hunt, from the car to the nearest star. A leg across the 180th
+  meridian is laid the short way round (until Mars came it was laid the long way, the wrong way
+  round the Moon, for a route by Daedalus or Von Kármán on its far side). Each leg's line runs
+  between its ends on the ground, at the heights there (until Vesta and Ceres, between its ends at
+  the sphere's height, 0, which on the Moon and Mars put a leg's far end off by its length times the
+  ground's height over the radius, a few metres a kilometre on Olympus Mons, and in Rheasilvia, 50 km
+  under Vesta's sphere and under a level up leaning from it, would have pointed elsewhere). On Vesta and Ceres, as the scene follows
+  the car ([the moving recentre](#the-moving-recentre)), the gates, stars and chevrons are put where
+  they now are and the course laid again. A gate goes as it's
   passed, with "Gate 2 / 6" (or "3 / 6 stars") said over the speed. A sprint's gates count in their
   order only; stars in any.
 - **Passing** one is driving into its zone: within its radius across the ground (30 m for a gate on
-  the Earth, 40 on the Moon; 18 and 22 for a star; 45 and 60 for a landmark), and up and down from
-  2 m over its ground to 2 m over its top, and twice its radius beyond them (a pillar with rounded
-  ends: `TALL` in challenge-rules.js). On the Earth its ground is the lowest and its top the
+  the Earth, 40 on the other worlds; 18 and 22 for a star; 45 and 60 for a landmark), and up and
+  down from 2 m over its ground to 2 m over its top, and twice its radius beyond them (a pillar with
+  rounded ends: `TALL` in challenge-rules.js). On the Earth its ground is the lowest and its top the
   highest of what rays down across its zone meet (below), so a gate beside a tower is on the street
   and passed there, on the roof too, and one by a bridge on the deck or under it; flying over low
-  passes it. On the Moon both are its one height. One whose ground hasn't loaded yet counts across
-  the ground alone.
+  passes it. On the other worlds both are its one height. One whose ground hasn't loaded yet counts
+  across the ground alone.
 - **The finish card**, as the last is passed: the time ("0:42.37"), **New best!** when it is, your
   place on the board ("#2 of 5 on the board"), its top five with your row picked out, and
   **Retry** (back at the start for another countdown), **Back** (to the globe, the list open) and
@@ -4340,11 +5630,15 @@ in D1 as latitudes and longitudes (to 6 decimals, 10 cm): `{ start: { lat, lon, 
 [ [ lat, lon ] ], radius, goal }`. Only the points' heights are the page's to find, on the ground
 it actually has.
 
-| | Earth: day | week | month | Moon: day | week | month |
+| | Earth: day | week | month | the other worlds: day | week | month |
 | --- | --- | --- | --- | --- | --- | --- |
 | Sprint: gates, m apart, turn | 6, 200-300, ±30° | 9, 250-380, ±35° | 14, 300-450, ±40° | 6, 280-420, ±55° | 9, 350-520, ±60° | 14, 400-600, ±65° |
 | Collect: stars, within m, apart m | 6, 260, 70 | 10, 450, 90 | 15, 700, 110 | 6, 350, 90 | 10, 600, 120 | 15, 900, 150 |
 | Landmark: from m off | 1,200-1,800 | 2,500-3,500 | 4,500-6,500 | 1,600-2,400 | 3,200-4,500 | 6,000-8,500 |
+
+Vesta's and Ceres's sprints turn more gently, ±35°, ±40° and ±45° (`SHAPES.vesta`, which Ceres's
+are): in their weak gravity a hop keeps the car in the air 9 to 20 s, so a sharp turn can't be made
+where it's laid out.
 
 A daily one is about 30 to 90 s for a good driver (a city's streets at 100 km/h or so, with the
 booster now and then: a daily sprint is about 1.5 km), a weekly one longer and a monthly one longer
@@ -4355,7 +5649,7 @@ longest of the three), the others any of the three alike.
   `heading` is the way along its road) and each after turning a little from the way before. **Stars**
   are anywhere in a disc round the place (as likely anywhere in it), apart from each other and at
   least 60 m from the start. **A landmark** is the place itself, its goal ring at its pin, the start a
-  few kilometres back along the road it's on (on the Moon, any way), facing it.
+  few kilometres back along the road it's on (on the other worlds, any way), facing it.
 - **On the Earth**, Google's tiles have no roads in them: nobody can see the streets a route crosses
   in advance. So what makes a route fair and fun there is that it's forgiving: gates follow the
   start's road first and turn gently, a gate's zone is 30 m wide (a parallel street, a square, a car
@@ -4383,21 +5677,22 @@ longest of the three), the others any of the three alike.
   building wider than 36 m (every ray meets the roof: it's drawn there, its zone reaching 60 m under
   it), in a courtyard or among buildings with no street to it (fly), and a sprint can lead off the
   road it started on.
-- **On the Moon** the ground is open, and its heights are the game's own (moon-height.js): exact
-  before any of its ground is built, the same in the Worker as in the page. So the page puts each
-  point on them at once, and the Worker **checks each route**, at its points and along its legs. No
-  point (and no landmark's start) on ground sloping 20° or more across ±15 m, craters under 30 m
-  left out (the car drives over those), so no gate is on a crater's wall; and each leg in its order
-  (a sprint's from the start through its gates, a landmark's from its start to it; a hunt's stars
-  are taken in any order, so its legs aren't known) looked along the straight line, its heights
-  every 25 m, each stretch of 100 m rising or falling 20° or more a fault (`legFaults`), so the way
-  from gate to gate isn't over a crater's wall or up a mountainside either. A steep point counts as
-  ten stretches (a gate on a wall is worse than a wall on the way, which can be driven round or
-  flown over). The place's own pin (a sprint's start, a landmark's goal) is where it is, the same in
-  every try, so it isn't counted: no faults means nothing could be better. A sprint or a hunt is laid
-  out up to 8 times and the one with fewest faults kept (`moonFaults` in
-  worker/drive/challenges.js; counting stops once a try has as many as the best so far). **A
-  landmark's drive**, with no road to come along, is tried from **every 5°** round it at one
+- **On the Moon** (and on the other worlds, below) the ground is open, and its heights are the game's own
+  (body-height.js): exact before any of its ground is built, the same in the Worker as in the page.
+  So the page puts each point on them at once, and the Worker **checks each route**, at its points
+  and along its legs. No point (and no landmark's start) on ground sloping 20° or more across ±15 m,
+  craters under 30 m left out (the car drives over those), so no gate is on a crater's wall; and
+  each leg in its order (a sprint's from the start through its gates, a landmark's from its start to
+  it; a hunt's stars are taken in any order, so its legs aren't known) looked along the straight
+  line, its heights every 25 m, each stretch of 100 m rising or falling 20° or more a fault
+  (`legFaultsOn`), so the way from gate to gate isn't over a crater's wall or up a mountainside
+  either. A steep point counts as ten stretches (a gate on a wall is worse than a wall on the way,
+  which can be driven round or flown over). The place's own pin (a sprint's start, a landmark's
+  goal) is where it is, the same in every try, so it isn't counted: no faults means nothing could be
+  better. A sprint or a hunt is laid out up to 8 times and the one with fewest faults kept
+  (`routeFaults` in worker/drive/challenges.js, by world; `moonFaults`, `legFaults` and `moonSteep`
+  are kept as the Moon's, for the tests; counting stops once a try has as many as the best so far).
+  **A landmark's drive**, with no road to come along, is tried from **every 5°** round it at one
   distance (drawn from its range, in whole metres), from a bearing chosen at random (in whole
   degrees), and the first with fewest faults kept: on rough ground the way in that's clear may be a
   narrow window (at Shackleton's rim, 20° or so either way along the rim), which 8 bearings spread
@@ -4406,45 +5701,94 @@ longest of the three), the others any of the three alike.
   whether its leg has any fault, looked for from the landmark's end, where its own crater wall or
   mountainside is, so a leg that crosses one is told in a few reads; only where none is clear are
   they counted. The Worker reads the Moon's heights from the site's own `/moon/height.bin` through
-  its `ASSETS` binding once per Worker instance (2 MB, 0.3 ms to read in Node); a point's check is
-  four looks at about 1 µs each, a sprint's 0.7 ms with its tries and legs (a monthly's too), a
-  landmark's 0.2 ms as a rule and 2 ms at most (Shackleton's rim), well within the Free plan's 10 ms
-  of CPU a request. Laid out for 24 of the Moon's places, each kind at a week's size, 9 of their 480
-  points were left on ground that steep (18 unchecked), on the roughest ground, where none of the
-  tries found better; for all 52 places, sprints and landmarks of each length, 20 of their 1,664
-  legs cross a steep stretch, 6 at most, all sprints' on Shackleton's rim and Mons Hadley, where
-  none of their 8 tries was clear (with the points alone checked, 50, up to 31 on one); and of the
-  landmarks the Worker lays out with its own random numbers for every place over 20 days, 8 weeks and
-  4 months (1,664 drives), 10 cross a steep stretch (7 at most), on Shackleton's rim and Mons Hadley
-  on days whose distance has no clear way in from any bearing, and none where another bearing at its
-  distance is clearer. The tests check all three.
+  its `ASSETS` binding once per Worker instance (2 MB, 0.3 ms to read in Node; `groundCheck`, each
+  world's from its own `heights.url`, one load at a time a world, and a route laid out unchecked, as
+  the Earth's are, if they can't be had just now); a point's check is four looks at about 1 µs each,
+  a sprint's 0.7 ms with its tries and legs (a monthly's too), a landmark's 0.2 ms as a rule and 2
+  ms at most (Shackleton's rim), well within the Free plan's 10 ms of CPU a request. Laid out for 24
+  of the Moon's places, each kind at a week's size, 9 of their 480 points were left on ground that
+  steep (18 unchecked), on the roughest ground, where none of the tries found better; for all 52
+  places, sprints and landmarks of each length, 20 of their 1,664 legs cross a steep stretch, 6 at
+  most, all sprints' on Shackleton's rim and Mons Hadley, where none of their 8 tries was clear
+  (with the points alone checked, 50, up to 31 on one); and of the landmarks the Worker lays out
+  with its own random numbers for every place over 20 days, 8 weeks and 4 months (1,664 drives), 10
+  cross a steep stretch (7 at most), on Shackleton's rim and Mons Hadley on days whose distance has
+  no clear way in from any bearing, and none where another bearing at its distance is clearer. The
+  tests check all three.
+- **On Mars** it's all the same (its routes are the Moon's sizes, `SHAPES.mars`), on its own
+  heights: the Worker's `GROUNDS.mars`, made with `createGround` as the page's is, handed
+  `/mars/height.bin` (8.3 MB; handing it over takes 0.2 ms in Node, the Moon's 0.1 ms). Its places
+  are its 55. Its ground is gentler at this check's scale than the Moon's craters: laid out as the
+  tests lay them out, for all 55 places, each kind at a week's size, 1 of their 1,100 points was
+  left on ground that steep (3 unchecked), and of their sprints' and landmarks' 1,760 legs of each
+  length, 1 crosses a steep stretch, on Pavonis Mons's flank (8 with only the points checked;
+  measured in Node with the Worker's own functions). Its canyons' walls are another matter: a 14 km
+  leg down Valles Marineris's south wall to Coprates Chasma's floor, 8 km under the plateau, crosses
+  50 steep stretches or more, and one along the canyon's floor none (the tests check both, and that
+  the Moon's ground at the same latitude and longitude is nothing like it).
+- **On Vesta and Ceres** it's the same again on their own heights (`GROUNDS.vesta`, `GROUNDS.ceres`,
+  handed `/vesta/height.bin` and `/ceres/height.bin`, 8.3 MB each, as they come: Vesta's steps are
+  read times 2 m, not copied to metres, which took the Worker about 370 ms), with one difference:
+  a slope is measured from what's level there, the level spheroid's surface, as the car drives it
+  ([the level frame](#the-level-frame)), not from the sphere their heights are over, which leans up
+  to 12.4° from it on Vesta. A point's four heights 15 m round it are put in the level frame there
+  and its rise taken north to south and east to west over how far apart they are that way
+  (`steepOn`); a leg's stretch is steep as it rises along the level's up at its start against the
+  way across it (`legFaultsOn`'s `levelSteep`). Of 1,640 points round Vesta the test looks at, the
+  sphere's check would say otherwise at 333 (on Ceres, which hardly leans, 25). They're far rougher
+  than the Moon or Mars at this check's scale: laid out for every place, each kind at a week's size,
+  669 of Vesta's 2,180 points are left on ground that steep (1,062 unchecked) and 134 of Ceres's
+  3,020 (304 unchecked), so on Vesta a gate on a slope is common and a hop or a flight is often the
+  way to it. Their legs are measured for the least time a run can take on the deepest ground the
+  world has (`LEG_SCALE` in challenge-rules.js: on a world whose `lowest` is more than 1% of its
+  radius under its sphere, `metresOn` times one less that share, Vesta's 0.80 and Ceres's 0.94), as a
+  leg along Rheasilvia's floor, 50 km under Vesta's sphere, is a fifth shorter than on the sphere,
+  more than a sprint leg's slack; the Earth's, the Moon's and Mars's are 1, as they were.
+- **What it costs the Worker** (measured in Node, on the real heights, laying out and checking a
+  route, the fastest of three runs of each of 148 to 208 layouts a kind and size). A sprint, the
+  Moon's 0.17 / 0.32 / 0.54 ms on average for a day's, a week's and a month's (1.85 at most), Mars's
+  0.13 / 0.22 / 0.38 (1.59 at most); a hunt at most 0.10 on average on either (0.71 and 0.58 at
+  most); a landmark, the Moon's 0.14 / 0.21 / 0.39 (2.15 at most), Mars's 0.08 / 0.16 / 0.30 (0.83
+  at most). Vesta's and Ceres's are dearer, on rougher ground, more of the 8 tries used: all three
+  kinds at all three sizes for each of their spots, laid out and checked, 2.4 to 3.1 ms a route on
+  average on Vesta and 1.1 to 1.25 on Ceres (99 routes each, in a fresh Node process, three runs).
+  Six checked routes at once (a month starting on a Monday: the Moon's and Mars's day,
+  week and month), in a Worker instance that's warm, 1.25 ms on average over 2,000 (1.18 the median,
+  2.06 at the 95th percentile, 2.96 at the 99th, 9.4 once, a garbage collection). But in a Worker
+  instance just started, whose code isn't compiled yet, the first route takes 5 to 10.5 ms and six
+  together 8.5 to 20.5 ms (25 fresh processes): over the Free plan's 10 ms. So **no more than three
+  routes are checked on their ground in one request** (`CHECKED_MOST`, [below](#how-theyre-picked)),
+  as many as the Moon alone ever needed at once. Three of Vesta's in an instance just started can
+  come near the 10 ms or past it, which hasn't been measured in workerd: [known
+  limits](#known-limits).
 
 ### How they're picked
 
 - **Periods** are the UTC day, the week from Monday (as the leaderboard's and the visit caps') and
   the calendar month: `day:2026-11-16`, `week:2026-11-16`, `month:2026-11`. Each ends where the
   next begins (midnight UTC, Monday's, the first of the month's).
-- **The rotation** goes round the places on each world: the game's featured places (on the Earth
-  the 12 start spots and the 5 places' pages with a pin of their own, the Eiffel Tower, the
-  Colosseum, Piccadilly Circus, Hollywood Boulevard and Copacabana; on the Moon its 52 places, the
-  spots and those its search finds) and the busy drop-in places the owner has approved. They're
-  shuffled afresh each time round (a round is as many periods as there are places: 17 days for the
-  Earth's dailies), sorted by an HMAC-SHA256 of the round and each place's id, and each period takes
-  the next (its own place): so each place comes about once a round. Two rules on top. **The three
-  live on a world are three places**: a period never takes the rotation's pick for a longer period
-  it's in (a day its week's or its month's; a week the month it starts in or the one it ends in, as
-  a week across a month's end is live beside both). **No place comes twice in a row**: a period
-  never takes the period before's pick. One whose own place is ruled out steps aside to the place
-  half a round on in the order, or the first free one after that, never the next or the last in the
-  order (the periods either side's own places); that place then comes twice that round, and the one
-  stepped from not at all. The period before's pick is only worked out where it could clash (at a
-  round's start, whose first may be the last round's last or its step aside, and where a period
-  steps aside anyway; anywhere else it's the order's last place or a step aside, never this one's
-  own), so working back stops within a few periods: a round's own places are all different, and
-  only the few its longer periods took make one step aside. The tests check both rules over three
-  years of days, ten of weeks and thirty of months on each world with four keys. The kind is an HMAC
-  of the period's key too, and so are the route's random numbers (of the period's key, the world,
-  the kind and the place: sfc32 from its bytes).
+- **The rotation** goes round the places on each world: the game's featured places (on the Earth the
+  12 start spots and the 5 places' pages with a pin of their own, the Eiffel Tower, the Colosseum,
+  Piccadilly Circus, Hollywood Boulevard and Copacabana; on the Moon its 52 places, the spots and
+  those its search finds; on Mars its 55, on Vesta its 109 and on Ceres its 151) and the busy drop-in
+  places the owner has approved.
+  They're shuffled afresh each time round (a round is as many periods as there are places: 17 days
+  for the Earth's dailies), sorted by an HMAC-SHA256 of the round and each place's id, and each
+  period takes the next (its own place): so each place comes about once a round. Two rules on top.
+  **The three live on a world are three places**: a period never takes the rotation's pick for a
+  longer period it's in (a day its week's or its month's; a week the month it starts in or the one
+  it ends in, as a week across a month's end is live beside both). **No place comes twice in a
+  row**: a period never takes the period before's pick. One whose own place is ruled out steps aside
+  to the place half a round on in the order, or the first free one after that, never the next or the
+  last in the order (the periods either side's own places); that place then comes twice that round,
+  and the one stepped from not at all. The period before's pick is only worked out where it could
+  clash (at a round's start, whose first may be the last round's last or its step aside, and where a
+  period steps aside anyway; anywhere else it's the order's last place or a step aside, never this
+  one's own), so working back stops within a few periods: a round's own places are all different,
+  and only the few its longer periods took make one step aside. The tests check both rules over
+  three years of days, ten of weeks and thirty of months on each world with four keys. The kind is
+  an HMAC of the period's key too, and so are the route's random numbers (of the period's key, the
+  world, the kind and the place: sfc32 from its bytes).
 - **The rules against what's fixed.** Worked out alone, the rotation's rules hold only while its
   places stay as they are: approving or unapproving a place changes how many there are, and with it
   each period's round, order and place, so what it would choose now for yesterday or this week isn't
@@ -4458,7 +5802,7 @@ longest of the three), the others any of the three alike.
   clear of those fixed just before it. Places are the same to these rules by their ids where both
   are the rotation's own, else by their names or pins within 1 km (an owner's pick of the Eiffel
   Tower by its coordinates is the Eiffel Tower). Every instance reads the same rows, so they still
-  agree. The admin page's next six are worked out the same way, the longest first, each clear of
+  agree. The admin page's next fifteen are worked out the same way, the longest first, each clear of
   what's fixed now and of those worked out before it (on a Sunday, Monday's day clear of next week's
   pick of yours, as it will be when the two are fixed together). A test
   fixes a year of days as the Worker does, with the owner picking every third week and every other
@@ -4484,14 +5828,32 @@ longest of the three), the others any of the three alike.
   never worked out: a later change to the rotation's code, the places or the approvals never changes
   a live challenge (only those not yet fixed, which the admin page shows as they'd be fixed now), and
   the rules keep clear of what it fixed.
+- **Three checked an ask at most** (`CHECKED_MOST`). Laying out a route on the Moon or Mars is
+  half a millisecond or less of the Worker's CPU on average (about 2 at most), but 5 to 10.5 in an
+  instance just started ([its cost](#the-kinds-and-their-routes)), so an ask fixes the Earth's as ever (they aren't checked, and
+  cost next to nothing) and no more than three of the checked ones, a world at a time (the Moon's,
+  then Mars's, Vesta's and Ceres's) and each world's the longest first (never a day's before its
+  week's); the rest are left for the next ask, which fixes them as this one would have, and this
+  one answers with what's fixed so far. Once an ask has its three, a world with ground isn't even
+  looked at (its heights aren't loaded for routes this ask won't lay out). The Moon's are all fixed
+  at a period's first ask, as they always were; another world's can come over two asks (a new
+  week's Mars week in the first, its day in the next). Nothing is kept in the instance as live till
+  every world's three are there. A new day alone needs four checked (each other world's day): two
+  asks, the first listing 14 of the 15 (Ceres's day the one left). A new week, or a new month, needs
+  eight: three asks, the first listing 10 of the 15, the next 13. A month starting on a Monday, or a
+  database with none yet, needs twelve: four asks, listing 6 (the Earth's three and the Moon's
+  three), then 9, 12 and the 15. Such an answer says so (`more: true`); the page lists what it's
+  given, and while it says there's more, with the list open, asks again (at once, then after 5 s, 10
+  and 20: four times at most, `RELOADS`), as it does when one has ended: just enough for the four
+  asks of a Monday month's first, with none to spare (with three worlds it needed two).
 
 ### The owner's controls
 
 On **`/admin.html`** (an account in `ADMIN_EMAILS`, as the rest of the page), under where people
 drop in, **Challenges**:
 
-- **Live now**: the six, each with where it came from (**rotation** or **yours**), how many drivers
-  have a time on it, the best and who, the time left, and **Change**. **Next up**: the six of the
+- **Live now**: the fifteen, each with where it came from (**rotation** or **yours**), how many drivers
+  have a time on it, the best and who, the time left, and **Change**. **Next up**: the fifteen of the
   next day, week and month, as they'd be fixed now (yours, or the rotation's, clear of what's fixed
   now and of the longer ones next up). You know each place and kind ahead, not its route: that's
   laid out as the period's first ask fixes it.
@@ -4508,9 +5870,9 @@ drop in, **Challenges**:
   visitor-days), or coordinates with a name, a region and the heading along its road if you know it.
   A day typed in is the period (the list says "The day picked beside it"), and picking another in
   the list clears the day, so the form never shows one period and saves another. **Save** keeps it
-  for that period and says which ("Saved for month:2027-01, the Moon."); **Back to the rotation**
-  drops yours ("Back to the rotation for ..."). For a period ahead that's all: it's fixed from your
-  pick when it comes.
+  for that period and says which ("Saved for month:2027-01, the Moon.", "..., Vesta."); **Back to the
+  rotation** drops yours ("Back to the rotation for ..."). For a period ahead that's all: it's fixed
+  from your pick when it comes.
 - **A live one** is asked about before anything's sent: **Save** for any live one, and **Back to the
   rotation** for a live one of yours (one the rotation chose stays as it is: below). With times on
   it: "This challenge is live, and 12 drivers have times on it. Changing it now changes what the
@@ -4520,7 +5882,7 @@ drop in, **Challenges**:
   board of its own." Each says which period and world. **Change it anyway** replaces it: the old one
   is marked replaced, its board kept and given its final places at once, and a new one fixed from
   your choice, with a board of its own (from nothing). Players' pages see the new one within a
-  minute (each Worker instance keeps the six that long); a time posted for the old one after that is
+  minute (each Worker instance keeps the fifteen that long); a time posted for the old one after that is
   turned away ("This challenge is over (or the owner has changed it)"). The Worker asks too (409,
   `live`) if times have come since the page looked, and the page warns then.
 - **Nothing to replace**: **Back to the rotation** on a live one the rotation chose leaves it as it
@@ -4570,8 +5932,8 @@ In D1 (migration `0006_challenges.sql`):
 A board is each player's best, quickest first (the same time: who set it first). The top 20, with
 names, the ⭐ and levels looked up as the leaderboard's are (a rename or a refund shows at once), and
 your own row with its rank, are kept in Cloudflare's cache as the leaderboard's boards are: a live
-challenge's board, the list's top threes and each player's own rows on the six **a minute**, so
-each of the six live boards is read from D1 at most once a minute in one of Cloudflare's locations,
+challenge's board, the list's top threes and each player's own rows on the fifteen **a minute**, so
+each of the fifteen live boards is read from D1 at most once a minute in one of Cloudflare's locations,
 whoever asks; a **finished** challenge's board **a day**, as its times can't change (a name cleaned
 up on it, or a cheat removed, shows within the day where it was looked at, or at once after
 **Purge Everything** in the Cloudflare dashboard, which clears what the Worker keeps there
@@ -4582,7 +5944,7 @@ Cloudflare's locations; elsewhere they're at most a minute behind.
 read from the board's index alone, as many rows as it has up to 1,000) is kept in Cloudflare's cache
 for 10 minutes (a finished one's a day), and a player's rank is where their time falls in it,
 found by halving: so their own row is one read by its key however far down they are (on the list,
-their rows on the six, six reads), and a board is read whole at most once in 10 minutes in a
+their rows on the fifteen, fifteen reads), and a board is read whole at most once in 10 minutes in a
 location, whoever asks, and again after a new best there (the time's answer reads it afresh, to
 give the new rank). Past the order's thousand it's "#1000+". Where your row is among the board's
 top 20 shown, its rank is the row's; on a finished board, your final place (`final_rank`). Ranks
@@ -4591,7 +5953,7 @@ new best is ranked at once (its answer, and the looks after it there).
 
 **Nothing is deleted.** Once a challenge's period has been over for a minute (`GRACE`: a run finished
 a moment before midnight is still taken in that minute, if it began before the end), the next ask
-that reads the six from D1 (each Worker instance does once a minute) writes each player's
+that reads the fifteen from D1 (each Worker instance does once a minute) writes each player's
 `final_rank` and its `final_at`, after its answer has gone (`ctx.waitUntil`: it's no part of a list
 or a time's answer, so it can't slow one or turn one into an error); a replaced one gets them as
 it's replaced. A time is written only while its challenge isn't finished or replaced, checked in
@@ -4666,33 +6028,34 @@ page's first load but the few lines `boot.js` needs to ask what a link is (below
   your row is further down. It shares a link to your best,
   `https://worlddrive.app/c?challenge=<id>&vs=<handle>` (its own path, `/c`, for its preview card:
   below), with its words ("Beat my 0:21.40 on today's Furka Pass sprint in World Drive", "...on
-  this week's drive to Eiffel Tower...", "...on today's Tycho crater star hunt on the Moon...")
+  this week's drive to Eiffel Tower...", "...on today's Tycho crater star hunt on the Moon...",
+  "...on Mars...")
   through the browser's own share sheet where it has one (a
   phone's: messages, chats), else copies them ("Link copied!"), else shows them in a field picked
   out to copy by hand. Closing the sheet without sharing does nothing more. Shared or copied is
   counted for the [play stats](#play-stats) (`challenge: share`).
 - **A friend's link.** The page asks the Worker what it is (`/api/challenges/link`) as it starts,
-  beside the robot check, so it costs no wait: the visit waits for its answer at most `LINK_WAIT`
-  (4 s) after the check, to know its world, and one slower than that opens its card when it comes
-  (over whatever's going on, a drive paused as Challenges does), the visit's world the Earth for
-  want of knowing. The challenge's world is the visit's: **an Earth challenge spends an Earth
-  drive** as any page load on the Earth does, **a Moon challenge none**, the game opening in the
-  Moon-only mode (`moonOnly`, as a [link to the Moon](#going-there) does).
-  With today's Earth drives used up an Earth challenge's link shows the used-up screen, and **Drive
-  on the Moon** opens the Moon with the link's card, its Start saying **Needs an Earth drive**. The
-  globe comes up as for a link to a place, then the challenges' list with the link's card over it:
-  "Ann Racer's time to beat: 0:21.40 on the daily checkpoint sprint at Furka Pass, 5 h 12 m left."
-  and **Start: race their ghost** (a drop-in at its start, racing their ghost). The link leaves the
-  address once it's opened, the address back to the home page's `/` (a reload doesn't open it
-  again; a `?ref=` stays). The page reads a link the same at `/` (`/?challenge=<id>&vs=<handle>`),
-  without the preview card. A handle that names nobody (cut short in a message, or that player
-  removed) opens the challenge without a ghost and
-  says so ("That link's time wasn't found..."); a link to a challenge that's over shows its final
-  board, their time and place on it ("This challenge is over. Ann Racer finished ... #2 on its
-  board.") and **Today's challenges**; one to no challenge says so over today's. A link's page and
-  a run started from it are counted (`challenge: link`, `link_start`), so the owner can see whether
-  links bring people. On the test pad (maps off) a link's card shows too, its run raced, its time
-  not posted (as any time there).
+  beside the robot check, so it costs no wait: the visit waits for its answer at most `LINK_WAIT` (4
+  s) after the check, to know its world, and one slower than that opens its card when it comes (over
+  whatever's going on, a drive paused as Challenges does), the visit's world the Earth for want of
+  knowing. The challenge's world is the visit's: **an Earth challenge spends an Earth drive** as any
+  page load on the Earth does, **one on another world none**, the game opening on its world with
+  the Earth closed (`earthClosed`, as a [link to another world](#what-every-world-but-the-earth-has)
+  does: a free visit, `{ world: 'mars' }` for a Mars challenge's). With today's Earth drives used up
+  an Earth challenge's link shows the used-up screen, and **Drive on the Moon** opens the Moon with
+  the link's card, its Start saying **Needs an Earth drive**. The globe comes up as for a link to a
+  place, then the challenges' list with the link's card over it: "Ann Racer's time to beat: 0:21.40
+  on the daily checkpoint sprint at Furka Pass, 5 h 12 m left." and **Start: race their ghost** (a
+  drop-in at its start, racing their ghost). The link leaves the address once it's opened, the
+  address back to the home page's `/` (a reload doesn't open it again; a `?ref=` stays). The page
+  reads a link the same at `/` (`/?challenge=<id>&vs=<handle>`), without the preview card. A handle
+  that names nobody (cut short in a message, or that player removed) opens the challenge without a
+  ghost and says so ("That link's time wasn't found..."); a link to a challenge that's over shows
+  its final board, their time and place on it ("This challenge is over. Ann Racer finished ... #2 on
+  its board.") and **Today's challenges**; one to no challenge says so over today's. A link's page
+  and a run started from it are counted (`challenge: link`, `link_start`), so the owner can see
+  whether links bring people. On the test pad (maps off) a link's card shows too, its run raced, its
+  time not posted (as any time there).
 
 **Recording.** Each frame of a run (after the car's own step, before the passes), the car's model
 (its pivot, as drawn: continuous through a jump's take-off and landing, where the Driver's own
@@ -4703,8 +6066,11 @@ once when the chunk loads (positions and turns for 4,097 samples, the packed num
 buffer: 311,360 bytes, about 300 KB), so a frame allocates nothing. A run longer than 4,096 samples (6 min 49 s)
 drops every other one and goes on every 200 ms, and so on (`everyFor`): a two-hour run, the longest
 a time can be, is sampled every 3.2 s. At the finish it's put into the **ghost's frame**, the
-route's start on the world's ellipsoid at height 0 (east, north, up; as the scene's own frame is at
-a place, through the globe's own matrices), and packed (`packGhost`): a version, the interval, the
+route's start on the world's ellipsoid at height 0 (the Earth's WGS84, and for every other world a
+sphere of its radius, as its globe has it; east, north, up; as the scene's own frame is at a place,
+through the globe's own matrices; on Vesta and Ceres, up along their level spheroid's normal at the
+start, as the scene's is there: `levelFrame`, [the level frame](#the-level-frame), in `sceneToStart`
+and in the Worker's `localOf` alike), and packed (`packGhost`): a version, the interval, the
 count, then each sample's position as its second difference in centimetres (the change in its step:
 along a road a few centimetres) and its yaw, pitch and roll as their change in 1/1024 of a turn,
 each a zigzag varint. Measured: a run of 73 s driven on the test pad by a bot pressing the game's
@@ -4714,9 +6080,16 @@ characters); and on a path of a road's turns, a bump now and then, a minute 3.6 
 minutes 18 KB, two hours 21.8 KB (every 3.2 s), against `GHOST_BYTES`' 48 KB at most. The posted
 text is base64url: 33 % more.
 
+On Vesta and Ceres the scene moves under a run every kilometre or so ([the moving
+recentre](#the-moving-recentre)): each time, the samples recorded so far are moved with it
+(`recorder.transform`), so the run is one path in the start's frame however many moves it crossed
+(left as they were, its first sample would be kilometres off its start and the Worker would refuse it
+as `start`).
+
 **Racing one.** Its numbers are unpacked once and put into this scene once as its run starts (a
 drop-in elsewhere near the same start is another scene: from the start's frame through the globe's
-matrices, so it's where it was, to the millimetre), then each frame it's placed between two samples
+matrices, so it's where it was, to the millimetre; on Vesta and Ceres put in again after each move
+of the scene), then each frame it's placed between two samples
 and turned between their turns, its wheels turned, and its name tag moved: a few dozen numbers.
 **Its cost** is its model's own draws and triangles and no more, and the model is **made light**
 for it (`lighten` in challenge-ghost.js), once for each ride and look on a page: each material's
@@ -4762,9 +6135,20 @@ medians by turns shown and hidden; headless, frames are paced at 16.4 ms either 
 **What the Worker checks** (`ghostFault` in ghost-rules.js, after `checkPasses`, before anything is
 read of the player or written; a 400 with `reason: 'ghost'` and the fault):
 
+- `world`: the challenge is on one of the worlds (worlds.js); else where its points are in the
+  ghost's frame can't be told, and nothing is taken (`localOf` gives none). Asked before anything
+  else.
 - `form`: a ghost (base64url, 48 KB at most packed, this version, no number longer than four bytes,
   no more samples than 4,097, no byte too many or too few, no sample further than 60 km from the
-  start or 20 km up or down) sampled at the interval its time should be (`everyFor( ms )`: one
+  start or 60 km up or down: Olympus Mons's top is about 21.2 km over the sphere Mars's heights are
+  on, so a run up there is that high in its frame, and every ghost there would have been refused
+  under the 20 km this was before Mars; Vesta's ground goes from 50.7 km under its sphere to 30.3 km
+  over it, and under a level up leaning from the sphere's a run deep in Rheasilvia is kilometres off
+  its pin across the ground in its frame, so the 30 km it was with Mars is 60 since Vesta, on every
+  world. Packed, the first sample's numbers are its place itself and the second's up to three times
+  that, in centimetres: 18 million at most, a zigzag varint of 26 bits, within the 28 a sample's
+  number can have, so the packing is the same and `GHOST_VERSION` is still 1)
+  sampled at the interval its time should be (`everyFor( ms )`: one
   sampled more coarsely, where a corner could be cut between samples, is refused), and **no more
   than 10 bytes a sample** on average (`GHOST_DENSITY`, and 8 for its head): driving packs into
   about six (a fair run in the test under seven, the bot's 73 s run 6.0, a crash or a jump more for
@@ -4774,8 +6158,12 @@ read of the player or written; a 400 with `reason: 'ghost'` and the fault):
   checked before anything of that size is made, so no post has the Worker make more than 4,097
   samples' arrays.
 - `time`: as long as the time (`countFor( ms )` samples, the last at the time itself).
-- `start`: its first sample (the car at GO) within `START_SLACK` (100 m) of the start, as the first
-  leg's check has it.
+- `start`: its first sample (the car at GO) within `START_SLACK` (100 m) of the start across the
+  ground, as the first leg's check has it. On Vesta and Ceres the frame's up leans from the sphere's,
+  so a car straight over the pin is off it across the ground in that frame (in Rheasilvia, 50 km
+  under the sphere at 12° of lean, by 5 km): there it's measured from the point on the pin's line out
+  from the middle at the sample's own height (`beside`, exact: a point's place in the frame goes in a
+  straight line with its height).
 - `speed`: between any two samples no further across the ground, nor up or down, than `FASTEST`
   (430 km/h, the fastest the game goes: [below](#how-cheating-is-limited-1)) covers in the time
   between them, and 0.3 m for the rounding to the centimetre and the line between two frames
@@ -4795,7 +6183,13 @@ read of the player or written; a 400 with `reason: 'ghost'` and the fault):
 - `pass`: each point within its radius (and 3 m, `PASS_SLACK`: the model's middle is a little off
   the point a pass is told by, in the air) at its pass time, between the samples either side of it,
   or at a sample within one interval of it (a ghost that goes through a gate a second before or
-  after its pass says, or 3.5 m wide of its radius, is refused).
+  after its pass says, or 3.5 m wide of its radius, is refused). On Vesta and Ceres the point is
+  found at the sample's height on its line out from the middle (`beside`), while the page's zone
+  stands along the level's up, leaning from it by `lean` m a metre up (`leanAt`): what that can put
+  a pass the page took past the radius is let off too, `PASS_SLACK + radius · (√(1 + (lean · TALL)²)
+  − 1) + lean · ZONE_UP`, the most the page's zone can reach past the line, about 6 m more for a
+  60 m radius at Vesta's most leaning latitudes, none at its equator and poles. The Earth's, the
+  Moon's and Mars's are checked as ever.
 
 A **new best's run id must be new** (400, `run`, for the best's own id with a better time): a run's
 ghost is kept, and cached, by its id, so it never changes.
@@ -4929,8 +6323,9 @@ to `CHALLENGE_LOOKS`; nothing for anything else.
   4,097 samples), against about 4.8 KB of text a minute of a real run (3.6 KB packed), so a script
   posting the most a /48 can (300 a day) of the largest could otherwise have stored 19 MB a day, and
   from ten /48s filled D1's 500 MB (the Free plan's for a database, after which every write fails:
-  new players, times, sign-ins, passes bought) in under three days. With the budget the six live
-  challenges keep 96 MB of ghosts at most, whoever posts what. What's left: slow runs posted to fill
+  new players, times, sign-ins, passes bought) in under three days. With the budget the fifteen live
+  challenges keep 240 MB of ghosts at most (144 MB when there were nine, 96 MB when six), whoever posts what. What's
+  left: slow runs posted to fill
   a challenge's budget (about 260 of the largest, 6 min 49 s each: a robot check, a player and a
   visit each) are let go one by one as quicker bests come, so they keep no leader's or newcomer's
   ghost out; while it's full, though, a time slower than every kept one has none, until quicker
@@ -4975,14 +6370,15 @@ to `CHALLENGE_LOOKS`; nothing for anything else.
   three alone did.
 
 Both new routes are held as the boards are: `CHALLENGE_LOOKS` (60 a minute) first, then those that
-miss the cache and read D1 `CHALLENGE_MISSES` (10 a minute), by the keyed hash of the address (an
+miss the cache and read D1 `CHALLENGE_MISSES` (24 a minute), by the keyed hash of the address (an
 IPv6 one by its /48), never the address. **So is every time posted** that gets as far as reading D1
 (its body, its visit token and its ghost's form checked first): each is one of its address's
 `CHALLENGE_MISSES`, shared with its lists and boards, asked before the challenge's row is read, as
 a post reads D1 (the challenge, the player, the visit, the best, the gap: about nine rows) before the
 gap, the visit's times or the visitor's day can turn it away. A page posts once a run (again only if
-its answer's lost), never near ten a minute; a script resending a good body, which before read nine
-rows each of `CHALLENGE_LOOKS`' 60 a minute (777,600 rows a day from one address), is held to ten.
+its answer's lost), never near 24 a minute; a script resending a good body, which before read
+nine rows each of `CHALLENGE_LOOKS`' 60 a minute (777,600 rows a day from one address), is held to
+24 (fifteen before Vesta and Ceres, ten before Mars).
 
 **What it costs.**
 
@@ -5018,7 +6414,7 @@ rows each of `CHALLENGE_LOOKS`' 60 a minute (777,600 rows a day from one address
   at most (above; at a few hundred bests a day, a few megabytes), deleted as each challenge
   finishes. Reads: a ghost once in 30 days a place per run (one row), a link's answer once a minute
   a place (the challenge, the time by its handle, its player: about four rows). What one address can
-  cost is still bounded by `CHALLENGE_MISSES`' 10 misses a minute, posts among them: a miss of
+  cost is still bounded by `CHALLENGE_MISSES`' 15 misses a minute, posts among them: a miss of
   either new route reads at most four rows, a post nine (45 for one of the few new bests the
   visitor's day allows), less than a board's ([what one address can cost](#what-challenges-cost)).
 - **The Worker's CPU**: the check is written to be cheap on its first call, as on an isolate just
@@ -5038,11 +6434,20 @@ rows each of `CHALLENGE_LOOKS`' 60 a minute (777,600 rows a day from one address
 - **Workers Paid**: all of it within what's included, as the rest of the challenges are.
 
 **How it's tested.** `npm run test:drive-worker`: the ghost's frame where 3d-tiles-renderer's object
-frame puts a point, to the millimetre, on the Earth's ellipsoid and the Moon's sphere; packed and
+frame puts a point, to the millimetre, on the Earth's ellipsoid and the Moon's and Mars's spheres,
+and on Vesta and Ceres the level one (`levelFrame`, its up the spheroid's, which a point straight
+up from the pin leaves across the ground; a run recorded across the scene's recentres, its samples
+moved with them, taken in a deep basin, on a leaning slope and hopping 25 m over the ground through
+its gates, and the same unmoved refused as `start`, or off its gates or its start) (Mars's against 3d-tiles-renderer's `Ellipsoid` of 3,389.5 km each way, never the Earth's, where a
+point 5 km off on Mars would be nearly twice as far; a world that isn't one has no frame, and a
+ghost on it the fault `world`; a fair Mars ghost taken, and the same refused as `pass` in the
+Earth's frame or the Moon's); packed and
 unpacked as it was (angles the short way round), the interval doubling past 4,096 samples, and
 everything that isn't a ghost refused (not base64url, too long, another version, cut short, a byte
 too many; and, each in a ghost whole and well made but for it, so it's that check that turns it
-away, a count past the most, a number written in five bytes, a place 60 km off, 20 km down);
+away, a count past the most, a number written in five bytes, a place past 60 km off, up or
+down; and one 22 km up, 60 km up and 45 km down taken, as a run on Olympus Mons or in Rheasilvia
+is);
 `ghostFault`'s every fault (a ghost of another interval, a sample short or a time longer, its
 first sample 150 m off, a gate passed nowhere near, a dash at twice the speed with fair passes, a
 jump of 20 m, up and down 20 m a sample) and what it lets off (R's 4 m on, four in a run of 10 s, a
@@ -5082,7 +6487,7 @@ monthly's last day, "beat it" for a time whose ghost isn't kept, a place with
 markup in it text in its tags, the link its address, the rest of the page as it is; no challenge,
 one that isn't, a place's link: the page as it is), the home page with the same link the file as it
 is (the Worker not run for it: `run_worker_first` is `/api/*`, `/c` and `/ads.txt`), and its answer from the
-cache; the two routes held to `CHALLENGE_MISSES` from one /48 (ten answered, the rest 429, the
+cache; the two routes held to `CHALLENGE_MISSES` from one /48 (fifteen answered, the rest 429, the
 cache's still answered, another /48 too); a time posted one of them (past them a 429 before D1 is
 touched, one asked a post); what a post reads by D1's own count on a challenge keeping 1,240
 slower ghosts (a first 40 rows at most, a new best 60, one that isn't 30, one the gap turns away
@@ -5124,17 +6529,20 @@ card, the HUD with its split and button clear of the driving buttons, the finish
 all on the screen). `npm run test:drive-moon-ui`: a Moon challenge's link at `/c` with today's Earth
 drives used up (the visit the Moon's, no Earth drive asked for, no used-up screen; their ghost raced
 on the Moon, the split, the time posted with the Moon visit and a ghost the Worker would take).
-`npm run test:drive-seo`: none of it in the first load. Pictures with `TEST_SCREENSHOTS`
+`npm run test:drive-mars-ui`: a Mars challenge's link (a free visit asked for with `world:
+'mars'`, the game on Mars at once, its gate on Mars's own heights, driven through and posted with
+that visit). `npm run test:drive-seo`: none of it in the first load. Pictures with `TEST_SCREENSHOTS`
 (`challenges-ghost-*.png`, `challenges-share-*.png`, `challenges-link-*.png`,
 `challenges-moon-4-link.png`, `challenges-moon-5-link-finish.png`).
 
 ### The Worker's routes
 
 - `GET /api/challenges?id=<player>`: `{ now, challenges: [ { id, period, key, world, kind, place,
-  region, route, startsAt, endsAt, total, top, me } ] }`, `top` the board's best three (`{ rank,
+  region, route, startsAt, endsAt, total, top, me } ], more? }`, `top` the board's best three (`{ rank,
   name, ms, vehicle, date, level, title, supporter? }`) and `me`, with a player's id, their `{ ms,
   rank }` (and `owner: true` for the owner's) or null. The first ask in a period fixes its
-  challenges. A rank is at most 1,001: past the board's first thousand (the page's "#1000+").
+  challenges; `more: true` when some are left for the next ask ([how they're
+  picked](#how-theyre-picked)). A rank is at most 1,001: past the board's first thousand (the page's "#1000+").
 - `GET /api/challenges/board?challenge=<id>&id=<player>`: `{ challenge, total, rows, me }`, the top 20
   of any challenge, live or past (`challenge` with its `replacedAt` and `finalAt`); 404 for none.
 - `POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle, look, ghost }`:
@@ -5161,33 +6569,34 @@ on the Moon, the split, the time posted with the Moon visit and a ghost the Work
 - `GET /api/challenges/link` and `GET /api/challenges/ghost`, a link's answer and a run's ghost:
   [above](#ghosts-and-challenge-a-friend).
 
-Every one is checked as the others are: same-origin and JSON for a change (index.js), sizes (a time's
-body 69 KB at most with its ghost, an admin's 2 KB), types and values (400), and held to a rate: the lists, the
-boards, the links, the ghosts and the times to **`CHALLENGE_LOOKS`** first, before anything's read (Cloudflare's rate
-limiter, 60 a minute by address: no Durable Object request, and a page asks a few times a minute at
-most); and those of the lists and boards that find something missing from Cloudflare's cache and
-are to read D1 (a board's rows, the list's tops, a player's own rows, a board's order), and every
-time posted that gets as far as reading D1, to
-**`CHALLENGE_MISSES`** too, asked once a request just before that first read: **10 a minute** by
-address, room for a page's list, all six boards, a time and the list again, while what the cache has is
-answered past it all the same (429 `{ retryAfter: 60 }` past either). An address is **an IPv6 one
-by its /48**, as the [drop-in places](#where-people-drop-in) count a visitor: a /48, which a free
-tunnel broker hands out, holds 65,536 /64s, each of which would otherwise have limits of its own.
-Neither is given an address as it is: each is counted by an HMAC of the day and the address under a
-key derived from the Worker's secret (`lookKey`), so its key for an address changes each day and
-says nothing of it, as DriveLimits counts by a hash with the day's salt (without asking DriveLimits
-for the salt, which would be a Durable Object request a look). A time is then held to one each
-10 s from a player, **100 from a visit** (`CHALLENGE_TIMES_PER_VISIT`, `visits.times`: each visit is
-a robot check, so that's what one buys, whatever addresses its token is sent from) and **300 a day
-from a visitor** (`CHALLENGE_TIMES_PER_VISITOR_DAILY`, counted in DriveLimits as the leaderboard's
-scores are, a hash of the address with the day's salt, but an IPv6 one by its /48), the admin
-page's to `ADMIN_LOOKS`. The 10 s and the visit's count are claimed first, together in one
-transaction (a write of `last_time_at` only while the visit has times left, then its count only if
-that write was made), and the visitor's day asked of DriveLimits after, so when DriveLimits says
-the day's used up, the player's `last_time_at` is set so their 10 s runs out at midnight UTC (and
-the visit given back the try it took): until then each of their tries stops at that first claim,
-which writes nothing, and never asks DriveLimits again. (The leaderboard's scores do the same with
-`last_score_at`, and still count a visitor by the /64.)
+Every one is checked as the others are: same-origin and JSON for a change (index.js), sizes (a
+time's body 69 KB at most with its ghost, an admin's 2 KB), types and values (400), and held to a
+rate: the lists, the boards, the links, the ghosts and the times to **`CHALLENGE_LOOKS`** first,
+before anything's read (Cloudflare's rate limiter, 60 a minute by address: no Durable Object
+request, and a page asks a few times a minute at most); and those of the lists and boards that find
+something missing from Cloudflare's cache and are to read D1 (a board's rows, the list's tops, a
+player's own rows, a board's order), and every time posted that gets as far as reading D1, to
+**`CHALLENGE_MISSES`** too, asked once a request just before that first read: **24 a minute** by
+address (15 before Vesta and Ceres, 10 before Mars), room for a page's list and its four asks again
+while a new period's routes are checked, all fifteen boards and a time, 21 in all, while
+what the cache has is answered past it all the same (429 `{ retryAfter: 60 }` past either). An
+address is **an IPv6 one by its /48**, as the [drop-in places](#where-people-drop-in) count a
+visitor: a /48, which a free tunnel broker hands out, holds 65,536 /64s, each of which would
+otherwise have limits of its own. Neither is given an address as it is: each is counted by an HMAC
+of the day and the address under a key derived from the Worker's secret (`lookKey`), so its key for
+an address changes each day and says nothing of it, as DriveLimits counts by a hash with the day's
+salt (without asking DriveLimits for the salt, which would be a Durable Object request a look). A
+time is then held to one each 10 s from a player, **100 from a visit** (`CHALLENGE_TIMES_PER_VISIT`,
+`visits.times`: each visit is a robot check, so that's what one buys, whatever addresses its token
+is sent from) and **300 a day from a visitor** (`CHALLENGE_TIMES_PER_VISITOR_DAILY`, counted in
+DriveLimits as the leaderboard's scores are, a hash of the address with the day's salt, but an IPv6
+one by its /48), the admin page's to `ADMIN_LOOKS`. The 10 s and the visit's count are claimed
+first, together in one transaction (a write of `last_time_at` only while the visit has times left,
+then its count only if that write was made), and the visitor's day asked of DriveLimits after, so
+when DriveLimits says the day's used up, the player's `last_time_at` is set so their 10 s runs out
+at midnight UTC (and the visit given back the try it took): until then each of their tries stops at
+that first claim, which writes nothing, and never asks DriveLimits again. (The leaderboard's scores
+do the same with `last_score_at`, and still count a visitor by the /64.)
 
 ### How cheating is limited
 
@@ -5197,10 +6606,12 @@ worker/drive/challenges.js):
 
 - **A visit token of the right kind.** A time is only taken with a token `/api/visit` handed out:
   for an Earth challenge, an Earth visit (`e`, one the Earth's caps let through) or the owner's
-  (`o`); a Moon visit (`m`, which costs nothing but a robot check, and one turned away by the caps)
-  posts the Moon's alone (403, reason `world`). A token forged, changed, run out (6 hours) or
-  another player's is a 403 (`visit`): one visit posts for one player, as for scores. So every time
-  comes from a visit that passed Turnstile, and an Earth one from one of the day's capped drives.
+  (`o`); a free world's visit (`m`, any but the Earth's, which costs nothing but a robot check, and
+  one turned away by the caps) posts the free worlds' alone, a challenge's on any of them
+  whichever world it opened on (403, reason `world`, on an Earth one). A token forged, changed, run
+  out (6 hours) or another player's is a 403 (`visit`): one visit posts for one player, as for
+  scores. So every time comes from a visit that passed Turnstile, and an Earth one from one of the
+  day's capped drives.
 - **A player**, by the leaderboard's id and secret (403, `player`).
 - **So many from a visit, a player and a visitor**: 100 times from a visit (each a robot check),
   one each 10 s from a player, 300 a day from a visitor (an IPv6 one by its /48) (429; above).
@@ -5215,7 +6626,10 @@ worker/drive/challenges.js):
   goes** allows: from within the last point's radius (the first leg from within 100 m of the start,
   `START_SLACK`, where the drop-in may have found the street) to within the next's, as the crow flies
   along the ground, at **430 km/h**, less 100 ms a leg (a frame at its longest, `LEG_SLACK`: a pass
-  is seen at the end of the frame it happened in).
+  is seen at the end of the frame it happened in); on Vesta and Ceres along the sphere of their
+  deepest ground (`LEG_SCALE`: [the kinds and their routes](#the-kinds-and-their-routes)), as a leg
+  50 km down in Rheasilvia is a fifth shorter than on the sphere: a 400 m leg with a radius of 40 at
+  least 2,016 ms on Vesta and 2,472 on Ceres, against 2,679 elsewhere.
 - **430 km/h, worked out from the game.** The fastest any ride goes is its top speed boosted: the
   booster pushes up to twice a ride's top speed (`BOOST_SPEED` in src/drive.js), and the fastest
   ride's is the hypercar's 215 km/h (src/drive-app/cars.js). Nothing else goes faster along the
@@ -5336,20 +6750,24 @@ within a day, or at once after a purge of the cache.
   of about a second as the run began, and a gate kilometres off looked at again every few seconds,
   its tiles' hierarchies built for rays the car's never needed. After the first look, one gate's
   nine rays every 0.2 s: on tiles already hit, a few thousandths of a millisecond each.
-- **The Worker and D1.** Each Worker instance keeps the six live challenges for a minute, and
+- **The Worker and D1.** Each Worker instance keeps the fifteen live challenges for a minute, and
   Cloudflare's cache keeps the list's tops, the live boards and each player's own rows for a
   minute, a finished board for a day and each board's order for 10 minutes, so a list view reads at
-  most: the six challenges (once a minute an instance), each board's top three, its one to race
-  and its count (50 rows) when the cache has none, and a player's own rows on the six (six reads by
-  their key: 12 rows by D1's count). A board view reads its top 20 and their players (41 rows) and the player's
+  most: the fifteen challenges (once a minute an instance), each board's top three, its one to race
+  and its count (122 rows measured for the fifteen, 74 for nine, 50 for six) when the cache has none,
+  and a player's own rows on the fifteen (fifteen reads by their key: 30 rows by D1's count, 18 when
+  there were nine, 12 when six). A
+  board view reads its top 20 and their players (41 rows) and the player's
   own row (2). **A rank** is found in its board's order, read whole (as many rows as the board has,
   1,000 at most, from its index alone) at most once in 10 minutes in a location, whoever asks (a new
-  best there is put into the order kept, not read afresh). The test measures it in workerd's own D1 (`meta.rows_read`) on six boards
-  of 1,240: the list for a player at the bottom of all six read 12 rows, a board's own row 2, and
-  the first look, reading the six orders, 6,060 (counting the rows ahead, as at first, a list read
-  6,012 every time, so a script asking as each of its own players in turn read that on every ask).
-  The first ask in a period writes its new challenges (one to six rows) and reads the owner's
-  picks, the approved places and the periods before's six; finishing a challenge writes its board's
+  best there is put into the order kept, not read afresh). The test measures it in workerd's own D1 (`meta.rows_read`) on fifteen boards
+  of 1,240: the list for a player at the bottom of all fifteen read 30 rows, a board's own row 2, and
+  the first look, reading the fifteen orders, 15,150 (on nine, 18 and 9,090; on six, 12 and 6,060; counting the rows ahead, as
+  at first, a list on six read 6,012 every time, so a script asking as each of its own players in
+  turn read that on every ask).
+  The first ask in a period writes its new challenges (one to fifteen rows; up to three of the other
+  worlds' an ask) and reads the owner's picks, the approved places and the periods before's
+  fifteen; finishing a challenge writes its board's
   final places once. A time: the challenge's row, the player, the visit's binding (a write the first
   time), the best, `last_time_at` and the visit's count (writes), the best again (a write only when
   it's better), the top five, its rank in the board's order kept (a new best put into it), and one
@@ -5360,109 +6778,120 @@ within a day, or at once after a purge of the cache.
   million reads and 100,000 writes, and a few hundred of its 100,000 Durable Object requests (which
   the visits and driving with others share). The once-a-visit word while driving asks for the list
   once (cached as any list is).
-- **What one address can cost, whatever it asks.** Everything that reads D1, the looks and the
-  times posted alike, is one of 10 a minute from an address (`CHALLENGE_MISSES`; an IPv6 address by
-  its /48), and what the looks can make it read is bounded by the cache besides, whoever asks: each
-  live board's rows once a minute in a location, the list's tops once, a finished board once a day,
-  a board's order once in 10 minutes. So asking for boards, past boards, lists for players or
-  players that aren't, or posting times, in turn, costs an address at most about 6 × 41 rows for
-  the live boards, 50 for the list and 3 × 12 for players or posts a minute (a post the gap turns
-  away reads 9), 332 rows, about 478,000 a day; the 300 new bests a /48's visitor may post a day
-  read 45 each instead (about 10,000 more), or 190 while a challenge's ghosts are full and each lets
-  one go (about 53,000 more): about a tenth of the Free plan's 5 million at the very most. (Before,
-  posts weren't counted in `CHALLENGE_MISSES` at all, and each new best read its board's order
-  afresh: resending a good body at `CHALLENGE_LOOKS`' 60 a minute read 777,600 rows a day, each of
-  the 300 new bests about 1,040 more, and each read every slower ghost kept on its challenge twice,
-  well over 1.5 million a day from one /48. Before that, past boards asked for in turn read 41 rows
-  each, and lists as a script's own players 6,000 each, at `CHALLENGE_LOOKS`' 60 a minute from every
-  /64 of a /48: hundreds of millions a day.) A board's order, read whole, is a cost of the board's
-  size, not of who asks: on six boards of 1,000 (thousands of players a day) a location reads at
-  most 6,000 rows each 10 minutes, 864,000 a day; at boards of 100, 86,000. Times written: by D1's
-  own count (every row and index entry), a new best with its ghost writes 14 rows (a player's first
-  on a challenge 16, with the visit's binding; one that lets a slower ghost go 16), one that isn't 2
-  (`last_time_at`, the visit's count), and asks DriveLimits once; any post can be a new best by
-  shaving a millisecond, so a script's are 14 each. A visit posts 100 at most (one robot check buys
-  about 1,400 rows written) and a visitor 300 a day (about 4,200 rows written, 4,800 if each is a new
-  player's first, and 300 DriveLimits requests from a /48 a day); past that each of its players
-  costs one more try (a write and a DriveLimits request, which holds that player till midnight) and
-  then nothing. It would take about 21 to 24 /48s, each with its three robot checks a day, to write
-  the Free plan's 100,000 rows, and over 300 to use its 100,000 Durable Object requests (and so
-  `/api/visit` for everyone). The ghosts those posts store are bounded apart from that: 16 MB a
-  challenge at most ([ghosts](#ghosts-and-challenge-a-friend)), 96 MB for the six live, of D1's 500
-  MB, whoever posts them. Before, with the visitor counted by its /64 and no count a visit, one
-  player with one robot check could post every 10 s from a new /64 all day: 46,000 rows written
-  and 8,640 DriveLimits requests.
-  **What's left**: those bounds are an address's, so a script with many addresses (many /48s, or a
-  pool of IPv4 addresses) gets them many times over, and each of its times still needs a robot
-  check per 100. If it happens, lower `CHALLENGE_MISSES` or `CHALLENGE_LOOKS` in
-  wrangler.drive.jsonc and set `CHALLENGE_TIMES_PER_VISIT` lower, and remove the script's players
-  (the SQL above: their times go with them).
+- **What one address can cost, whatever it asks.** Everything that reads D1, the looks and the times
+  posted alike, is one of 24 a minute from an address (`CHALLENGE_MISSES`; an IPv6 address by its
+  /48), and what the looks can make it read is bounded by the cache besides, whoever asks: each live
+  board's rows once a minute in a location, the list's tops once, a finished board once a day, a
+  board's order once in 10 minutes. So asking for boards, past boards, lists for players or players
+  that aren't, or posting times, in turn, costs an address at most about 15 × 41 rows for the live
+  boards, 122 for the list and 8 × 30 for players or posts a minute (a post the gap turns away reads
+  9), about 980 rows, about 1.4 million a day (530 and 770,000 at fifteen a minute with nine boards,
+  332 and 478,000 at ten with six); the 300 new bests a /48's visitor may post a day read 45 each
+  instead (about 10,000 more), or 190 while a challenge's ghosts are full and each lets one go
+  (about 53,000 more): under a third of the Free plan's 5 million at the very most (a sixth with
+  three worlds). (Before, posts weren't counted in `CHALLENGE_MISSES` at
+  all, and each new best read its board's order afresh: resending a good body at `CHALLENGE_LOOKS`'
+  60 a minute read 777,600 rows a day, each of the 300 new bests about 1,040 more, and each read
+  every slower ghost kept on its challenge twice, well over 1.5 million a day from one /48. Before
+  that, past boards asked for in turn read 41 rows each, and lists as a script's own players 6,000
+  each, at `CHALLENGE_LOOKS`' 60 a minute from every /64 of a /48: hundreds of millions a day.) A
+  board's order, read whole, is a cost of the board's size, not of who asks: on fifteen boards of
+  1,000 (thousands of players a day) a location reads at most 15,000 rows each 10 minutes, about 2.2
+  million a day; at boards of 100, 216,000. Times written: by D1's own count (every row and index
+  entry), a new best with its ghost writes 14 rows (a player's first on a challenge 16, with the
+  visit's binding; one that lets a slower ghost go 16), one that isn't 2 (`last_time_at`, the
+  visit's count), and asks DriveLimits once; any post can be a new best by shaving a millisecond, so
+  a script's are 14 each. A visit posts 100 at most (one robot check buys about 1,400 rows written)
+  and a visitor 300 a day (about 4,200 rows written, 4,800 if each is a new player's first, and 300
+  DriveLimits requests from a /48 a day); past that each of its players costs one more try (a write
+  and a DriveLimits request, which holds that player till midnight) and then nothing. It would take
+  about 21 to 24 /48s, each with its three robot checks a day, to write the Free plan's 100,000
+  rows, and over 300 to use its 100,000 Durable Object requests (and so `/api/visit` for everyone).
+  The ghosts those posts store are bounded apart from that: 16 MB a challenge at most
+  ([ghosts](#ghosts-and-challenge-a-friend)), 240 MB for the fifteen live, of D1's 500 MB, whoever
+  posts them. Before, with the visitor counted by its /64 and no count a visit, one player with one
+  robot check could post every 10 s from a new /64 all day: 46,000 rows written and 8,640
+  DriveLimits requests. **What's left**: those bounds are an address's, so a script with many
+  addresses (many /48s, or a pool of IPv4 addresses) gets them many times over, and each of its
+  times still needs a robot check per 100. If it happens, lower `CHALLENGE_MISSES` or
+  `CHALLENGE_LOOKS` in wrangler.drive.jsonc and set `CHALLENGE_TIMES_PER_VISIT` lower, and remove
+  the script's players (the SQL above: their times go with them).
 - **Workers Paid**: all of it is well within what the plan includes (50 million D1 rows written and
   25 billion read a month, a million Durable Object requests).
 
 ### How challenges are tested
 
-- `npm run test:drive-worker`: the fastest the game goes from its own files (`BOOST_SPEED`, the drift
-  and trick boosts, Shift's boost, every top speed written where rides are tuned and each offered
-  ride's own: it fails if one changes, or a ride's can't be found); periods turning over at
+- `npm run test:drive-worker`: the fastest the game goes from its own files (`BOOST_SPEED`, the
+  drift and trick boosts, Shift's boost, every top speed written where rides are tuned and each
+  offered ride's own: it fails if one changes, or a ride's can't be found); periods turning over at
   midnight UTC, on Monday and at a month's end (a leap year's February and a year's end too), and
   their keys; routes laid out as their shapes say (the gates' spacing and first heading, the stars
   in their disc and apart, a landmark's distance), the same from the same numbers; a time checked
   (as fast as the game goes and a frame quicker taken, quicker refused; out of order, a gate missed
   or twice, times going back, a time not the last pass's, fractions, too long; collectibles any
-  order); the rotation over 60 days on each world (no place twice in a row, never a day's its
-  week's or month's, every kind, another key another order, an approved place joining it) and its
-  rules over three years of days, ten of weeks and thirty of months with four keys (never twice in a
-  row; a day never its week's or month's, a week never either month it's in); and against what's
-  fixed, a year of days fixed as the Worker fixes them with the owner's picks of weeks and months
-  and places approved and unapproved on the way (fails if the rotation works its rules out alone); a
-  time written only while its challenge is open, checked in the write (`postTime` on D1's shape over
+  order); the rotation over 60 days on each world (no place twice in a row, never a day's its week's
+  or month's, every kind, another key another order, an approved place joining it) and its rules
+  over three years of days, ten of weeks and thirty of months with four keys (never twice in a row;
+  a day never its week's or month's, a week never either month it's in); and against what's fixed, a
+  year of days fixed as the Worker fixes them with the owner's picks of weeks and months and places
+  approved and unapproved on the way (fails if the rotation works its rules out alone); a time
+  written only while its challenge is open, checked in the write (`postTime` on D1's shape over
   node:sqlite, the challenge finished between its check and its write: turned away, nothing kept); a
   rank found in the board's order (read from the board's index alone, by SQLite's plan, 1,000 rows
   at most, and no count of the rows ahead anywhere: the last of 1,201 "1000+", one further up
   exact), and by halving (ties, the player's own old time left out, the owner's); **what a look
-  reads**, by workerd's own D1 count (`meta.rows_read`, wrangler's `getPlatformProxy`): six boards of
-  1,240, a list for each of 40 players at the bottom of all six in turn 24 rows at most (12), a
-  board's own row 6 at most (2), a finished board's its final place with no order read, kept a day
-  and a live one a minute (fails if a rank is counted, or the order isn't kept); a visit's times
-  (3 there) from four addresses, the fourth turned away (429, `visit`) writing nothing, a new visit
-  posting again, the visitor's day asked by the /48 and a try it turns away given back to the visit;
-  a run's id another player's turned away (a new row or a new best), nothing of it written;
-  `CHALLENGE_LOOKS`' and `CHALLENGE_MISSES`' key a keyed hash of the address and the day (the same
-  all day, not the next, an IPv6 address by its /48: every /64 of it the same, another /48
-  another); the Moon's routes off steep ground, at their points and along their legs (every Moon
-  place's sprints and landmarks: none with more than 6 steep stretches on a leg, few with any, far
-  fewer than with the points alone checked), and every place's landmarks as the Worker lays them
-  out over 20 days, 8 weeks and 4 months, none crossing more than a way in from any other bearing
-  at its distance would (fails with the 8 bearings tried at first); and against the Worker
-  under wrangler: the migration's tables (and nothing of an address in them, a run's id unique on
-  its challenge); six fixed in D1 at the first ask, the same on every ask and as
-  this process works them out with the same secret (place, kind, route, the Moon's checked on its
-  heights), a live one staying as fixed; times taken (only bests, the board in order with names and
-  levels, the list's tops and your own, a Moon challenge with an Earth visit) and every way of
-  cheating turned away (too fast, out of order, a gate missed, a time not the last pass's, longer
-  than the visit, bad bodies: 400; no visit, forged, another kind, someone else's, run out, the
-  wrong secret, an Earth challenge with a Moon visit, from another site: 403; another period's or
-  none: 403; a player's 10 s and a visitor's day: 429, with nothing kept, and past the day the
-  player held till midnight, the next tries writing nothing); the same run posted again answered as
-  taken from the cache, from any address, writing nothing, a burst of it from one address a 429,
-  another inside the 10 s still a 429, and the same run after 5 minutes a post like any other (the
-  gap claimed, not a new best); the owner's runs off the board and its count; the cache (a new best
-  clearing it) and `CHALLENGE_LOOKS`; yesterday's board kept with each player's final place (the
-  owner's none, written in the background), a run finished just before midnight taken in the minute
-  after and none later; the same at a week's turn (Sunday 23:59:50 to Monday 00:00:20, a new week
-  fixed, the month the same one, the old week finished and the month not) and a month's (30
-  November to 1 December, a new month, the week the same one, the three live on the Moon three
-  places); `CHALLENGE_MISSES` (from a /48's /64s in turn, boards that aren't and lists for players
-  that aren't, a miss each: ten answered, the rest 429; the cache's list still answered, another
-  /48 too); a visitor's day by the /48 (four times from four /64s, the fifth from another turned
-  away, the player held till midnight); the rotation clear of what's fixed through the routes (a
-  place approved and the owner's picks for a Tuesday and its week: the Wednesday and Thursday
+  reads**, by workerd's own D1 count (`meta.rows_read`, wrangler's `getPlatformProxy`): fifteen boards
+  of 1,240, a list for each of 40 players at the bottom of all fifteen in turn 36 rows at most (30), a
+  list's miss 128 at most (122), a board's own row 6 at most (2), a finished board's its final place
+  with no order read, kept a day and a live one a minute (fails if a rank is counted, or the order
+  isn't kept); a visit's times (3 there) from four addresses, the fourth turned away (429, `visit`)
+  writing nothing, a new visit posting again, the visitor's day asked by the /48 and a try it turns
+  away given back to the visit; a run's id another player's turned away (a new row or a new best),
+  nothing of it written; `CHALLENGE_LOOKS`' and `CHALLENGE_MISSES`' key a keyed hash of the address
+  and the day (the same all day, not the next, an IPv6 address by its /48: every /64 of it the same,
+  another /48 another); the Moon's routes off steep ground, at their points and along their legs
+  (every Moon place's sprints and landmarks: none with more than 6 steep stretches on a leg, few
+  with any, far fewer than with the points alone checked), and every place's landmarks as the Worker
+  lays them out over 20 days, 8 weeks and 4 months, none crossing more than a way in from any other
+  bearing at its distance would (fails with the 8 bearings tried at first); Vesta's and Ceres's
+  slopes against their level, not the sphere (a point steep as its ground leans 20° from what's level
+  there, a leg as it rises along the level's up; on Vesta the sphere's check otherwise at many
+  points), and their places' routes, checked, leaving far fewer points on steep ground than
+  unchecked; Mars's on its own
+  heights (Olympus Mons's top over 20 km up, a leg down Valles Marineris's south wall 50 steep
+  stretches or more and one along its floor none, the Moon's ground at the same places nothing like
+  it; every Mars place's routes of each kind with no more than one point in a hundred left steep,
+  and their legs fewer steep than with the points alone checked; the Worker's layout `makeRoute`'s
+  with Mars's check); and against the Worker under wrangler: the migration's tables (and nothing of
+  an address in them, a run's id unique on its challenge); fifteen fixed in D1, six at the first ask
+  (the Earth's three and the Moon's three: three checked on their ground at most) and Mars's,
+  Vesta's and Ceres's three at each ask after, `more` said till the last, the same on every ask and
+  as this process works them out with the same secret (place, kind, route, the other worlds'
+  checked on their heights), a live one
+  staying as fixed; times taken (only bests, the board in order with names and levels, the list's
+  tops and your own, a Moon challenge with an Earth visit, a Mars time with a free visit) and every
+  way of cheating turned away (too fast, out of order, a gate missed, a time not the last pass's,
+  longer than the visit, bad bodies: 400; no visit, forged, another kind, someone else's, run out,
+  the wrong secret, an Earth challenge with a free world's visit, from another site: 403; another
+  period's or none: 403; a player's 10 s and a visitor's day: 429, with nothing kept, and past the
+  day the player held till midnight, the next tries writing nothing); the same run posted again
+  answered as taken from the cache, from any address, writing nothing, a burst of it from one
+  address a 429, another inside the 10 s still a 429, and the same run after 5 minutes a post like
+  any other (the gap claimed, not a new best); the owner's runs off the board and its count; the
+  cache (a new best clearing it) and `CHALLENGE_LOOKS`; yesterday's board kept with each player's
+  final place (the owner's none, written in the background), a run finished just before midnight
+  taken in the minute after and none later; the same at a week's turn (Sunday 23:59:50 to Monday
+  00:00:20, a new week fixed, the month the same one, the old week finished and the month not) and a
+  month's (30 November to 1 December, a new month, the week the same one, the three live on the Moon
+  three places); `CHALLENGE_MISSES` (from a /48's /64s in turn, boards that aren't and lists for
+  players that aren't, a miss each: 24 answered, the rest 429; the cache's list still answered,
+  another /48 too); a visitor's day by the /48 (four times from four /64s, the fifth from another
+  turned away, the player held till midnight); the rotation clear of what's fixed through the routes
+  (a place approved and the owner's picks for a Tuesday and its week: the Wednesday and Thursday
   neither the day before's nor the week's; fails if the rotation works its rules out alone); a
-  Monday's week and day fixed by one ask, the owner's pick for the week the place the day would
-  get were it fixed first: the day another place, as the admin page's next up said on the Sunday
-  (fails if the day is fixed first, or next up ignores the pick); and the admin routes
-  (ADMIN_EMAILS only;
+  Monday's week and day fixed by one ask, the owner's pick for the week the place the day would get
+  were it fixed first: the day another place, as the admin page's next up said on the Sunday (fails
+  if the day is fixed first, or next up ignores the pick); and the admin routes (ADMIN_EMAILS only;
   picks ahead and back to the rotation, bad ones refused, a pick fixing its day when it comes; the
   owner's picks listed however far ahead, soonest first; a live one changed only after the warning,
   then a new board, the old one kept, finished and closed; back to the rotation on the rotation's
@@ -5507,6 +6936,13 @@ within a day, or at once after a purge of the cache.
   Moon's first, the Earth's needing an Earth drive (the used-up screen again), a Moon challenge's
   gate on the Moon's own heights (where a ray down meets the ground built there, within a metre),
   driven through and posted with the Moon visit.
+- `npm run test:drive-mars-ui`: a Mars challenge from a link: a free visit (`{ token, world: 'mars'
+  }`), on Mars at once, "On Mars" first and the Earth's needing an Earth drive, a gate on Mars's own
+  heights within a metre, driven through and posted with that visit.
+- `npm run test:drive-asteroids-ui`: a sprint on Vesta driven across a moving recentre, its time
+  and ghost posted with the visit and taken by `checkPasses` and `ghostFault`, then **Retry** moving
+  the scene back to the start, the gate where it was and not passed ([how Vesta and Ceres are
+  tested](#how-vesta-and-ceres-are-tested)).
 - `npm run test:drive-seo`: in the build, the challenges a chunk of their own, script and styles,
   none of them in the page or the game's chunk.
 
@@ -5516,8 +6952,9 @@ Pictures of each are saved with `TEST_SCREENSHOTS` (`challenges-*.png`).
 
 Deploy (`npm run deploy:drive` applies `0006_challenges.sql` and `0007_challenge_ghosts.sql`
 first; the `CHALLENGE_LOOKS` and `CHALLENGE_MISSES` rate limiters, and the Worker running for a
-link's own path, `/c`, come with `wrangler.drive.jsonc`). Nothing else to set: the first ask fixes
-the day's six, from the rotation. To choose one, the admin page. A link's preview card can be
+link's own path, `/c`, come with `wrangler.drive.jsonc`; `CHALLENGE_MISSES` went from 10 to 15 a
+minute with Mars's three, and to 24 with Vesta's and Ceres's six). Nothing else to set: the first asks fix the day's fifteen, from the
+rotation. To choose one, the admin page. A link's preview card can be
 checked after a deploy with a chat app's link inspector (or `curl -s
 'https://worlddrive.app/c?challenge=<id>' | grep og:`).
 `CHALLENGE_TIMES_PER_VISITOR_DAILY` and `CHALLENGE_TIMES_PER_VISIT` can be added in the dashboard
@@ -5537,7 +6974,7 @@ migration `0009_achievements.sql`), and checks a construction ride wherever it s
 ### What players see
 
 - **The grid.** **🏅 Achievements** on the profile card (the globe's panel, under the level, with
-  "3 / 25"), and **Achievements** in a locked construction ride's note, open it: a dialog of badges,
+  "3 / 28"), and **Achievements** in a locked construction ride's note, open it: a dialog of badges,
   three across on a computer, one on a phone held upright, each with its name, its one line ("Drive
   100 km"), a bar and how far toward it ("10.5 / 100 km", "1 / 10 drives", "0 / 1 finished"; for a
   place on a board, "On a weekly board"), and once earned "Earned 17 Nov 2026" in gold. One that
@@ -5552,20 +6989,21 @@ migration `0009_achievements.sql`), and checks a construction ride wherever it s
   linked account too; before a nickname, this browser's own counts, nothing earned, and "Pick a
   nickname to earn them: what you've driven counts when you do."
 - **Toasts.** As one is earned, "Achievement: 100 km driven"; for one that unlocks a ride, then
-  "Unlocked: Skid steer" with **Garage** (pausing the drive, the Garage on that ride, as a level-up's
-  ride does). One after another, about four seconds each (one with a button its whole seven, for
-  the tap), never over a challenge's countdown or run (they wait for its end), and never over another
-  toast that's up, such as the day's challenge nudge (they wait for it to go, as the nudge waits for
-  others): `showNotices` in `main.js`. A report goes out as the drive pauses, so they often come with
-  the pause menu open: paused, a toast sits at the foot of the screen, clear of the menu's **Keep
-  driving** (`levels.css`), so a tap meant for it never lands on one. Earned on another device, or
-  before this browser knew the player, they're not told again here; those earned meanwhile (a
-  challenge's places, written as its board ended) are told at the next visit. Before a nickname,
-  what this browser's counts reach of what the nickname's claim will keep (`CLAIM_TALLY`, below: the
-  first drive, 10 km, a first Moon drive, a first look, three rides; never 100 km, ten Moon drives or
-  days in a row, which take driving after the nickname) is told once ("Achievement: First drive ·
-  pick a nickname to keep it", with **Pick one**), and isn't told again when the claim earns it; the
-  rest are told when the Worker earns them, so nothing is promised that the nickname won't keep.
+  "Unlocked: Skid steer" with **Garage** (pausing the drive, the Garage on that ride, as a
+  level-up's ride does). One after another, about four seconds each (one with a button its whole
+  seven, for the tap), never over a challenge's countdown or run (they wait for its end), and never
+  over another toast that's up, such as the day's challenge nudge (they wait for it to go, as the
+  nudge waits for others): `showNotices` in `main.js`. A report goes out as the drive pauses, so
+  they often come with the pause menu open: paused, a toast sits at the foot of the screen, clear of
+  the menu's **Keep driving** (`levels.css`), so a tap meant for it never lands on one. Earned on
+  another device, or before this browser knew the player, they're not told again here; those earned
+  meanwhile (a challenge's places, written as its board ended) are told at the next visit. Before a
+  nickname, what this browser's counts reach of what the nickname's claim will keep (`CLAIM_TALLY`,
+  below: the first drive, 10 km, a first drive on each other world, a first look, three rides;
+  never 100 km, ten drives on another world or days in a row, which take driving after the nickname) is
+  told once ("Achievement: First drive · pick a nickname to keep it", with **Pick one**), and isn't
+  told again when the claim earns it; the rest are told when the Worker earns them, so nothing is
+  promised that the nickname won't keep.
 - **Locked rides.** In the ride pickers each wears its achievement's chip ("🔒 10 km", "🔒 Weekly
   top 3") where a level's car wears "Lv 8 · or Pass"; picked, it says "Finish a weekly challenge in
   its top 3 to unlock the vac truck. See your Achievements." under the rides, and the ride doesn't
@@ -5589,7 +7027,7 @@ migration `0009_achievements.sql`), and checks a construction ride wherever it s
 
 ### The list
 
-25 achievements, in the grid's order. **Checked**: the Worker counts it from its own records.
+34 achievements, in the grid's order. **Checked**: the Worker counts it from its own records.
 **Trusted**: only the page can say it (as it says what it drove for XP), so the Worker takes it within
 its caps.
 
@@ -5600,6 +7038,9 @@ its caps.
 | 100 km driven | Drive 100 km | km in progress reports | trusted | **Wheel loader** |
 | 1,000 km driven | Drive 1,000 km | km in progress reports | trusted | |
 | One small step, Moon regular, Lunar legend | Drive on the Moon (1, 10, 50 times) | Moon drives (a drop-in there and 250 m driven) in reports | trusted | |
+| Touchdown, Red regular, Martian | Drive on Mars (1, 10, 50 times) | Mars drives (the same) in reports | trusted | |
+| Into the belt, Vesta regular, Vestal | Drive on Vesta (1, 10, 50 times) | Vesta drives (the same) in reports | trusted | |
+| Bright spot, Ceres regular, Cererian | Drive on Ceres (1, 10, 50 times) | Ceres drives (the same) in reports | trusted | |
 | First challenge, 10 challenges, 50 challenges | Finish a challenge (1, 10, 50) | `challenge_times`: a time on the board | checked | **Concrete mixer** (1), **Dump truck** (10) |
 | Top 10, Podium, Winner | Finish a challenge in its top 10, top 3, first | `final_rank` on a finished board, any period | checked | **Bulldozer** (top 10) |
 | Daily winner | First on a daily | `final_rank` on a finished daily | checked | |
@@ -5618,20 +7059,24 @@ supporters and everyone else earn them alike (`rideUnlock` in `vehicles.js` says
 
 ### Where each count comes from, and how it's bounded
 
-- **Trusted counts ride on the progress reports** (`POST /api/progress`, [levels](#reports-and-how-cheating-is-limited)):
-  the report's own km (already capped by the time since the last report, 450 km/h of it), and a new
-  `feats: { moon, looks, rides }` (Moon drives, Garage changes, the ids of rides tried, each since
-  the last report; `checkTallies`: whole numbers, ride ids the game offers, a 400 otherwise; a Garage
-  change is counted only when it changes the look, `garage.js`). The Worker adds them to the player's
-  `players.tallies` (JSON: `{ km, moon, looks, rides: [ ids ], streak, run, runDay, day, today }`),
-  each held to a day's worth (`TALLY_DAY`): 500 km, 10 Moon drives, 10 Garage changes and 4 new
-  rides a UTC day, whatever the reports say. So 1,000 km takes at least two days of a script (and
-  more than two hours of reports at the time cap), 25 looks three days, 50 Moon drives five. The
-  claim (a new nickname's first report, carrying what was driven before it) counts for XP as before
-  (an hour's km at most), but toward the achievements only `CLAIM_TALLY`'s 25 km, 2 Moon drives, 5
-  looks and 3 rides: a first hour's 10 km and its skid steer, never the 100 km's wheel loader, which
-  takes driving after the nickname. Reading and writing them costs nothing more: they're in the
-  player's row, read and written by the report's own statements.
+- **Trusted counts ride on the progress reports** (`POST /api/progress`,
+  [levels](#reports-and-how-cheating-is-limited)): the report's own km (already capped by the time
+  since the last report, 450 km/h of it), and a new `feats: { moon, mars, vesta, ceres, looks,
+  rides }` (drives on each other world, Garage changes, the ids of rides tried, each since the last
+  report; a page from before Mars sends no `mars`, and one from before Vesta and Ceres no `vesta` or
+  `ceres`, which is none; `checkTallies`: whole numbers, ride ids the game
+  offers, a 400 otherwise; a Garage change is counted only when it changes the look, `garage.js`).
+  The Worker adds them to the player's `players.tallies` (JSON: `{ km, moon, mars, vesta, ceres,
+  looks, rides: [ ids ], streak, run, runDay, day, today }`; tallies kept before Mars, or before
+  Vesta and Ceres, with none of theirs, read as none there), each held to a day's worth
+  (`TALLY_DAY`): 500 km, 10 drives on each other world, 10 Garage changes and 4 new rides a UTC day, whatever the reports say. So 1,000 km takes at least two
+  days of a script (and more than two hours of reports at the time cap), 25 looks three days, 50
+  Moon drives five, and 50 on Mars, Vesta or Ceres five. The claim (a new nickname's first report, carrying what was
+  driven before it) counts for XP as before (an hour's km at most), but toward the achievements only
+  `CLAIM_TALLY`'s 25 km, 2 drives on each other world, 5 looks and 3 rides: a first hour's 10 km and
+  its skid steer, never the 100 km's wheel loader, which takes driving after the nickname. Reading
+  and writing them costs nothing more: they're in the player's row, read and written by the report's
+  own statements.
 - **Days in a row** are the days the Worker itself gave the daily bonus (once a UTC day, by its own
   clock): one more in a row after a bonus yesterday, else the first (`run` and `runDay` in the
   tallies); the best is kept (`streak`), so an achievement stays when the run breaks. The streak a
@@ -5748,17 +7193,17 @@ on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them 
   (`visits.listed`, written as it's had; after that, and to a report sent again, the answer without
   it). No Durable Object is asked: a visit takes a robot check, and the Earth's are a few a day an
   address.
-- `POST /api/achievements { id, secret }`: `{ achievements: [ { id, at } ], counts: { km, moon, looks,
-  rides, streak, parties, challenges }, own: { km, moon, looks, rides }, left: { km, moon, looks,
-  rides }, rides: [ unlocked construction rides ] }`, the player's and their account's (`counts`:
-  the most any of the account's players has of each; `own`: this player's own trusted counts, which
-  their reports add to; `left`: what more of each the Worker will take from this player today).
-  JSON from the site itself (`checkSameOrigin`, 1 kB at most), a 400 for anything but a player's id
-  and secret, a 403 for the wrong secret; held to `ACHIEVEMENT_LOOKS` (Cloudflare's rate limiter, 6
-  a minute by the challenges' keyed hash of the address's /48 and the day, before anything's read)
-  and `ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY` (200 a day by `DriveLimits`, by the /48), a 429 past
-  either. Never cached anywhere shared (`no-store`): it's the player's own; the page
-  keeps an answer a minute.
+- `POST /api/achievements { id, secret }`: `{ achievements: [ { id, at } ], counts: { km, moon,
+  mars, vesta, ceres, looks, rides, streak, parties, challenges }, own: { km, moon, mars, vesta,
+  ceres, looks, rides }, left: { km, moon, mars, vesta, ceres, looks, rides }, rides: [ unlocked construction rides ] }`, the player's and their
+  account's (`counts`: the most any of the account's players has of each; `own`: this player's own
+  trusted counts, which their reports add to; `left`: what more of each the Worker will take from
+  this player today). JSON from the site itself (`checkSameOrigin`, 1 kB at most), a 400 for
+  anything but a player's id and secret, a 403 for the wrong secret; held to `ACHIEVEMENT_LOOKS`
+  (Cloudflare's rate limiter, 6 a minute by the challenges' keyed hash of the address's /48 and the
+  day, before anything's read) and `ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY` (200 a day by
+  `DriveLimits`, by the /48), a 429 past either. Never cached anywhere shared (`no-store`): it's the
+  player's own; the page keeps an answer a minute.
 - `GET /api/admin/achievements` (the owner's, as `/api/admin/stats`: `ADMIN_EMAILS`, `ADMIN_LOOKS`):
   `{ players, earners, achievements: [ { id, name, goal, checked, ride, players } ] }`, how many
   players there are, how many have any, and how many have each. The admin page shows them as bars
@@ -5766,7 +7211,7 @@ on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them 
 
 ### What's kept, and what isn't
 
-`achievements`: a player's id, an achievement's id and when, 25 rows a player at most, removed with
+`achievements`: a player's id, an achievement's id and when, 34 rows a player at most, removed with
 the player. `players.tallies` (a few numbers, the ids of up to 31 rides, the days in a row and the
 day's counts), `players.parties` and `players.party_marks` (up to 10 short HMACs of the player's id
 with a party's code under a key from the Worker's secret, so a party isn't counted twice; not the
@@ -5784,7 +7229,7 @@ a month included):
 
 | | Rows read | Rows written | Other |
 | --- | --- | --- | --- |
-| A report with something in it | none more (the tallies are in the player's row) | none more, and 1 an achievement earned (25 a player, ever) | |
+| A report with something in it | none more (the tallies are in the player's row) | none more, and 1 an achievement earned (34 a player, ever) | |
 | An empty report | the player's row, as before | none | |
 | The page's ask for the whole list (an empty report with `feats: true`, once a visit) | the account's achievements: a few dozen, about 250 at most whatever the account (its first 20 players, 200 rows of the others', each counted again as they're grouped) | 1 (`visits.listed`) | |
 | A challenge time, a player's first on that challenge | up to 50 (their nth time, by key), usually 1 to 10 | 1 an achievement earned | |
@@ -5801,28 +7246,29 @@ achievements earned are a few hundred rows written. What one ask reads is bounde
 account: `playersOf` reads at most 20 of its players and `featRows` the player's own achievements
 and at most 200 of the others' (measured with D1's own `rows_read` in the tests: the same for an
 account of 80 players as of 160). **One address** can ask for the grid 6 times a minute and 200
-times a day: at about 410 rows an ask at most, 82,000 rows a day, under 2 % of the free plan's reads,
-and no writes. An empty report reads only the player's row; the whole list comes once a visit (8 Earth
-visits a day an address, and a robot check each for the Moon's), so about 250 rows a page load at
-most. Its reports, times and parties were bounded already (levels' 30 s gap and `PROGRESS_POSTS`,
-the challenges' `CHALLENGE_MISSES` and daily caps, `LIVE_CONNECTS`), and achievements add at most 25
-rows written a player, ever, 2 a party joined and 1 a visit's list. A score in a locked construction
-ride is refused only after the score's gap (one every 10 s a player) and the visitor's day (1,500 an
-address), as any score is: at most 1,500 lookups of about 60 rows, 90,000 rows a day. A time in
-one likewise only after the time's gap (one every 10 s a player), its visit's count and the
-visitor's day (300 an address): at most 300 lookups, 18,000 rows a day. A room reads nothing of
-achievements at a hello or a change of ride except for a construction ride, and then one ask once
-a connection for all eight of them, however many looks it sends and whichever rides (14 rows
-measured for a player alone, 281 for an account of 20 players or more, the most `playersOf` reads):
-a visit's 200 connections a day (`LIVE_VISIT_CONNECTS`) in construction rides are about 2,800 rows
-for most players and 56,000 at most, and an address's 8 Earth visits 450,000 at most, under a tenth
-of the free plan's reads (a Moon visit, as for everything a visit buys, takes a robot check each).
-(Round 2 asked once for each ride, about 60 rows each for a big account, and again for each look
-sent while D1 was answering: forty looks at once were forty asks, some 580,000 rows a visit.) (Round 1 read the account's whole list, about
-250 rows, at every hello, whatever the ride: 10 visits' worth of reconnects from one address came to
-500,000 rows, a tenth of the free plan's reads, and the day's 40,000 connects to twice its reads.)
-So one address stays well under a tenth of the free plan's daily reads and writes. Storage: about 40
-bytes an achievement row, 300 a player's tallies and 180 their party marks.
+times a day: at about 410 rows an ask at most, 82,000 rows a day, under 2 % of the free plan's
+reads, and no writes. An empty report reads only the player's row; the whole list comes once a visit
+(8 Earth visits a day an address, and a robot check each for the other worlds'), so about 250
+rows a page load at most. Its reports, times and parties were bounded already (levels' 30 s gap and
+`PROGRESS_POSTS`, the challenges' `CHALLENGE_MISSES` and daily caps, `LIVE_CONNECTS`), and
+achievements add at most 34 rows written a player, ever, 2 a party joined and 1 a visit's list. A
+score in a locked construction ride is refused only after the score's gap (one every 10 s a player)
+and the visitor's day (1,500 an address), as any score is: at most 1,500 lookups of about 60 rows,
+90,000 rows a day. A time in one likewise only after the time's gap (one every 10 s a player), its
+visit's count and the visitor's day (300 an address): at most 300 lookups, 18,000 rows a day. A room
+reads nothing of achievements at a hello or a change of ride except for a construction ride, and
+then one ask once a connection for all eight of them, however many looks it sends and whichever
+rides (14 rows measured for a player alone, 281 for an account of 20 players or more, the most
+`playersOf` reads): a visit's 200 connections a day (`LIVE_VISIT_CONNECTS`) in construction rides
+are about 2,800 rows for most players and 56,000 at most, and an address's 8 Earth visits 450,000 at
+most, under a tenth of the free plan's reads (a visit to another world, as for everything a visit
+buys, takes a robot check each). (Round 2 asked once for each ride, about 60 rows each for a big
+account, and again for each look sent while D1 was answering: forty looks at once were forty asks,
+some 580,000 rows a visit.) (Round 1 read the account's whole list, about 250 rows, at every hello,
+whatever the ride: 10 visits' worth of reconnects from one address came to 500,000 rows, a tenth of
+the free plan's reads, and the day's 40,000 connects to twice its reads.) So one address stays well
+under a tenth of the free plan's daily reads and writes. Storage: about 40 bytes an achievement row,
+300 a player's tallies and 180 their party marks.
 
 **The page's first load**: the shared rules (`achievement-rules.js`, needed there for the locks, the
 reports' counts and the toasts' words) and the construction rides' names and tuning (`works.js`)
@@ -5865,36 +7311,40 @@ which phones already draw.)
 
 ### How it's tested
 
-- `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the rules as written (25, each
+- `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the rules as written (34, each
   count known, every construction ride unlocked by one, the pass none; `checkTallies` turning away a
   ride that isn't one, a count that isn't whole or is negative; a day's worth taken by `addTallies`
   and again the next day; what `crossed` reaches; the grid's lines), then the Worker under `wrangler
   dev`: the migration's columns and table; trusted counts with reports (the claim held to
   `CLAIM_TALLY`, its 25 km giving the skid steer and not the wheel loader, what's left of a day's 10
-  Moon drives, 10 looks and 4 rides, five minutes' km more the same day at the time cap, only what's
-  left of the day's 500 km, the next UTC day's worth, earned once, 400s for what the page can't send,
-  an empty report's every one only when it asks, and none to one that doesn't); the whole list once a
-  visit (again from a new visit, nothing from another player's); three days in a row by the Worker's
-  clock (earned on the third, kept through a day off); a claim saying 10,000 days in a row earning no
-  streak achievement and leaving the telehandler locked until the Worker has seen three days, and a
-  player from before achievements starting from their streak, but only as far as the Worker could
-  have seen it (10,000 days in the row of a player made two days ago giving three days and the 3
-  days' achievement, never the 7 or 30; an old one only its capped best, the telehandler locked);
-  the rows an ask reads (D1's
-  `rows_read`, through wrangler's platform proxy) the same for an account of 80 players as of 160,
-  and a few hundred at most; challenges finished from the times as the grid asks, and placings from final
-  ranks alone (top 10, podium, winner, daily, weekly: the vac truck's), the rides refused (a 403
-  with `reason: 'ride'` and the unlock's words) on the leaderboard until earned and let through
-  after, and checked only after the score's gap (forty at once in a locked ride: one 403, then 429s,
-  as in the go-kart); the rows a room's ask for every construction ride reads (`ridesSql`: 14 alone,
-  281 for the big account, the same for 80 players as for 160); the docs' console SQL writing every placing of a board finished before
+  Moon drives, 10 Mars drives, 10 looks and 4 rides, five minutes' km more the same day at the time
+  cap, only what's left of the day's 500 km, the next UTC day's worth, earned once, 400s for what
+  the page can't send, an empty report's every one only when it asks, and none to one that doesn't);
+  the whole list once a visit (again from a new visit, nothing from another player's); three days in
+  a row by the Worker's clock (earned on the third, kept through a day off); a claim saying 10,000
+  days in a row earning no streak achievement and leaving the telehandler locked until the Worker
+  has seen three days, and a player from before achievements starting from their streak, but only as
+  far as the Worker could have seen it (10,000 days in the row of a player made two days ago giving
+  three days and the 3 days' achievement, never the 7 or 30; an old one only its capped best, the
+  telehandler locked); the rows an ask reads (D1's `rows_read`, through wrangler's platform proxy)
+  the same for an account of 80 players as of 160, and a few hundred at most; challenges finished
+  from the times as the grid asks, and placings from final ranks alone (top 10, podium, winner,
+  daily, weekly: the vac truck's), the rides refused (a 403 with `reason: 'ride'` and the unlock's
+  words) on the leaderboard until earned and let through after, and checked only after the score's
+  gap (forty at once in a locked ride: one 403, then 429s, as in the go-kart); the rows a room's ask
+  for every construction ride reads (`ridesSql`: 14 alone, 281 for the big account, the same for 80
+  players as for 160); the docs' console SQL writing every placing of a board finished before
   achievements (a weekly's first and third: top 10, podium, the weekly podium, the first a winner;
   the eleventh none; nothing more run again); following sign-in both ways (two players linked to one
-  account each having the other's, the grid's counts the account's best and `own` each player's
-  own, the rows each player's own); the grid's route (its player,
-  `no-store`, 400s, 413, 405, another site's page, the day's cap from one address, the rate
-  limiter before anything's read, today's `left`); the owner's counts (every achievement, its
-  players, nothing of who, 401 and 403).
+  account each having the other's, the grid's counts the account's best and `own` each player's own,
+  the rows each player's own); the grid's route (its player, `no-store`, 400s, 413, 405, another
+  site's page, the day's cap from one address, the rate limiter before anything's read, today's
+  `left`); the owner's counts (every achievement, its players, nothing of who, 401 and 403); and
+  Mars's drives coming with reports as the Moon's do (held to a day's 10 and a claim's 2, earned as
+  they're reached: Touchdown, Red regular, Martian), with tallies kept from before Mars (no `mars`
+  in them) counting none there; and Vesta's and Ceres's the same (a claim's 2 each earning Into the
+  belt and Bright spot, a day's 10 Vesta regular, the grid's counts, `own` and `left` for each, and
+  a count that isn't whole, is negative or isn't a number a 400).
 - `npm run test:drive-worker`: migration 0009 on top of 0001 to 0008 with a player kept and their
   counts none yet, one row an achievement, removed with the player; in the challenges' story a
   player's first time writing their first challenge finished (and the rows a time writes, one more
@@ -5985,8 +7435,8 @@ a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-b
 - **Never anywhere else.** It's in the globe's own section (`#globe-ui`), so it's gone, and takes no
   room, while dropping in, driving, paused, on the loading, robot-check, used-up and other screens,
   and back when the globe is (**M**). It's the one ad a visit asks for, so there's nothing between
-  drops either. The places' pages and the Moon's (`/drive/`, `/moon/`) have none: they have no script
-  at all.
+  drops either. The places' pages and the other worlds' (`/drive/`, `/moon/`, `/mars/`, `/vesta/`,
+  `/ceres/`) have none: they have no script at all.
 - **Supporters never see one**, and Google's script isn't even loaded for them: the page waits for
   the Worker's word on the pass (`/api/me`, which `supporter.js` asks anyway) before asking for the
   ad's code. A pass that comes mid-visit (bought, or signed in) takes the ad away at once, with its
@@ -6010,7 +7460,10 @@ a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-b
   (`requestIdleCallback`, at most 5 s; 3 s on a browser without it). Google's script,
   `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=<ADSENSE_CLIENT>` (`async`,
   `crossorigin="anonymous"`), is only asked for while the globe shows (dropped in before then, it
-  waits for the globe), as an ad slot with no width is one Google can't fill.
+  waits for the globe), as an ad slot with no width is one Google can't fill; nor while [the
+  orrery](#picking-a-world-the-orrery) is open over the globe (`body[data-orrery='open']`, which
+  hides the panel and the slot with it): it waits for it to close. One already shown is only hidden
+  while the orrery's open, and back as it closes.
 - The slot is an `<ins class="adsbygoogle">` with `data-ad-client`, `data-ad-slot` when there is
   one and `data-full-width-responsive="false"`, sized by `ads.css` (Google's way to give a
   responsive unit an exact size: no `data-ad-format`), so the ad can't grow over the sheet. Its
@@ -6093,7 +7546,9 @@ pass comes mid-visit; blocked and unfilled, gone quietly with the pin's card whe
 on a phone upright and on its side, clear of the sheet, the title, the trophy and the pin's card
 (with the pin still between the title and its card), with a picture of each (`drive-ad-desktop.png`,
 `drive-ad-phone.png`, `drive-ad-phone-landscape.png`, in `TEST_SCREENSHOTS` or the system's temporary
-folder).
+folder). `npm run test:drive-orrery-ui` opens [the orrery](#picking-a-world-the-orrery) with
+`?worlds=1` and the same stand-in: no ad asked for under it; closed, one asked for and shown, none
+counted blocked; opened again, the ad hidden but kept, and back as it closes.
 
 ## Settings
 
@@ -6110,7 +7565,10 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
 | `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
 | `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
-| `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use; 0 is off |
+| `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use on the Earth; 0 is off there |
+| `LIVE_MOON_DAILY_BUDGET` | 20000 | [The Moon's own](#driving-with-others-on-the-moon), apart; 0 is off on the Moon |
+| `LIVE_MARS_DAILY_BUDGET`, `LIVE_VESTA_DAILY_BUDGET`, `LIVE_CERES_DAILY_BUDGET` | 4000, 3000, 3000 | [Each world's own](#on-every-world), apart; 0 is off on that world |
+| `LIVE_ADDRESS_FLOOR` | 1000 | The least [an address's share](#on-every-world) of a world's day is; 0 for none |
 | `ADSENSE_CLIENT`, `ADSENSE_SLOT` | empty | [Google's ad on the globe](#ads): the AdSense publisher id (empty: no ads) and, if wanted, a display unit's id |
 
 Secrets, set by the owner and never in a file (Cloudflare dashboard: Workers & Pages → world-drive →
@@ -6149,7 +7607,7 @@ Object request): `LIVE_CONNECTS` (each visit's connections to rooms, 20 a minute
 admin account's asks for the admin page's stats, [drop-in places](#where-people-drop-in) and
 challenges, 30 a minute), `CHALLENGE_LOOKS` (each address's asks for [challenges'](#challenges)
 lists and boards and its times posted, 60 a minute), `CHALLENGE_MISSES` (those of its lists and
-boards that miss the cache and read D1, 10 a minute), `PASSWORD_TRIES` (each address's
+boards that miss the cache and read D1, and its times posted, 24 a minute), `PASSWORD_TRIES` (each address's
 [sign-ins with a password, checks of one and account changes](#guessing-and-how-its-slowed), 10 a
 minute) and `ACHIEVEMENT_LOOKS` (each address's asks for its [achievements](#achievements-and-rewards),
 6 a minute), each address (an IPv6 one by its /48) counted by a keyed hash of it and the day, never as
@@ -6192,7 +7650,13 @@ page loaded then makes driving with others anyway and is turned away at the door
 `DriveLimits` runs the new code; it tries again as after a dropped connection, so it's in a room a
 few minutes later at most. `npx wrangler deploy -c wrangler.drive.jsonc
 --durable-objects-code-update-mode immediate` (after `npm run build:drive` and the migrations)
-skips the wait, at the cost of dropping everyone's connection to their room for a moment.
+skips the wait, at the cost of dropping everyone's connection to their room for a moment. The
+deploy that brought driving with others to Mars, Vesta and Ceres (protocol v3, the far worlds'
+budgets, `LIVE_ADDRESS_FLOOR` and the `live_mars`, `live_vesta` and `live_ceres` tables, which
+`DriveLimits` makes itself: no migration) is the same: for those minutes a room on the old code
+answers a new page in v1 ([old pages and old rooms](#on-every-world)), and an old `DriveLimits` says
+nothing of the far worlds, which the Worker then takes as open. Don't send part of the requests to
+an older Worker with a gradual deployment across it: that one would turn every new page away (400).
 
 **Rolling back** (a version picked in the dashboard's Deployments, or a gradual deployment sending
 some requests to an older one) past the deploy that brought [where people drop
@@ -6203,6 +7667,14 @@ scores, XP, stats and driving with others carry on. The older Worker counts no p
 code runs again and the next day starts (they're no use without the Worker's secret); D1's
 `dropins_daily` stays as it is, with a gap for the days rolled back. Going forward again needs
 nothing.
+
+**Mars** came with no migration: its counts, cells, tallies and challenges are new values in the
+tables that were there. The page and the Worker go out together (`npm run deploy:drive` builds the
+one and deploys the other), and the Worker still answers a free visit with `moon: true` (beside
+`free` and `world`), so a page from before Mars, still in a browser's cache, opens on the Moon as
+it did. **Vesta and Ceres** came the same way, with no migration: a page from before them sends no
+`vesta` or `ceres` in its reports (none), and its list shows the nine of the three worlds it knows
+(it lists by its own list of worlds), leaving the new six out. `CHALLENGE_MISSES`' new 24 comes with `wrangler.drive.jsonc`.
 
 To deploy from GitHub on every push with Workers Builds (as the construction app is): in the
 Cloudflare dashboard open the **world-drive** Worker → Settings → Build, connect this repository and
@@ -6231,18 +7703,22 @@ driving simulators) is why every page says plainly what World Drive is and what 
 don't: Google's photorealistic 3D cities, anywhere on Earth, arcade stunts, boosts, drifting and
 flying, other drivers as ghosts and party links, levels, free in the browser with nothing to
 download. "Drive on the Moon" is a search with only throwaway games in it, and World Drive's Moon
-is made from NASA's own maps of it, so [the Moon has pages of its own](#the-moons-pages) too.
+is made from NASA's own maps of it, so [the Moon has pages of its own](#the-moons-pages) too, and so,
+made the same way, have [Mars](#marss-pages) and [Vesta and Ceres](#vestas-and-ceress-pages).
 
 ### What a search engine reads
 
 - **The home page's head** (`drive/index.html`). A title that says what it is ("World Drive – Drive
-  Anywhere on Earth in 3D | Free Browser Driving Game"; with the Moon it would be over 70 characters,
-  so the Moon is in the description instead) and a description of about 160 characters, the most
-  important first ("Drive anywhere on Earth in photorealistic 3D, or on the Moon: ...")
-  ([title links](https://developers.google.com/search/docs/appearance/title-link),
+  Anywhere on Earth in 3D | Free Browser Driving Game"; with the Moon it would be over 70
+  characters, so the other worlds are in the description instead) and a description of about 160
+  characters, the most important first ("Drive anywhere on Earth in photorealistic 3D, or on the
+  Moon, Mars, Vesta and Ceres: ...", 166 characters, of the 170 the test allows; its old ", no
+  download" gone to make room for Mars) ([title
+  links](https://developers.google.com/search/docs/appearance/title-link),
   [snippets](https://developers.google.com/search/docs/appearance/snippet)); the canonical address
-  `https://worlddrive.app/`, so a party's link (`?party=`) or a place's (`?spot=`) counts as the home
-  page ([canonical URLs](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls));
+  `https://worlddrive.app/`, so a party's link (`?party=`) or a place's (`?spot=`) counts as the
+  home page ([canonical
+  URLs](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls));
   Open Graph and Twitter tags with the link card (below), so a link posted anywhere, a party's
   included, unfurls with the picture, the name and what it is; the icons and the web app manifest.
 - **Structured data** (JSON-LD in the head): `WebSite` with the site's name
@@ -6250,22 +7726,26 @@ is made from NASA's own maps of it, so [the Moon has pages of its own](#the-moon
   `VideoGame` co-typed `WebApplication` ([software apps](https://developers.google.com/search/docs/appearance/structured-data/software-app):
   Google only reads a game co-typed so), with its genres, `gamePlatform` "Web browser",
   `applicationCategory` `GameApplication` (the value Google takes, rather than "Game"), free
-  (`offers.price` 0), and World Drive as its publisher; its description has the Moon in it too.
+  (`offers.price` 0), and World Drive as its publisher; its description has the Moon, Mars and the
+  asteroids Vesta and Ceres in it too.
   Google's app rich result also needs a rating or reviews; World Drive has none to give, so none are
   made up, and it shows as an ordinary result.
 - **Words a crawler can read**, in the page itself, so they're there for a crawler that doesn't run
-  scripts and shown to everyone ([JavaScript SEO](https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics)):
+  scripts and shown to everyone ([JavaScript
+  SEO](https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics)):
   the splash's line under the name (on the screen while World Drive loads), and at the foot of the
   globe's panel, under the start spots: what World Drive is, what you can do, the keys, links to the
-  places' pages and the Moon's (`<!-- places -->` and `<!-- moon places -->`, filled in by the
-  build) and a few questions (is it free, does it work on a phone, can I drive my own street, can I
-  drive on the Moon, can I play with friends, what's kept about me). It's plain text in the panel,
-  there for anyone who scrolls down, nothing hidden. **About World Drive** opens from there as
-  before; its words are in the page too. In the game a plain tap on one of the places flies the
+  places' pages and each other world's (`<!-- places -->`, and a marker a world, `<!-- moon places
+  -->`, `<!-- mars places -->`, `<!-- vesta places -->` and `<!-- ceres places -->`, filled in by
+  the build, which stops if one is missing) and a few questions (is it free, does it work on a
+  phone, can I drive my own street, can I drive on the Moon, on Mars, on Vesta, on Ceres, can I play
+  with friends, what's kept about me). It's plain text in the
+  panel, there for anyone who scrolls down, nothing hidden. **About World Drive** opens from there
+  as before; its words are in the page too. In the game a plain tap on one of the places flies the
   globe there (main.js, by the link's `data-play`, for any link in the panel's words that has one)
-  rather than leaving for its page; on one of the Moon's it turns the globe to the Moon first, as
-  its link (`/?spot=moon-<id>`) does. The lists of them all, `/drive/` and `/moon/`, open in a new
-  tab.
+  rather than leaving for its page; on one of another world's it turns the globe to that world
+  first, as its link (`/?spot=moon-<id>`, `/?spot=vesta-<id>`) does. The lists of them all,
+  `/drive/`, `/moon/`, `/mars/`, `/vesta/` and `/ceres/`, open in a new tab.
 - **What Google renders.** Google runs the page as well, but its renderer has no WebGL
   ([Google says so](https://developers.google.com/search/docs/crawling-indexing/javascript/fix-search-javascript)),
   and robots.txt keeps it off `/api/`. `boot.js` looks for WebGL 2 (which three.js needs) before
@@ -6301,7 +7781,8 @@ a `?party=` stays. On Google's tiles that's once the root has arrived, not befor
 come, the reload its error screen asks for still goes to the place. A link's name and region are
 taken only as the leaderboard takes a place's name (`cleanPlace`: letters, numbers and an address's
 punctuation, nothing rude), as the others driving there see it; otherwise it's a dropped pin. A link
-to somewhere that isn't on Earth, or a spot that isn't one, pins nothing.
+to a latitude and longitude that aren't one (`?at=91,10`), or a spot that isn't one, pins nothing
+(and a `world=` that isn't a world is the Earth).
 
 To add a place: an entry in `places.js` with true facts (check them), its own words (nothing copied
 from another page) and a pin on a road, dropped in on Google's tiles first (that there are 3D
@@ -6309,22 +7790,27 @@ buildings there if the page says so, that the start is on the road and not besid
 heading faces what the page is about); then `npm run drive-site-images` draws its card. Each page
 has to be worth reading on its own: a pile of near-identical pages for every town would be what
 Google calls [doorway pages](https://developers.google.com/search/docs/essentials/spam-policies#doorways).
-Each place's list of the others ends with the Moon, and `/drive/` says it's there.
+Each place's list of the others ends with the other worlds (a line each, Mars's "Volcanoes, canyons
+and the rovers' sites", Vesta's "The giant Rheasilvia basin and its peak", Ceres's "Bright salt spots
+and an ice volcano"), and `/drive/` says they're there ("And the Moon, Mars, Vesta and Ceres", a
+paragraph each).
 
 ### The Moon's pages
 
 `/moon/` is about driving on the Moon in World Drive: what it is (the real Moon's shapes from the
 Lunar Reconnaissance Orbiter's laser altimeter, LOLA, and its colours from the orbiter's camera,
 LROC, NASA's and in the public domain; the small craters made up), what's different there (a sixth
-of the gravity, jumps as high and two and a half times as long, the Earth in the sky, no water, on
-your own), its places and a big **Drive on the Moon** that opens the game on the Moon with
+of the gravity, jumps as high and two and a half times as long, the Earth in the sky, no water, and
+driving with others there as on the Earth), its places and a big **Drive on the Moon** that opens the game on the Moon with
 Tranquility Base pinned. Each of the Moon's twelve start spots (`MOON_SPOTS`) has its own page at
 `/moon/<slug>/` (Tranquility Base, Hadley Rille, the Taurus-Littrow valley, Tycho, Copernicus,
 Aristarchus, Plato, Mons Huygens, Shackleton, Mare Orientale, Tsiolkovskiy and Von Kármán), shaped
 as an Earth place's: its own title and description, breadcrumbs (World Drive › The Moon › the place),
 what the place is in a few true sentences, what to do there, how the Moon is in World Drive, the
-keys, links to the other Moon pages, `/moon/`, `/drive/` and home, and NASA's credit in the footer.
-Its **Drive here** is the spot's link, `/?spot=moon-<id>` (`linkedPlace`): the game turns the
+keys, links to the other Moon pages, `/moon/`, `/drive/` and home, and NASA's credit in the footer
+(every page's footer links to each world's: "Drive on the Moon", "Drive on Mars", "Drive on Vesta",
+"Drive on Ceres"). Its **Drive
+here** is the spot's link, `/?spot=moon-<id>` (`linkedPlace`): the game turns the
 globe to the Moon and pins the spot there, and never drops in by itself.
 
 Their words are `drive/site/moon.js` (`MOON_PAGES`, and the paragraphs every Moon page shares).
@@ -6353,11 +7839,95 @@ and leave out what isn't certain), its own words, and its `game` line if the gam
 differently; then `npm run drive-site-images -- moon <slug>` draws its card. A page for a place
 narrower than the Moon's heights can show would promise what the game hasn't got.
 
+Every world's pages are made by the same code in `build.js`, from its own file of words,
+`drive/site/<world>.js`: its pages, the paragraphs they share, and its `<WORLD>_SITE`
+(`MOON_SITE`, `MARS_SITE`, `VESTA_SITE`, `CERES_SITE`: its own page's title, description, card's words and opening lines, the
+place its **Drive on ...** pins, the line over a place's coordinates, its line in the Earth's
+places' lists and on `/drive/`, and its credit), gathered in `WORLD_SITES`; the build stops if a
+world in `OFF_EARTH` has none. The Moon's words moved there unchanged: built from the old code and
+the new, its 13 pages differ only in the two lines every page shares ("How to play" saying "the
+Moon or Mars", and the footer's "Drive on Mars"). With Vesta and Ceres the same two lines grew
+again ("the Moon, Mars, Vesta or Ceres", and the footer's two more links), and the Moon's and Mars's
+own words are as they were: their "And the Earth" paragraphs still name only the Earth (and Mars's
+the Moon), every world being in every page's footer.
+
+### Mars's pages
+
+`/mars/` is about driving on Mars in World Drive: what it is (its heights from the laser altimeter
+on NASA's Mars Global Surveyor, MOLA, from NASA's Planetary Data System, and its colours from the
+Viking orbiters' photographs as the USGS's colour mosaic has them, all in the public domain; the
+small craters made up), what's different there (38% of the gravity, jumps as high and about 1.6
+times as long, a butterscotch sky with Phobos in it, no water, and driving with others in Mars's own rooms), its places and a big
+**Drive on Mars** that opens the game on Mars with Olympus Mons pinned. Each of its twelve start
+spots (`MARS_SPOTS`) has a page at `/mars/<slug>/`: `olympus-mons`, `valles-marineris`,
+`bradbury-landing` (Curiosity's), `mount-sharp`, `jezero`, `hellas-planitia`, `chryse-planitia`
+(Viking 1's), `meridiani-planum` (Opportunity's), `gusev` (Spirit's), `noctis-labyrinthus`,
+`arsia-mons` and `korolev`, shaped as the Moon's: breadcrumbs World Drive › Mars › the place, its
+**Drive here** `/?spot=mars-<id>`, and a `BreadcrumbList` and a `WebPage` about a `Place` contained
+in Mars, with no `GeoCoordinates`, its words giving where it is in "areocentric latitude and
+longitude, north and east positive". The footer credits MOLA and the Viking pictures, linking to the
+USGS's mosaic page.
+
+Their words are `drive/site/mars.js` (`MARS_PAGES`, `MARS_MADE`, `MARS_DRIVING` and `MARS_SITE`),
+kept as the Moon's are: well-known facts, checked against more than one source, and what isn't
+certain left out (Curiosity touched down on 6 August 2012, still 5 August in California; Viking 1
+was "the first U.S. mission to land safely", not the first to land). They're honest about the game:
+its heights every eighth of a degree (7.4 km apart at the equator), the craters you drive among
+made up, "There are no landers, rovers or tracks in it", and each page's `game` line says what the
+game can't show there (Jezero's delta, Eagle crater, Yellowknife Bay, Mount Sharp's layers, Olympus
+Mons's cliffs as steep slopes rather than sheer ones). What a page says of its start's ground, the
+distances and the ways the ground falls, is the game's own, measured on its heights (the summit
+about 57 km south of the Olympus Mons start, Mount Sharp about 38 km south-east of Bradbury Landing),
+and its sky is the one the game draws (a paler glow round the sun, which is always from the
+south-west about 34° up, and Phobos to the north-east, never in sight past 69°).
+
+They live beside Mars's files in `/mars/` (`height.bin` and `colour.webp`) as the Moon's do: the
+dev server's `driveSite` makes `/mars/` and `/mars/<slug>/` too (its addresses are `/drive/` and
+each world's in `OFF_EARTH`, so Vite never answers `/mars/` with the game's own page), and passes
+the files on. To add one: a start spot in `MARS_SPOTS` first (dropped in on), then an entry in
+`mars.js`, then `npm run drive-site-images -- mars <slug>`.
+
+### Vesta's and Ceres's pages
+
+`/vesta/` and `/ceres/` are made the same way, from `drive/site/vesta.js` and `drive/site/ceres.js`
+(`VESTA_PAGES`, `VESTA_MADE`, `VESTA_DRIVING`, `VESTA_SITE`, and Ceres's alike): what each is (the
+DLR's shape model from the framing camera on NASA's Dawn, which orbited it, and the framing camera's
+photographs; the small craters made up; "Dawn never landed, and there's no spacecraft in it"), what's
+different there (2.5% and 2.9% of the gravity, jumps as high and about six times as long, a black sky
+full of stars with the sun low in the south-west, no moons, no water, a world far from round, and
+driving with others in its own rooms), their places and a big **Drive on Vesta** (Rheasilvia's central peak pinned) or **Drive on
+Ceres** (Occator). Each of their eleven start spots has a page: on Vesta
+`rheasilvia-central-peak`, `rheasilvia`, `marcia`, `calpurnia`, `divalia-fossae`,
+`matronalia-rupes`, `veneneia`, `saturnalia-fossae`, `vestalia-terra`, `cornelia` and `claudia`; on
+Ceres `occator`, `cerealia-facula`, `ahuna-mons`, `kerwan`, `yalode`, `urvara`, `dantu`, `haulani`,
+`ernutet`, `juling` and `kait`; shaped as Mars's, a `Place` contained in Vesta or Ceres, their words
+giving where it is in "planetocentric latitude and longitude, north and east positive". The footer
+credits Dawn, linking to the USGS's mosaics (`https://planetarymaps.usgs.gov/mosaic/`, where
+make-asteroids.mjs fetches them). Their "And the Earth, ..." paragraph names every other world.
+
+Their facts are those of the research behind them and of the place files (each feature by the IAU's
+Gazetteer). What a page says of the game (rim distances, depths, which way the ground falls, the
+highest and lowest places) was measured on `drive/public/<world>/height.bin` over the level spheroid,
+as the game drives it: Vesta's from about 22 km under its level on Rheasilvia's floor to about 19.5 km
+over it on the basin's rim, Ceres's from 7.3 km under to 9.4 km over; and each `game` line says what
+the game can't show (Claudia, 600 m across, about one of its heights wide, has no sign of it). If
+make-asteroids, a world's `level`, its look's sun or its gravity changes, those lines want measuring
+again.
+
+**Their cards aren't drawn yet**: until `npm run drive-site-images -- vesta` and `-- ceres` are run
+(about a minute a card, 12 each, with the game running), their pages have World Drive's own card,
+`/og/world-drive.png` (build.js uses a page's own only once its file is there, and the search pages'
+test says which it expects). `WORLD_CARDS` has their words ("The real Vesta, from NASA's Dawn",
+"2.5% of the gravity"; Ceres's "2.9%") and each spot's shot; the hub cards look at Vesta from 40° S
+80° E and at Ceres from 15° N 120° W.
+
 ### Sitemap, robots.txt and one address
 
-- **`/sitemap.xml`** is made by the build: the home page, `/drive/` and every place's page, `/moon/`
-  and every Moon place's page, each with the day the files it's made from were last committed
-  (`git log`: for the Moon's, `moon.js`, `build.js`, `site.css` and `moon-places.js`), so its
+- **`/sitemap.xml`** is made by the build: the home page, `/drive/` and every place's page, each
+  other world's own (`/moon/`, `/mars/`, `/vesta/`, `/ceres/`) and every one of their places' pages, each with the day the files it's made from were
+  last committed (`git log`: for a world's, its `drive/site/<world>.js`, `build.js`, `site.css` and
+  `src/drive-app/<world>-places.js`; for the home page, `drive/index.html`, `places.js` and every
+  world's words), so its
   `lastmod` only moves when the page does, which is the only `lastmod` Google trusts ([sitemaps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)).
   Built from a shallow clone (a build server's may be one), whose oldest commit seems to add every
   file, there's no `lastmod` at all rather than that commit's date on every page.
@@ -6421,10 +7991,12 @@ and the manifest's icons (`site.webmanifest`). Run it after adding a place, with
 tests run (it starts the dev server on `TEST_VITE_PORT`). A party's **Share** says where you're
 driving ("Drive with me at Monaco harbour in World Drive"), and its link unfurls with the card.
 
-The Moon's cards are pictures of World Drive's own Moon (NASA's data, drawn by the game, so nothing
-of Google's), drawn only when asked for: `npm run drive-site-images -- moon` draws `og/moon.png`
-(the Moon from space, as the globe shows it once turned there) and `og/moon-<slug>.png` for each
-Moon page; `-- moon tycho plato` just those, `-- moon hub` just the Moon's own. For each it opens
+The Moon's and Mars's cards are pictures of World Drive's own worlds (NASA's data, drawn by the
+game, so nothing of Google's), drawn only when asked for: `npm run drive-site-images -- <world>
+[<slug>...] [hub]`, as many worlds as asked (`-- moon hub mars korolev`), every slug checked before
+anything's drawn. `-- moon` draws `og/moon.png` (the Moon from space, as the globe shows it once
+turned there) and `og/moon-<slug>.png` for each Moon page; `-- moon tycho plato` just those, `-- moon
+hub` just the Moon's own. With no world named it draws neither the Moon's nor Mars's. For each it opens
 the place's link in a page the card's size, with a ride picked (`world-drive.vehicle`: the go-kart
 or the muscle car) and the boost pads off, drops in, turns the ride to the camera and lets it settle
 on the ground that way, then holds it and the camera still (the driver's update and the field of
@@ -6440,6 +8012,22 @@ looking up toward the Earth would put the camera under the ground, the ride and 
 together, as in a jump. Each is a palette PNG under 200 kB. In Chromium's software renderer a
 drop-in takes 15 to 30 s and the ground's building round the camera a minute or two more, so all
 thirteen take about half an hour.
+
+Mars's, `-- mars`, are `og/mars.png` (Mars from space over the Tharsis volcanoes and Valles
+Marineris, the globe centred on 2° S 88° W) and `og/mars-<slug>.png`, its words "Drive on Mars.",
+"The real Mars, from NASA" and "38% of the gravity" (`WORLD_CARDS` says each world's words, shots
+and globe). With no Earth in its sky, each is framed by a heading alone (`MARS_SHOTS`: 135° or 315°,
+across the sun from the south-west, toward what's highest round the spot or down into it), the
+cards' ground under a butterscotch sky with the ride in frame. All 13 took about 13 minutes here,
+each 95 to 149 kB. Jezero's is dark, as the Viking mosaic is there, and Korolev's ice white. The
+waits are for `window.drive.bodies[ world ]`'s ground (`rush`, `pending`) and `window.drive.world`
+being the world.
+
+Vesta's and Ceres's, `-- vesta` and `-- ceres`, are set up the same way (`VESTA_SHOTS`,
+`CERES_SHOTS`: 135° or 315° each, across the sun toward the biggest relief round the spot) but not
+drawn yet ([their pages](#vestas-and-ceress-pages)); the script stops if a world in `OFF_EARTH` has
+no `WORLD_CARDS`. Its framing takes the scene as x west, y up and z north, which on these worlds is
+their level frame at the drop-in (`placeBody`).
 
 ### How the search pages are tested
 
@@ -6464,9 +8052,42 @@ words shown with the line on why there's no globe, no visit and no game's code a
 errors, on a computer and a phone); each place's **Drive here** opening the game on the test globe
 with its pin there and the address tidied, Tycho's page's opening it on the Moon with Tycho pinned,
 a drop-in from a link, the pin clear of the sheet on a phone, a `?party=` kept, a rude name or a
-place off the Earth refused; the dev server making the same pages, the Moon's included, and passing
+place that isn't one refused; the dev server making the same pages, the Moon's included, and passing
 the Moon's files on; and the load above on a phone's connection (the first paint is the largest,
 under 2.5 s, before the game's code).
+
+Every check of the Moon's runs for Mars too, and every Moon assertion is kept (`WORLD_CHECKS` holds
+each world's own values: its page's title, the line over its coordinates, its honesty line, its
+credit's link, its page's phrases and its files' sizes). For Mars: exactly its pages, one for every
+spot; their cards and the hub's title; "Mars" in the home page's head and its game's description;
+breadcrumbs ending in Mars, a `Place` contained in Mars and no geo data; Mars in each Earth place's
+list, on `/drive/` ("And the Moon, Mars, Vesta and Ceres") and in every page's footer; each page's "On Mars at
+... (areocentric ...)", "made up", its honesty line and its `/?spot=mars-...` link (`linkedPlace`
+making it a Mars place); `/mars/` over 500 words, with MOLA, Mars Global Surveyor, Viking, USGS,
+the areoid, public domain, made up, "38% of the gravity", "about 1.6 times as long", the
+butterscotch sky, Phobos, "No water", "With others" and "Mars's own rooms" in it, and nothing "on your own" (read whole: the page's word list
+leaves out "38%"), and what its **Drive on Mars** pins; the USGS's mosaic page the one more outside
+link allowed; `/mars/height.bin` (8,294,400 bytes) and `/mars/colour.webp` (1,050,320) served
+whole, and `/mars/olympus-mons` sent on to its slash (307); Mars's pages in the sitemap; the home
+page's Mars list with its `data-play` links and "Can I drive on Mars?"; a tap on Bradbury Landing
+in the panel, from the Moon, turning the globe to Mars with `mars-curiosity` pinned; Olympus Mons's
+**Drive here** opening the game on Mars; and on the dev server `/mars/`, `/mars/korolev/`, the 307,
+the sitemap's Mars pages, the home page's list and Mars's files passed on. And for Vesta and Ceres
+the same checks of their pages and files (their `WORLD_CHECKS`: "planetocentric latitude and
+longitude", "Dawn never landed, and there's no spacecraft in it", Dawn, the DLR, the framing camera,
+"2.5% of the gravity" and "about six times as long", "2.9%" and "nearly six times as long", "black sky
+full of stars", "With others" and "Vesta's own rooms" or "Ceres's own rooms"; `height.bin` 8,294,400
+bytes each, `colour.webp` 444,068 and 781,442), eleven pages each, the USGS's planetary maps the one
+more outside link, their lists on the home page and "Can I drive on Vesta?" and "...on Ceres?";
+their cards World Drive's own until theirs are drawn (`DRAWN`). Since driving with others came to
+every world, no world's page and not the home page says "on your own", and the home page's FAQ says
+"press Worlds at the top of this panel and pick Mars", "on every world" and "You can drive with
+others on Vesta too" (and Ceres). And [the orrery](#picking-a-world-the-orrery) is a chunk of its
+own, script and styles, that the game never imports in its first load and the page never asks for:
+only its empty `<dialog id="orrery">` and the **Worlds** button are in the page, none of its words
+in the game's code, and its pictures under `/orrery/` (five worlds' and Vesta's and Ceres's
+129,600-byte shapes). Twenty-one tests, about 3 to 4.5 minutes (not timed again with the five
+worlds).
 
 ### The owner's steps
 
@@ -6475,8 +8096,8 @@ The domain is verified in Google Search Console already (a DNS record).
 1. **Search Console → Sitemaps**: submit `https://worlddrive.app/sitemap.xml`.
 2. **URL Inspection**: inspect `https://worlddrive.app/`, **Test live URL** (it should be "URL is
    available to Google", with the page's words in the rendered HTML), then **Request indexing**; the
-   same for `/drive/`, `/moon/` and a few places' pages. There's a daily limit on requests: a handful is enough,
-   as the sitemap and the links bring the rest.
+   same for `/drive/`, `/moon/`, `/mars/` and a few places' pages. There's a daily limit on
+   requests: a handful is enough, as the sitemap and the links bring the rest.
 3. **Pages** (Indexing → Pages) over the next weeks: what's indexed, and why anything isn't. A new
    domain takes days to weeks.
 4. **Bing Webmaster Tools**: add the site by importing it from Search Console, and submit the sitemap
@@ -6545,100 +8166,119 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   test pad a visit for everything a visit does (names, scores, [levels](#levels)' reports and
   driving with others), as `scripts/test-drive-levels-ui.mjs` does, and `window.worldDriveStatsTest
   = { visit }` one for the [play stats](#play-stats) alone, as `scripts/test-drive-ui.mjs` does.
+  `window.worldDriveOrreryTest = { onLoad: true }` opens [the orrery](#picking-a-world-the-orrery)
+  as the page loads, as `?worlds=1` does (`scripts/test-drive-orrery-ui.mjs`).
+- The other worlds need neither a key nor the Worker: their files are in the repository
+  (`drive/public/moon/`, `drive/public/mars/`, `drive/public/vesta/`, `drive/public/ceres/`), so
+  they're the real worlds under `npm run dev:drive` alone. `npm run make-moon`, `npm run make-mars`
+  and `npm run make-asteroids` (`-- vesta`, `-- ceres`, or both) make the files again from NASA's
+  and the USGS's maps (Mars's about half an hour, nearly all of it the Viking mosaic's 12.7 GB, read
+  a quarter of a gigabyte at a time; Vesta's and Ceres's maps a few hundred MB each, fetched whole,
+  or given as copies; through a proxy, Node needs `NODE_USE_ENV_PROXY=1`), and say a few known
+  places' heights as they go, to see the grid read right. `node scripts/make-orrery.mjs` makes
+  the orrery's pictures (`drive/public/orrery/`) from those files and NASA's Blue Marble (fetched in
+  the three-globe package from npm, or `--earth=<file>`); it has no `npm run` of its own yet.
 - In the browser console, `window.drive` has the scene, the globe, the driver and `dropIn( { name,
-  lat, lon } )`, levels' `progress` (`progress.level`, `progress.progress`, what's `unsent` and the
-  report on its way, `flying`) and
-  `profile`, the play stats' `stats` (`stats.counts`, what's counted and not posted yet), and with
-  driving with others on, `live`, `ghosts` and `friends`.
+  lat, lon } )`, the world being driven (`world`), each other world's ground (`bodies`, by id:
+  `bodies.mars.stats()` says how many of its squares are drawn and built) and `setWorld`; on Vesta
+  and Ceres `recentring`, `recentres`, `origin` and `shiftTo( { lat, lon, height } )` ([the moving
+  recentre](#the-moving-recentre)); levels'
+  `progress` (`progress.level`, `progress.progress`, what's `unsent` and the report on its way,
+  `flying`) and `profile`, the play stats' `stats` (`stats.counts`, what's counted and not posted
+  yet), and with driving with others on, `live`, `ghosts` and `friends`; and `orrery` (`open()`,
+  `close()`, `isOpen`).
 
-Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile and
-Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and JSON
-checks, the search's validation, cache and one-a-second limit, www, and that the key is only ever in
-the answer to a visit that passed; and the leaderboard on a throwaway D1 database: name rules, the
-filter and uniqueness, renaming, scores with a visit token, every cheat above turned away, SQL-ish
-names and places kept as text, the top 20 and your own rank, one place's board, the cache, days and
-weeks turning over, the tidying after 35 days, what's stored, and the console's SQL above; and the
-Supporter Pass, with test keys standing in for Google's and a made-up webhook secret for Stripe's:
-signing in and every bad token turned away, the session cookie, `/api/me`, the webhook's signatures
-and five minutes, a payment once, bank debits, buying before signing in, refunds and chargebacks
-(either delivered before its checkout), another link's checkouts, test-mode payments with a live
-link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`, 30 drives a day for a
-supporter, the ⭐, the owner's SQL, and buying off without its settings; [usernames and
-passwords](#how-usernames-and-passwords-are-tested) (all that's listed there); and the [play
-stats](#play-stats): each metric's keys checked and held to a post's most, `MAX_COUNTS`, and the
-admin page's answer with the facts from the leaderboard's and the pass's tables, refunds left out,
-the period before added up, the totals and the tidying after two years), and `npm run test:drive-ui`
-(the page in Chromium without a key: the globe and panel, search on Enter, spots, pins, dropping in
-and driving, the play stats it posts (the funnel once a visit, the device, searches by kind and
-never what was typed, play time, a drop-in's time and one left for the globe), stunts (a wall throwing the kart into the air and never through it, a backflip landed
-for points, the DRIFT button), changing ride, M and teleporting again without a reload, recent
-places, a phone with touch buttons, boosting flat out going supersonic in each free ride (the boom,
-the streaks, the tag and the wider view, and its end as it slows), boost pads on the test pad (off
-until the pause menu's switch turns them on, kept across a reload, and off again; put down as it
-drives, never on a roof, a car, a shelter or a slope nor from high up, moved onto sharper ground, a
-small one's 12 % and a big one's fill, dark then lit again, left lit with a full gauge, recycled;
-each test that needs them switches them on), water (the test pad's sea given one even sea colour,
-as Google draws water, driven on as on the ground: off its edge at speed and slowly, down onto its
-surface and on across it, never sinking, splashing or put back; off a ramp, a spin landed on it
-scoring; slowly down a beach, out across the sea and back up onto the land; flown out and let down
-onto it; R on it and by it putting it a few metres on, on the water; paused out on it and driven
-on, sending others no splash or spray; boost pads never on it or by it; Google's other water
-colours, a bluish lawn among ball fields and a lagoon's turquoise; a canal's water by its wall
-never taken for dry), the open sea and the big lakes (the pad lowered under the water's surface,
-as Google draws the bed: started on the sea's surface or Lake Baikal's, ridden on, flown over and
-come down on, no boost pads on it, a floating ride's spray, from an island out across it and back
-onto the island; 14 m under the sea, on Google's water as before; the Dead Sea's shore, land, never;
-the map's sea, coasts, lakes and land; land walled off from the sea by ground over it, the side
-of the Assal depression, never; Lake Erie's surface gone out over land to Niagara's gorge and back
-by the lake; driven and flown out from a coast over a bed sloping under the sea in the sea's
-colours, the sea's surface laid before the kart is under it (by the frame loop's own look too, with
-houses behind the beach, and reversing out, and driven and flown past moored boats, between two
-jetties and through a marina), its look round the bed spread over frames (never more than 12 rays
-in one, all down, nor more than one first ray into new ground made slow as a tile's, with tiles 25,
-15 or 10 m across) and carried on till it's known (laid in time at 100 and 300 km/h and 20 frames a
-second too), but not over ground coloured as sand or with no picture, nor in Death Valley's square,
-nor with the kart in a hollow under it, and a big lake's only over its bed 15 m under it; New
-Orleans' streets under the sea behind its levee, among houses, driven into, flown over and started
-in, never, nor beside someone flying over them, even with the surface already laid; Go to beside a
-driver out on the sea's surface, or hopping, flying or rolled onto their side over it (beside them
-at their height), in the scene and by a drop-in, on it with them; with the surface laid, beside
-someone flying over Lake Baikal's shelf, a sandy bed or the bed between a harbour's moles, on it
-with them, and by a drop-in from 12 km off over that shelf too, and over its shelf in a square its
-shore crosses, in the scene and by a drop-in from 24 km off, but not between moles a street's width
-apart nor over a hollow inland, nor two or four squares from the lake's (laid in its own square or
-the shore square); with the sea laid off Santa Monica, by a drop-in beside someone flying over a
-sandbank 14 km off, on it, but over a field under the sea in New Orleans, on the field; with none
-laid, beside someone riding on a surface of their own over Baikal's shelf, a sandy bed or an inlet,
-from the globe, or over a sandy bed 2 m down in the scene, on it with them, but not beside one on a
-levee at the sea's height, one in the air at that height, nor one riding over New Orleans' street,
-there or 25 m from a crossing, nor, with its houses' fronts 20 m apart, one riding or flying over
-its street where a bearing threads between them past every ray down, nor, with a boulevard 49 m
-across it, one riding or flying over the street where it meets it, where five bearings thread
-between the houses past every ray down and along them (but, as a known limit, with the two houses
-facing each other across a street by it left empty, beside one riding by them, there and from the
-globe, on it with them), nor, laid out more sparsely, one riding or flying over its street, there or
-from the globe (though flown over it, the frame loop's look lays it); without the map, only the deep
-sea), the used-up, robot-check and getting-ready screens, the visit asked for only once the game's
-code is here (a download that fails, and its Try again, spend none; a script that breaks is told
-from a dropped
+Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile
+and Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and
+JSON checks, the search's validation, cache and one-a-second limit, www, and that the key is only
+ever in the answer to a visit that passed; and the leaderboard on a throwaway D1 database: name
+rules, the filter and uniqueness, renaming, scores with a visit token, every cheat above turned
+away, SQL-ish names and places kept as text, the top 20 and your own rank, one place's board, the
+cache, days and weeks turning over, the tidying after 35 days, what's stored, and the console's SQL
+above; and the Supporter Pass, with test keys standing in for Google's and a made-up webhook secret
+for Stripe's: signing in and every bad token turned away, the session cookie, `/api/me`, the
+webhook's signatures and five minutes, a payment once, bank debits, buying before signing in,
+refunds and chargebacks (either delivered before its checkout), another link's checkouts, test-mode
+payments with a live link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`,
+30 drives a day for a supporter, the ⭐, the owner's SQL, and buying off without its settings;
+[usernames and passwords](#how-usernames-and-passwords-are-tested) (all that's listed there); and
+the [play stats](#play-stats): each metric's keys checked and held to a post's most, `MAX_COUNTS`,
+and the admin page's answer with the facts from the leaderboard's and the pass's tables, refunds
+left out, the period before added up, the totals and the tidying after two years), and `npm run
+test:drive-ui` (the page in Chromium without a key: the globe and panel, search on Enter, spots,
+pins, dropping in and driving, the play stats it posts (the funnel once a visit, the device,
+searches by kind and never what was typed, play time, a drop-in's time and one left for the globe),
+stunts (a wall throwing the kart into the air and never through it, a backflip landed for points,
+the DRIFT button), changing ride, M and teleporting again without a reload, recent places, a phone
+with touch buttons, boosting flat out going supersonic in each free ride (the boom, the streaks, the
+tag and the wider view, and its end as it slows), boost pads on the test pad (off until the pause
+menu's switch turns them on, kept across a reload, and off again; put down as it drives, never on a
+roof, a car, a shelter or a slope nor from high up, moved onto sharper ground, a small one's 12 %
+and a big one's fill, dark then lit again, left lit with a full gauge, recycled; each test that
+needs them switches them on), water (the test pad's sea given one even sea colour, as Google draws
+water, driven on as on the ground: off its edge at speed and slowly, down onto its surface and on
+across it, never sinking, splashing or put back; off a ramp, a spin landed on it scoring; slowly
+down a beach, out across the sea and back up onto the land; flown out and let down onto it; R on it
+and by it putting it a few metres on, on the water; paused out on it and driven on, sending others
+no splash or spray; boost pads never on it or by it; Google's other water colours, a bluish lawn
+among ball fields and a lagoon's turquoise; a canal's water by its wall never taken for dry), the
+open sea and the big lakes (the pad lowered under the water's surface, as Google draws the bed:
+started on the sea's surface or Lake Baikal's, ridden on, flown over and come down on, no boost pads
+on it, a floating ride's spray, from an island out across it and back onto the island; 14 m under
+the sea, on Google's water as before; the Dead Sea's shore, land, never; the map's sea, coasts,
+lakes and land; land walled off from the sea by ground over it, the side of the Assal depression,
+never; Lake Erie's surface gone out over land to Niagara's gorge and back by the lake; driven and
+flown out from a coast over a bed sloping under the sea in the sea's colours, the sea's surface laid
+before the kart is under it (by the frame loop's own look too, with houses behind the beach, and
+reversing out, and driven and flown past moored boats, between two jetties and through a marina),
+its look round the bed spread over frames (never more than 12 rays in one, all down, nor more than
+one first ray into new ground made slow as a tile's, with tiles 25, 15 or 10 m across) and carried
+on till it's known (laid in time at 100 and 300 km/h and 20 frames a second too), but not over
+ground coloured as sand or with no picture, nor in Death Valley's square, nor with the kart in a
+hollow under it, and a big lake's only over its bed 15 m under it; New Orleans' streets under the
+sea behind its levee, among houses, driven into, flown over and started in, never, nor beside
+someone flying over them, even with the surface already laid; Go to beside a driver out on the sea's
+surface, or hopping, flying or rolled onto their side over it (beside them at their height), in the
+scene and by a drop-in, on it with them; with the surface laid, beside someone flying over Lake
+Baikal's shelf, a sandy bed or the bed between a harbour's moles, on it with them, and by a drop-in
+from 12 km off over that shelf too, and over its shelf in a square its shore crosses, in the scene
+and by a drop-in from 24 km off, but not between moles a street's width apart nor over a hollow
+inland, nor two or four squares from the lake's (laid in its own square or the shore square); with
+the sea laid off Santa Monica, by a drop-in beside someone flying over a sandbank 14 km off, on it,
+but over a field under the sea in New Orleans, on the field; with none laid, beside someone riding
+on a surface of their own over Baikal's shelf, a sandy bed or an inlet, from the globe, or over a
+sandy bed 2 m down in the scene, on it with them, but not beside one on a levee at the sea's height,
+one in the air at that height, nor one riding over New Orleans' street, there or 25 m from a
+crossing, nor, with its houses' fronts 20 m apart, one riding or flying over its street where a
+bearing threads between them past every ray down, nor, with a boulevard 49 m across it, one riding
+or flying over the street where it meets it, where five bearings thread between the houses past
+every ray down and along them (but, as a known limit, with the two houses facing each other across a
+street by it left empty, beside one riding by them, there and from the globe, on it with them), nor,
+laid out more sparsely, one riding or flying over its street, there or from the globe (though flown
+over it, the frame loop's look lays it); without the map, only the deep sea), the used-up,
+robot-check and getting-ready screens, the visit asked for only once the game's code is here (a
+download that fails, and its Try again, spend none; a script that breaks is told from a dropped
 connection, and logged), a Turnstile script that never comes ending on the robot check's screen at
 its deadline (and Try again asking for it afresh), a place's link kept in the address until Google's
 root has come, and the leaderboard with its answers made in the test: tabs, your own row, picking a
-name and renaming, a landed jump posting the run with the card asking first, each place's best posted, a dead connection
-changing nothing, and a phone; and buying the pass with Google's script stood in for: signing in
-from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
-word, unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked,
-the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries
-the pass's rides, the Garage and the boost styles, `npm run test:drive-seo` what
-[search engines](#how-the-search-pages-are-tested) see, `npm run test:drive-live` and
-`npm run test:drive-live-ui` [driving with others](#how-its-tested), `npm run test:drive-levels`
-and `npm run test:drive-levels-ui` [levels](#how-levels-are-tested), and `npm run test:drive-moon-ui`
-[the Moon](#how-the-moon-is-tested). The UI tests drive the go-kart unless a test picks another (the
-pickup, the default, is 219,000 triangles, about a frame a second in Chromium's software renderer);
-`npm run test:drive-ui` checks the pickup is the default, and that the go-kart takes over if its
-model doesn't load. `TEST_VITE_PORT` picks a test's port,
-and `TEST_VITE_CACHE` a folder for its dev server's pre-bundled dependencies (else
-`node_modules/.vite`), so tests run side by side on one checkout don't redo each other's.
+name and renaming, a landed jump posting the run with the card asking first, each place's best
+posted, a dead connection changing nothing, and a phone; and buying the pass with Google's script
+stood in for: signing in from the sheet, the pause menu and the used-up screen, Buy's link, "Check
+again" before Stripe's word, unlocking on focus and on `?supporter=thanks`, on every load, signing
+out, the player linked, the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run
+test:drive-pro-ui` tries the pass's rides, the Garage and the boost styles, `npm run test:drive-seo`
+what [search engines](#how-the-search-pages-are-tested) see, `npm run test:drive-live` and `npm run
+test:drive-live-ui` [driving with others](#how-its-tested), `npm run test:drive-levels` and `npm run
+test:drive-levels-ui` [levels](#how-levels-are-tested), `npm run test:drive-moon-ui` [the
+Moon](#how-the-moon-is-tested), `npm run test:drive-mars-ui` [Mars](#how-mars-is-tested) (5581
+its port unless `TEST_VITE_PORT` says), `npm run test:drive-asteroids-ui` [Vesta and
+Ceres](#how-vesta-and-ceres-are-tested) (5591) and `npm run test:drive-orrery-ui` [the
+orrery](#picking-a-world-the-orrery) (5601). The UI tests drive the go-kart unless a test picks another
+(the pickup, the default, is 219,000 triangles, about a frame a second in Chromium's software
+renderer); `npm run test:drive-ui` checks the pickup is the default, and that the go-kart takes over
+if its model doesn't load. `TEST_VITE_PORT` picks a test's port, and `TEST_VITE_CACHE` a folder for
+its dev server's pre-bundled dependencies (else `node_modules/.vite`), so tests run side by side on
+one checkout don't redo each other's.
 
 ## How it fits together
 
@@ -6649,9 +8289,12 @@ src/drive-app/boot.js        the page's first script: WebGL looked for (without 
                              words), the splash, /api/config and the robot check while main.js
                              loads, then the visit
 src/drive-app/main.js        the game: the tiles, modes (globe, dropping, driving, paused), a
-                             place's link, dropping in, recentring, the render loop
-drive/site/                  the places' pages, /drive/ and /sitemap.xml (build.js, a Vite plugin;
-                             places.js their words; site.css their look)
+                             place's link, dropping in, recentring (and on Vesta and Ceres the
+                             moving recentre: follow, shiftTo), the render loop
+drive/site/                  the places' pages, /drive/, each other world's (/moon/, /mars/,
+                             /vesta/, /ceres/) and /sitemap.xml (build.js, a Vite plugin;
+                             places.js, moon.js, mars.js, vesta.js and ceres.js their words;
+                             site.css their look)
 src/drive-app/globe.js       GlobeView: GlobeControls, the slow spin, flights, the pin, picking
 src/drive-app/spawn.js       Ground: the ground's height, which way the street runs, a bridge's deck
 src/drive-app/panel.js       search, spots, recent places, the ride picker, the pin's card
@@ -6690,11 +8333,26 @@ src/drive-app/sea.js         the open sea: its surface where Google draws only t
                              scripts/make-sea-mask.mjs makes)
 src/drive-app/lakes.js       the big lakes whose beds Google may draw: their surfaces' heights,
                              with sources, and their outlines' names in Natural Earth
-src/drive-app/moon.js        the Moon: its ground's quadtree of squares, their look, its stars and
-                             the Earth in its sky; moon-height.js its ground's height anywhere (LOLA's
-                             heights, drive/public/moon/height.bin, and the made-up craters);
-                             moon-places.js its spots and the places its search finds. Its picture
-                             is drive/public/moon/colour.webp; scripts/make-moon.mjs makes both files
+src/drive-app/worlds.js      the list of worlds: the Earth, the Moon, Mars, Vesta and Ceres,
+                             each's name, size, gravity, files, credit, made-up ground and (Vesta,
+                             Ceres) level spheroid and recentre (no imports: the page, the Worker,
+                             the site and the tests share it)
+src/drive-app/level.js       which way is up on a world with a level spheroid, and a place's frame
+                             there (levelFrame), for the page and the Worker alike
+src/drive-app/body.js        a world made in the page (the Moon, Mars, Vesta, Ceres): its ground's quadtree of
+                             squares, their look, its stars, its sky and what hangs in it; LOOKS,
+                             each world's light, sky, haze, sun, dust and glow. moon.js is the
+                             Moon's by its old name
+src/drive-app/body-height.js a world's ground's height anywhere (its heights, drive/public/<world>/
+                             height.bin, and the made-up craters and rolls); moon-height.js the
+                             Moon's one, for the Worker too
+src/drive-app/world-places.js each world's spots and places (moon-places.js, mars-places.js,
+                             vesta-places.js, ceres-places.js) and
+                             their search (place-search.js)
+drive/public/moon/, mars/,   each world's height.bin and colour.webp; scripts/make-moon.mjs,
+  vesta/, ceres/             make-mars.mjs and make-asteroids.mjs make them
+drive/public/orrery/         the orrery's pictures of the five worlds and Vesta's and Ceres's
+                             shapes, which scripts/make-orrery.mjs makes
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
@@ -6726,14 +8384,20 @@ src/drive-app/live.js        the page's connection to its room: which room, send
 src/drive-app/ghosts.js      the others' cars, their name tags and effects
 src/drive-app/friends.js     the chip and list, Drive with friends, the party's banner and toasts,
                              the horn (each driver's, horns.js)
-src/drive-app/online.js      who's driving now on the globe: /api/online, the dots, Driving now
+src/drive-app/online.js      who's driving now on the globe: /api/online, the dots, Driving now,
+                             and every world's count (online.worlds) for the orrery and Worlds
+src/drive-app/orrery.js      the orrery: the Solar System the worlds are picked from, in the
+                             #orrery dialog, drawn by the page's renderer, a chunk of its own
+                             loaded as it first opens (orrery.css its look); orrery-bodies.js its
+                             eleven bodies
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
 src/drive-app/stats.js       the play stats in the page: counting, posting with the visit's token;
                              stats-protocol.js what may be counted (the page and the Worker share
                              it); dropin-cells.js the grid drop-in places are counted by
 drive/public/admin.html      the owner's page: the play stats, where people drop in (its maps
-                             drawn from /sea/mask.bin and /moon/colour.webp), the challenges and
+                             drawn from /sea/mask.bin, /moon/colour.webp and /mars/colour.webp;
+                             its own copy of the worlds' list), the challenges and
                              how many players have each achievement
 vite.drive.config.js         the build: no key, only the offered vehicles copied from public/, and
                              drive/public/ (the cars) as its own public folder; in dev, /api passed
@@ -6779,7 +8443,7 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 
 ## Known limits
 
-- [Achievements](#achievements-and-rewards) the page counts (km, Moon drives, Garage changes,
+- [Achievements](#achievements-and-rewards) the page counts (km, drives on the other worlds, Garage changes,
   rides tried) are its word, held to a day's worth each: a script reporting the most the caps allow
   earns the 1,000 km in two days and the wheel loader's 100 km on the second report after the claim,
   not in one go. What a script can have on its first day: the skid steer (10 km, its claim's 25 km
@@ -6797,7 +8461,9 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   air. The time check is on straight lines at 430 km/h, three or four times a good driver's speed in
   a city, so a made-up time that fits it gets through: the owner looks after the boards
   ([Looking after them](#looking-after-them)).
-- On the Moon you drive on your own (see [there](#on-the-moon-you-drive-on-your-own)). Its shapes
+- On the Moon, driving with others has a budget of its own (see [there](#driving-with-others-on-the-moon)),
+  as Mars, Vesta and Ceres do, so the Free plan's 100,000 a day are shared six ways: each world's rooms
+  and the rest. Its shapes
   are the real Moon's only down to a few kilometres; every crater smaller than about 20 km across
   that you drive in is made up. Nothing casts a shadow there: a crater's far wall is darker for
   facing away from the sun, but its floor isn't in its rim's shade. As on the Earth the scene isn't
@@ -6805,6 +8471,45 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   ground is 29 m lower and gravity 0.33° off true. Driving fast enough (in overdrive), the vehicle
   can outrun the finest squares being built (5 ms a frame), and drives on the next size up (a point
   every 2.6 m) until they catch up.
+- On Mars, as on the Moon, its shapes the real Mars's only down to a few kilometres (its
+  heights 7.4 km apart at the equator), the craters you drive among (from about 13 km across down)
+  made up, no shadows, and the scene not recentred while driving (Mars curves away about twice as
+  fast as the Earth: 10 km from the drop-in the ground is 15 m lower and gravity 0.17° off true).
+  Its sky is one moment's: the sun is fixed, always from the south-west about 34° up wherever you
+  are, so there's no night and no sunset, and Phobos is fixed in it too, to the north-east, a place
+  made up. The colours are the Viking orbiters' photographs as they were taken, weather and seasons
+  in them: Hellas's floor is pale (frost or haze over it, by the look of it), and round Arsia Mons's
+  caldera there are pale grey-white patches (cloud, most likely), one at its northern edge where the
+  Gazetteer puts the volcano's middle, which is why its start spot is in the caldera's middle.
+  Mars's heights are 8.3 MB to fetch the first time it's picked (the Moon's 2.1 MB), kept plain, so
+  a slow connection waits for them with **Worlds** saying "Loading Mars…". Its day's budget for
+  driving with others is small (4,000: about two hours of two driving together), so on a busy day
+  driving with others there ends early, and one address has a share of 1,000 of it.
+- On Vesta and Ceres, the same again (and their budgets for driving with others smaller still,
+  3,000 each): their shapes the real ones only down to about a
+  kilometre (their heights 573 m and 1,025 m apart at the equator; the bit of Vesta round its north
+  pole that Dawn couldn't map filled in on its map), the craters you drive among made up, no
+  shadows, and the sun fixed in the scene. The scene follows the car ([the moving
+  recentre](#the-moving-recentre)), so the sun stays where it is in the sky wherever you drive while
+  the stars turn with the world. Each move turns the chase camera's level by up to a third of a
+  degree at once, not eased; and on the globe, zoomed in by hand to between 40 and 320 m, a flight
+  can start with a slight roll as the view turns to the level. The car is held to the ground as on
+  the Earth (only a drop of 35 cm in a frame leaves it), so at speed it keeps to crests a real car
+  in a fortieth of the Earth's gravity would fly off: driving feels like the Earth's, with long hang
+  times. A square counts as over the horizon by a sphere's test, so from a high rim looking down
+  into Rheasilvia its floor far off can stay coarse (drawn, not hidden). The page's seconds in the
+  air for XP are real seconds (held to one a second, as everywhere), so hopping about on Vesta or
+  Ceres, in the air most of the time, earns air's XP faster than on the Earth (as the Moon already
+  did, at two and a half times the air). The leaderboard's longest air is still held to 120 s. The
+  heights are 8.3 MB to fetch for each, as Mars's are.
+- A period's first ask for the challenges can list fewer than the fifteen: no more than three routes
+  are checked on the other worlds' ground an ask, to keep within the Free plan's 10 ms of CPU in a
+  Worker just started, so a new day's first ask lists 14, a new week's or month's 10, and a month
+  starting on a Monday 6, and the asks after the rest, up to three more
+  ([how they're picked](#how-theyre-picked)). The page asks again four times, just enough for that
+  Monday. Three of Vesta's routes, the dearest (2.4 to 3.1 ms each on average in Node, with their
+  tries), in a Worker instance just started may still go past the 10 ms; it hasn't been measured in
+  workerd.
 
 - Where Google has no photogrammetry, the 3D tiles are smooth terrain with imagery on it: it still
   drives, without buildings.
@@ -6906,19 +8611,19 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   Google's ground under their car and beside them more than 1.5 m under it, and that ground not
   built up, told by heights alone within 75 m (below). So beside someone flying over a big lake's
   shelf less than 15 m under it, a bed coloured as sand or one closed in on most sides (an inlet, a
-  harbour's mouth), with none of yours laid (from the globe, from the Moon, or with none laid where
-  you are), you start on that bed under the water, as a pin there does, and stay on it; and so
-  beside someone riding on it there who's driven more than 34 km from where they dropped in (45 km
-  at mid-latitudes: their surface, laid as if the Earth were a sphere, can then be more than 0.5 m
-  off the water's height as it's worked out here), leaning more than 0.5 m on their springs (the bus
-  braking flat out), or in a hop off it as you join. Beside someone riding on it over open ground
-  under the water's height that isn't built up (a polder's fields or a park, in a coast's square),
-  you start on it over that ground, as they're driving on it there, and so among a town's houses by
-  such ground where a quarter of the way round is open onto it (on the test pad, by its town's open
-  ground, at 285 of the 1,260 spots of its outer blocks; with a dyke round it 75 m past its last
-  houses instead, at 5 of its houses' 4,806, where its streets end by the ground before the dyke);
-  in a channel less than about 130 m wide between banks or moles standing over the water you may
-  start on its bed under them (in one 60 m wide or narrower, always: [beside another
+  harbour's mouth), with none of yours laid (from the globe, from another world, or with none
+  laid where you are), you start on that bed under the water, as a pin there does, and stay on it;
+  and so beside someone riding on it there who's driven more than 34 km from where they dropped in
+  (45 km at mid-latitudes: their surface, laid as if the Earth were a sphere, can then be more than
+  0.5 m off the water's height as it's worked out here), leaning more than 0.5 m on their springs
+  (the bus braking flat out), or in a hop off it as you join. Beside someone riding on it over open
+  ground under the water's height that isn't built up (a polder's fields or a park, in a coast's
+  square), you start on it over that ground, as they're driving on it there, and so among a town's
+  houses by such ground where a quarter of the way round is open onto it (on the test pad, by its
+  town's open ground, at 285 of the 1,260 spots of its outer blocks; with a dyke round it 75 m past
+  its last houses instead, at 5 of its houses' 4,806, where its streets end by the ground before the
+  dyke); in a channel less than about 130 m wide between banks or moles standing over the water you
+  may start on its bed under them (in one 60 m wide or narrower, always: [beside another
   driver](#out-from-a-coast)), put on it in your scene where Google draws it less than about 3 m
   under them, and otherwise by a drop-in onto it; and a thin thing under their car that your tiles
   don't show (a pier's deck) has you start on the water beside it. With yours laid (in your scene;
@@ -6995,7 +8700,7 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   way up from a phone shows in how a ghost moves). **Hide** goes by name, so two guests who happen
   to have the same one (1 in 10,000) are hidden together. It switches itself off for the rest of
   the UTC day once it has spent [its budget](#the-days-budget) (by default about 40 driver-hours
-  with others), so on a busy day it ends early for everyone; its count of what it has spent runs a
+  with others on the Earth, each world apart), so on a busy day it ends early for everyone there; its count of what it has spent runs a
   minute behind (up to 10 for quiet rooms). One connection can still send at the room's limit, 20
   messages a second (four times what a page sends), for its visit's six hours: about 3,600 billed
   requests an hour, which nothing but the day's budget stops.
@@ -7010,6 +8715,15 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   left over, and in about 150 bands that's under 0.014° wide: no spot to 0.01° fits 0.002° inside
   it, so a dot there is drawn in the column before, and Drive here on it joins that column's room
   (open ocean, Antarctica, Chukotka and a few Fiji and Aleutian bands).
+- [On every world](#on-every-world): a car is sent only within its world's shell, up to 30 km over
+  Mars's highest ground and 40 km over Vesta's and Ceres's; flown higher than that (it's not known
+  how high a car can fly in their weak gravity), its ghost stops where it was on the others' screens
+  until it's back down. Near Vesta's poles an area's columns are wide (held to the width at about
+  87°). A page from before Mars, Vesta and Ceres had drivers (v2) shows a friend looking at Mars's
+  globe as on the Earth's. A dot on Vesta's or Ceres's globe is hidden round the back by the
+  sphere's test, so near the edge one may show through a high crater rim (not checked by eye). The
+  orrery's counts are who's driving now's, so after 10 minutes untouched on the globe (no more
+  asks) they can be old, and nothing says so.
 - [Levels](#levels): the page says what it drove, so a script reporting the most the caps allow
   from a real visit levels about ten times as fast as driving, and a new player's claim counts an
   hour of that at once; the Garage's unlocks are in the page, as the pass's are. Each device's
@@ -7026,19 +8740,20 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   shows a place busy on one day only. Everyone behind one address (a home, a school, a phone network
   sharing addresses) counts once a day at a place, so a busy start spot's count there is low beside
   its `dropin` count in the play stats. The owner's own drop-ins aren't counted as places at all
-  (their visits' tokens say they're the owner's), so what the owner tries out isn't seen there; their
-  play stats are counted as anyone's. A visit's
-  places past its 10 aren't counted, so a long party's later drop-ins are left out. Natural Earth's
-  towns are sparse in places, so a place is named by the nearest of them, which isn't always the
-  nearest town. The base map is the game's own, squares of about 5 km on the Earth and pixels of
-  about 2.7 km on the Moon, so it's zoomed no closer than 150 km across: Drive is how to see the
-  streets. A start spot's row is on at least as many days as its busiest cell, maybe more. The map
-  has a period's 2,000 busiest cells; with both worlds at their day's cap every day for a year, a
-  year-long look reads 1.1 million D1 rows. An answer is kept for an hour in the Worker instance that
-  worked it out, so looking again costs nothing, but four year-long looks in a day, each worked out
-  afresh (an hour apart, or in different Worker instances), would read most of a Free day's rows;
-  [What it costs](#what-it-costs-1) says why that's left so. Visitors behind one IPv6 /48 (a site's,
-  or many phones of one network's) count once a day at a place, as those behind one IPv4 address do.
+  (their visits' tokens say they're the owner's), so what the owner tries out isn't seen there;
+  their play stats are counted as anyone's. A visit's places past its 10 aren't counted, so a long
+  party's later drop-ins are left out. Natural Earth's towns are sparse in places, so a place is
+  named by the nearest of them, which isn't always the nearest town. The base map is the game's own,
+  squares of about 5 km on the Earth and pixels of about 2.7 km on the Moon and 5.2 km on Mars (0.4
+  and 0.7 km on Vesta and Ceres), so it's zoomed no closer than 150 km across, on every world: Drive
+  is how to see the streets (on Vesta, 525 km across, that's a good part of the world). A start spot's row is
+  on at least as many days as its busiest cell, maybe more. The map has a period's 2,000 busiest
+  cells; with every world at its day's cap every day for a year, a year-long look reads 2.7 million
+  D1 rows. An answer is kept for an hour in the Worker instance that worked it out, so looking again
+  costs nothing, but two year-long looks in a day, each worked out afresh (an hour apart, or in
+  different Worker instances), would read more than a Free day's rows; [What it
+  costs](#what-it-costs-1) says why that's left so. Visitors behind one IPv6 /48 (a site's, or many
+  phones of one network's) count once a day at a place, as those behind one IPv4 address do.
 - [The cars](#world-drives-cars): the importer turns a car's wheels, not what steers them, so the
   tuk-tuk's handlebars and the golf cart's and the lawn tractor's steering wheels stay still while
   their front wheels steer. The tuk-tuk's green panels are small, so the Garage's stripes and number
@@ -7061,17 +8776,29 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 The 3D world is Google's: the Google Maps logo and the data providers show whenever the tiles are on
 screen. The Moon's heights and pictures are NASA's (public domain), from the Lunar Reconnaissance
 Orbiter's laser altimeter (LOLA) and wide-angle camera (LROC), as NASA's Scientific Visualization
-Studio's CGI Moon Kit has them (https://svs.gsfc.nasa.gov/4720/), credited under **About World Drive**
-and in the corner while you're there. The open sea's height is NGA's EGM96 geoid (public domain), from PROJ's copy of it, and
-where the sea and the big lakes are is Natural Earth's ocean and lakes at 1:10 million (public
-domain, naturalearthdata.com), from its GitHub copy, as are the towns the owner's map of where
-people drop in names places by (its populated places). Place search © OpenStreetMap contributors. The
-trucks and the cars are models from Sketchfab under CC BY 4.0, credited under **About World Drive**
-and on the ride picker (and the cars in `drive/public/cars/CREDITS.md`): the muscle car by Lexyc16,
-the golf cart by pixelsquare, the tuk-tuk by aminzafar, the ice-cream van by Sidra, the lawn tractor
-by mirrol, the retro wedge by Serg_Stark... (Serg_str), the formula racer by TimMod, the neon racer
-and the night cruiser by ferofluid, the dune buggy by XP_Frost, the farm truck by Nekitron, the
-police cruiser by JG3D, the hypercar by ollitei and the cyber muscle car by Jungle Jim. The go-kart
-and the pass's rides are built in code. The link cards (`drive/public/og/`) show the muscle car,
-drawn as World Drive draws it, on an Earth drawn in CSS: no picture of Google's tiles is used outside
-the map itself.
+Studio's CGI Moon Kit has them (https://svs.gsfc.nasa.gov/4720/), credited under **About World
+Drive** and in the corner while you're there. Mars's heights are NASA's too (public domain), from
+Mars Global Surveyor's laser altimeter (MOLA), as NASA's Planetary Data System's Geosciences Node
+has them, and its colours are the Viking orbiters' photographs, NASA Ames's colour over the USGS's
+MDIM 2.1 mosaic, as the USGS has it (public domain:
+https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m), credited the
+same way ("Mars: NASA MGS MOLA, Viking (USGS)"); its small craters, the rocks close by and Phobos's
+place in the sky are made up, as About says. Vesta's and Ceres's are from NASA's Dawn mission
+(NASA/JPL-Caltech/UCLA/MPS/DLR/IDA): its framing camera's photographs and the DLR's models of their
+shapes made from them, as the USGS's planetary maps have them
+(https://planetarymaps.usgs.gov/mosaic/), credited the same way ("Vesta: NASA Dawn (DLR, USGS)",
+"Ceres: NASA Dawn (DLR, USGS)"); their small craters and the rocks close by are made up. They're
+free to use with credit (the USGS asks that the authors be cited; the DLR made them), not public
+domain as such. The open sea's height is NGA's EGM96 geoid (public
+domain), from PROJ's copy of it, and where the sea and the big lakes are is Natural Earth's ocean
+and lakes at 1:10 million (public domain, naturalearthdata.com), from its GitHub copy, as are the
+towns the owner's map of where people drop in names places by (its populated places). Place search ©
+OpenStreetMap contributors. The trucks and the cars are models from Sketchfab under CC BY 4.0,
+credited under **About World Drive** and on the ride picker (and the cars in
+`drive/public/cars/CREDITS.md`): the muscle car by Lexyc16, the golf cart by pixelsquare, the
+tuk-tuk by aminzafar, the ice-cream van by Sidra, the lawn tractor by mirrol, the retro wedge by
+Serg_Stark... (Serg_str), the formula racer by TimMod, the neon racer and the night cruiser by
+ferofluid, the dune buggy by XP_Frost, the farm truck by Nekitron, the police cruiser by JG3D, the
+hypercar by ollitei and the cyber muscle car by Jungle Jim. The go-kart and the pass's rides are
+built in code. The link cards (`drive/public/og/`) show the muscle car, drawn as World Drive draws
+it, on an Earth drawn in CSS: no picture of Google's tiles is used outside the map itself.

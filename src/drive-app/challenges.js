@@ -1,21 +1,22 @@
 import './challenges.css';
 import {
 	Color, CylinderGeometry, DataTexture, DoubleSide, InstancedMesh, MathUtils, Matrix4, MeshBasicMaterial, OctahedronGeometry, Quaternion,
-	LinearFilter, TorusGeometry, Vector3,
+	LinearFilter, Shape, ShapeGeometry, TorusGeometry, Vector2, Vector3,
 } from 'three';
 import { send } from './api.js';
 import { createRaceGhost, createRecorder } from './challenge-ghost.js';
-import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
+import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_NAMES, TALL, ZONE_UP, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
 import { ghostFault } from './ghost-rules.js';
 import { LEVEL_MAX, levelLine } from './levels.js';
-import { MOON } from './moon-places.js';
+import { EARTH, WORLDS, onWorld, OnWorld, WORLD_IDS } from './worlds.js';
+import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from '../geo.js';
 
 // Challenges in the page (docs/world-drive.md, "Challenges"): its own chunk, loaded the first time
-// they're opened (main.js), so nothing of it is in the page's first load. The list of the six live
-// ones (the current world's three first), each with the time it has left (ticking), its board's top
+// they're opened (main.js), so nothing of it is in the page's first load. The list of the fifteen live
+// ones (three a world, the current world's first), each with the time it has left (ticking), its board's top
 // three and your best; its board; starting one (a drop-in at its start, on its world); the run: a
 // countdown, the gates or items on the ground the game has (their heights found as it loads: rays
-// down on the Earth's tiles, a few a frame, the Moon's own heights), the next one marked on the HUD
+// down on the Earth's tiles, a few a frame, another world's own heights), the next one marked on the HUD
 // with an arrow and how far, the timer, and the finish card with your time, your place and the
 // board's top, Retry and Back, the car brought to a stop under it; and posting the time
 // (worker/drive/challenges.js), kept to be posted when the connection's back if it can't be.
@@ -42,17 +43,42 @@ import { MOON } from './moon-places.js';
 const COUNTDOWN = 3;
 const READING = 6;
 // Gates and items as drawn (m): a sprint's ring at most RING round (its zone is the route's radius,
-// wider), a beam BEAM round and BEAM_HIGH up from the ground (twice that on the Moon, where it's
-// seen from further), an item ITEM across, ITEM_UP over the ground, turning at SPIN rad/s.
+// wider), a beam BEAM round and BEAM_HIGH up from the ground (twice that on another world, where
+// it's seen from further), an item ITEM across, ITEM_UP over the ground, turning at SPIN rad/s.
 const RING = 10;
-const RING_TUBE = 0.035;
+const RING_TUBE = 0.06;
 const BEAM = 3;
 const BEAM_HIGH = 320;
 const ITEM = 2.2;
 const ITEM_UP = 3;
 const SPIN = 1.6;
-// The middle of a gate's zone is this far (m) over its ground.
-const ZONE_UP = 2;
+// The next gate (or star) stands out: its beam NEXT_WIDE times as wide, and its ring breathing
+// NEXT_PULSE of its size either way at PULSE_RATE rad/s.
+const NEXT_WIDE = 1.8;
+const NEXT_PULSE = 0.08;
+const PULSE_RATE = 4;
+// The course on another world's ground (its heights are known everywhere, so it can be laid on them):
+// glowing chevrons CHEVRON_GAP m apart, CHEVRON across and CHEVRON_UP over the ground, pointing the
+// way, leaned up CHEVRON_LEAN rad from lying flat (flat, they're lines a few metres off from a
+// driver's low view). Bright on the way to the next gate (from the gate before, or the start), from the car up to
+// COURSE_REACH m ahead; dim on the way on from it (the turn coming), PREVIEW_REACH m of it. For a
+// star hunt, from the car to the nearest star. Laid again as the next one changes and each
+// COURSE_MOVE m driven; a wave of light runs along them toward the gate, WAVE m long, every
+// WAVE_TIME s. COURSE_MOST at most.
+const CHEVRON_GAP = 18;
+const CHEVRON = 1.7;
+const CHEVRON_UP = 0.15;
+const CHEVRON_LEAN = 0.35;
+const COURSE_REACH = 720;
+const PREVIEW_REACH = 260;
+const COURSE_MOVE = 12;
+const WAVE = 90;
+const WAVE_TIME = 1.1;
+const COURSE_MOST = 64;
+// The marker on the screen over the next gate (or star): this far (m) over its top, kept EDGE px in
+// from the screen's sides when the gate's off the screen or behind.
+const MARKER_UP = 4;
+const EDGE = 44;
 // On the Earth a gate's ground is found by rays down at its middle and at eight points round it,
 // PROBE_OUT of its radius out (the lowest is its ground, the highest its top: probe), only for the
 // gates within PROBE_NEAR m of the car (a far one's tiles are coarse, so what a ray finds there is
@@ -87,9 +113,11 @@ const WAIT_MOST = 60;
 // and on a phone over the buttons.
 const STOPPING = 1;
 const STOP_LEAST = 12;
-// A new list is asked for as a listed challenge ends; if that fails (or still has it ended) it's
-// asked again after RELOAD ms, then twice that and so on up to RELOAD_MOST, RELOADS times at most
-// (or after the Retry-After the Worker gives), and then not till the list is opened again.
+// A new list is asked for as a listed challenge ends, or while the Worker says it has more to come
+// (a period's first ask can be short: its CHECKED_MOST); if that fails (or still has it ended, or
+// more to come) it's asked again after RELOAD ms, then twice that and so on up to
+// RELOAD_MOST, RELOADS times at most (or after the Retry-After the Worker gives), and then not till
+// the list is opened again.
 const RELOAD = 5000;
 const RELOAD_MOST = 60000;
 const RELOADS = 4;
@@ -105,17 +133,23 @@ const SHARE_KINDS = { sprint: 'sprint', collect: 'star hunt', landmark: 'drive' 
 const SHARE_PERIODS = { day: 'today\'s', week: 'this week\'s', month: 'this month\'s' };
 const LINK_PERIODS = { day: 'daily', week: 'weekly', month: 'monthly' };
 const FLAG = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg>';
-const WORLD_NAMES = { earth: 'On the Earth', moon: 'On the Moon' };
 
 const _v = new Vector3();
 const _q = new Quaternion();
 const _s = new Vector3();
+const _w = new Vector3();
+const _colour = new Color();
 const _m = new Matrix4();
 const _up = new Vector3( 0, 1, 0 );
+const _inverse = new Matrix4();
+const _carto = { lat: 0, lon: 0, height: 0 };
 
-// app: what main.js hands over: visit(), player(), pickName( name, say ), world(), moonOnly
+// app: what main.js hands over: visit(), player(), pickName( name, say ), world(), earthClosed
 // ({ onEarth } when there's no Earth this visit), mode(), place(), vehicle(), the driver, ground,
-// camera, scene, globe, moon and vehicles, stats, startAt( place ), placeCar( pose ), toGlobe(),
+// camera, scene, globe, bodies (the other worlds' grounds, body.js, by id) and vehicles, stats,
+// startAt( place ), placeCar( pose ), toGlobe(), recentring (on a world whose scene follows the car,
+// how far it goes before the scene's moved to it; else null) and shiftTo( { lat, lon, height } ) (the
+// scene moved there as that does, recentred called with it),
 // keys() (the keys card shown over a run's countdown, the visit's first time on a computer: true
 // if it is), go() (a run's GO: the keys card put away, so nothing covers the road while the clock
 // runs), pivot() (your car's, as drawn), look() (your ride's Garage look), ghostModels (ghosts.js's,
@@ -124,6 +158,7 @@ export function setUpChallenges( app ) {
 
 	const dialog = makeDialog();
 	const hud = makeHud( app.driveUi );
+	const marker = makeMarker( app.driveUi );
 	// The HUD's parts, and what's written in each (updateHud).
 	const hudParts = {
 		clock: hud.querySelector( '.ch-clock' ), gates: hud.querySelector( '.ch-gates' ), dist: hud.querySelector( '.ch-dist' ), arrow: hud.querySelector( '.ch-arrow' ),
@@ -268,15 +303,16 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// The six, the current world's three first, a heading for each world.
+	// The fifteen, the current world's three first, a heading for each world.
 	function render() {
 
 		const here = app.world();
-		const worlds = here === MOON ? [ 'moon', 'earth' ] : [ 'earth', 'moon' ];
+		const worlds = [ here, ...WORLD_IDS.filter( world => world !== here ) ];
 		const parts = [];
 		for ( const world of worlds ) {
 
-			const heading = Object.assign( document.createElement( 'h3' ), { className: 'ch-world', textContent: WORLD_NAMES[ world ] } );
+			if ( ! listed.challenges.some( c => c.world === world ) ) continue;
+			const heading = Object.assign( document.createElement( 'h3' ), { className: 'ch-world', textContent: OnWorld( world ) } );
 			parts.push( heading, ...listed.challenges.filter( c => c.world === world ).map( card ) );
 
 		}
@@ -306,7 +342,7 @@ export function setUpChallenges( app ) {
 		const you = el( 'p', 'ch-you', best === undefined ? 'You haven\'t a time on it yet' : `Your best ${ formatTime( best ) }${ challenge.me?.rank ? ` · #${ rankText( challenge.me.rank ) } of ${ Math.max( challenge.total, challenge.me.rank ) }` : '' }` );
 		if ( challenge.me?.owner ) you.textContent = `Your best ${ formatTime( challenge.me.ms ) } (yours as the owner, kept off the board)`;
 		const buttons = el( 'div', 'ch-buttons' );
-		const earthShut = challenge.world !== MOON && !! app.moonOnly;
+		const earthShut = challenge.world === EARTH && !! app.earthClosed;
 		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : 'Start' );
 		start.type = 'button';
 		start.addEventListener( 'click', () => earthShut ? toEarth() : begin( challenge ) );
@@ -340,27 +376,31 @@ export function setUpChallenges( app ) {
 
 		}
 
+		// Asked again while any listed has ended, or while the Worker says there are more to come (a
+		// period's first ask lays out only so many on their ground: its CHECKED_MOST, the next ones
+		// the rest, up to three more on a month's first day that's a Monday).
 		const ended = listed.challenges.filter( c => c.endsAt <= now ).map( c => c.id ).join( ',' );
-		if ( ended !== reloadFor ) [ reloadFor, reloads, reloadAt ] = [ ended, 0, 0 ];
-		if ( ! dialog.open || ! ended || reloading || reloads >= RELOADS || Date.now() < reloadAt ) return;
+		const due = ended || ( listed.more ? 'more' : '' );
+		if ( due !== reloadFor ) [ reloadFor, reloads, reloadAt ] = [ due, 0, 0 ];
+		if ( ! dialog.open || ! due || reloading || reloads >= RELOADS || Date.now() < reloadAt ) return;
 		reloading = true;
 		reloads ++;
 		load().then( answer => {
 
-			// Asked again later only if it's still the same ones ended (tick sees to that): after the
-			// Worker's Retry-After, or RELOAD doubling each time.
+			// Asked again later only if it's still the same ones ended, or still more to come (tick sees to
+			// that): after the Worker's Retry-After, or RELOAD doubling each time.
 			reloadAt = Date.now() + ( answer.retryAfter ? answer.retryAfter * 1000 : Math.min( RELOAD_MOST, RELOAD * 2 ** ( reloads - 1 ) ) );
 
 		} ).finally( () => reloading = false );
 
 	}
 
-	// No Earth this visit (today's Earth drives used up, or a page opened on the Moon): its own word
+	// No Earth this visit (today's Earth drives used up, or a page opened on another world): its own word
 	// on how to get there.
 	function toEarth() {
 
 		dialog.close();
-		app.moonOnly?.onEarth();
+		app.earthClosed?.onEarth();
 
 	}
 
@@ -371,7 +411,7 @@ export function setUpChallenges( app ) {
 		dialog.querySelector( '.ch-list' ).hidden = true;
 		board.hidden = false;
 		board.querySelector( '.ch-board-title' ).textContent = `${ PERIOD_NAMES[ challenge.period ] }: ${ challenge.place }`;
-		board.querySelector( '.ch-board-sub' ).textContent = `${ KIND_NAMES[ challenge.kind ] } · ${ describe( challenge ) }${ challenge.world === MOON ? ' · on the Moon' : '' }`;
+		board.querySelector( '.ch-board-sub' ).textContent = `${ KIND_NAMES[ challenge.kind ] } · ${ describe( challenge ) }${ challenge.world === EARTH ? '' : ` · ${ onWorld( challenge.world ) }` }`;
 		const rows = board.querySelector( '.ch-rows' );
 		const mine = board.querySelector( '.ch-mine' );
 		rows.replaceChildren();
@@ -437,7 +477,7 @@ export function setUpChallenges( app ) {
 	function shareText( challenge, ms ) {
 
 		const what = challenge.kind === 'landmark' ? `drive to ${ challenge.route.goal ?? challenge.place }` : `${ challenge.place } ${ SHARE_KINDS[ challenge.kind ] }`;
-		return `Beat my ${ formatTime( ms ) } on ${ SHARE_PERIODS[ challenge.period ] } ${ what }${ challenge.world === MOON ? ' on the Moon' : '' } in World Drive`;
+		return `Beat my ${ formatTime( ms ) } on ${ SHARE_PERIODS[ challenge.period ] } ${ what }${ challenge.world === EARTH ? '' : ` ${ onWorld( challenge.world ) }` } in World Drive`;
 
 	}
 
@@ -524,7 +564,7 @@ export function setUpChallenges( app ) {
 		card.hidden = false;
 		card.dataset.world = challenge.world;
 		card.replaceChildren();
-		const what = `the ${ LINK_PERIODS[ challenge.period ] } ${ KIND_NAMES[ challenge.kind ].toLowerCase() } at ${ challenge.place }${ challenge.world === MOON ? ' on the Moon' : '' }`;
+		const what = `the ${ LINK_PERIODS[ challenge.period ] } ${ KIND_NAMES[ challenge.kind ].toLowerCase() } at ${ challenge.place }${ challenge.world === EARTH ? '' : ` ${ onWorld( challenge.world ) }` }`;
 		const over = challenge.finalAt != null || challenge.replacedAt != null || ended( challenge );
 		const head = el( 'p', 'ch-link-head' );
 		const buttons = el( 'div', 'ch-buttons' );
@@ -555,7 +595,7 @@ export function setUpChallenges( app ) {
 		else if ( named ) head.append( `That link's time wasn't found (the address may have been cut short), so there's no ghost to race. Here's the challenge: ${ what }, ${ left } left.` );
 		else head.append( `Here's the challenge: ${ what }, ${ left } left.` );
 		card.append( el( 'p', 'ch-link-kicker', vs ? 'A friend\'s challenge' : 'A challenge' ), head );
-		const earthShut = challenge.world !== MOON && !! app.moonOnly;
+		const earthShut = challenge.world === EARTH && !! app.earthClosed;
 		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : vs?.ghost ? 'Start: race their ghost' : 'Start' );
 		start.type = 'button';
 		start.addEventListener( 'click', () => {
@@ -627,7 +667,7 @@ export function setUpChallenges( app ) {
 		app.startAt( {
 			...named, lat: start.lat, lon: start.lon,
 			...( Number.isFinite( start.heading ) ? { heading: start.heading } : {} ),
-			...( challenge.world === MOON ? { world: MOON } : {} ),
+			...( challenge.world === EARTH ? {} : { world: challenge.world } ),
 			challenge: challenge.id,
 		} );
 
@@ -770,7 +810,7 @@ export function setUpChallenges( app ) {
 
 		sayMissed();
 		if ( ! run || run.phase !== 'countdown' || ! race?.ready || race.challenge !== run.challenge.id ) return showGhostToggle();
-		race.ghost.start( app.globe, run.challenge.route.start );
+		race.ghost.start( app.globe, run.challenge.route.start, run.challenge.world );
 		run.raced = race;
 		showGhostToggle();
 
@@ -825,32 +865,79 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// Each point's place in the scene: on the Moon on its own heights (exact, before any ground is
+	// Each point's place in the scene: on another world on its own heights (exact, before any ground is
 	// built); on the Earth at the start's height until the tiles' ground there is found (probe, a few
 	// rays a frame from the next frame on: nothing more in the one the car arrives in).
 	function placeGates( challenge ) {
 
-		const { globe, moon } = app;
-		const moonly = challenge.world === MOON;
+		const { globe } = app;
+		// On another world its heights are known everywhere (body.js): each point at its own.
+		const heights = challenge.world === EARTH ? null : app.bodies?.[ challenge.world ] ?? null;
+		const moonly = !! heights;
 		const base = app.place()?.height ?? 0;
 		const ordered = challenge.kind !== 'collect';
 		const gates = challenge.route.points.map( ( [ lat, lon ], index ) => {
 
-			const height = moonly ? moon.heightAt( lat, lon ) ?? base : base;
+			const height = moonly ? heights.heightAt( lat, lon ) ?? base : base;
 			const local = sceneOf( globe, lat, lon, height ).clone();
 			const ground = moonly ? local.y : null;
-			return { index, lat, lon, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0, probed: moonly };
+			return { index, lat, lon, height, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0, probed: moonly };
 
 		} );
-		// A ring faces along the way to it: from the start, or the gate before.
 		const d = app.driver;
+		face( gates, ordered, { x: - d.east, z: d.north } );
+		return gates;
+
+	}
+
+	// A ring faces along the way to it: from the start (`from`, in the scene), or the gate before.
+	function face( gates, ordered, from ) {
+
 		gates.forEach( ( gate, i ) => {
 
-			const from = ordered && i ? gates[ i - 1 ] : { x: - d.east, z: d.north };
-			gate.facing = Math.atan2( gate.x - from.x, gate.z - from.z );
+			const before = ordered && i ? gates[ i - 1 ] : from;
+			gate.facing = Math.atan2( gate.x - before.x, gate.z - before.z );
 
 		} );
-		return gates;
+
+	}
+
+	// main.js: the scene's been moved by `matrix` (a Matrix4, a turn and a shift: its recentre, as the
+	// car drives on a world whose scene follows it, Vesta's or Ceres's, or app.shiftTo's on a Retry),
+	// and the driver, the camera and the rest with it. What's here in the scene is moved too: the
+	// run's recording so far; its gates placed again from where they are on the world (at the heights
+	// they were placed at, passed or not as they were: only another world's scene is ever moved, whose
+	// gates' heights are its own); where it started moved as a place and a way to face, and where the
+	// finish card held the car let go (it's held again where it is, at a standstill); the meshes put
+	// where the gates are and the course laid again; and the ghost raced put into the scene again.
+	function recentred( matrix ) {
+
+		recorder.transform( matrix );
+		if ( ! run ) return;
+		const { start } = run;
+		matrix.decompose( _w, _q, _s );
+		const { east, north, up } = localToEnu( enuToLocal( start.east, start.north, start.up, _v ).applyMatrix4( matrix ) );
+		// (The way it faced, turned as the scene was and laid flat again: a yaw's forward is -z turned
+		// by it.)
+		const yaw = headingToYaw( start.heading );
+		_v.set( - Math.sin( yaw ), 0, - Math.cos( yaw ) ).applyQuaternion( _q );
+		run.start = { east, north, heading: yawToHeading( Math.atan2( - _v.x, - _v.z ) ), up };
+		run.stopAt = null;
+		if ( run.challenge.world !== EARTH ) {
+
+			for ( const gate of run.gates ) {
+
+				const local = sceneOf( app.globe, gate.lat, gate.lon, gate.height );
+				Object.assign( gate, { x: local.x, z: local.z, ground: local.y, top: local.y, guess: local.y } );
+
+			}
+
+			face( run.gates, run.challenge.kind !== 'collect', { x: - run.start.east, z: run.start.north } );
+
+		}
+
+		meshes.moved( run );
+		if ( race?.ready && run.raced === race ) race.ghost.start( app.globe, run.challenge.route.start, run.challenge.world );
 
 	}
 
@@ -971,7 +1058,7 @@ export function setUpChallenges( app ) {
 
 		}
 
-		if ( run && run.challenge.world !== MOON && run.phase !== 'stopped' ) probeFrame( dt, d );
+		if ( run && run.challenge.world === EARTH && run.phase !== 'stopped' ) probeFrame( dt, d );
 
 		if ( run ) {
 
@@ -1049,7 +1136,7 @@ export function setUpChallenges( app ) {
 		// look, to draw it in.
 		const pivot = app.pivot?.();
 		if ( pivot ) recorder.finish( ms, pivot );
-		const ghost = pivot ? recorder.pack( app.globe, run.challenge.route.start ) : null;
+		const ghost = pivot ? recorder.pack( app.globe, run.challenge.route.start, run.challenge.world ) : null;
 		run.result = { challenge: run.challenge, id: run.id, ms, passes: run.passes.map( pass => [ ...pass ] ), vehicle: app.vehicle()?.id ?? 'go-kart', look: app.look?.() ?? {}, ghost };
 		app.stats.add( 'challenge', 'finish' );
 		app.driver.hud.flash( 'Finished!' );
@@ -1067,6 +1154,8 @@ export function setUpChallenges( app ) {
 
 		}
 
+		// (Not lit again by a boost key still held: see Driver.thrust.)
+		d.ranDry = true;
 		d.boost = null;
 
 	}
@@ -1117,7 +1206,7 @@ export function setUpChallenges( app ) {
 	function retry() {
 
 		if ( ! run ) return;
-		const { challenge, start, gates } = run;
+		const { challenge } = run;
 		if ( ended( challenge ) ) {
 
 			const from = app.mode();
@@ -1130,6 +1219,18 @@ export function setUpChallenges( app ) {
 		finish.hidden = true;
 		stopped.hidden = true;
 		naming = null;
+		// On a world whose scene follows the car (main.js's recentre), the start can be kilometres
+		// behind, several moves of the scene ago: the scene's moved back to the route's start first
+		// (app.shiftTo, which moves this run's start and gates with it, recentred), so the car's put
+		// down by the scene's middle.
+		if ( app.recentring ) {
+
+			const { lat, lon } = challenge.route.start;
+			app.shiftTo( { lat, lon, height: app.bodies?.[ challenge.world ]?.heightAt( lat, lon ) ?? 0 } );
+
+		}
+
+		const { start, gates } = run;
 		if ( ! app.placeCar( start ) ) return;
 		for ( const gate of gates ) gate.passed = false;
 		run = { challenge, gates, start, phase: 'countdown', left: COUNTDOWN, clock: 0, after: 0, passes: [], id: runId() };
@@ -1160,6 +1261,7 @@ export function setUpChallenges( app ) {
 	function showingHud( shown ) {
 
 		hud.hidden = ! shown;
+		marker.root.hidden = true;
 		document.body.classList.toggle( 'ch-running', shown );
 		for ( const key of Object.keys( written ) ) delete written[ key ];
 
@@ -1191,8 +1293,9 @@ export function setUpChallenges( app ) {
 		write( 'clock', formatTime( done ? run.ms : run.clock * 1000 ) );
 		write( 'gates', run.challenge.kind === 'landmark' ? run.challenge.route.goal : `${ run.passes.length } / ${ run.gates.length }${ run.challenge.kind === 'collect' ? ' ★' : '' }` );
 		const target = done ? null : nextGate( d );
-		write( 'aim', target ? '' : 'none', () => hudParts.arrow.hidden = hudParts.dist.hidden = ! target );
+		write( 'aim', target ? '' : 'none', () => hudParts.arrow.hidden = hudParts.dist.hidden = marker.root.hidden = ! target );
 		if ( ! target ) return;
+		placeMarker( target );
 		const east = - target.x - d.east;
 		const north = target.z - d.north;
 		app.camera.getWorldDirection( _v );
@@ -1200,7 +1303,55 @@ export function setUpChallenges( app ) {
 		const degrees = Math.round( ( Math.atan2( east, north ) - facing ) * MathUtils.RAD2DEG );
 		write( 'turn', degrees, () => hudParts.arrow.style.transform = `rotate( ${ degrees }deg )` );
 		const metres = Math.hypot( east, north );
-		write( 'dist', metres >= 1000 ? `${ ( metres / 1000 ).toFixed( 1 ) } km` : `${ Math.round( metres ) } m` );
+		write( 'dist', metres >= 1000 ? `${ ( metres / 1000 ).toFixed( 1 ) } km` : `${ Math.round( metres ) } m`, () => marker.dist.textContent = hudParts.dist.textContent = written.dist );
+
+	}
+
+	// The marker over the next gate (or star) on the screen, with how far it is: where it is in the
+	// view, or held at the screen's edge on its side when it's off the screen (or behind you, turned
+	// round to the side it's on), pointing to it there. Coloured as the gate is.
+	function placeMarker( target ) {
+
+		const ringed = run.challenge.kind !== 'collect';
+		const ring = Math.min( RING, run.challenge.route.radius * 0.5 );
+		const y = ( target.ground ?? target.guess ) + ( ringed ? ring * 2 + 0.6 : ITEM_UP + ITEM ) + MARKER_UP;
+		const camera = app.camera;
+		camera.getWorldPosition( _s );
+		camera.getWorldDirection( _v );
+		const behind = _w.set( target.x, y, target.z ).sub( _s ).dot( _v ) < 0;
+		_v.set( target.x, y, target.z ).project( camera );
+		let x = behind ? - _v.x : _v.x;
+		let yy = behind ? - _v.y : _v.y;
+		const width = window.innerWidth;
+		const height = window.innerHeight;
+		const ex = 1 - 2 * EDGE / width;
+		const ey = 1 - 2 * EDGE / height;
+		const off = behind || Math.abs( x ) > ex || Math.abs( yy ) > ey;
+		let angle = 0;
+		if ( off ) {
+
+			// Out along its direction from the middle until it meets the edge.
+			if ( behind && Math.abs( x ) < 1e-3 && Math.abs( yy ) < 1e-3 ) yy = - 1;
+			const scale = 1 / Math.max( Math.abs( x ) / ex, Math.abs( yy ) / ey );
+			x *= scale;
+			yy *= scale;
+			angle = Math.round( Math.atan2( x * width, yy * height ) * MathUtils.RAD2DEG );
+
+		}
+
+		const px = Math.round( ( x + 1 ) / 2 * width );
+		const py = Math.round( ( 1 - yy ) / 2 * height );
+		write( 'marker', `${ px },${ py }`, () => marker.root.style.transform = `translate( ${ px }px, ${ py }px )` );
+		write( 'markerOff', off ? angle : 'on', () => {
+
+			marker.root.classList.toggle( 'off', off );
+			// Pointing down, the arrow is where the distance goes: that goes over the diamond.
+			marker.root.classList.toggle( 'below', off && Math.abs( angle ) > 90 );
+			marker.pointer.style.transform = `rotate( ${ angle }deg )`;
+
+		} );
+		const last = ringed && target === run.gates[ run.gates.length - 1 ];
+		write( 'markerKind', ringed ? last ? 'goal' : 'gate' : 'star', () => marker.root.dataset.kind = ringed ? last ? 'goal' : 'gate' : 'star' );
 
 	}
 
@@ -1443,7 +1594,7 @@ export function setUpChallenges( app ) {
 		root.setAttribute( 'aria-labelledby', 'ch-title' );
 		root.innerHTML = `
 			<header class="ch-head"><h2 id="ch-title">${ FLAG } Challenges</h2><button type="button" class="close" aria-label="Close">&times;</button></header>
-			<p class="ch-intro">A daily, a weekly and a monthly one on the Earth and on the Moon, each with its own board. Your best time counts.</p>
+			<p class="ch-intro">A daily, a weekly and a monthly one on ${ worldList() }, each with its own board. Your best time counts.</p>
 			<p class="ch-note" role="status" hidden></p>
 			<p class="ch-status" role="status" hidden></p>
 			<section class="ch-link" aria-label="A friend's challenge" hidden></section>
@@ -1552,6 +1703,7 @@ export function setUpChallenges( app ) {
 		arrived,
 		paused,
 		resumed,
+		recentred,
 		left: () => {
 
 			pending = null;
@@ -1602,7 +1754,11 @@ export function setUpChallenges( app ) {
 		const beams = new InstancedMesh( beamGeometry, new MeshBasicMaterial( { transparent: true, opacity: 0.6, alphaMap: alpha, depthWrite: false, side: DoubleSide, forceSinglePass: true, toneMapped: false } ), most );
 		const rings = new InstancedMesh( new TorusGeometry( 1, RING_TUBE, 6, 36 ), new MeshBasicMaterial( { toneMapped: false } ), most );
 		const items = new InstancedMesh( new OctahedronGeometry( 1 ), new MeshBasicMaterial( { toneMapped: false } ), most );
-		for ( const mesh of [ beams, rings, items ] ) {
+		// The course's chevrons: a V pointing along +z, standing on the ground leaned forward.
+		const vee = new Shape( [ [ 0, 0.6 ], [ 1, - 0.4 ], [ 1, - 0.9 ], [ 0, 0.1 ], [ - 1, - 0.9 ], [ - 1, - 0.4 ] ].map( ( [ x, y ] ) => new Vector2( x, y ) ) );
+		const chevrons = new InstancedMesh( new ShapeGeometry( vee ).translate( 0, 0.9, 0 ).rotateX( Math.PI / 2 - CHEVRON_LEAN ), new MeshBasicMaterial( { transparent: true, opacity: 0.9, depthWrite: false, side: DoubleSide, toneMapped: false } ), COURSE_MOST );
+		chevrons.setColorAt( 0, NEXT );
+		for ( const mesh of [ beams, rings, items, chevrons ] ) {
 
 			mesh.frustumCulled = false;
 			mesh.count = 0;
@@ -1614,14 +1770,27 @@ export function setUpChallenges( app ) {
 		}
 
 		beams.name = 'challenge-beams';
+		chevrons.name = 'challenge-course';
+		// Marks on the ground, drawn before the beams always (both see-through: by the depth of
+		// bounding spheres made once, which a moving course would leave stale, the order would flip).
+		chevrons.renderOrder = 1;
 		let spin = 0;
+		let pulse = 0;
+		let wave = 0;
+		// The course as laid: each chevron's distance (m) to the gate it leads to, and whether it's on
+		// the way on from the next (dim); what it was laid for (the gate, and where the car was).
+		let laid = [];
+		let laidFor = null;
 		const added = () => !! beams.parent;
 		return {
-			beams, rings, items,
+			beams, rings, items, chevrons,
 			show( shown ) {
 
 				const ringed = shown.challenge.kind !== 'collect';
-				if ( ! added() ) app.scene.add( beams, rings, items );
+				if ( ! added() ) app.scene.add( beams, rings, items, chevrons );
+				chevrons.count = 0;
+				laid = [];
+				laidFor = null;
 				beams.count = rings.count = items.count = 0;
 				beams.count = shown.gates.length;
 				( ringed ? rings : items ).count = shown.gates.length;
@@ -1629,31 +1798,46 @@ export function setUpChallenges( app ) {
 				items.visible = ! ringed;
 				this.place( shown );
 				this.colour( shown );
+				// (Its bounds made again for this route's gates when it's next drawn.)
+				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = null;
 
 			},
 			hide() {
 
-				if ( added() ) app.scene.remove( beams, rings, items );
+				if ( added() ) app.scene.remove( beams, rings, items, chevrons );
+
+			},
+			// The scene's been moved (recentred): each where its gate now is, the course laid again
+			// (what it was laid for, the car's place, was in the scene as it was), and their bounds
+			// made again.
+			moved( shown ) {
+
+				laidFor = null;
+				this.place( shown );
+				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = chevrons.boundingSphere = null;
 
 			},
 			// Where each is: at its ground (or its guess), a passed one shrunk to nothing. With
 			// `itemsOnly`, the items alone (as they turn: the beams haven't moved).
 			place( shown, itemsOnly = false ) {
 
-				const moonly = shown.challenge.world === MOON;
+				const moonly = shown.challenge.world !== EARTH;
 				const radius = shown.challenge.route.radius;
 				const ringed = shown.challenge.kind !== 'collect';
 				const ring = Math.min( RING, radius * 0.5 );
+				const next = ringed ? shown.gates.find( gate => ! gate.passed ) : null;
+				const breathe = 1 + NEXT_PULSE * Math.sin( pulse );
 				shown.gates.forEach( ( gate, i ) => {
 
 					const y = gate.ground ?? gate.guess;
 					const gone = gate.passed ? 0 : 1;
 					if ( ! ringed ) items.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ITEM_UP, gate.z ), _q.setFromAxisAngle( _up, spin + i ), _s.set( ITEM * gone, ITEM * 1.4 * gone, ITEM * gone ) ) );
 					if ( itemsOnly ) return;
-					const wide = ( moonly ? 1.6 : 1 ) * BEAM * ( ringed ? 1 : 0.7 );
+					const wide = ( moonly ? 1.6 : 1 ) * BEAM * ( ringed ? 1 : 0.7 ) * ( gate === next ? NEXT_WIDE : 1 );
 					beams.setMatrixAt( i, _m.compose( _v.set( gate.x, y, gate.z ), _q.identity(), _s.set( wide * gone, ( moonly ? 2 : 1 ) * BEAM_HIGH * gone, wide * gone ) ) );
-					// Standing up, facing along the way to it.
-					if ( ringed ) rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( ring * gone ) ) );
+					// Standing up, facing along the way to it; the next one breathing.
+					const size = ring * gone * ( gate === next ? breathe : 1 );
+					if ( ringed ) rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( size ) ) );
 
 				} );
 				items.instanceMatrix.needsUpdate = true;
@@ -1678,17 +1862,139 @@ export function setUpChallenges( app ) {
 				this.place( shown );
 
 			},
-			// Items turn; rings stay.
+			// Items turn; the next ring breathes; the course is laid and its light runs on.
 			update( shown, dt ) {
 
-				if ( shown.challenge.kind !== 'collect' || ! added() ) return;
-				spin = ( spin + dt * SPIN ) % ( Math.PI * 2 );
-				this.place( shown, true );
+				if ( ! added() ) return;
+				if ( shown.challenge.kind === 'collect' ) {
+
+					spin = ( spin + dt * SPIN ) % ( Math.PI * 2 );
+					this.place( shown, true );
+
+				} else if ( shown.phase !== 'done' ) {
+
+					pulse = ( pulse + dt * PULSE_RATE ) % ( Math.PI * 2 );
+					const index = shown.gates.findIndex( gate => ! gate.passed );
+					if ( index >= 0 ) {
+
+						rings.getMatrixAt( index, _m );
+						_m.decompose( _v, _q, _s );
+						const ring = Math.min( RING, shown.challenge.route.radius * 0.5 );
+						rings.setMatrixAt( index, _m.compose( _v, _q, _s.setScalar( ring * ( 1 + NEXT_PULSE * Math.sin( pulse ) ) ) ) );
+						rings.instanceMatrix.needsUpdate = true;
+
+					}
+
+				}
+
+				this.course( shown, dt );
+
+			},
+			// The course on another world's ground to the next gate (see CHEVRON_GAP), laid again when
+			// the next one changes or the car's moved COURSE_MOVE m, its wave of light moved on each
+			// frame.
+			course( shown, dt ) {
+
+				const ground = app.bodies?.[ shown.challenge.world ];
+				const target = shown.phase === 'done' || shown.phase === 'stopped' || shown.challenge.world === EARTH ? null : nextGate( app.driver );
+				if ( ! target || ! ground?.heightAt ) {
+
+					chevrons.count = 0;
+					laidFor = null;
+					return;
+
+				}
+
+				const d = app.driver;
+				const car = { x: - d.east, z: d.north };
+				if ( ! laidFor || laidFor.target !== target || Math.hypot( car.x - laidFor.x, car.z - laidFor.z ) > COURSE_MOVE ) {
+
+					this.lay( shown, target, car );
+					laidFor = { target, ...car };
+
+				}
+
+				wave = ( wave + dt / WAVE_TIME ) % 1;
+				laid.forEach( ( chevron, i ) => {
+
+					// A crest running toward the gate: brightest where (distance / WAVE + time) is whole.
+					const phase = ( chevron.to / WAVE + wave ) % 1;
+					const light = 0.4 + 0.5 * Math.max( 0, Math.cos( phase * Math.PI * 2 ) ) ** 3;
+					_colour.copy( chevron.dim ? LATER : chevron.goal ? GOAL : NEXT ).multiplyScalar( chevron.dim ? 0.5 : light );
+					chevrons.setColorAt( i, _colour );
+
+				} );
+				if ( chevrons.instanceColor ) chevrons.instanceColor.needsUpdate = true;
+
+			},
+			lay( shown, target, car ) {
+
+				// The world's own ground (body.js), whose heights the chevrons lie on.
+				const ground = app.bodies[ shown.challenge.world ];
+				const ordered = shown.challenge.kind !== 'collect';
+				const { start } = shown.challenge.route;
+				const index = shown.gates.indexOf( target );
+				// The leg to it: from the gate before, or the start; a star from the car.
+				const from = ! ordered ? latLonOf( app.globe, car.x, app.driver.y, car.z ) : index ? shown.gates[ index - 1 ] : start;
+				laid = [];
+				const legs = [ { from, to: target, dim: false, goal: ordered && index === shown.gates.length - 1 } ];
+				if ( ordered && index + 1 < shown.gates.length ) legs.push( { from: target, to: shown.gates[ index + 1 ], dim: true, goal: false } );
+				for ( const leg of legs ) {
+
+					// Its ends on the ground, as the gates are: from points at height 0 a leg deep in a
+					// basin would point elsewhere, the more so under a level up leaning from the
+					// sphere's (Vesta's, level.js).
+					const a = sceneOf( app.globe, leg.from.lat, leg.from.lon, ground.heightAt( leg.from.lat, leg.from.lon ) ?? 0 ).clone();
+					const b = sceneOf( app.globe, leg.to.lat, leg.to.lon, ground.heightAt( leg.to.lat, leg.to.lon ) ?? 0 );
+					const length = Math.hypot( b.x - a.x, b.z - a.z );
+					if ( length < 1 ) continue;
+					const angle = Math.atan2( b.x - a.x, b.z - a.z );
+					// How far along the leg the car is (from its gate), so the bright ones start at the car.
+					const carTo = leg.dim ? length : Math.max( 0, Math.min( length, ( ( b.x - car.x ) * ( b.x - a.x ) + ( b.z - car.z ) * ( b.z - a.z ) ) / length ) );
+					// Not on the gate's own zone, where the ring is.
+					const first = Math.max( CHEVRON_GAP, shown.challenge.route.radius * 0.6 );
+					for ( let to = first; to < length; to += CHEVRON_GAP ) {
+
+						if ( laid.length >= COURSE_MOST ) break;
+						if ( leg.dim ? length - to > PREVIEW_REACH : to > carTo || carTo - to > COURSE_REACH ) continue;
+						const t = 1 - to / length;
+						// (Across the 180th meridian the short way round, not the long way back.)
+						const lat = leg.from.lat + ( leg.to.lat - leg.from.lat ) * t;
+						const lon = leg.from.lon + ( ( leg.to.lon - leg.from.lon + 540 ) % 360 - 180 ) * t;
+						const at = sceneOf( app.globe, lat, lon, ( ground.heightAt( lat, lon ) ?? 0 ) + CHEVRON_UP );
+						chevrons.setMatrixAt( laid.length, _m.compose( at, _q.setFromAxisAngle( _up, angle ), _s.setScalar( CHEVRON ) ) );
+						laid.push( { to, dim: leg.dim, goal: leg.goal } );
+
+					}
+
+				}
+
+				chevrons.count = laid.length;
+				chevrons.instanceMatrix.needsUpdate = true;
+				chevrons.boundingSphere = null;
 
 			},
 		};
 
 	}
+
+}
+
+// Every world, in a sentence: "the Earth, the Moon, Mars, Vesta and Ceres".
+function worldList() {
+
+	const names = WORLD_IDS.map( world => WORLDS[ world ].the );
+	return `${ names.slice( 0, - 1 ).join( ', ' ) } and ${ names.at( - 1 ) }`;
+
+}
+
+// The latitude and longitude (degrees) of a point in the scene ({ lat, lon }), on the world the globe is on.
+function latLonOf( globe, x, y, z ) {
+
+	globe.earth.updateWorldMatrix( true, false );
+	_inverse.copy( globe.earth.matrixWorld ).invert();
+	globe.ellipsoid.getPositionToCartographic( _w.set( x, y, z ).applyMatrix4( _inverse ), _carto );
+	return { lat: _carto.lat * MathUtils.RAD2DEG, lon: _carto.lon * MathUtils.RAD2DEG };
 
 }
 
@@ -1699,6 +2005,20 @@ function sceneOf( globe, lat, lon, height ) {
 	globe.earth.updateWorldMatrix( true, false );
 	globe.ellipsoid.getCartographicToPosition( lat * MathUtils.DEG2RAD, lon * MathUtils.DEG2RAD, height, _v );
 	return _v.applyMatrix4( globe.earth.matrixWorld );
+
+}
+
+// The marker over the next gate on the screen: a diamond with how far it is under it, and an arrow
+// pointing to it when it's held at the screen's edge.
+function makeMarker( parent ) {
+
+	const root = document.createElement( 'div' );
+	root.className = 'ch-marker';
+	root.hidden = true;
+	root.setAttribute( 'aria-hidden', 'true' );
+	root.innerHTML = '<span class="ch-marker-pointer"><svg viewBox="0 0 20 20" width="18" height="18"><path d="M10 1 17 13H3z" fill="currentColor"/></svg></span><span class="ch-marker-diamond"></span><span class="ch-marker-dist"></span>';
+	parent.append( root );
+	return { root, dist: root.querySelector( '.ch-marker-dist' ), pointer: root.querySelector( '.ch-marker-pointer' ) };
 
 }
 

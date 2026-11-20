@@ -1,7 +1,7 @@
 {
 	"name": "World Drive",
 	"short_name": "World Drive",
-	"description": "Drive anywhere on Earth in photorealistic 3D: stunts, boosts, drifts, flying and friends. A free arcade driving game in your browser.",
+	"description": "Drive anywhere on Earth in photorealistic 3D, or on the Moon and Mars: stunts, boosts, drifts, flying and friends. A free arcade driving game in your browser.",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",

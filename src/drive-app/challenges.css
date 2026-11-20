@@ -99,6 +99,10 @@ dialog.ch-dialog::backdrop {
 	background: linear-gradient( 160deg, rgba( 160, 170, 200, 0.12 ), var( --chip ) );
 }
 
+.ch-card[data-world='mars'] {
+	background: linear-gradient( 160deg, rgba( 205, 120, 80, 0.14 ), var( --chip ) );
+}
+
 .ch-top {
 	display: flex;
 	align-items: center;
@@ -435,6 +439,92 @@ dialog.ch-dialog::backdrop {
 
 /* --- the run ----------------------------------------------------------------------------- */
 
+/* The marker over the next gate (or star) on the screen: a diamond with how far it is under it,
+   placed by challenges.js (translate to the gate's point, then centred on it); off the screen, held
+   at the edge with an arrow pointing the way. Gold for a gate, green for the finish, amber for a star. */
+#drive-ui .ch-marker {
+	--mark: #ffd23f;
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 14;
+	pointer-events: none;
+	color: var( --mark );
+	will-change: transform;
+}
+
+#drive-ui .ch-marker[data-kind="goal"] {
+	--mark: #5dff8a;
+}
+
+#drive-ui .ch-marker[data-kind="star"] {
+	--mark: #ffc531;
+}
+
+#drive-ui .ch-marker .ch-marker-diamond {
+	position: absolute;
+	left: -9px;
+	top: -9px;
+	width: 18px;
+	height: 18px;
+	border: 3px solid var( --mark );
+	background: rgba( 9, 15, 27, 0.45 );
+	transform: rotate( 45deg );
+	box-shadow: 0 0 10px var( --mark ), 0 1px 4px rgba( 0, 0, 0, 0.7 );
+	animation: ch-marker-beat 1.1s ease-in-out infinite;
+}
+
+#drive-ui .ch-marker .ch-marker-dist {
+	position: absolute;
+	left: 0;
+	top: 16px;
+	transform: translateX( -50% );
+	font: 900 italic 15px/1 var( --font );
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	text-shadow: 0 1px 3px rgba( 0, 0, 0, 0.9 ), 0 0 2px rgba( 0, 0, 0, 0.9 );
+}
+
+#drive-ui .ch-marker .ch-marker-pointer {
+	display: none;
+	position: absolute;
+	left: -9px;
+	top: -9px;
+	width: 18px;
+	height: 18px;
+	filter: drop-shadow( 0 1px 3px rgba( 0, 0, 0, 0.7 ) );
+}
+
+#drive-ui .ch-marker .ch-marker-pointer svg {
+	display: block;
+	transform: translateY( -22px );
+}
+
+#drive-ui .ch-marker.below .ch-marker-dist {
+	top: -31px;
+}
+
+#drive-ui .ch-marker.off .ch-marker-pointer {
+	display: block;
+}
+
+#drive-ui .ch-marker.off .ch-marker-diamond {
+	animation: none;
+	opacity: 0.85;
+}
+
+@keyframes ch-marker-beat {
+	50% {
+		scale: 1.18;
+	}
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	#drive-ui .ch-marker .ch-marker-diamond {
+		animation: none;
+	}
+}
+
 /* The timer, how many are passed and an arrow to the next with how far: top left under the
    Globe button, clear of the speed (bottom right on a computer, one low row in the middle on a phone
    on its side) and the level bar in the middle. */
@@ -761,6 +851,10 @@ button.ch-race {
 
 .ch-link[data-world='moon'] {
 	background: linear-gradient( 160deg, rgba( 160, 170, 200, 0.2 ), var( --chip ) );
+}
+
+.ch-link[data-world='mars'] {
+	background: linear-gradient( 160deg, rgba( 205, 120, 80, 0.22 ), var( --chip ) );
 }
 
 .ch-link-kicker {

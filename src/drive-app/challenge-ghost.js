@@ -2,6 +2,7 @@ import { BufferAttribute, BufferGeometry, Euler, Group, MathUtils, Matrix3, Matr
 import { OBJECT_FRAME } from '3d-tiles-renderer';
 import { GHOST_BYTES, GHOST_EVERY, GHOST_SAMPLES, TURN, countFor, ghostText, packGhost, readGhost, sampleTime } from './ghost-rules.js';
 import { lightPart } from './ghost-light.js';
+import { levelFrame, levelled } from './level.js';
 import { cleanLook } from './paint.js';
 
 // A challenge run's ghost in the page (docs/world-drive.md, "Challenges", "Ghosts"), in the
@@ -14,6 +15,8 @@ import { cleanLook } from './paint.js';
 // frames' steps, as the time is), found between the frame before and this one. It's put into the
 // ghost's frame (the route's start, ghost-rules.js) and packed only at the finish. A run long enough
 // to fill GHOST_SAMPLES drops every other sample and goes on half as often, so it never takes more.
+// On a world whose scene is moved to the car as it drives (main.js's recentre: Vesta, Ceres), the
+// samples so far are moved with it (transform), so they're all in the scene as it is at the finish.
 //
 // A ghost raced is one model, drawn as the others' ghosts are (ghosts.js's ghostModels: the ride
 // and its Garage look, see-through near your car or the camera, nothing in it to hit, its wheels
@@ -47,6 +50,9 @@ const _q = new Quaternion();
 const _qa = new Quaternion();
 const _m = new Matrix4();
 const _frame = new Matrix4();
+const _east = new Vector3();
+const _north = new Vector3();
+const _up = new Vector3();
 const _e = new Euler( 0, 0, 0, 'YXZ' );
 const _s = new Vector3();
 const _cam = new Vector3();
@@ -60,19 +66,26 @@ let lighter = null;
 
 // The matrix from this scene to the ghost's frame on `world`: the route's `start` on the globe's
 // ellipsoid at height 0 (3d-tiles-renderer's object frame, as main.js centres the scene at a place:
-// x west, y up, z north), through the Earth-centred one the globe's `earth` group sits in. Into
-// `target`; its inverse goes the other way.
-function sceneToStart( globe, start, target ) {
+// x west, y up, z north), through the Earth-centred one the globe's `earth` group sits in. On a
+// world with a level spheroid, level.js's frame there instead (up along that spheroid's normal),
+// as ghost-rules.js's localOf has it. Into `target`; its inverse goes the other way.
+function sceneToStart( globe, start, world, target ) {
 
 	globe.earth.updateWorldMatrix( true, false );
-	globe.ellipsoid.getObjectFrame( start.lat * DEG, start.lon * DEG, 0, 0, 0, 0, _frame, OBJECT_FRAME );
+	if ( levelled( world ) ) {
+
+		const { origin, east, north, up } = levelFrame( world, start.lat, start.lon, 0 );
+		_frame.makeBasis( _east.fromArray( east ).negate(), _up.fromArray( up ), _north.fromArray( north ) ).setPosition( ...origin );
+
+	} else globe.ellipsoid.getObjectFrame( start.lat * DEG, start.lon * DEG, 0, 0, 0, 0, _frame, OBJECT_FRAME );
 	return target.copy( globe.earth.matrixWorld ).multiply( _frame ).invert();
 
 }
 
 // The run being recorded: start( pivot ) at GO, frame( ms, pivot ) every frame of the run after
-// (its clock, ms), finish( ms, pivot ) with the time at the last pass, then pack( globe, start ) for
-// what's posted (ghost-rules.js's text), or null if it couldn't be packed.
+// (its clock, ms), finish( ms, pivot ) with the time at the last pass, then pack( globe, start,
+// world ) for what's posted (ghost-rules.js's text), or null if it couldn't be packed. transform( M )
+// when the scene's been moved by M (a Matrix4, a turn and a shift: main.js's recentre).
 export function createRecorder() {
 
 	const most = GHOST_SAMPLES + 1;
@@ -179,11 +192,30 @@ export function createRecorder() {
 			count = n + 1;
 
 		},
-		// The run as it's posted, in the frame of `start` (the route's) on the world the globe is on.
-		pack( globe, start ) {
+		// The samples so far (and the frame before's) moved as the scene has been, by `matrix`.
+		transform( matrix ) {
+
+			matrix.decompose( _cam, _qa, _s );
+			for ( let i = 0, most = Math.max( n, count ); i < most; i ++ ) {
+
+				_p.set( xs[ i ], ys[ i ], zs[ i ] ).applyMatrix4( matrix );
+				xs[ i ] = _p.x;
+				ys[ i ] = _p.y;
+				zs[ i ] = _p.z;
+				_q.fromArray( qs, i * 4 ).premultiply( _qa ).toArray( qs, i * 4 );
+
+			}
+
+			before.p.applyMatrix4( matrix );
+			before.q.premultiply( _qa );
+
+		},
+		// The run as it's posted, in the frame of `start` (the route's) on `world`, the one the globe
+		// is on.
+		pack( globe, start, world ) {
 
 			if ( ! count ) return null;
-			sceneToStart( globe, start, _m );
+			sceneToStart( globe, start, world, _m );
 			_m.decompose( _cam, _q, _s );
 			const steps = radians => ( ( Math.round( radians / ( Math.PI * 2 ) * TURN ) % TURN ) + TURN ) % TURN;
 			for ( let i = 0; i < count; i ++ ) {
@@ -210,8 +242,9 @@ export function createRecorder() {
 // A ghost to race, in `scene` with `models` (ghosts.js's ghostModels) and its name in `tags` (an
 // element over the drive): load( data, vehicle ) with what the Worker keeps of it ({ run, ms,
 // passes, vehicle, look, ghost }) and the ride it was driven in (vehicles.js's, or the kart); then
-// start( globe, start ) as a run of its challenge starts (into this scene), and update( ms, shown,
-// camera, own ) each frame with the run's clock (ms from GO). dispose() when it's done with.
+// start( globe, start, world ) as a run of its challenge starts (into this scene), and again
+// whenever the scene's been moved (main.js's recentre), and update( ms, shown, camera, own ) each
+// frame with the run's clock (ms from GO). dispose() when it's done with.
 export function createRaceGhost( { scene, models, tags, name } ) {
 
 	const group = new Group();
@@ -263,11 +296,14 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 			return true;
 
 		},
-		// Its samples into this scene, as a run of its challenge starts at `start`.
-		start( globe, start ) {
+		// Its samples into this scene, as a run of its challenge starts at `start` on `world` (or as
+		// the scene's been moved). The way it faced is forgotten, so its wheels don't steer for the
+		// scene's turn.
+		start( globe, start, world ) {
 
 			if ( ! ghost ) return;
-			sceneToStart( globe, start, _m ).invert();
+			lastYaw = null;
+			sceneToStart( globe, start, world, _m ).invert();
 			_m.decompose( _cam, _q, _s );
 			const { count, east, north, up, yaw, pitch, roll } = ghost;
 			places = new Float64Array( count * 3 );

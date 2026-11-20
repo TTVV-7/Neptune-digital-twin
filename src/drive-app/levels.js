@@ -336,8 +336,8 @@ export function badgeOf( level ) {
 // the page's own for the report (REPORT_ID), so one sent again whose answer never came is counted
 // once; and only in a claim, days: { xp, streak, day }, the days' bonuses counted in this browser
 // before the nickname (their XP together, and the streak they made, as of `day`). And feats, when
-// there's anything in it: the achievements' trusted counts since the last report (Moon drives,
-// Garage changes, rides tried: achievement-rules.js's checkTallies).
+// there's anything in it: the achievements' trusted counts since the last report (the drives on the
+// Moon, Mars, Vesta and Ceres, Garage changes, rides tried: achievement-rules.js's checkTallies).
 export const REPORT_FIELDS = [ 'km', 'air', 'drifts', 'pads', 'together', 'tricks' ];
 export const REPORT_ID = /^[\w-]{8,40}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -350,11 +350,12 @@ export function emptyReport() {
 
 const SPOT_IDS = new Set( SPOTS.map( spot => spot.id ) );
 
-// An area's name as cellOf gives it ('near:1277.1088'), or null.
+// An area's name as cellOf gives it ('near:1277.1088'), or null. Only the Earth's: the Moon's areas
+// (moon:...) are rooms for driving with others there, not areas levels count.
 export function checkArea( text ) {
 
 	const room = parseRoom( text );
-	return room?.kind === 'near' && room.shard === 0 && room.cell === text ? text : null;
+	return room?.kind === 'near' && room.world === 'earth' && room.shard === 0 && room.cell === text ? text : null;
 
 }
 

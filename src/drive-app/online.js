@@ -1,6 +1,8 @@
 import { MathUtils, Matrix4, Vector3 } from 'three';
-import { busiest, checkDot, DOT_SPREAD, ONLINE_AREAS, toGeodetic } from './live-protocol.js';
+import { busiest, checkDot, DOT_SPREAD, EARTH, fromFrame, LIVE_WORLD_IDS, MOON_WORLD, ONLINE_AREAS, worldOfRoom } from './live-protocol.js';
 import { formatLatLon, metresBetween, spotNear } from './places.js';
+import { SPOTS_ON } from './world-places.js';
+import { OnWorld, WORLDS, onWorld as onTheWorld } from './worlds.js';
 
 // Who's driving now, on the globe (docs/world-drive.md, "On the globe: who's driving now"): where
 // people are driving just now, from GET /api/online, as a glowing dot over each area with how many
@@ -8,18 +10,27 @@ import { formatLatLon, metresBetween, spotNear } from './places.js';
 // busiest few areas. A dot or an area flies the globe there and pins it, with "3 drivers here" on the
 // pin's card; Drive here drops in there, in that area's room, so you see them. A dot of more than one
 // area flies down over them instead, near enough that they come apart. Only where and how many come:
-// never who.
+// never who. Off the Earth it's that world's (GET /api/online?world=moon, mars, vesta or ceres), its
+// dots on its own globe and its areas named after its own spots; each world's panel also says how
+// many are driving on the others, a tap away (one other world: it turns the globe there; more: "On
+// other worlds", which opens the worlds to pick from, onOthers), even while it's off on this one (its
+// budget for the day spent: the Worker's answer still says how many are on the others), so there's
+// somewhere to go to drive with others. Not the Earth on a visit with no Earth (main.js's
+// earthClosed): that row would lead nowhere. How many on each world (worlds, less this page where
+// it's still counted) goes to onCounts as it changes, for the worlds to pick from.
 //
 // It asks when the globe shows, then every POLL_MS while the globe shows and the tab can be seen,
 // never while driving, nor while the Garage is open, nor once nobody has touched the page for
 // IDLE_MS (a tab left on the globe on a second screen): it asks again at the next touch. An answer is
 // kept 30 s, by the Worker in each of Cloudflare's locations and by the browser, and only a Worker
 // with none kept asks DriveLimits, which counts it against driving with others' budget for the day:
-// a page alone on the globe in its location is an ask a minute. Answered off (LIVE, or the day's
+// a page alone on the globe in its location is an ask every 40 s or so. Answered off (LIVE, or the day's
 // budget spent), or with driving with others over for this visit (live.js's ended, or the visit run
-// out), it's gone for the visit.
+// out), it's gone for the visit: on that world (each world's budget is its own: it goes on asking
+// there, for the others' counts), or on all (asking nothing more). After `idle` without a touch, what
+// it last heard is kept as it was: counts may be old then.
 
-const POLL_MS = 60000;
+const POLL_MS = 20000;
 const IDLE_MS = 10 * 60000;
 // The panel lists the busiest this many areas.
 const LISTED = 5;
@@ -51,24 +62,53 @@ const _mean = new Vector3();
 const _inverse = new Matrix4();
 
 // camera, earth (the tiles' group, or the test globe, whose matrixWorld takes Earth-centred
-// positions into the scene), ellipsoid: as main.js has them; canvas: the renderer's; live: live.js's;
+// positions into the scene), ellipsoid: as main.js has them; bodies: { moon, mars, vesta, ceres:
+// { group, ellipsoid } } the same for each other world (moon: the Moon's alone, from before), and
+// world(): which the globe shows; onWorld( world ): turn the globe to another world (the panel's line
+// of how many are driving there, when it's one); onOthers( row ): the panel's line of how many are
+// driving on other worlds, when it's more than one (its button); onCounts( worlds ): how many are
+// driving on each world now changed ({ id: { on, total } }, less this page where it's still counted,
+// or null once there's nothing more to say); canvas: the renderer's; live: live.js's;
 // layer: the element the dots go in; panel: panel.js's; covers: the elements a dot isn't drawn
 // under; mode(): main.js's; paused(): whether something covers the globe (the Garage), so it asks
 // nothing; onPick( place ): fly the globe to a place and pin it; onZoom( { lat, lon, distance } ):
-// fly the globe straight down over a spot, from `distance` (m) up. poll and idle: POLL_MS and IDLE_MS
-// unless the tests say.
+// fly the globe straight down over a spot, from `distance` (m) up; earthless: no Earth this visit
+// (main.js's earthClosed), so no row for it. poll and idle: POLL_MS and IDLE_MS unless the tests say.
 export function createOnline( {
-	camera, earth, ellipsoid, canvas, live, layer, panel, covers, mode, paused = () => false, onPick, onZoom, poll = POLL_MS, idle = IDLE_MS,
+	camera, earth, ellipsoid, bodies = {}, moon = null, world = () => EARTH, onWorld = () => {}, onOthers = () => {}, onCounts = () => {}, canvas, live, layer, panel, covers, mode,
+	paused = () => false, onPick, onZoom, earthless = false, poll = POLL_MS, idle = IDLE_MS,
 } ) {
 
-	// Off, as an answer said (for this visit); total, and the areas (DOTs with where they are in the
-	// Earth's frame, and which way is up there), busiest first.
+	// Each world's frame (its group and shape), and which the globe shows (the Earth for a world it
+	// has none for).
+	const frames = { [ EARTH ]: { group: earth, ellipsoid } };
+	for ( const id of LIVE_WORLD_IDS ) {
+
+		const frame = bodies[ id ] ?? ( id === MOON_WORLD ? moon : null );
+		if ( id !== EARTH && frame?.group && frame.ellipsoid ) frames[ id ] = frame;
+
+	}
+
+	const here = () => frames[ world() ] ? world() : EARTH;
+	// Off on a world, as an answer said (for this visit), or on all (off); total, and the areas
+	// (DOTs with where they are in their world's frame, and which way is up there), busiest first,
+	// for the world they're of (shownWorld); how many are driving on the other worlds (elsewhere, all
+	// told, and others, by world); and how many on each world, as the last answer said (heard) and
+	// less this page where it's still counted (counts, as onCounts was last told).
 	let off = false;
+	const offWorlds = new Set();
 	let total = 0;
 	let areas = [];
+	let shownWorld = EARTH;
+	let elsewhere = 0;
+	let others = [];
+	let heard = null;
+	let counts = null;
+	let countsKey = 'null';
 	let asking = null;
 	let nextAsk = 0;
 	let lastMode = null;
+	let lastWorld = null;
 	// This page, just back on the globe (see left).
 	let you = null;
 	// The dots' buttons (made as they're needed, kept), and what they show.
@@ -89,7 +129,7 @@ export function createOnline( {
 	// a drag that starts on one spins it: see tap).
 	canvas.addEventListener( 'pointermove', e => {
 
-		const over = e.pointerType === 'mouse' && mode() === 'globe' && ! off ? dotAt( e.clientX, e.clientY ) : - 1;
+		const over = e.pointerType === 'mouse' && mode() === 'globe' && ! offHere() ? dotAt( e.clientX, e.clientY ) : - 1;
 		canvas.style.cursor = over >= 0 ? 'pointer' : '';
 		buttons.forEach( ( button, i ) => button.classList.toggle( 'hover', i === over ) );
 
@@ -97,14 +137,24 @@ export function createOnline( {
 
 	// --- asking ---
 
+	// Off on the world the globe shows.
+	function offHere() {
+
+		return off || offWorlds.has( here() );
+
+	}
+
 	function ask() {
 
 		asking ??= ( async () => {
 
+			const which = here();
 			try {
 
-				const res = await fetch( '/api/online', { headers: { Accept: 'application/json' } } );
-				take( res.ok && /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ? await res.json() : null );
+				const res = await fetch( which === EARTH ? '/api/online' : `/api/online?world=${ which }`, { headers: { Accept: 'application/json' } } );
+				const answer = res.ok && /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ? await res.json() : null;
+				// (Turned to the other world meanwhile: this one's is for later.)
+				if ( which === here() ) take( answer, which );
 
 			} catch {
 
@@ -122,15 +172,20 @@ export function createOnline( {
 
 	}
 
-	// An answer, { on, total, areas }, checked as the Worker checks what rooms say; null for none (a
-	// Worker without it).
-	function take( answer ) {
+	// An answer for `which` world, { on, total, areas, worlds: { id: { on, total } }, and from a
+	// Worker from before how many on the other of the Earth and the Moon (moon, or earth) }, checked as
+	// the Worker checks what rooms say; null for none (a Worker without it). Off on that world, only
+	// how many are on the others is taken.
+	function take( answer, which = EARTH ) {
 
 		if ( off ) return;
-		if ( answer?.on === false ) {
+		heard = worldsOf( answer ) ?? ( answer ? null : heard );
+		if ( answer?.on === false || offWorlds.has( which ) ) {
 
-			off = true;
-			show( [], 0 );
+			offWorlds.add( which );
+			elsewhereOf( answer, which );
+			show( [], 0, which );
+			told( which, null );
 			return;
 
 		}
@@ -138,20 +193,113 @@ export function createOnline( {
 		const found = answer?.on === true && Array.isArray( answer.areas ) ? answer.areas.slice( 0, ONLINE_AREAS ).map( checkDot ).filter( Boolean ) : null;
 		if ( ! found ) {
 
-			show( [], 0, false );
+			show( [], 0, which, false );
 			return;
 
 		}
 
 		const counted = found.reduce( ( sum, area ) => sum + area.count, 0 );
 		const all = Number.isInteger( answer.total ) && answer.total >= counted ? answer.total : counted;
-		const mine = discount( found );
-		show( found.filter( area => area.count > 0 ).sort( busiest ), all - mine );
+		elsewhereOf( answer, which );
+		const mine = discount( found, which );
+		show( found.filter( area => area.count > 0 ).sort( busiest ), all - mine, which );
+		told( which, total );
+
+	}
+
+	// How many an answer says are driving on each world ({ id: { on, total } }), checked; null for an
+	// answer without (a Worker from before).
+	function worldsOf( answer ) {
+
+		const said = answer?.worlds;
+		if ( ! said || typeof said !== 'object' ) return null;
+		const out = {};
+		for ( const id of LIVE_WORLD_IDS ) {
+
+			const entry = said[ id ];
+			if ( ! entry || typeof entry !== 'object' ) continue;
+			out[ id ] = { on: entry.on !== false, total: count( entry.total ) };
+
+		}
+
+		return out;
+
+	}
+
+	// How many are driving on each world now, less this page where it's still counted (the shown
+	// world's as shown, `shown`; another's as self takes it off), to onCounts if that's changed.
+	function told( which, shown ) {
+
+		let next = null;
+		if ( heard ) {
+
+			next = {};
+			for ( const [ id, { on, total: all } ] of Object.entries( heard ) ) next[ id ] = { on, total: id === which && shown !== null ? shown : Math.max( 0, all - self( id, which ) ) };
+
+		}
+
+		setCounts( next );
+
+	}
+
+	function setCounts( next ) {
+
+		const key = JSON.stringify( next );
+		if ( key === countsKey ) return;
+		countsKey = key;
+		counts = next;
+		onCounts( counts );
+
+	}
+
+	// How many are driving on the other worlds, from an answer for `which`: by world (others, those
+	// with any, in LIVE_WORLD_IDS' order, less this page if it's still counted on one: see left) and
+	// all told (elsewhere). From a Worker from before, the other of the Earth and the Moon's only.
+	function elsewhereOf( answer, which ) {
+
+		const said = worldsOf( answer );
+		others = [];
+		if ( said ) {
+
+			for ( const id of LIVE_WORLD_IDS ) {
+
+				if ( id === which || ! said[ id ]?.on ) continue;
+				const n = Math.max( 0, said[ id ].total - self( id, which ) );
+				if ( n ) others.push( { world: id, count: n } );
+
+			}
+
+		} else {
+
+			const id = which === MOON_WORLD ? EARTH : which === EARTH ? MOON_WORLD : null;
+			const n = id ? otherOf( answer, which ) : 0;
+			if ( n ) others.push( { world: id, count: n } );
+
+		}
+
+		elsewhere = others.reduce( ( sum, other ) => sum + other.count, 0 );
+
+	}
+
+	// How many a Worker from before says are driving on the other of the Earth and the Moon, less
+	// this page if it's still counted there.
+	function otherOf( answer, which ) {
+
+		const other = which === MOON_WORLD ? EARTH : MOON_WORLD;
+		return Math.max( 0, count( answer?.[ other ] ) - self( other, which ) );
+
+	}
+
+	// 1 if this page is still counted on world `id` (back on the globe from driving there, and turned
+	// to `which`, another: see left), else 0.
+	function self( id, which ) {
+
+		return you && performance.now() <= you.until && you.world === id && id !== which ? 1 : 0;
 
 	}
 
 	// This page itself, still counted where it was driving: 1 taken off that area, or 0 (see left).
-	function discount( found ) {
+	function discount( found, which ) {
 
 		if ( ! you || performance.now() > you.until ) {
 
@@ -160,10 +308,11 @@ export function createOnline( {
 
 		}
 
+		if ( you.world !== which ) return 0;
 		// The others it knows are driving in its room: while it's still in it (it stays a minute back on
 		// the globe) as they are now, else as it last knew.
 		if ( live.room === you.room ) you.others = othersDriving();
-		const area = found.find( a => you.spots.some( spot => metresBetween( spot.lat, spot.lon, a.lat, a.lon ) < YOU_NEAR ) && a.count > othersIn( a, found ) );
+		const area = found.find( a => you.spots.some( spot => distance( spot.lat, spot.lon, a.lat, a.lon, which ) < YOU_NEAR ) && a.count > othersIn( a, found ) );
 		if ( ! area ) return 0;
 		area.count --;
 		return 1;
@@ -174,7 +323,7 @@ export function createOnline( {
 	// to be, else where they dropped in, or null where it can't say.
 	function othersDriving() {
 
-		return [ ...live.players.values() ].filter( p => ! p.away ).map( p => p.s ? toGeodetic( p.s[ 0 ], p.s[ 1 ], p.s[ 2 ] ) : p.place ?? null );
+		return [ ...live.players.values() ].filter( p => ! p.away ).map( p => p.s ? fromFrame( p.s[ 0 ], p.s[ 1 ], p.s[ 2 ], p.world ) : p.place ?? null );
 
 	}
 
@@ -190,7 +339,7 @@ export function createOnline( {
 			let gap = OTHERS_NEAR;
 			for ( const a of other ? found : [] ) {
 
-				const d = metresBetween( other.lat, other.lon, a.lat, a.lon );
+				const d = distance( other.lat, other.lon, a.lat, a.lon, you.world );
 				if ( d < gap ) {
 
 					nearest = a;
@@ -210,18 +359,38 @@ export function createOnline( {
 
 	// --- showing it ---
 
-	// The areas and the total, in the panel and as dots; listed: false hides the panel's part.
-	function show( found, all, listed = true ) {
+	// The areas and the total on world `which`, in the panel and as dots; listed: false hides the
+	// panel's part. The panel's last line is how many are driving on the other worlds, if any: a tap
+	// turns the globe there (one world) or opens the worlds to pick from (more).
+	function show( found, all, which = here(), listed = true ) {
 
+		const shape = frames[ which ].ellipsoid;
+		shownWorld = which;
 		areas = found.map( area => ( {
 			...area,
-			at: ellipsoid.getCartographicToPosition( area.lat * DEG, area.lon * DEG, area.height, new Vector3() ),
-			up: ellipsoid.getCartographicToNormal( area.lat * DEG, area.lon * DEG, new Vector3() ),
+			at: shape.getCartographicToPosition( area.lat * DEG, area.lon * DEG, area.height, new Vector3() ),
+			up: shape.getCartographicToNormal( area.lat * DEG, area.lon * DEG, new Vector3() ),
 		} ) );
 		total = Math.max( 0, all );
-		panel.setOnline( off || ! listed ? null : {
-			summary: total ? `${ total } driving now. Tap a glowing dot to join them.` : 'Nobody driving right now: be the first.',
-			areas: areas.slice( 0, LISTED ).map( area => ( { title: nameOf( area ), subtitle: drivers( area.count ), place: placeOf( area ) } ) ),
+		// (Words for this world: none for the Earth's, as before there were others.)
+		const on = which === EARTH ? '' : `${ onTheWorld( which ) } `;
+		// The other worlds with drivers it can point to: off there, or the Earth on a visit with none, not.
+		const shown = off ? [] : others.filter( other => ! offWorlds.has( other.world ) && ! ( earthless && other.world === EARTH ) );
+		const sum = shown.reduce( ( n, other ) => n + other.count, 0 );
+		const one = shown.length === 1 ? shown[ 0 ].world : null;
+		const there = ! shown.length ? []
+			: one ? [ { title: OnWorld( one ), subtitle: drivers( sum ), world: one, onClick: () => onWorld( one ) } ]
+				: [ { title: 'On other worlds', subtitle: drivers( sum ), world: 'others', onClick: e => onOthers( e?.currentTarget ?? null ) } ];
+		const where = one ? onTheWorld( one ) : 'on other worlds';
+		// Off on this world: only the others' row, if there's anyone there to point to.
+		const closed = offWorlds.has( which );
+		let summary = `Nobody driving ${ on }right now: be the first.`;
+		if ( closed ) summary = `${ drivers( sum ) } ${ where } right now.`;
+		else if ( total ) summary = `${ total } driving ${ on }now. Tap a glowing dot to join them.`;
+		else if ( there.length ) summary = `Nobody driving ${ onTheWorld( which ) } right now: ${ drivers( sum ) } ${ where }.`;
+		panel.setOnline( off || ! listed || ( closed && ! there.length ) ? null : {
+			summary,
+			areas: [ ...( closed ? [] : areas.slice( 0, LISTED ).map( area => ( { title: nameOf( area ), subtitle: drivers( area.count ), place: placeOf( area ) } ) ) ), ...there ],
 		} );
 		// A pin on an area says how many are there now.
 		const pinned = panel.pinned;
@@ -247,15 +416,19 @@ export function createOnline( {
 	// and `near` says which start spot it's near, if one is, for the pin's card and the drive's.
 	function placeOf( area ) {
 
-		const spot = spotNear( area.lat, area.lon, NAMED_WITHIN );
-		const at = spot && metresBetween( spot.lat, spot.lon, area.lat, area.lon ) <= DOT_SPREAD ? spot : null;
-		return { name: at?.name ?? 'Dropped pin', region: at?.region ?? '', near: spot ? `Near ${ spot.name }` : '', lat: area.lat, lon: area.lon, drivers: area.count };
+		const spot = nearSpot( area.lat, area.lon, shownWorld );
+		const at = spot && distance( spot.lat, spot.lon, area.lat, area.lon, shownWorld ) <= DOT_SPREAD ? spot : null;
+		return {
+			name: at?.name ?? 'Dropped pin', region: at?.region ?? '', near: spot ? `Near ${ spot.name }` : '', lat: area.lat, lon: area.lon, drivers: area.count,
+			// (Off the Earth, its world: a place with none is the Earth's.)
+			...( shownWorld !== EARTH ? { world: shownWorld } : {} ),
+		};
 
 	}
 
 	function nameOf( area ) {
 
-		const spot = spotNear( area.lat, area.lon, NAMED_WITHIN );
+		const spot = nearSpot( area.lat, area.lon, shownWorld );
 		return spot ? `Near ${ spot.name }` : formatLatLon( area.lat, area.lon );
 
 	}
@@ -274,15 +447,16 @@ export function createOnline( {
 
 		}
 
-		earth.updateWorldMatrix( true, false );
+		const { group } = frames[ shownWorld ];
+		group.updateWorldMatrix( true, false );
 		camera.getWorldPosition( _cam );
 		const width = window.innerWidth;
 		const height = window.innerHeight;
 		const dots = [];
 		for ( const area of areas ) {
 
-			_pos.copy( area.at ).applyMatrix4( earth.matrixWorld );
-			_normal.copy( area.up ).transformDirection( earth.matrixWorld );
+			_pos.copy( area.at ).applyMatrix4( group.matrixWorld );
+			_normal.copy( area.up ).transformDirection( group.matrixWorld );
 			if ( _normal.dot( _to.subVectors( _cam, _pos ) ) <= 0 ) continue;
 			_pos.project( camera );
 			if ( Math.abs( _pos.x ) > 1 || Math.abs( _pos.y ) > 1 || _pos.z > 1 ) continue;
@@ -365,10 +539,11 @@ export function createOnline( {
 	function zoomOn( members ) {
 
 		const all = members.reduce( ( sum, area ) => sum + area.count, 0 );
+		const { group, ellipsoid: shape } = frames[ shownWorld ];
 		_mean.set( 0, 0, 0 );
 		for ( const area of members ) _mean.addScaledVector( area.at, area.count / all );
-		const { lat, lon } = ellipsoid.getPositionToCartographic( _mean, {} );
-		ellipsoid.getCartographicToPosition( lat, lon, 0, _mean );
+		const { lat, lon } = shape.getPositionToCartographic( _mean, {} );
+		shape.getCartographicToPosition( lat, lon, 0, _mean );
 		let nearest = Infinity;
 		let farthest = 0;
 		members.forEach( ( area, i ) => {
@@ -381,9 +556,9 @@ export function createOnline( {
 		const tan = Math.tan( camera.fov * DEG / 2 );
 		const apart = nearest * window.innerHeight / ( 2 * tan * DOT_LARGEST * 1.25 );
 		const inSight = farthest / ( 0.6 * tan * Math.min( 1, camera.aspect ) );
-		earth.updateWorldMatrix( true, false );
-		camera.getWorldPosition( _cam ).applyMatrix4( _inverse.copy( earth.matrixWorld ).invert() );
-		const high = ellipsoid.getPositionElevation( _cam );
+		group.updateWorldMatrix( true, false );
+		camera.getWorldPosition( _cam ).applyMatrix4( _inverse.copy( group.matrixWorld ).invert() );
+		const high = shape.getPositionElevation( _cam );
 		onZoom( { lat: lat / DEG, lon: lon / DEG, distance: Math.max( ZOOM_LEAST, inSight, Math.min( apart, high / 4 ) ) } );
 
 	}
@@ -408,21 +583,37 @@ export function createOnline( {
 		update() {
 
 			const now = mode();
-			// The globe showing again: asked at once (an answer still kept comes from the browser).
-			if ( now !== lastMode && now === 'globe' ) nextAsk = 0;
+			const which = here();
+			// The globe showing again, or turned to the other world: asked at once (an answer still
+			// kept comes from the browser), and the other world's dots gone meanwhile.
+			if ( ( now !== lastMode && now === 'globe' ) || which !== lastWorld ) nextAsk = 0;
+			if ( which !== lastWorld && lastWorld !== null && ! off ) show( [], 0, which, false );
 			lastMode = now;
-			if ( ( off || live.ended || Date.now() >= live.visitEnds ) && ( areas.length || ! layer.hidden ) ) {
+			lastWorld = which;
+			if ( ( off || live.ended || Date.now() >= live.visitEnds ) && ( areas.length || ! layer.hidden || counts ) ) {
 
 				off = true;
 				show( [], 0 );
 				layer.hidden = true;
+				heard = null;
+				setCounts( null );
 
 			}
 
+			// This world's budget for the day spent (live.js was told, as it was turned away): off here too.
+			if ( ( live.closedWorlds?.has( which ) ?? ( live.closedHere && ( live.world ?? which ) === which ) ) && ! offWorlds.has( which ) ) {
+
+				offWorlds.add( which );
+				show( [], 0, which );
+
+			}
+
+			if ( offHere() && areas.length ) show( [], 0, which );
+			// (Off here only, it still asks, for how many are on the other world.)
 			if ( off || now !== 'globe' ) return;
 			const at = performance.now();
 			if ( ! asking && at >= nextAsk && at - touchedAt < idle && ! paused() && document.visibilityState === 'visible' ) ask();
-			place();
+			if ( ! offHere() ) place();
 
 		},
 
@@ -430,7 +621,7 @@ export function createOnline( {
 		// which then goes there.
 		tap( x, y ) {
 
-			const i = mode() === 'globe' && ! off ? dotAt( x, y ) : - 1;
+			const i = mode() === 'globe' && ! offHere() ? dotAt( x, y ) : - 1;
 			if ( i < 0 ) return false;
 			go( drawn[ i ].members );
 			return true;
@@ -441,8 +632,8 @@ export function createOnline( {
 		// in an area's room, answers for a while may still count it there (see YOU_MS).
 		left( spot ) {
 
-			const room = live.status === 'live' && live.room?.startsWith( 'near:' ) ? live.room : null;
-			you = room ? { room, spots: [ spot, live.place ].filter( Boolean ), others: othersDriving(), until: performance.now() + YOU_MS } : null;
+			const room = live.status === 'live' && worldOfRoom( live.room ) !== null ? live.room : null;
+			you = room ? { room, world: worldOfRoom( room ), spots: [ spot, live.place ].filter( Boolean ), others: othersDriving(), until: performance.now() + YOU_MS } : null;
 
 		},
 
@@ -451,7 +642,26 @@ export function createOnline( {
 
 		get on() {
 
-			return ! off;
+			return ! offHere();
+
+		},
+		// Which world's dots these are, and how many are driving on the others.
+		get world() {
+
+			return shownWorld;
+
+		},
+		get elsewhere() {
+
+			return elsewhere;
+
+		},
+		// How many are driving on each world ({ id: { on, total } }, less this page where it's still
+		// counted, so the shown world's total is the panel's), or null (nothing heard, or nothing more
+		// to say: off for the visit).
+		get worlds() {
+
+			return counts;
 
 		},
 		get total() {
@@ -472,6 +682,44 @@ export function createOnline( {
 		},
 
 	};
+
+}
+
+// The start spot on `world` nearest ( lat, lon ) within NAMED_WITHIN, or null: places.js's for the
+// Earth, each other world's own (world-places.js) for it.
+function nearSpot( lat, lon, world ) {
+
+	if ( world === EARTH ) return spotNear( lat, lon, NAMED_WITHIN );
+	let nearest = null;
+	let gap = NAMED_WITHIN;
+	for ( const spot of SPOTS_ON[ world ] ?? [] ) {
+
+		const d = distance( lat, lon, spot.lat, spot.lon, world );
+		if ( d <= gap ) {
+
+			nearest = spot;
+			gap = d;
+
+		}
+
+	}
+
+	return nearest;
+
+}
+
+// How far apart (m) two spots on `world` are along its ground.
+function distance( latA, lonA, latB, lonB, world ) {
+
+	const metres = metresBetween( latA, lonA, latB, lonB );
+	return world === EARTH ? metres : metres * ( WORLDS[ world ]?.radius ?? 6371000 ) / 6371000;
+
+}
+
+// A count as an answer gives one: a whole number, not absurd; else 0.
+function count( n ) {
+
+	return Number.isInteger( n ) && n > 0 && n < 1e6 ? n : 0;
 
 }
 

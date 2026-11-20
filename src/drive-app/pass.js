@@ -3,6 +3,7 @@ import { BOOSTS } from './boosts.js';
 import { CARS } from './cars.js';
 import { RIDES } from './levels.js';
 import { PRO_RIDES } from './rides/index.js';
+import { listOf, OFF_EARTH } from './worlds.js';
 
 // The Supporter Pass sheet: what the pass is and what comes with it (the rides, every Garage look at
 // once, +50% XP for levels, the ⭐, more drives a day), opened from the globe's panel, the pause
@@ -18,6 +19,9 @@ const count = n => COUNTS[ n ] ?? String( n );
 // rewards), and the rides built for it.
 const LEVEL_CARS = CARS.filter( car => RIDES.some( reward => reward.id === car.id ) );
 const PASS_CARS = CARS.filter( car => car.pro || LEVEL_CARS.includes( car ) );
+// "The Moon, Mars, Vesta and Ceres": the worlds free for everyone, pass or not.
+const FREE = listOf( OFF_EARTH );
+const FREE_WORLDS = FREE[ 0 ].toUpperCase() + FREE.slice( 1 );
 // How many of the Garage's boost styles the pass adds to the free ones (boosts.js).
 const PASS_BOOSTS = BOOSTS.filter( style => ! style.free ).length;
 
@@ -92,7 +96,7 @@ function build() {
 				<li><b>The whole Garage, now</b><span>Every look at once: 20 colours, finishes up to chrome, eight decals, rims, underglow, horns, ${ count( PASS_BOOSTS ).toLowerCase() } more boost styles (a galaxy, dragon fire...), flame colours and trails. Levels unlock some as you drive; the pass doesn't wait.</span></li>
 				<li><b>+50% XP</b><span>Every level sooner, with its titles and level-only colours.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
-				<li><b>30 Earth drives a day</b><span>Instead of 1. The Moon's free for everyone.</span></li>
+				<li><b>30 Earth drives a day</b><span>Instead of 1. ${ FREE_WORLDS } are free for everyone.</span></li>
 			</ul>
 			<div class="buy-area">
 				<button type="button" class="primary buy" disabled>Coming soon</button>

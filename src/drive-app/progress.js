@@ -7,6 +7,11 @@ import { ACHIEVEMENTS, CLAIM_TALLY, TALLY_KM, mergeTallies, reached } from './ac
 import { setFeats } from './feats.js';
 import { storage } from './places.js';
 import { isPro } from './pro.js';
+import { OFF_EARTH } from './worlds.js';
+
+// The worlds whose drives each have their own count for the achievements (achievement-rules.js):
+// every one but the Earth (the Moon's, Mars's, Vesta's and Ceres's).
+const WORLD_TALLIES = OFF_EARTH;
 
 // The page's side of levels (levels.js, docs/world-drive.md): what's driven, counted as it's
 // driven (km, air, drift boosts, pads, minutes with others, landed trick runs, new areas and spots,
@@ -25,8 +30,8 @@ import { isPro } from './pro.js';
 // the Worker counts it once.
 //
 // Achievements (achievement-rules.js) ride on the same reports: the counts only the page can tell
-// (drives on the Moon, Garage changes, rides tried) go as each report's `feats`, and its km are the
-// report's own. The answers say which the player has earned (feats.js keeps them, for the
+// (drives on each world but the Earth, Garage changes, rides tried) go as each report's `feats`, and its
+// km are the report's own. The answers say which the player has earned (feats.js keeps them, for the
 // construction rides' locks), and those that are new are told (onAchievement), once each: the ones
 // a report just earned, and any the player has that this browser hadn't seen yet (a challenge's
 // places, written as its board ended). Before a nickname nothing's earned, but what's been driven
@@ -147,10 +152,11 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	let popped = 0;
 	let shown = 0;
 	let told = emptyReport();
-	// For achievements: whether this drive is on the Moon and has been counted as a Moon drive, and the
-	// ride being driven and how far it has gone in it.
-	let moonDrive = false;
-	let moonCounted = false;
+	// For achievements: which world made in the page this drive is on ('moon', 'mars', 'vesta',
+	// 'ceres'; null on the Earth) and whether it has been counted as a drive there, and the ride being driven and how far
+	// it has gone in it.
+	let worldDrive = null;
+	let worldCounted = false;
 	let ride = null;
 	let rideKm = 0;
 	// The trick run going on: its ride (entry), how long it's lasted and the XP it's had.
@@ -267,11 +273,12 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		dropKm += km;
 		if ( vehicle !== ride ) [ ride, rideKm ] = [ vehicle, 0 ];
 		rideKm += km;
-		// A Moon drive, and a ride tried, once it's driven TALLY_KM.
-		if ( moonDrive && ! moonCounted && dropKm >= TALLY_KM ) {
+		// A drive on a world but the Earth, and a ride tried, once it's driven TALLY_KM.
+		if ( worldDrive && ! worldCounted && dropKm >= TALLY_KM ) {
 
-			moonCounted = true;
-			tally().moon ++;
+			worldCounted = true;
+			const counts = tally();
+			counts[ worldDrive ] = ( counts[ worldDrive ] ?? 0 ) + 1;
 
 		}
 
@@ -424,12 +431,12 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 	}
 
-	// A new drive (a drop-in): its own distance for spots, and on the Moon (moon) a Moon drive once
-	// it's driven TALLY_KM.
-	function dropped( { moon = false } = {} ) {
+	// A new drive (a drop-in) on `world`: its own distance for spots, and on a world but the Earth a
+	// drive there once it's driven TALLY_KM.
+	function dropped( { world = 'earth' } = {} ) {
 
-		moonDrive = moon;
-		moonCounted = false;
+		worldDrive = WORLD_TALLIES.includes( world ) ? world : null;
+		worldCounted = false;
 		dropKm = 0;
 		area = null;
 		areaKm = 0;
@@ -448,7 +455,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// The achievements' counts since the last report, made as they're first needed.
 	function tally() {
 
-		unsent.feats ??= { moon: 0, looks: 0, rides: [] };
+		unsent.feats ??= { ...Object.fromEntries( WORLD_TALLIES.map( id => [ id, 0 ] ) ), looks: 0, rides: [] };
 		return unsent.feats;
 
 	}
@@ -462,15 +469,16 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// --- achievements: what's earned, and what's told ---
 
 	// The counts this browser has toward each achievement beyond what the Worker last said: what's
-	// been driven since, and before a nickname, everything driven here ({ km, moon, looks, rides,
-	// streak }, as achievement-rules.js's countsOf has them).
+	// been driven since, and before a nickname, everything driven here ({ km, moon, mars, vesta,
+	// ceres, looks, rides, streak }, as achievement-rules.js's countsOf has them).
 	function pending() {
 
 		const parts = [ unsent, ...flying?.player === who() ? [ flying.before ] : [], ...who() ? [] : [ local.totals ] ];
 		const feats = parts.reduce( ( sum, part ) => mergeTallies( sum, part.feats ) ?? sum, undefined );
 		return {
 			km: parts.reduce( ( sum, part ) => sum + ( part.km || 0 ), 0 ),
-			moon: feats?.moon ?? 0, looks: feats?.looks ?? 0, rides: feats?.rides?.length ?? 0,
+			...Object.fromEntries( WORLD_TALLIES.map( id => [ id, feats?.[ id ] ?? 0 ] ) ),
+			looks: feats?.looks ?? 0, rides: feats?.rides?.length ?? 0,
 			streak: who() ? 0 : local.streak ?? 0,
 		};
 
@@ -526,7 +534,11 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		if ( who() || ! worker || ! visit() ) return;
 		const had = heard.id === 'local' ? new Set( heard.list ) : new Set();
 		const counts = pending();
-		const now = reached( { km: Math.min( counts.km, CLAIM_TALLY.km ), moon: Math.min( counts.moon, CLAIM_TALLY.moon ), looks: Math.min( counts.looks, CLAIM_TALLY.looks ), rides: Math.min( counts.rides, CLAIM_TALLY.rides ), streak: 0 } );
+		const now = reached( {
+			km: Math.min( counts.km, CLAIM_TALLY.km ),
+			...Object.fromEntries( WORLD_TALLIES.map( id => [ id, Math.min( counts[ id ], CLAIM_TALLY[ id ] ?? 0 ) ] ) ),
+			looks: Math.min( counts.looks, CLAIM_TALLY.looks ), rides: Math.min( counts.rides, CLAIM_TALLY.rides ), streak: 0,
+		} );
 		const news = now.filter( feat => ! had.has( feat ) );
 		if ( ! news.length ) return;
 		// (Kept at once, so a reload doesn't tell them again.)

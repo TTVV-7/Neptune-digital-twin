@@ -1,0 +1,656 @@
+/* The orrery (orrery.js): a full-screen modal <dialog>, see-through, the Solar System drawn behind it
+   by the page's own canvas. Over it: a title bar; the five worlds you can drive on in one row (the
+   panel's old switch's look: an icon over a name, the picked one in the accent) and the rest of the
+   family in a row of its own that scrolls sideways within itself; and a picked body's sheet: on the
+   right on a wide screen, at the bottom on a phone held upright, on the right again held sideways;
+   its words scroll, its Drive stays put. Its closed state (display: none) is style.css's, as it has
+   to be there before this loads. */
+
+#orrery.orrery {
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var( --ink );
+	font: 15px/1.4 var( --font );
+	overflow: hidden;
+	outline: none;
+	--orrery-sheet: min( 380px, 100% );
+	--orrery-edge: max( 16px, env( safe-area-inset-left, 0px ) );
+}
+
+#orrery.orrery::backdrop {
+	background: transparent;
+}
+
+/* The scene's own surface: drag, wheel, pinch, tap. */
+.orrery-stage {
+	position: absolute;
+	inset: 0;
+	touch-action: none;
+	cursor: grab;
+}
+
+.orrery-stage.dragging {
+	cursor: grabbing;
+}
+
+.orrery-stage.pointing {
+	cursor: pointer;
+}
+
+/* The tags under the bodies (for the pointer only: the rows and the sheet are the way in by keys). */
+.orrery-tags {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.orrery-tag {
+	position: absolute;
+	left: 0;
+	top: 0;
+	padding: 6px 8px;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	font: 600 12px/1 var( --font );
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+	color: var( --muted );
+	text-shadow: 0 1px 3px #000, 0 0 8px #000;
+	pointer-events: auto;
+	will-change: transform;
+}
+
+.orrery-tag.drive {
+	color: var( --ink );
+}
+
+.orrery-tag.drive::before {
+	content: '';
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	margin-right: 6px;
+	border-radius: 50%;
+	background: var( --accent );
+	box-shadow: 0 0 8px var( --accent );
+	vertical-align: 1px;
+}
+
+.orrery-tag:hover {
+	color: var( --accent );
+}
+
+.orrery-tag-n {
+	color: var( --accent );
+}
+
+/* The title bar. */
+.orrery-bar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px 14px;
+	flex-wrap: wrap;
+	min-height: 56px;
+	padding: calc( 10px + env( safe-area-inset-top, 0px ) ) 68px 0 var( --orrery-edge );
+	pointer-events: none;
+}
+
+.orrery-bar > * {
+	pointer-events: auto;
+}
+
+#orrery-title {
+	margin: 0;
+	font-size: 22px;
+	font-style: italic;
+	font-weight: 900;
+	letter-spacing: -0.01em;
+	text-shadow: 0 1px 6px rgba( 0, 0, 0, 0.6 );
+}
+
+.orrery-total {
+	margin: 0;
+	padding: 3px 9px;
+	border-radius: 999px;
+	background: rgba( 60, 224, 90, 0.16 );
+	font-size: 13px;
+	font-weight: 700;
+	color: #8ff0a4;
+}
+
+.orrery-hint {
+	margin: 0;
+	font-size: 12px;
+	color: var( --muted );
+	text-shadow: 0 1px 3px #000;
+}
+
+.orrery-hint-touch,
+body.touch .orrery-hint-mouse {
+	display: none;
+}
+
+body.touch .orrery-hint-touch {
+	display: inline;
+}
+
+.orrery-close {
+	position: absolute;
+	top: calc( 8px + env( safe-area-inset-top, 0px ) );
+	right: max( 12px, env( safe-area-inset-right, 0px ) );
+	z-index: 3;
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 1px solid var( --line );
+	border-radius: 50%;
+	background: var( --panel-solid );
+	color: var( --ink );
+}
+
+.orrery-close:hover {
+	background: #18233a;
+}
+
+/* The worlds you can drive on, and the rest. */
+.orrery-pick {
+	position: absolute;
+	top: calc( 62px + env( safe-area-inset-top, 0px ) );
+	left: var( --orrery-edge );
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: min( 520px, calc( 100% - 32px ) );
+	pointer-events: none;
+}
+
+.orrery.has-sheet .orrery-pick {
+	width: min( 520px, calc( 100% - var( --orrery-sheet ) - 48px ) );
+}
+
+.orrery-worlds,
+.orrery-others {
+	pointer-events: auto;
+	padding: 4px;
+	border: 1px solid var( --line );
+	border-radius: 14px;
+	background: var( --panel );
+	backdrop-filter: blur( 10px );
+	-webkit-backdrop-filter: blur( 10px );
+}
+
+/* Five across, each its share and never more (a long name can't push the row wider). */
+.orrery-worlds {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax( 0, 1fr );
+	gap: 4px;
+}
+
+.orrery-worlds button {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+	min-width: 0;
+	min-height: 52px;
+	padding: 7px 2px 6px;
+	border: 0;
+	border-radius: 10px;
+	background: none;
+	font-size: 12px;
+	font-weight: 800;
+	line-height: 1.1;
+	white-space: nowrap;
+	color: var( --muted );
+}
+
+.orrery-worlds button:hover {
+	color: var( --ink );
+	background: var( --chip );
+}
+
+.orrery-worlds button[aria-checked='true'] {
+	background: var( --accent );
+	color: var( --accent-ink );
+}
+
+.orrery-worlds button:focus-visible {
+	outline: 2px solid var( --sky );
+	outline-offset: -2px;
+}
+
+.orrery-icon {
+	display: grid;
+	line-height: 0;
+}
+
+.orrery-name {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Where the game is now: a small dot by its name. */
+.orrery-worlds button.is-here .orrery-name::after {
+	content: '';
+	display: inline-block;
+	width: 5px;
+	height: 5px;
+	margin-left: 4px;
+	border-radius: 50%;
+	background: currentColor;
+	vertical-align: 2px;
+}
+
+/* How many drive there now. */
+.orrery-n {
+	position: absolute;
+	top: 3px;
+	right: 4px;
+	min-width: 16px;
+	padding: 1px 4px;
+	border-radius: 999px;
+	background: #3ce05a;
+	font-size: 10px;
+	font-weight: 800;
+	line-height: 14px;
+	color: #052410;
+}
+
+.orrery-n:empty {
+	display: none;
+}
+
+.orrery-others {
+	display: flex;
+	gap: 4px;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scrollbar-width: none;
+}
+
+.orrery-others::-webkit-scrollbar {
+	display: none;
+}
+
+.orrery-others button {
+	flex: none;
+	min-height: 44px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 10px;
+	background: none;
+	font-size: 13px;
+	font-weight: 600;
+	color: var( --muted );
+}
+
+.orrery-others button:hover,
+.orrery-others button.is-chosen {
+	color: var( --ink );
+	background: var( --chip-hover );
+}
+
+.orrery-others button:focus-visible {
+	outline: 2px solid var( --sky );
+	outline-offset: -2px;
+}
+
+/* A body's sheet: its words scroll, its Drive stays at the bottom. */
+.orrery-sheet {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	width: var( --orrery-sheet );
+	border-left: 1px solid var( --line );
+	background: linear-gradient( 90deg, rgba( 11, 19, 34, 0.82 ), var( --panel-solid ) 30% );
+}
+
+.orrery-sheet-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: calc( 64px + env( safe-area-inset-top, 0px ) ) max( 22px, env( safe-area-inset-right, 0px ) ) 12px 22px;
+}
+
+.orrery-sheet-body > * {
+	flex: none;
+	margin: 0;
+}
+
+.orrery-kicker {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+.orrery-kicker.yes {
+	color: var( --accent );
+}
+
+#orrery-sheet-name {
+	font-size: 40px;
+	font-style: italic;
+	font-weight: 900;
+	line-height: 0.95;
+	letter-spacing: -0.02em;
+}
+
+.orrery-count {
+	align-self: flex-start;
+	padding: 4px 10px;
+	border-radius: 999px;
+	background: rgba( 60, 224, 90, 0.16 );
+	font-size: 14px;
+	font-weight: 700;
+	color: #8ff0a4;
+}
+
+.orrery-count.off {
+	background: var( --chip );
+	color: var( --muted );
+}
+
+.orrery-lede {
+	font-size: 15px;
+	line-height: 1.55;
+	color: var( --muted );
+}
+
+.orrery-facts {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1px;
+	overflow: hidden;
+	border: 1px solid var( --line );
+	border-radius: 12px;
+	background: var( --line );
+}
+
+.orrery-facts div {
+	min-width: 0;
+	padding: 10px 12px;
+	background: var( --panel-solid );
+}
+
+.orrery-facts dt {
+	margin: 0 0 4px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+.orrery-facts dd {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.orrery-facts small {
+	font-size: 12px;
+	font-weight: 500;
+	color: var( --muted );
+}
+
+.orrery-spots h4,
+.orrery-party h4 {
+	margin: 0 0 8px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+.orrery-spots ul,
+.orrery-party ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.orrery-spots button,
+.orrery-party button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 44px;
+	padding: 0 14px;
+	border: 1px solid var( --line );
+	border-radius: 999px;
+	background: var( --chip );
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.orrery-spots button:hover,
+.orrery-party button:hover {
+	background: var( --chip-hover );
+}
+
+.orrery-join {
+	font-size: 12px;
+	font-weight: 800;
+	color: var( --accent );
+}
+
+.orrery-looking {
+	display: flex;
+	align-items: center;
+	min-height: 44px;
+	padding: 0 4px;
+	font-size: 14px;
+	color: var( --muted );
+}
+
+.orrery-note,
+.orrery-counted {
+	font-size: 12px;
+	line-height: 1.5;
+	color: var( --muted );
+}
+
+.orrery-note.closed {
+	font-size: 14px;
+	font-weight: 700;
+	color: var( --accent );
+}
+
+.orrery-note:empty {
+	display: none;
+}
+
+.orrery-source {
+	font: 11px/1.5 ui-monospace, 'SFMono-Regular', Menlo, monospace;
+	color: var( --muted );
+}
+
+.orrery-go {
+	flex: none;
+	padding: 10px max( 22px, env( safe-area-inset-right, 0px ) ) calc( 16px + var( --safe-bottom ) ) 22px;
+	border-top: 1px solid var( --line );
+	background: var( --panel-solid );
+}
+
+.orrery-drive {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	min-height: 52px;
+	padding: 0 18px;
+	border: 0;
+	border-radius: 12px;
+	background: var( --accent );
+	font-size: 18px;
+	font-style: italic;
+	font-weight: 800;
+	color: var( --accent-ink );
+}
+
+.orrery-drive:hover {
+	filter: brightness( 1.06 );
+}
+
+.orrery-drive:focus-visible {
+	outline: 2px solid var( --ink );
+	outline-offset: 3px;
+}
+
+.orrery-credit {
+	position: absolute;
+	left: var( --orrery-edge );
+	bottom: calc( 10px + var( --safe-bottom ) );
+	margin: 0;
+	font-size: 11px;
+	color: var( --muted );
+	text-shadow: 0 1px 3px #000;
+	pointer-events: none;
+}
+
+.orrery.has-sheet .orrery-credit {
+	display: none;
+}
+
+/* A phone held upright: the rows at the top, the sheet at the bottom (at most half the height), the
+   tags only for the picked body (orrery.js). */
+@media ( max-width: 760px ) {
+
+	#orrery-title {
+		font-size: 19px;
+	}
+
+	.orrery-hint {
+		display: none;
+	}
+
+	.orrery-pick,
+	.orrery.has-sheet .orrery-pick {
+		width: auto;
+		right: var( --orrery-edge );
+	}
+
+	.orrery-sheet {
+		top: auto;
+		left: 0;
+		width: 100%;
+		max-height: 50%;
+		border-left: 0;
+		border-top: 1px solid var( --line );
+		border-radius: 18px 18px 0 0;
+		background: var( --panel-solid );
+	}
+
+	.orrery-sheet-body {
+		gap: 10px;
+		padding: 16px max( 18px, env( safe-area-inset-right, 0px ) ) 10px max( 18px, env( safe-area-inset-left, 0px ) );
+	}
+
+	#orrery-sheet-name {
+		font-size: 30px;
+	}
+
+	.orrery-lede {
+		font-size: 14px;
+	}
+
+	.orrery-go {
+		padding: 8px max( 18px, env( safe-area-inset-right, 0px ) ) calc( 10px + var( --safe-bottom ) ) max( 18px, env( safe-area-inset-left, 0px ) );
+	}
+
+}
+
+/* A phone held sideways: the rows top left, the sheet down the right at 42% (all of the height). */
+@media ( orientation: landscape ) and ( max-height: 520px ) {
+
+	#orrery.orrery {
+		--orrery-sheet: 42%;
+	}
+
+	.orrery-bar {
+		min-height: 48px;
+		padding-top: calc( 6px + env( safe-area-inset-top, 0px ) );
+	}
+
+	.orrery-hint {
+		display: none;
+	}
+
+	.orrery-pick,
+	.orrery.has-sheet .orrery-pick {
+		top: calc( 50px + env( safe-area-inset-top, 0px ) );
+		right: auto;
+		gap: 6px;
+		width: min( 520px, calc( 100% - 32px ) );
+	}
+
+	.orrery.has-sheet .orrery-pick {
+		width: calc( 100% - var( --orrery-sheet ) - 32px );
+	}
+
+	.orrery-worlds button {
+		min-height: 48px;
+	}
+
+	.orrery-sheet {
+		top: 0;
+		left: auto;
+		width: var( --orrery-sheet );
+		max-height: none;
+		border-top: 0;
+		border-left: 1px solid var( --line );
+		border-radius: 0;
+	}
+
+	.orrery-sheet-body {
+		padding-top: calc( 60px + env( safe-area-inset-top, 0px ) );
+	}
+
+	#orrery-sheet-name {
+		font-size: 26px;
+	}
+
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.orrery-tag {
+		will-change: auto;
+	}
+
+}

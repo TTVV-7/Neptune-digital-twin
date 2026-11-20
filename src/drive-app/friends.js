@@ -1,6 +1,7 @@
 import { hornAudio, hornsOn, playHorn, setHornsOn } from './horns.js';
-import { FLAGS, cellOf } from './live-protocol.js';
+import { EARTH, FLAGS, cellOf, isLiveWorld, placeWorld } from './live-protocol.js';
 import { hideKeys, toast } from './screens.js';
+import { listOf, onWorld } from './worlds.js';
 
 // Driving with others on screen (live.js has the connection, ghosts.js the cars): the chip by the
 // place's name while driving ("Party · 3", "Nearby · just you") and the list of drivers it opens,
@@ -8,10 +9,32 @@ import { hideKeys, toast } from './screens.js';
 // (inviting friends with a link, the party's members, leaving it, and the switches); the banner
 // on the globe while in a party; the toasts as people come, go and drop in somewhere; and the horn
 // (H, or its button on a touch screen), heard for yours and those near, each in its driver's horn
-// from the Garage (horns.js), which travels with their look.
+// from the Garage (horns.js), which travels with their look. All of it on every world alike: a
+// friend on another world is "on Mars" (or "on the Earth"...), and Go to or Join takes you there.
 
-// Driving with others off for the rest of the day, its budget spent (worker/drive/live.js).
+// Driving with others off for the rest of the day, its budget spent (worker/drive/live.js): on every
+// world, or on one (each has its own), with others' still on.
 export const BUDGET_TOAST = 'Lots of drivers today: driving with others is back after midnight UTC.';
+
+// What's said when `world`'s budget for the day is spent and those of the worlds `open` aren't
+// (none: on every world, BUDGET_TOAST).
+export function budgetToast( world, open = [] ) {
+
+	const others = open.filter( id => id !== world && isLiveWorld( id ) );
+	if ( ! isLiveWorld( world ) || ! others.length ) return BUDGET_TOAST;
+	return `Lots of drivers ${ onWorld( world ) } today: driving with others there is back after midnight UTC. You can still drive with others on ${ listOf( others ) }.`;
+
+}
+
+// What's said when this address has had its share of `world`'s budget today (each address has a
+// share of each world's, so that one can't spend it for everyone), with the worlds still `open`.
+export function SHARE_TOAST( world, open = [] ) {
+
+	const others = open.filter( id => id !== world && isLiveWorld( id ) );
+	const said = `You've driven with others a lot ${ onWorld( world ) } today`;
+	return others.length ? `${ said }. You can still drive with others on ${ listOf( others ) }.` : `${ said }: it's back after midnight UTC.`;
+
+}
 // Other cars' horns are heard this near (m).
 const HEAR_RANGE = 150;
 // In an area, a toast for someone new at most this often (ms).
@@ -68,7 +91,14 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	// --- what the room says ---
 
 	const inParty = () => !! live.party;
-	for ( const type of [ 'status', 'party', 'nearby', 'welcome', 'clear', 'look', 'away' ] ) live.on( type, refresh );
+	for ( const type of [ 'status', 'party', 'nearby', 'welcome', 'clear', 'look', 'away', 'closed' ] ) live.on( type, refresh );
+	live.on( 'closed', ( { world, quiet, share } ) => {
+
+		if ( quiet ) return;
+		const open = live.openWorlds?.() ?? [];
+		toast( share ? SHARE_TOAST( world, open ) : budgetToast( world, open ), 10000 );
+
+	} );
 	live.on( 'party', code => {
 
 		// The party stays in the address while you're in it, so a reload (or the link copied from the
@@ -103,8 +133,9 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		const p = live.players.get( pid );
 		if ( ! inParty() || ! p ) return;
 		// A friend dropping in where you're driving (as Join does, beside you) needs no Join; on the
-		// globe, the banner says it already if it's them.
-		const here = ! live.away && live.place && cellOf( place.lat, place.lon ) === cellOf( live.place.lat, live.place.lon );
+		// globe, the banner says it already if it's them. (Their area on their world: the Moon's are
+		// their own.)
+		const here = ! live.away && live.place && cellOf( place.lat, place.lon, placeWorld( place ) ) === cellOf( live.place.lat, live.place.lon, placeWorld( live.place ) );
 		if ( here ) toast( `${ p.name } dropped in near you.`, 4000 );
 		else if ( mode() !== 'globe' || bannerPid !== pid ) toast( `${ p.name } went to ${ place.name || 'a new place' }.`, 8000, { label: 'Join', onClick: () => goTo( pid ) } );
 
@@ -139,9 +170,10 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	function refresh() {
 
 		lastMode = mode();
-		// Over for this visit, whatever ended it (the toast said why): none of it shows. Nor the horn
-		// with nearby off and no party, as there's nobody to hear it.
-		const off = !! live.ended;
+		// Over for this visit, whatever ended it (the toast said why), or for today on this world (its
+		// budget spent) with no party (a party's room goes on through another world): none of it shows.
+		// Nor the horn with nearby off and no party, as there's nobody to hear it.
+		const off = !! live.ended || ! live.world || ( !! live.closedHere && ! inParty() );
 		for ( const area of areas ) area.refresh( off );
 		hornKey.hidden = horn.hidden = off || live.status === 'off';
 		showChip();
@@ -155,7 +187,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	function showChip() {
 
 		const { status } = live;
-		chip.hidden = !! live.ended || status === 'off';
+		chip.hidden = !! live.ended || ( !! live.closedHere && ! inParty() ) || status === 'off' || status === 'closed';
 		if ( chip.hidden ) {
 
 			openList( false );
@@ -214,9 +246,10 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		heading.textContent = inParty() ? `Party ${ live.party }` : 'Drivers nearby';
 		const shown = others();
 		empty.hidden = shown.length > 0;
-		empty.textContent = inParty() ? 'Nobody else here yet. Invite friends from the pause menu.'
+		const says = inParty() ? 'Nobody else here yet. Invite friends from the pause menu.'
 			: live.status === 'busy' ? 'This area is full just now, so you\'re driving on your own here.'
 				: 'Nobody else driving near here yet.';
+		if ( empty.textContent !== says ) empty.textContent = says;
 		for ( const [ pid, row ] of rowOf ) {
 
 			if ( live.players.has( pid ) ) continue;
@@ -228,11 +261,15 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		for ( const { p, distance } of shown ) {
 
 			if ( ! rowOf.has( p.pid ) ) rowOf.set( p.pid, makeRow( p.pid ) );
-			const row = rowOf.get( p.pid );
-			row.fill( p, distance );
-			rows.append( row.li );
+			rowOf.get( p.pid ).fill( p, distance );
 
 		}
+
+		// Put in order only when the order changed: moving a row takes it out of the page and back,
+		// which drops the focus from its button (tabbed to, every half second) and, on a slow page,
+		// has it gone for a moment under a tap.
+		const order = shown.map( ( { p } ) => rowOf.get( p.pid ).li );
+		if ( order.length !== rows.children.length || order.some( ( li, i ) => rows.children[ i ] !== li ) ) rows.append( ...order );
 
 	}
 
@@ -263,11 +300,13 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 				if ( p.name !== name ) who.firstChild.replaceWith( nameOf( p ) );
 				name = p.name;
 				const paused = p.s && p.s[ 10 ] & FLAGS.paused;
-				const where = p.away ? 'on the globe' : paused ? 'paused' : distance !== null ? far( distance ) : p.place?.name ? `at ${ p.place.name }` : 'driving';
-				what.textContent = `${ rides.get( p.vehicle ) ?? 'Go-kart' } · ${ where }`;
+				const where = p.away ? onGlobe( p ) : elsewhere( p ) ?? ( paused ? 'paused' : distance !== null ? far( distance ) : p.place?.name ? `at ${ p.place.name }` : 'driving' );
+				// (Each written only when it changes, as the list refreshes twice a second.)
+				const says = `${ rides.get( p.vehicle ) ?? 'Go-kart' } · ${ where }`;
+				if ( what.textContent !== says ) what.textContent = says;
 				go.disabled = p.away || ( ! p.s && ! p.place );
 				const hiddenHere = ghosts.isHidden( name );
-				hide.textContent = hiddenHere ? 'Show' : 'Hide';
+				if ( hide.textContent !== ( hiddenHere ? 'Show' : 'Hide' ) ) hide.textContent = hiddenHere ? 'Show' : 'Hide';
 				hide.title = hiddenHere ? 'Show them again' : 'Hide them for this visit';
 				// Whose, for a screen reader: otherwise a column of the same two words.
 				go.setAttribute( 'aria-label', `Go to ${ name }` );
@@ -281,7 +320,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	// Made again only when what it says changes: it's a live region, read out each time it is.
 	function showBanner() {
 
-		const show = inParty() && mode() === 'globe' && ! live.ended;
+		const show = inParty() && mode() === 'globe' && ! live.ended && !! live.world;
 		banner.hidden = ! show;
 		const driving = show ? [ ...live.players.values() ].find( p => ! p.away && ( p.s || p.place ) ) : null;
 		bannerPid = driving?.pid ?? null;
@@ -346,13 +385,39 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 				members.replaceChildren( you, ...[ ...live.players.values() ].map( p => {
 
 					const li = document.createElement( 'li' );
-					li.append( nameOf( p ), ` · ${ p.away ? 'on the globe' : p.place?.name ? `at ${ p.place.name }` : 'driving' }` );
+					li.append( nameOf( p ), ` · ${ p.away ? onGlobe( p ) : elsewhere( p ) ?? ( p.place?.name ? `at ${ p.place.name }` : 'driving' ) }` );
 					return li;
 
 				} ) );
 
 			},
 		};
+
+	}
+
+	// Where a driver on another world is, from the game's: "on Mars" (or "on the Earth"...); null for
+	// one on this world.
+	function elsewhere( p ) {
+
+		const theirs = isLiveWorld( p.world ) ? p.world : EARTH;
+		return theirs === here() ? null : onWorld( theirs );
+
+	}
+
+	// A friend on the globe: on another world's, named ("on Mars's globe"), as they aren't where this
+	// page would see them. Which globe the room says (globe), else the world they last drove on.
+	function onGlobe( p ) {
+
+		const theirs = isLiveWorld( p.globe ) ? p.globe : isLiveWorld( p.world ) ? p.world : EARTH;
+		return theirs === here() ? 'on the globe' : `${ onWorld( theirs ) }'s globe`;
+
+	}
+
+	// The world this page's game is on, as live.js was told (the one whose rooms it uses, from a
+	// live.js without it).
+	function here() {
+
+		return live.gameWorld ?? live.world ?? EARTH;
 
 	}
 

@@ -1805,7 +1805,7 @@ describe( 'Driving with others: their underglow and horn', () => {
 			const handlers = {};
 			const players = new Map();
 			const live = {
-				players, status: 'live', ended: null, party: null, nearby: true, self: null, place: null, away: false,
+				players, status: 'live', ended: null, world: 'earth', gameWorld: 'earth', party: null, nearby: true, self: null, place: null, away: false,
 				ride: { vehicle: 'go-kart', look: { horn: 'fanfare' } },
 				on: ( type, fn ) => ( handlers[ type ] ??= [] ).push( fn ),
 				honk: () => true, invite: () => null, leaveParty: () => {}, setNearby: () => {}, joinParty: () => {},

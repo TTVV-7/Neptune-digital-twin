@@ -3,7 +3,8 @@ import { clone as cloneModel } from 'three/addons/utils/SkeletonUtils.js';
 import { createDriveFx } from '../drive-fx.js';
 import { specFor } from '../drive.js';
 import { frontToYaw } from '../library.js';
-import { FLAGS, INTERP_MS, STALE_MS, TELEPORT } from './live-protocol.js';
+import { FLAGS, INTERP_MS, STALE_MS, teleported } from './live-protocol.js';
+import { createPlaneKit, FOLD, UNFOLD } from '../plane.js';
 import { levelLine } from './levels.js';
 import { applyLook, cleanLook, fxOf } from './paint.js';
 import { liftGlow } from './underglow.js';
@@ -64,14 +65,18 @@ const _turn = new Quaternion();
 const _half = new Quaternion();
 const _axis = new Vector3();
 const _chord = new Vector3();
+const _splash = new Vector3();
 const noRay = () => {};
 
 // scene: where the ghosts go; earth: the tiles' (or test globe's) group, whose matrixWorld takes
-// Earth-centred positions into the scene as it is now; vehicles: loadVehicles()'; loader: the
+// Earth-centred positions into the scene as it is now; frame(): the group for the world the game is
+// on (earth, or off the Earth that world's group, whose matrixWorld takes positions in its own frame
+// in, levelled and recentred as it is now): only the drivers on that world are drawn, through it, and
+// only while live.js's rooms are that world's (none on a closed world, alone there); vehicles: loadVehicles()'; loader: the
 // ModelManager's glTF loader (or models: ghostModels' own, shared with a challenge's ghost); live:
 // live.js's; tags: the element their names go in; own(): your car's pivot, or null; effects: what
 // drive-fx.js is asked for (the Driver's: fewer on a phone).
-export function createGhosts( { scene, earth, camera, vehicles, loader, models = ghostModels( loader ), live, tags, own, effects = undefined } ) {
+export function createGhosts( { scene, earth, frame = () => earth, camera, vehicles, loader, models = ghostModels( loader ), live, tags, own, effects = undefined } ) {
 
 	const group = new Group();
 	group.name = 'ghosts';
@@ -207,7 +212,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 	}
 
 	// Where the car was at `at`: between the two words either side of then, or past the newest, on a
-	// little at its speed and turning as it was (see onFrom). A jump of more than TELEPORT m isn't
+	// little at its speed and turning as it was (see onFrom). A jump further than it could have gone (teleported) isn't
 	// driven: it's there all at once. False with no word of it at all.
 	function sample( ghost, at ) {
 
@@ -225,10 +230,10 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 		} else if ( ! b || b.at <= at ) {
 
 			const ahead = MathUtils.clamp( ( at - ( b ?? a ).at ) / 1000, 0, EXTRAPOLATE );
-			if ( b && a.p.distanceTo( b.p ) <= TELEPORT ) onFrom( ghost, a, b, ahead );
+			if ( b && ! teleported( a, b ) ) onFrom( ghost, a, b, ahead );
 			else setFrom( ghost, b ?? a, ahead );
 
-		} else if ( a.p.distanceTo( b.p ) > TELEPORT ) setFrom( ghost, a, 0 );
+		} else if ( teleported( a, b ) ) setFrom( ghost, a, 0 );
 		else {
 
 			const u = ( at - a.at ) / ( b.at - a.at );
@@ -358,6 +363,8 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 
 	function dispose( model ) {
 
+		model.kit?.dispose();
+		model.kit = null;
 		group.remove( model.pivot );
 		models.dispose( model );
 
@@ -434,6 +441,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 		pivot.updateMatrixWorld( true );
 		_v.copy( ghost.v ).applyQuaternion( _earth );
 		liftGlow( pivot, ghost.flags, dt );
+		const plane = planeOf( ghost, dt );
 		if ( ! animators.length || dt <= 0 ) return;
 		// Its wheels turn with its speed along the way it faces, and steer by how fast it's turning.
 		_forward.set( 0, 0, - 1 ).applyQuaternion( pivot.quaternion );
@@ -444,7 +452,32 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 		const steer = MathUtils.clamp( rate / dt * 2 / Math.max( 2, Math.abs( speed ) ), - 1, 1 ) * Math.sign( speed || 1 );
 		ghost.steer += ( steer - ghost.steer ) * Math.min( 1, dt * 8 );
 		const airborne = !! ( ghost.flags & FLAGS.air );
-		for ( const animate of animators ) animate( { steer: ghost.steer, speed, dt, airborne, vy: _v.y, throttle: speed > 1 } );
+		// As a plane, its wheels (those that fold) spin as fans.
+		for ( const animate of animators ) animate( { steer: plane ? 0 : ghost.steer, speed: plane ? 20 + speed * 0.2 : speed, dt, airborne: airborne || plane > 0, vy: _v.y, throttle: speed > 1, plane } );
+
+	}
+
+	// A car seen as a plane (FLAGS.plane): its wings unfold as the flag comes, at the pace the
+	// driver's did (plane.js), and fold away as it goes, the kit made and let go of with them.
+	// Returns how far out they are (0 to 1, eased as plane.js eases them).
+	function planeOf( ghost, dt ) {
+
+		const { model } = ghost;
+		const want = ghost.flags & FLAGS.plane ? 1 : 0;
+		model.plane ??= 0;
+		if ( want > model.plane ) model.plane = Math.min( 1, model.plane + dt / UNFOLD );
+		else if ( want < model.plane ) model.plane = Math.max( 0, model.plane - dt / FOLD );
+		if ( model.plane > 0 && ! model.kit ) model.kit = createPlaneKit( { pivot: model.pivot, box: model.box, noRay } );
+		if ( model.plane === 0 && model.kit ) {
+
+			model.kit.dispose();
+			model.kit = null;
+
+		}
+
+		const deploy = MathUtils.smootherstep( model.plane, 0, 1 );
+		model.kit?.update( dt, deploy, MathUtils.clamp( _v.length() / 100, 0.3, 1 ) );
+		return deploy;
 
 	}
 
@@ -461,8 +494,13 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 
 		const now = performance.now();
 		const at = now - INTERP_MS;
-		earth.updateWorldMatrix( true, false );
-		_earth.setFromRotationMatrix( earth.matrixWorld );
+		const world = frame();
+		const on = live.world ?? 'earth';
+		// (On a world closed, or without driving with others, live.js's rooms are another's, if any:
+		// nobody here is drawn.)
+		if ( live.gameWorld !== undefined && live.gameWorld !== on ) shown = false;
+		world.updateWorldMatrix( true, false );
+		_earth.setFromRotationMatrix( world.matrixWorld );
 		camera.getWorldPosition( _cam );
 		const ownPivot = shown ? own() : null;
 		ownPivot?.getWorldPosition( _own );
@@ -471,10 +509,11 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 		for ( const ghost of ghosts.values() ) {
 
 			ghost.drawn = false;
-			if ( ! shown || ghost.away || hidden.has( ghost.name ) || ! sample( ghost, at ) ) continue;
+			// (A driver on the other world is no car here: theirs is in its frame.)
+			if ( ! shown || ghost.away || ( live.players.get( ghost.pid )?.world ?? 'earth' ) !== on || hidden.has( ghost.name ) || ! sample( ghost, at ) ) continue;
 			// No word for STALE_MS: gone, unless its driver paused (parked, it stays).
 			if ( now - ghost.heard > STALE_MS && ! ( ghost.flags & FLAGS.paused ) ) continue;
-			ghost.scene.copy( ghost.p ).applyMatrix4( earth.matrixWorld );
+			ghost.scene.copy( ghost.p ).applyMatrix4( world.matrixWorld );
 			ghost.distance = ghost.scene.distanceTo( _cam );
 			drawn.push( ghost );
 
@@ -588,9 +627,33 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 
 	}
 
+	// The scene moved by `matrix` (main.js's shiftTo, as a small world recentres on the car): what
+	// ghosts keep in the scene's terms goes with it (their effects' smoke, sparks, trails and spray,
+	// a splash's level, where they were drawn), and their last yaw is forgotten, so the turn isn't
+	// taken for steering. Where they are (their words, in their world's own frame) isn't: it's drawn
+	// through the frame's matrix as it is now, every frame.
+	function transform( matrix ) {
+
+		for ( const ghost of ghosts.values() ) {
+
+			ghost.fx?.transform( matrix );
+			ghost.yaw = null;
+			ghost.scene.applyMatrix4( matrix );
+			if ( ghost.model ) {
+
+				const { position } = ghost.model.pivot;
+				ghost.splashLevel = _splash.set( position.x, ghost.splashLevel, position.z ).applyMatrix4( matrix ).y;
+
+			}
+
+		}
+
+	}
+
 	return {
 		group,
 		update,
+		transform,
 		// Your honk, over your own car.
 		honkSelf() {
 
@@ -630,6 +693,8 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 				flags: ghost.flags, faded: ghost.faded, fx: !! ghost.fx, bursts: { ...ghost.bursts }, builds: ghost.builds, snaps: ghost.snaps.length,
 				position: ghost.model ? ghost.model.pivot.position.toArray() : null,
 				quaternion: ghost.model ? ghost.model.pivot.quaternion.toArray() : null,
+				// As a plane: how far out its wings are (0 to 1), and whether its kit is drawn.
+				plane: ghost.model?.plane ?? 0, kit: !! ghost.model?.kit?.group.visible,
 				tag: ghost.tag.root,
 			} ) );
 
@@ -723,10 +788,14 @@ export function ghostModels( loader ) {
 		pivot.updateMatrixWorld( true );
 		_box.setFromObject( pivot ).getSize( _size );
 		const size = { width: _size.x, height: _size.y, length: _size.z, rear: _box.max.z, scale: pivot.scale.x };
+		// The same box in the pivot's own frame, for a plane's kit (see planeOf).
+		const box = _box.clone();
+		box.min.divideScalar( pivot.scale.x );
+		box.max.divideScalar( pivot.scale.x );
 		const wheel = ( size.rear - size.length * 0.2 ) / size.scale;
 		const track = size.width * 0.4 / size.scale;
 		return {
-			vehicle, pivot, materials: [ ...materials.values() ], templates: used, animators, size,
+			vehicle, pivot, materials: [ ...materials.values() ], templates: used, animators, size, box,
 			wheels: [ new Vector3( - track, 0.05, wheel ), new Vector3( track, 0.05, wheel ) ],
 			floats: !! specFor( vehicle.item ).floats,
 		};
