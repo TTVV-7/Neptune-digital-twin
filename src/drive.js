@@ -1810,7 +1810,8 @@ export class Driver {
 			size: { width: this.width, height: this.height, length: this.length, rear: this.rear, scale },
 			wheels: [ _a.set( - track, 0.05, wheel ), _b.set( track, 0.05, wheel ) ],
 			velocity: _target.set( - Math.sin( this.course * Math.PI / 180 ) * this.speed, this.vy, Math.cos( this.course * Math.PI / 180 ) * this.speed ),
-			flame: this.firing ? 1 : this.boost ? 0.55 : 0,
+			// As a plane, no exhaust: a trick boost paid in the air waits for the wheels (plane.js).
+			flame: this.aircraft?.on ? 0 : this.firing ? 1 : this.boost ? 0.55 : 0,
 			// A trail (World Drive's Garage) shows behind it boosting or flying.
 			trail: this.firing || this.boost || this.flying || this.aircraft?.on ? 1 : 0,
 			drifting: !! this.drifting && this.grounded,
