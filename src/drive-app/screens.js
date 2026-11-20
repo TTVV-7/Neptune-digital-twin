@@ -127,27 +127,25 @@ export function hideLoading() {
 
 	$( 'loading' ).hidden = true;
 	clearInterval( tipTimer );
+	window.worldDriveLoading?.resetGame?.();
 
 }
 
-// The drop-in's card's car (the splash's, drive/index.html) and a tip, a new one every few seconds
+// The drop-in's card's tips (drive/index.html's, as its mini game is), a new one every few seconds
 // while it's up.
 let tipTimer;
 function startTips( root ) {
 
 	const loading = window.worldDriveLoading;
 	const tip = root.querySelector( '.tip' );
-	const ride = root.querySelector( '.mini .ride' );
 	clearInterval( tipTimer );
 	if ( ! loading ) {
 
 		tip.hidden = true;
-		root.querySelector( '.mini' ).hidden = true;
 		return;
 
 	}
 
-	if ( ! ride.firstChild ) ride.innerHTML = loading.car;
 	const show = () => {
 
 		tip.classList.remove( 'in' );

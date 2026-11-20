@@ -995,45 +995,85 @@ body.touch #pause kbd {
 	to { transform: translateX( 0 ); }
 }
 
-/* The splash's scene, new each load (drawn by drive/index.html's script): the sky, two layers of
-   scenery rolling by at different speeds, and a car bouncing along the road. */
-#splash .scene {
+/* The loading screens' scene, new each load (drawn by drive/index.html's script): the sky, two
+   layers of scenery rolling by at different speeds, and a car bouncing along the road; and a mini
+   game in it (tap, Space or ↑ hops the car over what comes down the road). On the splash, across the
+   card's top; on the drop-in's card, above its words. */
+.scene.game {
 	position: relative;
+	overflow: hidden;
+	background: #0b1322;
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+#splash .scene.game {
 	height: 150px;
 	margin: -26px -26px 18px;
 	border-radius: 20px 20px 0 0;
-	overflow: hidden;
-	background: #0b1322;
 }
 
-#splash .scene svg {
+#loading .scene.game {
+	width: min( 320px, 78vw );
+	height: min( 120px, 29vw );
+	margin: 0 auto 12px;
+	border-radius: 12px;
+}
+
+.scene.game svg {
 	display: block;
 	width: 100%;
 	height: 100%;
 }
 
-#splash .scene .far { animation: scenery 48s linear infinite; }
-#splash .scene .near { animation: scenery 16s linear infinite; }
-#splash .scene .dashes { animation: dashes 0.5s linear infinite; }
-#splash .scene .car { animation: bounce 2.6s ease-in-out infinite; }
-#splash .scene .wheel,
-#loading .mini .wheel { animation: spin 0.4s linear infinite; }
-#splash .scene .star { animation: twinkle 3s ease-in-out infinite; }
-#splash .scene .lit { fill: #ffd98a; opacity: 0.85; }
+.scene.game .far { animation: scenery 48s linear infinite; }
+.scene.game .near { animation: scenery 16s linear infinite; }
+.scene.game .dashes { animation: dashes 0.5s linear infinite; }
+.scene.game .car { animation: bounce 2.6s ease-in-out infinite; }
+.scene.game.playing .car { animation-name: rumble; animation-duration: 0.3s; }
+.scene.game .wheel { animation: spin 0.4s linear infinite; transform-box: fill-box; transform-origin: center; }
+.scene.game .star { animation: twinkle 3s ease-in-out infinite; }
+.scene.game .lit { fill: #ffd98a; opacity: 0.85; }
 
-#splash .scene .scene-name {
+/* Crashed: everything stops, the car tipped up. */
+.scene.game.crashed :is( .far, .near, .dashes, .wheel ) { animation-play-state: paused; }
+.scene.game.crashed .car { animation: none; transform: translate( 4px, -3px ) rotate( -18deg ); }
+
+.scene.game .scene-name,
+.scene.game .game-say {
 	position: absolute;
-	right: 10px;
 	bottom: 8px;
 	padding: 2px 8px;
 	border-radius: 999px;
-	background: rgba( 0, 0, 0, 0.45 );
+	background: rgba( 0, 0, 0, 0.5 );
 	color: #fff;
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.4px;
 	text-transform: uppercase;
+	pointer-events: none;
 }
+
+.scene.game .scene-name { right: 10px; }
+.scene.game .game-say { left: 10px; }
+
+/* Playing: the score big in the corner (the crash's words back to small). */
+.scene.game.playing .game-say {
+	top: 8px;
+	bottom: auto;
+	font-size: 18px;
+	font-variant-numeric: tabular-nums;
+}
+
+.scene.game.playing.crashed .game-say {
+	font-size: 12px;
+	background: rgba( 179, 38, 30, 0.85 );
+}
+
+.scene.game.playing .scene-name { display: none; }
 
 @keyframes scenery {
 	from { transform: translateX( 0 ); }
@@ -1056,6 +1096,11 @@ body.touch #pause kbd {
 	72% { transform: translateY( -16px ) rotate( -6deg ); }
 	82% { transform: translateY( 0 ) rotate( 2deg ); }
 	88% { transform: translateY( -2px ) rotate( 0 ); }
+}
+
+/* While playing, only a small rumble: the hops are the player's. */
+@keyframes rumble {
+	50% { transform: translateY( -0.6px ); }
 }
 
 @keyframes spin {
@@ -1100,40 +1145,9 @@ body.touch #pause kbd {
 	from { opacity: 0; transform: translateY( 4px ); }
 }
 
-/* The drop-in's card: the same car on a short road. */
-#loading .mini {
-	width: 120px;
-	margin: 0 auto 8px;
-}
-
-#loading .mini .ride svg {
-	display: block;
-	width: 64px;
-	height: 34px;
-	margin: 0 auto -4px;
-	overflow: visible;
-}
-
-#loading .mini .ride .car { animation: bounce 2.6s ease-in-out infinite; }
-
-#loading .mini .road {
-	height: 4px;
-}
-
-#loading .mini .road i {
-	background: repeating-linear-gradient( 90deg, var( --accent ) 0 14px, transparent 14px 26px );
-}
-
-#splash .scene .wheel,
-#loading .mini .wheel {
-	transform-box: fill-box;
-	transform-origin: center;
-}
-
 @media ( prefers-reduced-motion: reduce ) {
 
-	#splash .scene *,
-	#loading .mini *,
+	.scene.game:not( .playing ) *,
 	#splash .tip,
 	#loading .tip {
 		animation: none !important;

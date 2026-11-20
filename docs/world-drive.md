@@ -5559,7 +5559,14 @@ last one in that browser): a sunset coast, a night city, an alpine pass, a deser
 Mars or a neon night, with two layers of scenery rolling by at different speeds and a car of a random
 colour (or now and then a monster truck) bumping along the road, hopping every few seconds. Under it,
 tips (the keys, the other worlds, challenges, a few real facts) change every few seconds. The drop-in's
-loading card shows the same car on a short road and the same tips. It's drawn by a small script in
+loading card shows the same scene, smaller, and the same tips.
+
+Both scenes are a **mini game**: tap the scene, or press Space or ↑, and the car hops. Once it has,
+things come down the road to hop over (cones; rocks on the Moon and Mars; neon blocks in the neon
+night), faster and faster, a point for each cleared. Hitting one ends the run (tap to go again); the
+best score is kept in the browser (`worldDriveLoadingBest`). Nothing comes before the first hop, so
+the scene is only a picture to anyone not playing. While a scene is up its Space and ↑ go to the game
+alone (not to a button or field that has them), and the drop-in's card going away ends a run. It's drawn by a small script in
 `drive/index.html`, right after the splash, so it's there at the first paint, before the game's code;
 `?scene=<id>` (`sunset`, `city`, `alps`, `desert`, `moon`, `mars`, `neon`) picks one. With reduced
 motion asked for, nothing moves.
