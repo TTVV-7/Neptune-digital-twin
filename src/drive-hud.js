@@ -430,7 +430,8 @@ const CSS = `
 /* A hit's word: big, tilted and gone in a moment, bursting off the vehicle (in the middle of the
    view, over it rather than on its roof, between it and the tricks), each in its own way by how hard the
    hit was: BONK! a small white pop that drops away, BOING! a springy squash and stretch, WHAM! hot
-   on a starburst, shaken; WIPEOUT! rolls over and drops. */
+   on a starburst, shaken; WIPEOUT! rolls over and drops. A hit's word is there from its first
+   frame (it comes in mostly solid, not out of nothing), so even a quick look at the hit sees it. */
 .dhud .dhud-pop {
 	position: absolute;
 	top: 40%;
@@ -498,7 +499,7 @@ const CSS = `
 
 @keyframes dhud-wham {
 	0% {
-		opacity: 0;
+		opacity: 0.7;
 		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.3 ) );
 	}
 	18% {
@@ -520,7 +521,7 @@ const CSS = `
 /* A quick pop, and down it drops. */
 @keyframes dhud-bonk {
 	0% {
-		opacity: 0;
+		opacity: 0.7;
 		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.3 ) );
 	}
 	25% {
@@ -540,7 +541,7 @@ const CSS = `
 /* Squashed flat, stretched tall, and springing back. */
 @keyframes dhud-boing {
 	0% {
-		opacity: 0;
+		opacity: 0.7;
 		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 0.4, 0.3 );
 	}
 	14% {
@@ -568,7 +569,7 @@ const CSS = `
 /* Slammed in big, shaken for a moment, and gone. */
 @keyframes dhud-wham-hit {
 	0% {
-		opacity: 0;
+		opacity: 0.6;
 		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 2.2 ) );
 	}
 	12% {
@@ -679,6 +680,13 @@ const CSS = `
 	padding: 0 16px;
 	text-align: center;
 	text-shadow: 0 2px 0 rgba( 0, 0, 0, 0.35 ), 0 4px 14px rgba( 0, 0, 0, 0.45 );
+	transition: opacity 0.15s ease-out;
+}
+
+/* Out of the way of a hit's word while it's up (see pop). */
+.dhud.popping .dhud-tricks {
+	opacity: 0;
+	transition: none;
 }
 
 .dhud .dhud-tricks b {
@@ -1097,6 +1105,7 @@ export function createDriveHud( parent = document.body ) {
 	let tilt = 1;
 	let chain = 0;
 	let lastPop = - Infinity;
+	let popTimer;
 	let panel = null;
 	let flying = false;
 	// Only touch what changed: these are set many times a second.
@@ -1242,6 +1251,8 @@ export function createDriveHud( parent = document.body ) {
 			boostRow.classList.remove( 'refuel', 'empty' );
 			boostLabel.textContent = 'BOOST';
 			pops.replaceChildren();
+			clearTimeout( popTimer );
+			root.classList.remove( 'popping' );
 			panel?.remove();
 			panel = null;
 			for ( const button of root.querySelectorAll( '.dhud-touch .down' ) ) button.classList.remove( 'down' );
@@ -1314,6 +1325,11 @@ export function createDriveHud( parent = document.body ) {
 			element.style.setProperty( '--size', String( 0.75 + power * 0.5 + 0.1 * Math.min( 5, chain - 1 ) ) );
 			pops.replaceChildren( element );
 			setTimeout( () => element.remove(), POP_TIME );
+			// The tricks (a wall bounce landing a big air, say) stand aside while the word's up, so
+			// it's never read through them; they come back as it goes.
+			clearTimeout( popTimer );
+			root.classList.add( 'popping' );
+			popTimer = setTimeout( () => root.classList.remove( 'popping' ), kind === 'bonk' ? 420 : 680 );
 
 		},
 
