@@ -152,7 +152,7 @@
 	.jump a:hover, .jump a:focus-visible { border-color: var(--accent); color: var(--accent); }
 	:target, #todo, #tiles, .card[id] { scroll-margin-top: 12px; }
 	/* What to work on: the advice picked from the numbers, the most pressing first. */
-	.todo { margin-bottom: 16px; }
+	.todo { margin-top: 12px; }
 	.todo h2 { font-size: 17px; }
 	.advice { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 	.advice li { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: start; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); border-left-width: 4px; }
@@ -206,7 +206,7 @@
 		</div>
 	</header>
 	<nav class="jump" aria-label="Jump to">
-		<a href="#todo">To do</a><a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#any">Any count</a>
+		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#any">Any count</a><a href="#todo">To do</a>
 	</nav>
 	<div id="out"><p class="muted">Loading...</p></div>
 	<section class="card places" id="places" aria-labelledby="places-title" hidden>
@@ -479,7 +479,6 @@
 		const scoresNote = scoresPartial ? 'partial' : scoresKept < 2 * days.length ? '' : changeText( [ total( 'scores' ), earlier( 'scores' ) ] );
 		const firstDay = rows.find( ( [ , metric ] ) => metric === 'visit' )?.[ 0 ];
 		out.innerHTML = `
-			${ adviceCard( advice( ctx ) ) }
 			<div class="tiles" id="tiles">
 				${ groups.map( ( [ group, list ], g ) => `<h2 class="group">${ esc( group ) }</h2>${ g ? '' : `<div class="tile today"><div class="label" title="Visits and driving so far today (UTC).">Today so far (UTC)</div><div class="value">${ esc( num( today( 'visit' ) ) ) }</div><div class="change muted">visits · ${ esc( hours( today( 'play' ) ) ) } played</div></div>` }` + list.map( ( [ label, value, change, fewerIsBetter, series, tip ] ) => `<div class="tile"><div class="label" title="${ esc( tip ?? '' ) }">${ esc( label ) }</div><div class="value">${ esc( value ) }</div>${ compared( label ) ? changeOf( change, fewerIsBetter ) : '' }${ spark( series ) }</div>` ).join( '' ) ).join( '' ) }
 			</div>
@@ -547,7 +546,8 @@
 					</div>
 					<div class="scroll" id="any-chart"></div>
 				</div>
-			</div>`;
+			</div>
+			${ adviceCard( advice( ctx ) ) }`;
 
 		// The chart of any count by day: the metric picked, all its keys together or one of them.
 		const metricPick = document.getElementById( 'metric' );

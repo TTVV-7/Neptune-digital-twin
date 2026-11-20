@@ -5585,7 +5585,7 @@ Ceres's from theirs, so their first periods show them rising from none, which th
 after, shows no false rise; the page says which have no ▲ or ▼, and why. The facts from the Worker's
 own tables are always compared. On it:
 
-- **What to work on**, first: advice read from the period's numbers, the most pressing first, each
+- **What to work on**, at the bottom of the page: advice read from the period's numbers, the most pressing first, each
   marked **Fix**, **Look at** or **Going well**, with what was seen and something to try. Plain rules
   with thresholds (shown once the period has about 20 visits): the funnel's biggest drop, slow loads
   and drop-ins, the commonest problem (and whether it's rising), searches finding nothing, the ride
