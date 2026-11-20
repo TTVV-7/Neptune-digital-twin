@@ -4546,7 +4546,7 @@ const STYLES = {
 
 				// Kept up with it, and gone before they drift back to the camera.
 				const p = batch.spawn( 1.1 + Math.random() * 0.3 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position );
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position ).addScaledVector( f.back, 0.25 * f.scale );
 				thrown( f, p, 0.96, 0.8 + Math.random() * 0.6, 1.3, 0.8 );
 				p.frame = SHAPES.butterfly;
 				p.size = ( 0.12 + Math.random() * 0.04 ) * f.scale;
@@ -4592,8 +4592,10 @@ const STYLES = {
 				for ( let i = 0; i < 5; i ++ ) {
 
 					const p = batch.spawn( 1.2 + Math.random() * 0.2 );
-					p.position.copy( f.nozzle ).addScaledVector( f.right, ( i - 2 ) * 0.22 * f.scale ).addScaledVector( f.back, Math.abs( i - 2 ) * 0.15 * f.scale ).addScaledVector( f.up, 0.15 * f.scale );
-					thrown( f, p, 0.96, 1, 0.6, 0 );
+					// (Its leader well behind the exhaust, and flying back and up away from it: started
+					// on it, a swarm sat on the vehicle, over the driver.)
+					p.position.copy( f.nozzle ).addScaledVector( f.right, ( i - 2 ) * 0.22 * f.scale ).addScaledVector( f.back, ( 0.7 + Math.abs( i - 2 ) * 0.15 ) * f.scale );
+					thrown( f, p, 0.96, 1.4, 0.8, 0 );
 					p.frame = SHAPES.butterfly;
 					p.size = 0.13 * f.scale;
 					p.colour.set( monarchs[ i % monarchs.length ] );
@@ -4631,6 +4633,15 @@ const STYLES = {
 					else view.sx *= ( p.kind === 3 ? 0.75 : 1 ) * ( 0.2 + 0.8 * Math.abs( Math.cos( p.age * rate + p.phase ) ) );
 					if ( p.kind === 0 ) view.turn = 0.35 * Math.sin( p.age * 2 + p.phase );
 					view.alpha = Math.min( 1, t * 10, ( 1 - t ) * 4 );
+					// Folded away over the vehicle itself, so they never sit on the driver.
+					const near = view.position.distanceTo( f.middle ) / f.scale;
+					if ( near < 1.1 ) {
+
+						const shrink = Math.max( 0, ( near - 0.5 ) / 0.6 );
+						view.sx *= shrink;
+						view.sy *= shrink;
+
+					}
 
 				},
 			};
