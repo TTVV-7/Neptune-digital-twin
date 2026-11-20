@@ -1727,7 +1727,7 @@ const STYLES = {
 				since = 0;
 				const fizz = overdrive( f ) > 0;
 				const p = batch.spawn( fizz ? 0.35 : 0.9 + Math.random() * 0.6 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.4 ) * 0.3 * f.scale, p.position );
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.5 ) * 0.25 * f.scale, p.position ).addScaledVector( f.back, 0.2 * f.scale );
 				if ( fizz ) {
 
 					thrown( f, p, 0.95, 1.5 + Math.random(), 0.3, 0.2 );
@@ -1736,8 +1736,8 @@ const STYLES = {
 
 				} else {
 
-					thrown( f, p, 0.9, 1.5 + Math.random() * 1.5, 0.6, 0.6 );
-					blow( p, ( 0.1 + Math.random() * 0.2 ) * f.scale );
+					thrown( f, p, 0.95, 1.5 + Math.random(), 0.6, 0.6 );
+					blow( p, ( 0.08 + Math.random() * 0.14 ) * f.scale );
 
 				}
 
@@ -1771,7 +1771,10 @@ const STYLES = {
 				look( p, t, view ) {
 
 					if ( p.kind === 2 ) return;
-					// Clear until it pops: a ring, flicking out.
+					// Clear until it pops: a ring, flicking out. Well behind it, it pops early, before the
+					// chase camera's lens is inside it.
+					const behind = _a.subVectors( view.position, f.middle ).dot( f.back ) / f.scale;
+					if ( behind > 2.6 ) t = Math.max( t, 0.9 + 0.1 * Math.min( 1, behind - 2.6 ) );
 					const end = p.kind === 3 ? 0.7 : 0.9;
 					if ( p.kind === 3 ) view.sx = view.sy = p.size * ( 1 + 2.5 * Math.min( 1, t / end ) );
 					if ( t > end ) {
@@ -1820,10 +1823,10 @@ const STYLES = {
 					if ( h > 0 && fl > 0.01 && rider <= 0 ) {
 
 						rider = 0.4;
-						const p = batch.spawn( 1.2 );
-						p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.5 * frame.scale ).addScaledVector( frame.up, 0.1 * frame.scale );
-						thrown( frame, p, 0.99, 2.5, 0.2, 0.2 );
-						blow( p, 0.3 * frame.scale );
+						const p = batch.spawn( 1 );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.8 * frame.scale ).addScaledVector( frame.up, 0.1 * frame.scale );
+						thrown( frame, p, 0.995, 1, 0.2, 0.2 );
+						blow( p, 0.2 * frame.scale );
 
 					}
 
@@ -1851,10 +1854,11 @@ const STYLES = {
 				cool( frame, dry ) {
 
 					f = frame;
-					const p = batch.spawn( dry ? 0.15 : 1.6 );
-					p.position.copy( frame.nozzle );
-					thrown( frame, p, 0.93, dry ? 0.3 : 1, 0.2, 0 );
-					blow( p, ( dry ? 0.1 : 0.45 ) * frame.scale );
+					// (The last one let go behind it and floating up and away, never over the vehicle.)
+					const p = batch.spawn( dry ? 0.15 : 1.4 );
+					p.position.copy( frame.nozzle ).addScaledVector( frame.back, ( dry ? 0 : 0.5 ) * frame.scale );
+					thrown( frame, p, 0.95, dry ? 0.3 : 1.2, dry ? 0.2 : 0.8, 0 );
+					blow( p, ( dry ? 0.1 : 0.3 ) * frame.scale );
 					if ( dry ) {
 
 						p.grow = 0;
