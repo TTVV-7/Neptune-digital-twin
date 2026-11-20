@@ -7060,6 +7060,44 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
 	} );
 
+	test( 'over a cap at Drive here, from the globe: the used-up notice offers the pass too ("Get more Earth drives") with a sign-in; signed in with the pass, the next Drive here asks again', async () => {
+
+		const visits = [];
+		const page = await supporterPage( { signedInAs: { ...ALICE, supporter: true }, config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true }, visit: route => {
+
+			const body = route.request().postDataJSON();
+			visits.push( body );
+			if ( body.globe ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { free: true, globe: true, world: 'earth', visit: 'v1.globe-visit' } ) } );
+			if ( visits.length === 2 ) return route.fulfill( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'You\'ve had today\'s free drives', reason: 'visitor', retryAfter: 3600 } ) } );
+			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: null, visit: 'v1.earth-visit' } ) } );
+
+		} } );
+		await page.goto( BASE );
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 90000 } );
+		await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+		await page.locator( '.pin-card .go' ).click();
+		const notice = page.locator( '#notice[data-kind="used-up"]' );
+		await notice.waitFor( { timeout: 30000 } );
+		assert.match( await notice.locator( '.message' ).textContent(), /a 24-hour pass, or the Supporter Pass for good: 10 Earth drives a day/ );
+		await notice.locator( '.account .stub-google' ).waitFor();
+		await shot( page, 'pass-9-drive-here-used-up-pitch' );
+		// The pitch: the pass's sheet.
+		await notice.locator( 'button', { hasText: 'Get more Earth drives' } ).click();
+		await page.locator( '#pass .buy-day' ).waitFor();
+		await page.keyboard.press( 'Escape' );
+		// A supporter on a new browser signs in there: the notice goes, and Drive here asks again.
+		await page.evaluate( () => window.testCredential = 'good-token' );
+		await notice.locator( '.stub-google' ).click();
+		await page.locator( '#notice' ).waitFor( { state: 'hidden', timeout: 30000 } );
+		assert.equal( visits.length, 2 );
+		await page.locator( '.pin-card .go' ).click();
+		await page.waitForFunction( () => window.drive.tiles, null, { timeout: 30000 } );
+		assert.deepEqual( visits.map( body => Object.keys( body ).filter( k => k !== 'token' )[ 0 ] ), [ 'globe', 'fromGlobe', 'fromGlobe' ] );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
 	test( 'buying not open yet: "Coming soon", with signing in for those who have the pass', async () => {
 
 		const page = await supporterPage( { me: { ...SIGNED_OUT, purchase: { enabled: false } } } );

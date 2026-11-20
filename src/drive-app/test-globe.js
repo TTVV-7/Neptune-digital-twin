@@ -88,6 +88,9 @@ export function createTestGlobe( { picture = null } = {} ) {
 
 	};
 
+	const group = new Group();
+	group.name = 'test-globe';
+	group.add( mesh );
 	return { group, mesh, ellipsoid: WGS84_ELLIPSOID, showPicture };
 
 }
