@@ -414,6 +414,26 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 
 		clear,
 
+		// The scene's frame moved (World Drive's recentre on a small world, main.js): each pad down
+		// carried by `matrix` (a Matrix4, turning and moving only), and drawn there now, paused as
+		// well. Where the vehicle was a frame ago is forgotten: one frame's sweep for what it drove
+		// over, rather than one along a line from where that was before.
+		transform( matrix ) {
+
+			_q.setFromRotationMatrix( matrix );
+			for ( const pad of pads ) {
+
+				if ( pad.state === 'free' ) continue;
+				pad.at.applyMatrix4( matrix );
+				pad.normal.applyQuaternion( _q );
+
+			}
+
+			last.known = false;
+			draw();
+
+		},
+
 		// Where the pads may go: EARTH_RULES or MOON_RULES.
 		get rules() {
 

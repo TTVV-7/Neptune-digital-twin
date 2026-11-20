@@ -187,6 +187,7 @@ const _v = new Vector3();
 const _p = new Vector3();
 const _across = new Vector3();
 const _q = new Quaternion();
+const _turn = new Quaternion();
 const _tyres = [ new Vector3(), new Vector3() ];
 const _scale = new Vector3();
 const _euler = new Euler();
@@ -331,9 +332,15 @@ function foam( at, wide, flecks ) {
 // kind: 'smoke', 'sparkle', 'ribbon', 'fire', 'stars' or 'neon', colour (smoke's) } }. water: whether there's water to
 // splash in (its pools are only made then). effects: as EFFECTS, read as they're needed, so an app
 // can change `calm` while it drives.
-export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false, effects = EFFECTS, gravity = 1 } = {} ) {
+// The colour of the dust a landing throws up: the Earth's and the Moon's grey-beige (another world's
+// its own, as main.js hands it to the Driver: body.js's LOOKS, Mars's red-brown).
+const DUST = 0xcfc8bc;
+
+export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false, effects = EFFECTS, gravity = 1, dust: dustColour = DUST } = {} ) {
 
 	const { soft, glow, star: twinkle, shooting } = getTextures();
+	// On a world of coloured dust (Mars's), the tyres throw that up rather than white smoke.
+	const tyres = dustColour === DUST ? null : dustColour;
 	const root = new Group();
 	root.name = 'drive-fx';
 	world.add( root );
@@ -420,6 +427,9 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	// Every batch of quads made above, to be told where the ground is.
 	const batches = [];
 	root.traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
+	// What falls in them falls with the world's gravity (m/s², the batches' unit), as the pools'
+	// sparks do: set again each frame from the effects' (see update), for a ghost's fx made once.
+	for ( const batch of batches ) batch.gravity = GRAVITY * ( effects.gravity ?? gravity );
 	// What the style and the supersonic effects are told each frame (see drive-boosts.js): one
 	// object, filled in again each time.
 	const frame = {
@@ -433,8 +443,8 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 	const smoke = pool( SMOKE_POOL, () => new SpriteMaterial( { map: soft, color: 0xdedede, transparent: true, depthWrite: false } ) );
 	const sparks = pool( SPARK_POOL, () => new SpriteMaterial( { map: glow, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false } ) );
-	// What crashing looks like (drive-crash.js): its sparks, rings and dust.
-	const crashes = createCrashes( root, effects );
+	// What crashing looks like (drive-crash.js): its sparks, rings and dust (another world's colour).
+	const crashes = createCrashes( root, effects, { dust: tyres } );
 	// Bits knocked off: little boxes in one draw, each its own size and colour, written in place.
 	const debrisMesh = new InstancedMesh( new BoxGeometry( 1, 1, 1 ), new MeshStandardMaterial( { roughness: 0.5, metalness: 0.3 } ), DEBRIS_POOL );
 	debrisMesh.name = 'drive-debris';
@@ -899,7 +909,9 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			hot += ( ( supersonic ? 1 : 0 ) - hot ) * Math.min( 1, dt * OVERDRIVE_EASE );
 			if ( hot < 0.001 ) hot = 0;
 			frame.hot = hot;
-			// The world's gravity, read each frame (a ghost's fx is made once, wherever it was).
+			// The world's gravity, read each frame (a ghost's fx is made once, wherever it was): every
+			// batch's (the supersonic effects' too), and the bursts' and the style's own.
+			for ( const batch of batches ) batch.gravity = GRAVITY * frame.gravity;
 			bursts.gravity = frame.gravity;
 			if ( style ) style.gravity = frame.gravity;
 			// A boom asked for while it was out of sight (a ghost's) goes off only if it's still
@@ -1001,7 +1013,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 						pivot.localToWorld( _p.copy( wheel ) ).y += 0.15;
 						_v.set( ( Math.random() - 0.5 ) * 1.2, 0.3 + Math.random() * 0.4, ( Math.random() - 0.5 ) * 1.2 ).addScaledVector( frame.back, 0.8 ).addScaledVector( velocity, 0.5 );
-						emit( smoke, _p, _v, SMOKE_LIFE, 0.3 + 0.2 * burnout, 1.3, 0xe8e8e8 );
+						emit( smoke, _p, _v, SMOKE_LIFE, 0.3 + 0.2 * burnout, 1.3, tyres ?? 0xe8e8e8 );
 
 					}
 
@@ -1022,7 +1034,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 						// A little over the tyre, so the ground doesn't cut the puff off flat.
 						pivot.localToWorld( _p.copy( wheel ) ).y += 0.25;
 						_v.set( ( Math.random() - 0.5 ) * 0.8, 0.5 + Math.random() * 0.5, ( Math.random() - 0.5 ) * 0.8 ).addScaledVector( velocity, 0.6 );
-						emit( smoke, _p, _v, SMOKE_LIFE, 0.5, 1.8, 0xf2f2f2 );
+						emit( smoke, _p, _v, SMOKE_LIFE, 0.5, 1.8, tyres ?? 0xf2f2f2 );
 
 					}
 
@@ -1241,6 +1253,52 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		},
 
+		// The scene's frame moved (drive.js's transform): everything left behind in it, the smoke, sparks,
+		// bits, trails and every batch's particles, carried by `matrix` (turning and moving only), and
+		// where the exhaust was a frame ago, or the next frame's would spread its particles along the
+		// whole way from where it was before.
+		transform( matrix ) {
+
+			_turn.setFromRotationMatrix( matrix );
+			for ( const from of [ smoke, sparks, trailSmoke, sparkles, fire, shootingStars, drops, mist ] ) {
+
+				if ( ! from ) continue;
+				for ( const item of from.items ) {
+
+					if ( item.age >= item.life ) continue;
+					item.sprite.position.applyMatrix4( matrix );
+					item.velocity.applyQuaternion( _turn );
+
+				}
+
+			}
+
+			// The bits (one instanced mesh, each its own place and turn, written each frame from these).
+			for ( const item of debris ) {
+
+				if ( item.age >= item.life ) continue;
+				// Its floor (a height in the scene) as high as it was under it.
+				const floor = _p.copy( item.position ).setY( item.floor ).applyMatrix4( matrix ).y;
+				item.position.applyMatrix4( matrix );
+				_q.setFromEuler( _euler.set( item.turn.x, item.turn.y, item.turn.z ) ).premultiply( _turn );
+				_euler.setFromQuaternion( _q );
+				item.turn.set( _euler.x, _euler.y, _euler.z );
+				item.velocity.applyQuaternion( _turn );
+				item.floor = floor;
+
+			}
+
+			ribbon?.transform( matrix );
+			surface?.transform( matrix, _turn );
+			for ( const point of [ frame.nozzle, frame.lastNozzle, frame.middle, frame.ground ] ) point.applyMatrix4( matrix );
+			for ( const batch of batches ) batch.transform( matrix );
+			// The crash's sparks, rings and dust (drive-crash.js), not among the batches above; and the
+			// ground the bits last bounced on, a height in the old frame, looked for again.
+			crashes.transform( matrix );
+			groundY = null;
+
+		},
+
 		dispose() {
 
 			world.remove( root );
@@ -1316,6 +1374,18 @@ function makeRibbon( root, { bands, half: wide, additive } ) {
 	return {
 
 		mesh,
+
+		// The scene's frame moved: its points carried by `matrix` (see the fx's transform).
+		transform( matrix ) {
+
+			for ( const point of points ) {
+
+				point.left.applyMatrix4( matrix );
+				point.right.applyMatrix4( matrix );
+
+			}
+
+		},
 
 		// `drift`: on the Garage's turntable, the way (world, m/s) the points laid are carried, or null.
 		update( pivot, size, power, dt, drift = null ) {
@@ -1434,6 +1504,19 @@ function makeFoam( root ) {
 			nextRing = ( nextRing + 1 ) % rings.length;
 			start( patches[ nextPatch ], at, 0, FOAM_LIFE, width * 0.6, width * ( 1.2 + power * 0.4 ), 0.7 );
 			nextPatch = ( nextPatch + 1 ) % patches.length;
+
+		},
+
+		// The scene's frame moved: each ring and patch carried by `matrix`, turned by `turn` (see the
+		// fx's transform).
+		transform( matrix, turn ) {
+
+			for ( const item of [ ...rings, ...patches ] ) {
+
+				item.mesh.position.applyMatrix4( matrix );
+				item.mesh.quaternion.premultiply( turn );
+
+			}
 
 		},
 

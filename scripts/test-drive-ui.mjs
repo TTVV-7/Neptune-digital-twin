@@ -97,6 +97,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { GOOGLE_STUB, startVite } from './worker-harness.mjs';
+import { pickWorld, worldShown } from './worlds-ui.mjs';
 import { cellMiddle, cellOf, checkCell } from '../src/drive-app/dropin-cells.js';
 import { checkPasses, destination, formatTime } from '../src/drive-app/challenge-rules.js';
 import { GHOST_BYTES, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime } from '../src/drive-app/ghost-rules.js';
@@ -415,6 +416,8 @@ describe( 'World Drive, desktop', () => {
 			const score = d.score;
 			d.hop();
 			d.vy = 12;
+			// (Thrown up, as a launch is: all of its air counts, none of it the hop's own.)
+			d.air.hop = 0;
 			d.press( 'KeyS' );
 			step( 5, () => {
 
@@ -3049,10 +3052,14 @@ describe( 'World Drive water', () => {
 			kit.reset( - 250, 180, 60 );
 			const out = {};
 			// Up on F, out over the sea, and down again with it let go.
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			kit.step( 4 );
 			Object.assign( out, { flying: d.flying, overSea: d.north < - 300, high: d.y } );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			Object.assign( out, { down: { north: d.north, y: d.y, flying: d.flying, grounded: d.grounded } } );
 			d.press( 'KeyW' );
@@ -3282,8 +3289,14 @@ async function dropInOver( page, where, depth ) {
 // Back on the globe with the pad where land is (and where it was, if dropInBeside moved it).
 async function padBack( page ) {
 
-	await page.keyboard.press( 'KeyM' );
-	await page.waitForFunction( () => window.drive.mode === 'globe' );
+	// (M only from a drive: on the globe it opens the worlds.)
+	if ( await mode( page ) !== 'globe' ) {
+
+		await page.keyboard.press( 'KeyM' );
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+
+	}
+
 	await page.evaluate( () => {
 
 		const pad = window.drive.ground.getColliders()[ 0 ];
@@ -3783,10 +3796,14 @@ describe( 'World Drive, the open sea', () => {
 			step( 1.5 );
 			out.far = { y: d.y, look: water.look( d.east, d.north, d.y ).level, expected: - ( d.north ** 2 ) / ( 2 * 6371000 ) };
 			// Up on F, and down again with it let go.
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			step( 2 );
 			const high = d.y - out.far.y;
 			d.release( 'KeyF' );
+			d.fly = false;
 			step( 20, () => ! d.grounded || d.flying );
 			step( 0.5 );
 			out.flew = { high, flying: d.flying, grounded: d.grounded, y: d.y, onWater: water.at( d.east, d.north, d.y ) !== null };
@@ -4245,6 +4262,9 @@ describe( 'World Drive, the open sea', () => {
 			kit.paint( [ 40, 170, 190 ] );
 			kit.reset( - 250, 60 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			const flew = { high: - Infinity, laid: null };
 			kit.step( 40, () => {
@@ -4255,6 +4275,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			d.release( 'KeyW' );
 			kit.step( 0.2 );
@@ -4361,6 +4382,9 @@ describe( 'World Drive, the open sea', () => {
 			const kit = window.coastKit;
 			kit.reset( - 250, 60 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			let laid = null;
 			kit.step( 40, () => {
@@ -4370,6 +4394,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			d.release( 'KeyW' );
 			kit.step( 0.2 );
@@ -4918,6 +4943,9 @@ describe( 'World Drive, the open sea', () => {
 			// Flown off the levee over the houses at up to 50 km/h, let down and driven on.
 			kit.reset( - 150, 40 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			const flew = { laid: false, high: - Infinity };
 			const air = () => {
@@ -4934,6 +4962,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 60, () => {
 
 				air();
@@ -5805,21 +5834,21 @@ describe( 'World Drive with its Worker', () => {
 		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
 		assert.equal( await page.locator( '#notice' ).isHidden(), true );
 		assert.equal( await page.evaluate( () => !! window.drive.tiles ), false );
-		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.equal( await worldShown( page ), 'moon' );
 		assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
 		await page.locator( '#toast', { hasText: 'Today\'s free Earth drives are all taken, so you\'re on the Moon' } ).waitFor();
 		await shot( page, 'drive-used-up-moon' );
 
 		// The Earth: the notice, and still on the Moon; and from there back to it, the same game.
 		const canvases = await page.locator( 'canvas' ).count();
-		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await pickWorld( page, 'earth' );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		assert.equal( await page.locator( '#notice .title' ).textContent(), 'Today\'s free Earth drives are used up' );
-		assert.match( await page.locator( '#notice .message' ).textContent(), /The Moon is free and unlimited/ );
+		assert.match( await page.locator( '#notice .message' ).textContent(), /The Moon, Mars, Vesta and Ceres are free and unlimited/ );
 		assert.equal( await page.locator( '#notice .countdown' ).textContent(), 'Fresh Earth drives in 5 h 2 min' );
 		await shot( page, 'drive-notice-used-up' );
 		assert.equal( await page.evaluate( () => window.drive.world ), 'moon' );
-		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.equal( await worldShown( page ), 'moon' );
 		await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
 		await page.locator( '#notice' ).waitFor( { state: 'hidden' } );
 		await page.waitForTimeout( 500 );
@@ -5841,7 +5870,7 @@ describe( 'World Drive with its Worker', () => {
 		await page.goto( BASE );
 		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
 		await page.locator( '#toast', { hasText: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon' } ).waitFor();
-		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await pickWorld( page, 'earth' );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		assert.equal( await page.locator( '#notice .title' ).textContent(), 'You\'ve had today\'s free Earth drive' );
 		assert.match( await page.locator( '#notice .message' ).textContent(), /one free Earth drive a day/ );
@@ -5876,7 +5905,7 @@ describe( 'World Drive with its Worker', () => {
 
 		// The Earth: the page again without the link (anything else in the address stays), asking for
 		// an Earth drive.
-		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await pickWorld( page, 'earth' );
 		// Over the cap there, so it opens on the Moon again, a word on why.
 		await page.locator( '#toast', { hasText: 'so you\'re on the Moon' } ).waitFor( { timeout: 60000 } );
 		assert.deepEqual( asked, [ 'moon', 'earth' ] );
@@ -5913,7 +5942,7 @@ describe( 'World Drive with its Worker', () => {
 		await page.waitForFunction( () => window.drive?.tiles, null, { timeout: 30000 } );
 		assert.equal( visits.length, 2 );
 		for ( const visit of visits ) assert.deepEqual( visit, { body: { token: TOKEN }, type: 'application/json' } );
-		assert.match( await page.locator( '#toast' ).textContent(), /1 more Earth drive today/ );
+		assert.match( await page.locator( '#toast' ).textContent(), /^1 more Earth drive today after this one\.$/ );
 		const roots = () => page.outside.filter( url => url.includes( '/v1/3dtiles/root.json' ) );
 		await page.waitForFunction( () => window.drive.tiles.rootLoadingState !== undefined, null, { timeout: 5000 } ).catch( () => {} );
 		await page.waitForTimeout( 1500 );
@@ -6111,10 +6140,13 @@ function landBackflip( page ) {
 		Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 40 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, boost: null } );
 		d.update( 1 / 60 );
 		const before = d.score;
+		// Thrown up at 12 m/s off a hop: about 2.4 s up.
 		d.hop();
 		d.vy = 12;
+		// (Thrown up, as a launch is: all of its air counts, none of it the hop's own.)
+		d.air.hop = 0;
 		d.press( 'KeyS' );
-		for ( let i = 0; i < 300; i ++ ) {
+		for ( let i = 0; i < 400; i ++ ) {
 
 			d.update( 1 / 60 );
 			if ( d.air && d.air.turned.x > Math.PI * 2 - 0.8 ) d.release( 'KeyS' );
@@ -6267,7 +6299,7 @@ describe( 'World Drive leaderboard', () => {
 		assert.deepEqual( Object.keys( sent ).sort(), [ 'airTime', 'id', 'place', 'runSeconds', 'score', 'secret', 'tricks', 'vehicle', 'visit' ] );
 		const { airTime, runSeconds, tricks, ...rest } = sent;
 		assert.deepEqual( rest, { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), visit: 'v1.test-visit-token', score, place: 'Furka Pass', vehicle: 'go-kart' } );
-		// The jump's tricks as the HUD named them, and its air: a backflip thrown up at 12 m/s is big air.
+		// The jump's tricks as the HUD named them, and its air: a backflip thrown up at 20 m/s off a hop is big air.
 		assert.match( tricks, /^Backflip! \+ Big air \d\.\d s$/ );
 		assert.equal( airTime, Number( tricks.match( /Big air (\d\.\d)/ )[ 1 ] ) );
 		assert.ok( Number.isInteger( runSeconds ) && runSeconds >= airTime, `runSeconds ${ runSeconds }` );
@@ -6483,18 +6515,22 @@ const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed 
 // sign-in (window.testCredential 'good-token') makes it signedIn. page.asked has what was sent, and
 // page.google how often Google's script (stood in for, harness's GOOGLE_STUB) was loaded. config and
 // visit: /api/config (maps off, the test pad) and /api/visit (never answered) as newPage takes them.
-async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
+async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, seedOnce = false, accountPlayer = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
 
 	const page = await newPage( { ...options, api: { config: { ...config, googleClientId: clientId }, turnstile: true, visit } } );
 	// Never a page of Stripe's: Buy's new tab is only noted.
 	await page.context().route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
-	await page.addInitScript( ( { player } ) => {
+	// (seedOnce: the player put in as the first page loads only, so the next visit has what the page
+	// left there.)
+	await page.addInitScript( ( { player, seedOnce } ) => {
 
 		window.opened = [];
 		window.open = ( ...args ) => ( window.opened.push( args ), null );
-		if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
+		if ( ! player || ( seedOnce && sessionStorage.getItem( 'test.seeded' ) ) ) return;
+		localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
+		sessionStorage.setItem( 'test.seeded', '1' );
 
-	}, { player } );
+	}, { player, seedOnce } );
 	const state = page.state = { me, signedInAs };
 	const asked = page.asked = { me: 0, sessions: [], signOuts: 0, links: [] };
 	page.google = 0;
@@ -6518,6 +6554,7 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 		if ( request.method() === 'DELETE' ) {
 
 			asked.signOuts ++;
+			asked.signOutBodies = [ ...asked.signOutBodies ?? [], request.postDataJSON() ];
 			state.me = SIGNED_OUT;
 			return route.fulfill( { status: 204 } );
 
@@ -6530,10 +6567,14 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 		json( route, state.me );
 
 	} );
-	await page.route( `${ BASE }/api/player/link`, route => {
+	// The account's player for this browser: this browser's own (no secret), or `accountPlayer`'s,
+	// handed over with a secret of its own, this browser's folded into it.
+	await page.route( `${ BASE }/api/player/mine`, route => {
 
-		asked.links.push( route.request().postDataJSON() );
-		json( route, { id: PLAYER.id, name: PLAYER.name } );
+		const sent = route.request().postDataJSON();
+		asked.links.push( sent );
+		if ( accountPlayer ) return json( route, { player: accountPlayer, merged: !! sent.id } );
+		json( route, { player: sent.id ? { id: sent.id, name: PLAYER.name } : null } );
 
 	} );
 	return page;
@@ -6690,7 +6731,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		const page = await supporterPage( { me: ALICE, player: PLAYER } );
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
-		await page.waitForFunction( () => localStorage.getItem( 'world-drive.linked' ) );
+		await page.waitForFunction( () => localStorage.getItem( 'world-drive.linked.2' ) );
 		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
@@ -6698,7 +6739,32 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( page.asked.links.length, 1, 'linked again on the next visit' );
 		// Signed out, the email in it goes from this browser.
 		await page.evaluate( () => window.drive.supporter.signOut() );
-		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked' ) ), null );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked.2' ) ), null );
+		await page.context().close();
+
+	} );
+
+	test( 'signed in on another browser, it drives as the account\'s player: its own nickname folded in, once', async () => {
+
+		// This browser's own nickname (made before signing in), and the account's, from another device.
+		const mine = { id: 'Ac0unt-player_00', secret: 'K'.repeat( 32 ), name: 'Tom' };
+		const page = await supporterPage( { me: ALICE, player: { ...PLAYER, name: 'Tom 2' }, seedOnce: true, accountPlayer: mine } );
+		await testPad( page );
+		await page.waitForFunction( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ?? 'null' )?.name === 'Tom' );
+		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
+		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), { ...mine, handed: true } );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked.2' ) ), `${ mine.id } ${ ALICE.email }` );
+		await page.locator( '#toast', { hasText: 'Signed in as Tom: Tom 2\'s progress here is now Tom\'s' } ).waitFor();
+		// The next visit asks no more.
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		await page.waitForTimeout( 300 );
+		assert.equal( page.asked.links.length, 1, 'asked again on the next visit' );
+		// Signed out, the account's player goes from this browser, its key with the session.
+		await page.evaluate( () => window.drive.supporter.signOut() );
+		assert.deepEqual( page.asked.signOutBodies, [ { key: mine.secret } ] );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.player' ) ), null );
+		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
 	} );
@@ -6739,7 +6805,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		};
 		const notice = page => page.locator( '#notice' );
 		const onMoon = page => page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
-		const toEarth = page => page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		const toEarth = page => pickWorld( page, 'earth' );
 
 		// A supporter on a new browser: on the Moon; the Earth's notice signs in, and the visit is asked for again.
 		let page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { signedInAs: { ...ALICE, supporter: true } } );
@@ -6802,6 +6868,8 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await page.waitForFunction( () => window.drive.supporter.me );
 		await openPass( page );
 		const area = sheet( page );
+		// (Google's button is drawn once it's in view: at the foot of the sheet, under its list.)
+		await area.locator( '.supporter-google' ).scrollIntoViewIfNeeded();
 		await area.locator( '.stub-google' ).waitFor();
 		assert.equal( await area.locator( '.buy' ).textContent(), 'Coming soon' );
 		assert.ok( await area.locator( '.buy' ).isDisabled() );
@@ -8021,7 +8089,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			assert.match( await page.locator( '#places-world button[data-world="moon"] span' ).textContent(), /^[1-9]/ );
 			await page.locator( '#places-days button', { hasText: 'Week' } ).click();
 			await page.locator( '#places-range', { hasText: 'Couldn\'t reach the server. Try again in a moment.' } ).waitFor();
-			assert.deepEqual( await page.locator( '#places-world button span' ).allTextContents(), [ '', '' ] );
+			assert.deepEqual( await page.locator( '#places-world button span' ).allTextContents(), [ '', '', '', '', '' ] );
 			assert.equal( await page.locator( '#places-empty' ).isVisible(), true );
 			assert.equal( await page.locator( '#places-empty' ).textContent(), 'Couldn\'t reach the server. Try again in a moment.' );
 			assert.equal( await page.locator( '#places-top tbody tr' ).count(), 0 );
@@ -8040,7 +8108,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			await page.locator( '#places-world button[data-world="moon"]' ).click();
 			await page.waitForTimeout( 300 );
 			assert.equal( await page.locator( '#places-range' ).textContent(), 'Loading...' );
-			assert.deepEqual( await page.locator( '#places-world button span' ).allTextContents(), [ '', '' ] );
+			assert.deepEqual( await page.locator( '#places-world button span' ).allTextContents(), [ '', '', '', '', '' ] );
 			assert.equal( await page.locator( '#places-top tbody tr' ).count(), 0 );
 			await drawn( page, 'moon', 1 );
 			assert.match( await page.locator( '#places-range' ).textContent(), new RegExp( `^${ TODAY } so far, UTC · 1 drop-in counted in 1 cell \\(1 km\\)$` ) );
@@ -9710,7 +9778,7 @@ describe( 'World Drive challenges', () => {
 			new PerformanceObserver( list => {
 
 				const { run, race } = window.drive.challenges;
-				for ( const entry of list.getEntries() ) window.longTasks.push( { start: Math.round( entry.startTime ), ms: Math.round( entry.duration ), phase: run?.phase ?? null, ready: !! race?.ready } );
+				for ( const entry of list.getEntries() ) window.longTasks.push( { start: Math.round( entry.startTime * 10 ) / 10, ms: Math.round( entry.duration ), phase: run?.phase ?? null, ready: !! race?.ready } );
 
 			} ).observe( { type: 'longtask' } );
 
@@ -9727,9 +9795,12 @@ describe( 'World Drive challenges', () => {
 		await page.evaluate( () => new Promise( resolve => setTimeout( resolve, 1000 ) ) );
 		const { tasks, timing, held } = await page.evaluate( () => {
 
+			// (Each gap between beats as much of it as is between built and made light: the frame that
+			// first draws it comes straight after, its shaders made then, seconds in SwiftShader, and
+			// whether a beat comes between is chance; nor is it the making light.)
 			const { timing } = window.drive.challenges.race;
 			let held = 0;
-			for ( let i = 1; i < window.beats.length; i ++ ) if ( window.beats[ i ] > timing.built && window.beats[ i - 1 ] < timing.light ) held = Math.max( held, window.beats[ i ] - window.beats[ i - 1 ] );
+			for ( let i = 1; i < window.beats.length; i ++ ) if ( window.beats[ i ] > timing.built && window.beats[ i - 1 ] < timing.light ) held = Math.max( held, Math.min( window.beats[ i ], timing.light ) - Math.max( window.beats[ i - 1 ], timing.built ) );
 			return { tasks: window.longTasks, timing, held: Math.round( held ) };
 
 		} );
@@ -9946,12 +10017,26 @@ describe( 'World Drive challenges', () => {
 				step();
 
 			} ) );
-			await page.locator( '#drive-ui .ch-split' ).waitFor();
-			const hud = await page.locator( '#drive-ui .ch-hud' ).boundingBox();
+			// (Where each is, all as the split shows, in one look: it's shown SPLIT_SHOW ms, and a frame
+			// drawing something for the first time can take seconds of that in SwiftShader.)
+			const boxes = await ( await page.waitForFunction( () => {
+
+				const box = selector => {
+
+					const el = document.querySelector( selector );
+					const r = el && ! el.hidden ? el.getBoundingClientRect() : null;
+					return r && r.width && r.height ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
+
+				};
+				const split = box( '#drive-ui .ch-hud .ch-split' );
+				return split && { hud: box( '#drive-ui .ch-hud' ), '.ch-split': split, '.ch-ghost-toggle': box( '#drive-ui .ch-hud .ch-ghost-toggle' ) };
+
+			} ) ).jsonValue();
+			const { hud } = boxes;
 			assert.ok( hud.x >= 0 && hud.x + hud.width <= viewport.width && hud.y >= 0, JSON.stringify( hud ) );
 			for ( const part of [ '.ch-split', '.ch-ghost-toggle' ] ) {
 
-				const at = await page.locator( `#drive-ui .ch-hud ${ part }` ).boundingBox();
+				const at = boxes[ part ];
 				assert.ok( at && at.x >= hud.x - 1 && at.x + at.width <= hud.x + hud.width + 1 && at.y + at.height <= hud.y + hud.height + 1, `${ name } ${ part }: ${ JSON.stringify( { at, hud } ) }` );
 
 			}

@@ -99,6 +99,10 @@ dialog.ch-dialog::backdrop {
 	background: linear-gradient( 160deg, rgba( 160, 170, 200, 0.12 ), var( --chip ) );
 }
 
+.ch-card[data-world='mars'] {
+	background: linear-gradient( 160deg, rgba( 205, 120, 80, 0.14 ), var( --chip ) );
+}
+
 .ch-top {
 	display: flex;
 	align-items: center;
@@ -847,6 +851,10 @@ button.ch-race {
 
 .ch-link[data-world='moon'] {
 	background: linear-gradient( 160deg, rgba( 160, 170, 200, 0.2 ), var( --chip ) );
+}
+
+.ch-link[data-world='mars'] {
+	background: linear-gradient( 160deg, rgba( 205, 120, 80, 0.22 ), var( --chip ) );
 }
 
 .ch-link-kicker {

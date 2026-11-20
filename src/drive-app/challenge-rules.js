@@ -1,10 +1,12 @@
 import { metresOn, RADIUS } from './dropin-cells.js';
+import { WORLD_IDS, WORLDS as WORLD_DATA } from './worlds.js';
 
-// Challenges (docs/world-drive.md, "Challenges"): a daily, a weekly and a monthly challenge on the
-// Earth and on the Moon, six at once, each with its own board of the best times. What the page (the
-// challenges' own chunk, challenges.js), the Worker (worker/drive/challenges.js) and the tests share:
-// the periods, the kinds, how a route is laid out from a period's random numbers, and the rules a
-// time is checked against. Plain data and small functions, no three.js.
+// Challenges (docs/world-drive.md, "Challenges"): a daily, a weekly and a monthly challenge on each
+// world (worlds.js: the Earth, the Moon, Mars, Vesta and Ceres, fifteen at once), each with its own
+// board of the best times. What the page (the challenges' own chunk, challenges.js), the Worker
+// (worker/drive/challenges.js) and the tests share: the periods, the kinds, how a route is laid out
+// from a period's random numbers, and the rules a time is checked against. Plain data and small
+// functions, no three.js.
 //
 // A challenge is a place and a route, the same for everyone in its period: a checkpoint sprint
 // (gates in order, timed from the start to the last), collectibles (every item round the place, in
@@ -13,7 +15,9 @@ import { metresOn, RADIUS } from './dropin-cells.js';
 // in D1, so nothing here changing later changes a live challenge: its points are latitudes and
 // longitudes, and only their heights are found by the page, on the ground it actually has.
 
-export const WORLDS = [ 'earth', 'moon' ];
+// The worlds with challenges: every one (worlds.js). Each needs its SHAPES below, its places (the
+// Worker's FEATURED) and its radius (dropin-cells.js's RADIUS), or no route can be laid out on it.
+export const WORLDS = WORLD_IDS;
 export const PERIOD_KINDS = [ 'day', 'week', 'month' ];
 export const KINDS = [ 'sprint', 'collect', 'landmark' ];
 export const PERIOD_NAMES = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
@@ -24,8 +28,9 @@ export const KIND_NAMES = { sprint: 'Checkpoint sprint', collect: 'Collect them 
 // times the booster's, which pushes up to twice a ride's top speed (BOOST_SPEED in src/drive.js).
 // Nothing beats that: a drift's mini-turbo is at most 1.5 times the top speed and a landed trick's
 // burst 1.25 times (DRIFT_BOOSTS, TRICK_BOOST), a boost pad only fills the booster, flying goes at
-// the ride's own speed, a hit keeps 85 % of the speed along the wall, R stops the car 4 m on, and
-// going downhill or falling adds nothing along the ground (drive.js keeps upward speed apart). So
+// the ride's own speed, a hit keeps 85 % of the speed along the wall, R stops the car 4 m on,
+// going downhill adds nothing along the ground (drive.js keeps upward speed apart), and a landing
+// carried on down a slope never passes the booster's. (Plane mode is never a challenge run.) So
 // 430 km/h, 119.4 m/s; scripts/test-drive-worker.mjs reads those numbers from the game's own files
 // and fails if any of them changes.
 export const TOP_SPEED = 215;
@@ -55,11 +60,12 @@ export const RANK_MOST = 1000;
 export const LINK_PATH = '/c';
 // A pass counts within a gate's radius across the ground, and up and down from its ground to its
 // top (on the Earth the lowest and the highest of what rays down across its zone meet: the street
-// beside a tower and the tower's roof, or the water under a bridge and its deck; on the Moon both
-// its one height) and this many times its radius beyond them: so a gate is passed on the street,
+// beside a tower and the tower's roof, or the water under a bridge and its deck; on another world
+// both its one height) and this many times its radius beyond them: so a gate is passed on the street,
 // on the roof or deck over it, or flying low over it, and one whose ground hasn't loaded yet across
-// the ground alone. (challenges.js.)
+// the ground alone. (challenges.js.) The zone's middle is ZONE_UP m over its ground.
 export const TALL = 2;
+export const ZONE_UP = 2;
 
 const DAY = 24 * 60 * 60 * 1000;
 // The first Monday after 1 January 1970 (a Thursday), from which weeks are counted.
@@ -74,7 +80,9 @@ const PERIOD_TEXT = /^(day|week):(\d{4}-\d{2}-\d{2})$|^month:(\d{4}-\d{2})$/;
 // (or flying) over whatever is in the way, passes it as well. Items are scattered in a disc round
 // the place, apart from each other, 18 m round. A landmark's start is a few kilometres back along the
 // road the place is on, so it's reached the way people drive to it. The Moon is open ground: longer
-// legs, sharper turns, bigger radii.
+// legs, sharper turns, bigger radii; and Mars is too, cratered, dusty and roadless, laid out as the
+// Moon's. Vesta and Ceres are the Moon's sizes with gentler turns: in their weak gravity a hop keeps
+// the car in the air for 9 to 20 s, so a sharp turn can't be made where it's laid out.
 //   sprint: { gates, spacing: [ m, m ], turn: ° either way, radius }
 //   collect: { items, within: m, apart: m, radius }
 //   landmark: { distance: [ m, m ], spread: ° either way, radius }
@@ -90,6 +98,13 @@ export const SHAPES = {
 		month: { sprint: { gates: 14, spacing: [ 400, 600 ], turn: 65, radius: 40 }, collect: { items: 15, within: 900, apart: 150, radius: 22 }, landmark: { distance: [ 6000, 8500 ], spread: 180, radius: 60 } },
 	},
 };
+SHAPES.mars = SHAPES.moon;
+SHAPES.vesta = {
+	day: { ...SHAPES.moon.day, sprint: { ...SHAPES.moon.day.sprint, turn: 35 } },
+	week: { ...SHAPES.moon.week, sprint: { ...SHAPES.moon.week.sprint, turn: 40 } },
+	month: { ...SHAPES.moon.month, sprint: { ...SHAPES.moon.month.sprint, turn: 45 } },
+};
+SHAPES.ceres = SHAPES.vesta;
 // The kinds a period's challenge is picked from, with how likely each is: a daily one is mostly a
 // sprint or a hunt for items (a landmark's drive is the longest of the three), the others any.
 export const KIND_ODDS = {
@@ -98,7 +113,8 @@ export const KIND_ODDS = {
 	month: [ [ 'sprint', 1 / 3 ], [ 'collect', 1 / 3 ], [ 'landmark', 1 / 3 ] ],
 };
 // Items are kept at least this far (m) from where the run starts, and a route laid out at most TRIES
-// times when a check (the Moon's ground, below) finds it wanting: the one with fewest faults is kept.
+// times when a check (the ground of a world made in the page, below) finds it wanting: the one with
+// fewest faults is kept.
 // A checked landmark's drive with no road to come along is tried from every BEARING_STEP degrees
 // round it instead.
 const CLEAR_START = 60;
@@ -225,9 +241,9 @@ export function kindFor( periodKind, u ) {
 // with `random` (randomFrom's): { start: { lat, lon, heading }, points: [ [ lat, lon ] ], radius,
 // goal } (goal: the landmark's name, for a drive to one). Sprints and collectibles start at the place
 // itself; a landmark's drive starts a few kilometres off and ends at the place. `check( route, kind,
-// enough )`, if given, says how many faults a route has (the Moon's ground too steep at its points or
-// along its legs: worker/drive/challenges.js), or that it has `enough` at least (the fewest so far: it
-// may stop counting there); then up to TRIES are laid out and the one with fewest kept.
+// enough )`, if given, says how many faults a route has (another world's ground too steep at its
+// points or along its legs: worker/drive/challenges.js), or that it has `enough` at least (the fewest
+// so far: it may stop counting there); then up to TRIES are laid out and the one with fewest kept.
 // Positions are to 6 decimals (10 cm).
 export function makeRoute( { kind, size, world, place }, random, check = null ) {
 
@@ -391,11 +407,24 @@ export function routeLength( world, route ) {
 
 // --- checking a time ---
 
+// A world whose ground lies deeper under its sphere than this share of its radius (worlds.js's
+// `lowest`) has its legs measured on the sphere of that lowest ground (legMinimum): on Vesta (52 km
+// under 263) and Ceres (29 under 470) a leg along a deep basin's floor or by a pole is a tenth or a
+// twentieth shorter than metresOn's, more than LEG_SLACK on a sprint's leg. The Moon's and Mars's
+// (under 1 %) are measured on their spheres as ever.
+const DEEP = 0.01;
+const LEG_SCALE = Object.fromEntries( WORLD_IDS.map( id => {
+
+	const share = - ( WORLD_DATA[ id ].lowest ?? 0 ) / WORLD_DATA[ id ].radius;
+	return [ id, share > DEEP ? 1 - share : 1 ];
+
+} ) );
+
 // The least time (ms) a leg can take: from within `fromRadius` of `from` ([ lat, lon ]) to within
-// `toRadius` of `to`, along the ground at FASTEST.
+// `toRadius` of `to`, along the ground at FASTEST (on the deepest ground the world has: LEG_SCALE).
 export function legMinimum( world, from, fromRadius, to, toRadius ) {
 
-	return Math.max( 0, metresOn( world, from[ 0 ], from[ 1 ], to[ 0 ], to[ 1 ] ) - fromRadius - toRadius ) / FASTEST * 1000;
+	return Math.max( 0, metresOn( world, from[ 0 ], from[ 1 ], to[ 0 ], to[ 1 ] ) * ( LEG_SCALE[ world ] ?? 1 ) - fromRadius - toRadius ) / FASTEST * 1000;
 
 }
 

@@ -78,7 +78,13 @@ const _p = new Vector3();
 const _side = new Vector3();
 
 // root: the group they're added to. effects: as drive-fx.js's EFFECTS, read as they're needed.
-export function createCrashes( root, effects = {} ) {
+// dust: another world's dust colour (body.js's LOOKS, Mars's red-brown), for its dust and regolith,
+// or null for the Earth's and the Moon's.
+export function createCrashes( root, effects = {}, { dust: dustColour = null } = {} ) {
+
+	const dusty = dustColour === null ? DUSTY : new Color( dustColour );
+	const slamDust = dustColour === null ? SLAM : new Color( dustColour );
+	const regolith = dustColour === null ? REGOLITH : new Color( dustColour );
 
 	// The dust first, so the sparks are added over it.
 	const dust = new Batch( root, { particles: DUST, blending: NormalBlending } );
@@ -216,7 +222,7 @@ export function createCrashes( root, effects = {} ) {
 		p.velocity.copy( velocity );
 		p.frame = SHAPES.soft;
 		p.size = 0.035 + Math.random() * 0.035;
-		p.colour.copy( REGOLITH );
+		p.colour.copy( regolith );
 		p.fall = 1;
 		p.kind = GRAIN;
 		return p;
@@ -449,8 +455,8 @@ export function createCrashes( root, effects = {} ) {
 		slam( at, power, width, slide ) {
 
 			_p.copy( at ).addScaledVector( UP, 0.06 );
-			ring( dust, _p, UP, 0.4, width * 0.4, width * ( 1.2 + 1.5 * power ), SLAM, 0.55 );
-			ground( at, count( air() ? 6 + 8 * power : 10 + 14 * power ), width * 0.4, 2 + 3 * power, 0.5 + 0.7 * Math.random(), 1, 0.25 + 0.1 * power, 0.9, DUSTY, 0.45 );
+			ring( dust, _p, UP, 0.4, width * 0.4, width * ( 1.2 + 1.5 * power ), slamDust, 0.55 );
+			ground( at, count( air() ? 6 + 8 * power : 10 + 14 * power ), width * 0.4, 2 + 3 * power, 0.5 + 0.7 * Math.random(), 1, 0.25 + 0.1 * power, 0.9, dusty, 0.45 );
 			for ( let i = count( 10 + 14 * power ); i > 0; i -- ) {
 
 				// Nearly flat along the ground, fanned a little either side of the slide.
@@ -472,7 +478,7 @@ export function createCrashes( root, effects = {} ) {
 			wipeDue = WIPE_STEP / ( effects.detail ?? 1 );
 			_p.copy( at ).setY( at.y + 0.1 );
 			_a.copy( velocity ).multiplyScalar( 0.5 );
-			if ( air() ) puff( _p.setY( at.y + 0.3 ), _v.set( Math.random() - 0.5, 0.4 + Math.random() * 0.4, Math.random() - 0.5 ), 0.6, 0.2, 0.6, DUSTY, 0.3 );
+			if ( air() ) puff( _p.setY( at.y + 0.3 ), _v.set( Math.random() - 0.5, 0.4 + Math.random() * 0.4, Math.random() - 0.5 ), 0.6, 0.2, 0.6, dusty, 0.3 );
 			else grain( _p, _v.set( Math.random() - 0.5, 1 + Math.random() * 2, Math.random() - 0.5 ), 1.4 );
 			_v.copy( velocity ).multiplyScalar( - 0.3 ).add( _a.set( ( Math.random() - 0.5 ) * 3, 0.2 + Math.random() * 0.6, ( Math.random() - 0.5 ) * 3 ) );
 			spark( _p.copy( at ).setY( at.y + 0.08 ), _v, STILL, 0.3, SCRAPE_WIDTH, HOT[ Math.floor( Math.random() * 3 ) ], at.y );
@@ -483,7 +489,7 @@ export function createCrashes( root, effects = {} ) {
 		// dust round its wheels (regolith on the Moon) and a thin white ring.
 		settle( at, width ) {
 
-			ground( at, count( 6 ), width * 0.45, 1.2, 0.3, 0.5, 0.22, 0.8, DUSTY, 0.45 );
+			ground( at, count( 6 ), width * 0.45, 1.2, 0.3, 0.5, 0.22, 0.8, dusty, 0.45 );
 			ring( dust, _p.copy( at ).addScaledVector( UP, 0.05 ), UP, 0.25, width * 0.5, width * 0.6, WHITE, 0.5 );
 
 		},
@@ -503,7 +509,7 @@ export function createCrashes( root, effects = {} ) {
 
 					_p.copy( at ).addScaledVector( _side, side * width * 0.4 ).setY( at.y + 0.2 );
 					if ( rear ) _p.add( _a.copy( rear ).setY( 0 ) );
-					if ( air() ) puff( _p, _v.copy( _side ).multiplyScalar( side * 0.6 ).setY( 0.3 ), 0.4, 0.18, 0.5, DUSTY, 0.45 );
+					if ( air() ) puff( _p, _v.copy( _side ).multiplyScalar( side * 0.6 ).setY( 0.3 ), 0.4, 0.18, 0.5, dusty, 0.45 );
 					else grain( _p, _v.copy( _side ).multiplyScalar( side * 0.8 ).setY( 1.2 ), 1.2 );
 
 				}
@@ -516,10 +522,27 @@ export function createCrashes( root, effects = {} ) {
 			// rather than light, still there for a visitor asking for less motion, only spreading
 			// less), a thin white shock ring racing out ahead of it, and the dust thrown up round it.
 			_p.copy( at ).addScaledVector( UP, 0.05 );
-			const skirt = ring( dust, _p, UP, 0.45 + 0.25 * power, width * 0.5, width * ( 0.7 + 1.5 * power ), DUSTY, 0.55 + 0.25 * power, SHAPES.shock );
+			const skirt = ring( dust, _p, UP, 0.45 + 0.25 * power, width * 0.5, width * ( 0.7 + 1.5 * power ), dusty, 0.55 + 0.25 * power, SHAPES.shock );
 			if ( calm() ) skirt.alpha = 0.45;
 			ring( sparks, _p.addScaledVector( UP, 0.02 ), UP, 0.3, width * 0.45, width * ( 1 + 1.8 * power ), WHITE, 0.3 + 0.35 * power );
-			ground( at, count( 8 + 12 * power ), width * 0.5, 1.8 + 3.2 * power, 0.5 + 0.7 * Math.random(), 0.7 + 0.5 * power, 0.28 + 0.12 * power, 0.5 + 0.9 * power, DUSTY, 0.55 );
+			ground( at, count( 8 + 12 * power ), width * 0.5, 1.8 + 3.2 * power, 0.5 + 0.7 * Math.random(), 0.7 + 0.5 * power, 0.28 + 0.12 * power, 0.5 + 0.9 * power, dusty, 0.55 );
+
+		},
+
+		// The scene's frame moved (drive-fx.js's transform): every live spark, ring and puff carried
+		// by `matrix`, and a scrape's glow and each spark's floor with them.
+		transform( matrix ) {
+
+			for ( const p of sparks.items ) {
+
+				if ( p.age >= p.life || p.floor === - Infinity ) continue;
+				p.floor = _p.copy( p.position ).setY( p.floor ).applyMatrix4( matrix ).y;
+
+			}
+
+			sparks.transform( matrix );
+			dust.transform( matrix );
+			rub.at.applyMatrix4( matrix );
 
 		},
 

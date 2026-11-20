@@ -1,17 +1,18 @@
 import { LOOK_PARTS, checkVehicle } from './live-protocol.js';
 import { SPOTS } from './places.js';
+import { OFF_EARTH, WORLD_IDS } from './worlds.js';
 
 // Play stats (docs/world-drive.md, "Play stats"): what the page counts (stats.js) and the Worker
 // adds up a day (worker/drive/stats.js) for the owner's admin page. Plain data and small functions,
 // so the Worker imports it too.
 //
 // Only counts, never who: no cookie, nothing kept in the browser for it, no id of the visitor or
-// their player, no address. A drop-in at somewhere other than a start spot is 'other' (or 'moon' on
-// the Moon) here; where it was goes beside the counts only as its cell of a grid about a kilometre
-// each way (dropin-cells.js), counted apart from everything else and never with who, so a street
-// searched for isn't told from its neighbours. A search is only which kind it was, never what was
-// typed, a device only whether it's a phone, a tablet or a computer, and a referring site is only
-// its host name.
+// their player, no address. A drop-in at somewhere other than a start spot is 'other' (or, on
+// another world, its id: 'moon', 'mars') here; where it was goes beside the counts only as its cell
+// of a grid about a kilometre each way (dropin-cells.js), counted apart from everything else and
+// never with who, so a street searched for isn't told from its neighbours. A search is only which
+// kind it was, never what was typed, a device only whether it's a phone, a tablet or a computer,
+// and a referring site is only its host name.
 
 const ALL = key => key === 'all' ? key : null;
 const SPOT_IDS = new Set( SPOTS.map( spot => spot.id ) );
@@ -37,14 +38,14 @@ const names = buckets => buckets.map( ( [ , name ] ) => name );
 export const DROVE = [ [ 60, 'drove_1m' ], [ 600, 'drove_10m' ], [ 1800, 'drove_30m' ] ];
 export const FUNNEL = [ 'globe', 'pin', 'dropin', 'driving', ...names( DROVE ) ];
 export const DEVICES = [ 'phone', 'tablet', 'computer' ];
-// A search's kind: of the map ('earth'), of the Moon's places ('moon'), coordinates typed; and,
-// counted as well as its kind, one that found nothing.
-export const SEARCHES = [ 'earth', 'moon', 'coordinates', 'nothing' ];
-// What went wrong: no ground at a drop-in (no 3D map there, or the Moon's ground not loading), a
-// ride's model not loading (the go-kart driven instead, or no drive), the Moon's files not loading,
-// Google's map not loading at all, Google refusing the visit's tiles (its map session over), and a
-// drop-in left for the globe before it was driving.
-export const PROBLEMS = [ 'no_ground', 'ride_failed', 'moon_failed', 'map_failed', 'map_session_ended', 'drop_abandoned' ];
+// A search's kind: of the map ('earth'), of another world's places (its id: 'moon', 'mars'),
+// coordinates typed; and, counted as well as its kind, one that found nothing.
+export const SEARCHES = [ ...WORLD_IDS, 'coordinates', 'nothing' ];
+// What went wrong: no ground at a drop-in (no 3D map there, or another world's ground not loading),
+// a ride's model not loading (the go-kart driven instead, or no drive), another world's files not
+// loading ('moon_failed', 'mars_failed'), Google's map not loading at all, Google refusing the
+// visit's tiles (its map session over), and a drop-in left for the globe before it was driving.
+export const PROBLEMS = [ 'no_ground', 'ride_failed', ...OFF_EARTH.map( world => `${ world }_failed` ), 'map_failed', 'map_session_ended', 'drop_abandoned' ];
 // A touch screen whose shorter side is at least this (CSS px) is a tablet's (deviceOf).
 const TABLET = 600;
 
@@ -58,8 +59,9 @@ export const METRICS = {
 	// milliseconds all together (for the mean).
 	load_time: { key: oneOf( names( LOAD_BUCKETS ) ), most: 1 },
 	load_ms: { key: key => key === 'total' ? key : null, most: 120000 },
-	// Drop-ins: where (a start spot's id, 'moon' anywhere on the Moon, or 'other'), and in which ride.
-	dropin: { key: key => SPOT_IDS.has( key ) || key === 'other' || key === 'moon' ? key : null, most: 20 },
+	// Drop-ins: where (a start spot's id, 'other' elsewhere on the Earth, or the world's id anywhere
+	// on another: 'moon', 'mars'), and in which ride.
+	dropin: { key: key => SPOT_IDS.has( key ) || key === 'other' || OFF_EARTH.includes( key ) ? key : null, most: 20 },
 	ride: { key: checkVehicle, most: 20 },
 	// Seconds driven (not paused), in each ride; and of those, with others in the room.
 	play: { key: checkVehicle, most: 600 },
@@ -72,9 +74,9 @@ export const METRICS = {
 	// How far the visit got (FUNNEL), each step once; and what it's on (deviceOf), once.
 	funnel: { key: oneOf( FUNNEL ), most: FUNNEL.length },
 	device: { key: oneOf( DEVICES ), most: 1 },
-	// The globe turned to the Moon; and seconds driven on each world, as play's.
-	world: { key: key => key === 'moon' ? key : null, most: 20 },
-	play_world: { key: oneOf( [ 'earth', 'moon' ] ), most: 600 },
+	// The globe turned to another world (the Moon, Mars); and seconds driven on each world, as play's.
+	world: { key: oneOf( OFF_EARTH ), most: 20 },
+	play_world: { key: oneOf( WORLD_IDS ), most: 600 },
 	// Searches made, by kind (SEARCHES), never what was typed.
 	search: { key: oneOf( SEARCHES ), most: 40 },
 	// How long each drop-in took, from Drive here to driving, in buckets; and what went wrong.

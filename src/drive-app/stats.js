@@ -132,9 +132,9 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 
 		},
 
-		// `dt` seconds driven (not paused) in `ride` on `world` ('earth' or 'moon'), `together` with
-		// others in the room: the play time, and the funnel's steps as this visit's driving passes 1,
-		// 10 and 30 minutes.
+		// `dt` seconds driven (not paused) in `ride` on `world` (worlds.js's id: 'earth', 'moon',
+		// 'mars'), `together` with others in the room: the play time, and the funnel's steps as this
+		// visit's driving passes 1, 10 and 30 minutes.
 		drove( ride, world, dt, together ) {
 
 			add( 'play', ride, dt );
@@ -146,7 +146,7 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 
 		},
 
-		// A drop-in arrived (driving) at ( lat, lon ) on `world` ('earth' or 'moon'): its place, as its
+		// A drop-in arrived (driving) at ( lat, lon ) on `world` (worlds.js's id): its place, as its
 		// cell, posted with its drop-in's count (the dropin metric, counted beside this). Once a visit
 		// for each cell, and no more than PLACES_PER_POST between posts.
 		dropped( world, lat, lon ) {

@@ -1,5 +1,7 @@
-import { FASTEST, START_SLACK } from './challenge-rules.js';
+import { FASTEST, START_SLACK, TALL, ZONE_UP } from './challenge-rules.js';
 import { RADIUS } from './dropin-cells.js';
+import { inFrame, levelFrame, levelled, pointOn } from './level.js';
+import { EARTH, isWorld } from './worlds.js';
 
 // A challenge run's ghost (docs/world-drive.md, "Challenges", "Ghosts"): the car's path from GO to
 // the finish, sampled every GHOST_EVERY ms of the run's own clock and packed small, posted with the
@@ -8,17 +10,20 @@ import { RADIUS } from './dropin-cells.js';
 // them) share: the packing, where a route's points are in a ghost's frame, and the checks a ghost
 // must pass for its time to be taken. Plain data and small functions, no three.js.
 //
-// A ghost's frame is the route's start (its pin) on the world's ellipsoid, at height 0: east,
-// north and up in metres, as the scene's own frame is at a place (x west, y up, z north: the object
-// frame 3d-tiles-renderer gives, which main.js recentres the scene on). Each sample is where the
-// car's model was then (its pivot, as drawn) and which way it faced (yaw, pitch and roll), in that
-// frame: centimetres and 1/TURN of a turn. Samples come at 0, every, 2 × every... ms and the last
-// at the run's time itself (the finish), so a ghost of `count` samples is a run of a time it
-// agrees with. Packed as a version byte, the interval and the count, then each sample's position as
-// its second difference (the change in its step, which along a road is a few centimetres) and its
-// angles as their change, each a zigzag varint: about six bytes a sample, so a minute is about 4
-// KB. A run longer than GHOST_SAMPLES samples is sampled half as often (and so on), so no ghost is
-// longer than that, whatever the run, and its bytes stay under GHOST_BYTES.
+// A ghost's frame is the route's start (its pin) on the world's ellipsoid, at height 0 (the Earth's
+// WGS84; every other world's a sphere of its radius, worlds.js): east, north and up in metres, as
+// the scene's own frame is at a place (x west, y up, z north: the object frame 3d-tiles-renderer
+// gives, which main.js recentres the scene on). On a world with a level spheroid (Vesta, Ceres:
+// level.js) its up is that spheroid's normal at the pin, as the scene's is there, not straight out
+// from the middle, so its ground's ups and downs are measured as the car drives them. Each sample
+// is where the car's model was then (its pivot, as drawn) and which way it faced (yaw, pitch and
+// roll), in that frame: centimetres and 1/TURN of a turn. Samples come at 0, every, 2 × every... ms and the last at the run's time itself
+// (the finish), so a ghost of `count` samples is a run of a time it agrees with. Packed as a version
+// byte, the interval and the count, then each sample's position as its second difference (the
+// change in its step, which along a road is a few centimetres) and its angles as their change, each
+// a zigzag varint: about six bytes a sample, so a minute is about 4 KB. A run longer than
+// GHOST_SAMPLES samples is sampled half as often (and so on), so no ghost is longer than that,
+// whatever the run, and its bytes stay under GHOST_BYTES.
 
 export const GHOST_VERSION = 1;
 // A sample every this many ms of the run's clock, at first.
@@ -59,10 +64,16 @@ const JUMPS = 4;
 const JUMP_EVERY = 15000;
 const JUMPS_MOST = 32;
 // How far (m) a ghost's samples may be from the start across the ground and up and down: no route
-// is anywhere near this long, nor ground this high or low.
+// is anywhere near this long, nor ground this high or low (Olympus Mons's top is 21.2 km over the
+// sphere Mars's heights are on, so a run up there is that high in its frame; Vesta's ground is from
+// 50.7 km under its sphere, Rheasilvia's floor, to 30.3 km over it, and under a level up leaning
+// 12° from the sphere's a run deep in Rheasilvia is up to 10 km across the ground from its pin in
+// its frame). Packed, the first sample's numbers are its place itself and the second's up to three
+// times that, in centimetres: 18 million at most, a zigzag varint of 26 bits, within the 28 that
+// readGhost reads.
 const REACH = 60000;
-const HEIGHT = 20000;
-// The Earth's ellipsoid (WGS84, as Google's tiles are on); the Moon is a sphere (moon.js).
+const HEIGHT = 60000;
+// The Earth's ellipsoid (WGS84, as Google's tiles are on); every other world is a sphere (body.js).
 const WGS84_A = 6378137;
 const WGS84_B = 6356752.314245179;
 const E2 = 1 - WGS84_B * WGS84_B / ( WGS84_A * WGS84_A );
@@ -97,9 +108,12 @@ export function sampleTime( i, count, every, ms ) {
 
 // Where ( lat, lon, height ) on `world` is from `origin` ({ lat, lon }, on its ellipsoid at height
 // 0): [ east, north, up ] (m), as the scene's frame there has it (main.js, 3d-tiles-renderer's object
-// frame: up along the ellipsoid's normal there).
+// frame: up along the ellipsoid's normal there; on a world with a level spheroid, level.js's frame,
+// up along that spheroid's normal). null on a world that isn't one (worlds.js).
 export function localOf( world, origin, lat, lon, height = 0 ) {
 
+	if ( ! isWorld( world ) ) return null;
+	if ( levelled( world ) ) return inFrame( levelFrame( world, origin.lat, origin.lon, 0 ), pointOn( world, lat, lon, height ) );
 	const [ ox, oy, oz ] = centred( world, origin.lat, origin.lon, 0 );
 	const [ x, y, z ] = centred( world, lat, lon, height );
 	const [ dx, dy, dz ] = [ x - ox, y - oy, z - oz ];
@@ -113,13 +127,14 @@ export function localOf( world, origin, lat, lon, height = 0 ) {
 
 }
 
-// ( lat, lon, height ) on `world` as a point from its middle (m).
+// ( lat, lon, height ) on `world` (one of worlds.js's) as a point from its middle (m): on the
+// Earth's ellipsoid, or on the sphere of another world's radius, as its globe has it (body.js).
 function centred( world, lat, lon, height ) {
 
 	const [ phi, lambda ] = [ lat * RAD, lon * RAD ];
-	if ( world === 'moon' ) {
+	if ( world !== EARTH ) {
 
-		const r = RADIUS.moon + height;
+		const r = RADIUS[ world ] + height;
 		return [ r * Math.cos( phi ) * Math.cos( lambda ), r * Math.cos( phi ) * Math.sin( lambda ), r * Math.sin( phi ) ];
 
 	}
@@ -295,27 +310,38 @@ function wrap( steps ) {
 
 // What's wrong with the ghost `text` (ghostText's) of a run of `ms` with `passes` on `challenge`'s
 // route ({ world, kind, route }), as the Worker checks it before a time is taken: '' for nothing.
+//   'world': the challenge isn't on one of the worlds (worlds.js), so where its points are in the
+//     ghost's frame can't be told, and nothing on it is taken.
 //   'form': not a ghost (readGhost's null), sampled at another interval than everyFor( ms ), or
 //     more than GHOST_DENSITY bytes a sample on average.
 //   'time': not as long as the run (its count isn't countFor( ms )).
-//   'start': its first sample (the car at GO) further from the start than START_SLACK.
+//   'start': its first sample (the car at GO) further from the start than START_SLACK across the
+//     ground.
 //   'speed': further between two samples, across the ground or up or down, than FASTEST goes in
 //     the time between them (and SAMPLE_SLACK), other than the game's own jumps (R's few metres on,
 //     or back onto the path it drove), and no more of those than a run of its length is let have.
-//   'pass': a point not within its radius (and PASS_SLACK) at its pass time, nor at a sample either
-//     side of it.
+//   'pass': a point not within its radius (and PASS_SLACK, and on a world with a level spheroid
+//     what its zone's lean adds) at its pass time, nor at a sample either side of it.
 // Passes and the time are checkPasses' already (the Worker asks that first). In centimetres and
-// their squares, a sample at a time, with nothing made on the way: it's the Worker's to do for
-// every time posted, within the Free plan's 10 ms of CPU.
+// their squares, a sample at a time, with nothing made on the way (but, on a world with a level
+// spheroid, a few short arrays for the start and each pass): it's the Worker's to do for every time
+// posted, within the Free plan's 10 ms of CPU.
 export function ghostFault( { world, route }, ms, passes, text ) {
 
+	if ( ! isWorld( world ) ) return 'world';
 	const ghost = readGhost( text );
 	if ( ! ghost || ghost.every !== everyFor( ms ) ) return 'form';
 	if ( ghost.count !== countFor( ms ) ) return 'time';
 	// (Its bytes, from its text's length: base64url, 3 bytes in 4 characters.)
 	if ( Math.floor( text.length * 3 / 4 ) > HEADER + GHOST_DENSITY * ghost.count ) return 'form';
 	const { every, count, east, north, up } = ghost;
-	if ( east[ 0 ] * east[ 0 ] + north[ 0 ] * north[ 0 ] > ( START_SLACK * 100 ) ** 2 ) return 'start';
+	// On a world with a level spheroid, its frame's up leans from the sphere's (level.js), so a point
+	// straight over the pin is off it across the ground in that frame (by kilometres in Rheasilvia):
+	// the first sample is measured from the pin at its own height (beside's).
+	const frame = levelled( world ) ? levelFrame( world, route.start.lat, route.start.lon, 0 ) : null;
+	const [ startEast, startNorth ] = frame ? beside( world, frame, route.start.lat, route.start.lon, up[ 0 ] / 100 ) : [ 0, 0 ];
+	const [ dx0, dy0 ] = [ east[ 0 ] - startEast * 100, north[ 0 ] - startNorth * 100 ];
+	if ( dx0 * dx0 + dy0 * dy0 > ( START_SLACK * 100 ) ** 2 ) return 'start';
 	let jumps = 0;
 	const allowed = Math.min( JUMPS_MOST, JUMPS + Math.floor( ms / JUMP_EVERY ) );
 	for ( let i = 1; i < count; i ++ ) {
@@ -340,10 +366,16 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 		const t0 = sampleTime( i, count, every, ms );
 		const t1 = sampleTime( i + 1, count, every, ms );
 		const u = t1 > t0 ? ( at - t0 ) / ( t1 - t0 ) : 1;
+		// (On a world with a level spheroid, the point's at the sample's height in the frame, and the
+		// page's zone round it stands along the level up, which leans from the line out from the
+		// middle the point is found on by up to `lean` m across the ground a metre up: what that can
+		// put a pass the page took past the radius is let off as well.)
+		const lean = frame ? leanAt( world, frame, lat, lon ) : 0;
+		const slack = frame ? PASS_SLACK + route.radius * ( Math.sqrt( 1 + ( lean * TALL ) ** 2 ) - 1 ) + lean * ZONE_UP : PASS_SLACK;
 		const near = ( x, y, z ) => {
 
-			const [ e, n ] = localOf( world, route.start, lat, lon, z / 100 );
-			return Math.hypot( x / 100 - e, y / 100 - n ) <= route.radius + PASS_SLACK;
+			const [ e, n ] = frame ? beside( world, frame, lat, lon, z / 100 ) : localOf( world, route.start, lat, lon, z / 100 );
+			return Math.hypot( x / 100 - e, y / 100 - n ) <= route.radius + slack;
 
 		};
 		const lerp = values => values[ i ] + ( values[ i + 1 ] - values[ i ] ) * u;
@@ -360,6 +392,39 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 	}
 
 	return '';
+
+}
+
+// Where ( lat, lon ) is across the ground in `frame` (level.js's, a ghost's on a world with a level
+// spheroid) at `up` (m) in it: [ east, north ] of the point on the line out from the world's middle
+// through it that's that high in the frame. Along that line a point's place in the frame changes in
+// step with its height over the sphere, so it's found in one go.
+function beside( world, frame, lat, lon, up ) {
+
+	const [ e, n, u ] = inFrame( frame, pointOn( world, lat, lon, 0 ) );
+	const [ de, dn, du ] = outward( world, frame, lat, lon );
+	const height = ( up - u ) / du;
+	return [ e + de * height, n + dn * height ];
+
+}
+
+// How far (m) across the ground in `frame` the level up at ( lat, lon ) and the line out from the
+// world's middle there part, a metre up: the page's zone round a point stands along the one, and
+// beside finds the point along the other.
+function leanAt( world, frame, lat, lon ) {
+
+	const [ de, dn, du ] = outward( world, frame, lat, lon );
+	const [ le, ln, lu ] = inFrame( { ...frame, origin: [ 0, 0, 0 ] }, levelFrame( world, lat, lon, 0 ).up );
+	return Math.hypot( le / lu - de / du, ln / lu - dn / du );
+
+}
+
+// The way straight out from `world`'s middle at ( lat, lon ), in `frame`: [ east, north, up ].
+function outward( world, frame, lat, lon ) {
+
+	const [ x, y, z ] = pointOn( world, lat, lon, 0 );
+	const r = Math.hypot( x, y, z );
+	return inFrame( { ...frame, origin: [ 0, 0, 0 ] }, [ x / r, y / r, z / r ] );
 
 }
 

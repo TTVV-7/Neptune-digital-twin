@@ -1,0 +1,573 @@
+import { AdditiveBlending, CylinderGeometry, ExtrudeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, Shape, Vector3 } from 'three';
+import { enuToLocal } from './geo.js';
+
+// Plane mode (World Drive): T turns the ride into a little plane. Wings swing down from its sides
+// with a jet under each, a fin rises at the back and (on a ride whose wheels can, cars.js) the
+// wheels fold flat as fans, and it lifts off. T again flies it down and folds it back into a car on
+// the ground. It's for looking round, not for points: drive.js keeps it apart from everything
+// that's scored (no tricks, no boost, no challenge runs, and a new stunt run once it's down), and
+// the app keeps it out of the levels' distance.
+//
+// How fast it may go depends on how high it is (SPEEDS): a crawl just off the ground, for looking
+// at a place, and faster the higher it climbs, as the ground below it gets further away. Climbing
+// and coming down are quicker the higher it is too (CLIMB).
+//
+// Never slower than CAR_SHARE times the ride's own top speed, though: a plane's speed even low
+// down. T again, flying, drops out of it: the kit folds away, the car falls (no faster than a
+// skydiver, DROP.terminal, its speed across the ground easing off) and a parachute opens over it
+// as it nears the ground (drive.js's PARACHUTE), steered a little with A/D, onto its wheels; T while
+// dropping unfolds it again. Within DROP.low m of the ground it lands and folds back as it always did.
+//
+// It's made by the Driver it belongs to (the `plane` option) and drives that Driver's vehicle,
+// using its position (east, north, y, heading, speed), its rays and its camera.
+
+// How long (s) the kit takes to unfold and fold, and how high (m) it lifts as it unfolds.
+export const UNFOLD = 0.9;
+export const FOLD = 0.7;
+const LIFT = 3;
+// The lowest it flies over the ground (m), and the highest (m over the ground).
+const CLEARANCE = 0.8;
+const CEILING = 12000;
+// The fastest it may go (km/h) at each height over the ground (m), and in between, on a log
+// scale of the height: 60 km/h just off the ground, 250 km/h at 150 m, 900 km/h at 2 km.
+const SPEEDS = [ [ 0, 60 ], [ 30, 100 ], [ 150, 250 ], [ 600, 500 ], [ 2000, 900 ], [ 6000, 1800 ], [ 12000, 2700 ] ];
+// Climbing or coming down (m/s): this much, plus this share of the height, up to the most.
+const CLIMB = { base: 6, share: 0.12, most: 250 };
+// Speeding up (m/s²): at least this, or this share of the top speed there a second; slowing down
+// twice as fast.
+const ACCEL = { least: 6, share: 0.35 };
+// Turning (°/s) slow and at TURN_FAST km/h and over.
+const TURN = [ 80, 28 ];
+const TURN_FAST = 900;
+const KMH = 3.6;
+const CAR_SHARE = 2;
+// The parachute a plane's drop comes down under (here, and drive.js's fallStep): opened PARACHUTE.open m over the
+// ground (or, falling faster, `lead` s of the fall over it), it slows the fall to `sink` m/s at
+// `settle` (1/s), its speed across the ground slowing at `drag` (1/s), and turns it back upright at
+// `right` (1/s), so it lands on its wheels. `size`: the canopy's radius as a share of the
+// vehicle's width (at least `least` m).
+export const PARACHUTE = { open: 30, lead: 0.8, sink: 5, settle: 3, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
+// The drop (T, flying): falling at most `terminal` m/s; its speed across the ground easing off to
+// the ride's own top speed at `drag` (1/s); turned `steer` °/s with A/D; and under `low` m over the
+// ground, no drop, it lands and folds as before.
+const DROP = { terminal: 55, drag: 0.35, steer: 30, low: 12 };
+
+const _a = new Vector3();
+const _b = new Vector3();
+const DOWN = new Vector3( 0, - 1, 0 );
+const UP = new Vector3( 0, 1, 0 );
+
+// The top speed (m/s) at `height` m over the ground.
+export function planeTopSpeed( height ) {
+
+	const h = Math.log1p( Math.max( 0, height ) );
+	for ( let i = 1; i < SPEEDS.length; i ++ ) {
+
+		const [ h1, s1 ] = SPEEDS[ i ];
+		if ( h > Math.log1p( h1 ) && i < SPEEDS.length - 1 ) continue;
+		const [ h0, s0 ] = SPEEDS[ i - 1 ];
+		const t = MathUtils.clamp( ( h - Math.log1p( h0 ) ) / ( Math.log1p( h1 ) - Math.log1p( h0 ) ), 0, 1 );
+		return MathUtils.lerp( s0, s1, t ) / KMH;
+
+	}
+
+	return SPEEDS[ SPEEDS.length - 1 ][ 1 ] / KMH;
+
+}
+
+// How fast (m/s) it climbs or comes down at `height` m over the ground.
+export function planeClimbRate( height ) {
+
+	return Math.min( CLIMB.most, CLIMB.base + Math.max( 0, height ) * CLIMB.share );
+
+}
+
+export class PlaneMode {
+
+	constructor( driver ) {
+
+		this.driver = driver;
+		this.kit = null;
+		this.reset();
+
+	}
+
+	// Whether it's a plane (unfolding, flying, coming down or folding back).
+	get on() {
+
+		return this.phase !== null;
+
+	}
+
+	// Off at once (a new drive, or getting out), with the kit gone.
+	reset() {
+
+		this.driver.showChute?.( false );
+		this.phase = null;
+		this.deploy = 0;
+		this.time = 0;
+		this.vy = 0;
+		this.steer = 0;
+		this.ground = null;
+		this.height = 0;
+		this.thrust = 0;
+		this.kit?.dispose();
+		this.kit = null;
+
+	}
+
+	// T: into a plane from driving (or from flying on F), or, as one, down and back into a car; while
+	// coming down, T flies on instead.
+	toggle() {
+
+		if ( this.phase === null ) this.begin();
+		else if ( this.phase === 'flying' && this.height > DROP.low ) this.drop();
+		else if ( this.phase === 'flying' ) this.phase = 'landing';
+		else if ( this.phase === 'landing' ) this.phase = 'flying';
+		else if ( this.phase === 'dropping' ) {
+
+			// Back into a plane, from where it's falling.
+			this.driver.showChute( false );
+			this.phase = 'unfolding';
+			this.time = 0;
+			this.from = this.driver.y;
+			this.driver.hud.flash( 'Plane!' );
+
+		}
+
+	}
+
+	// Out of the plane, in the air: the kit folds away and it falls, the parachute to come.
+	drop() {
+
+		this.phase = 'dropping';
+		this.time = 0;
+		this.vy = Math.min( this.vy, 0 );
+		this.driver.chute = { open: false, t: 0 };
+		this.driver.hud.flash( 'Bail out!' );
+
+	}
+
+	begin() {
+
+		const d = this.driver;
+		// Whatever it was doing stops: a drift, the booster, a jump's tricks (not landed, so not scored).
+		if ( d.drifting ) d.endDrift( false );
+		d.cutBooster();
+		d.boost = null;
+		d.air = null;
+		d.flying = false;
+		d.grounded = false;
+		d.airTime = 0;
+		d.driftHop = false;
+		if ( d.body ) for ( const spring of [ d.body.pitch, d.body.roll ] ) spring.value = spring.speed = 0;
+		d.hud.setFlying?.( false );
+		d.hud.setPlane?.( true );
+		this.phase = 'unfolding';
+		this.time = 0;
+		this.vy = 0;
+		this.steer = d.steer;
+		this.from = d.y;
+		this.kit = createPlaneKit( { pivot: d.entry.pivot, box: d.ownBox } );
+		d.speed = Math.max( 0, d.speed );
+		d.hud.flash( d.fly ? 'Plane! Space up · Shift down · T to bail out' : 'Plane! Space up · Shift down · F to bail out' );
+		d.onPlane?.( true );
+
+	}
+
+	// Back into a car, on the ground: it drives on from here, at what speed it landed with, and a
+	// new stunt run starts (the last one's place may be far behind).
+	finish() {
+
+		const d = this.driver;
+		this.reset();
+		d.grounded = true;
+		d.flying = false;
+		d.vy = 0;
+		d.pitch = 0;
+		d.roll = 0;
+		d.lastSafe = { east: d.east, north: d.north, y: d.y };
+		d.lastGood = d.recentGood = { east: d.east, north: d.north, y: d.y };
+		d.hud.setPlane?.( false );
+		d.newRun?.();
+		d.onPlane?.( false );
+
+	}
+
+	// The scene's frame moved under it (Driver.transform, which has carried the vehicle and its
+	// velocity): the heights it keeps in the scene's frame (where it lifts off to while unfolding, and
+	// the ground last found under it) go up or down by as much as the vehicle did (`dy` m), so a
+	// recentre mid-unfold doesn't send it shooting up or diving to the ground; and its climb is the
+	// vehicle's, turned with the frame.
+	transform( dy ) {
+
+		if ( ! this.on ) return;
+		if ( this.from !== undefined ) this.from += dy;
+		if ( this.ground !== null ) this.ground += dy;
+		this.vy = this.driver.vy;
+
+	}
+
+	// Each frame while it's a plane: moves the vehicle (the Driver poses it and places the camera).
+	update( dt ) {
+
+		const d = this.driver;
+		const { keys } = d;
+		const forward = keys.has( 'KeyW' ) || keys.has( 'ArrowUp' );
+		const back = keys.has( 'KeyS' ) || keys.has( 'ArrowDown' );
+		// (F only climbs where it doesn't also turn the plane back into a car: the `fly` option on.)
+		const up = keys.has( 'Space' ) || d.fly && keys.has( 'KeyF' );
+		const down = keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' ) || keys.has( 'KeyB' );
+		const steerInput = d.steerInput();
+
+		// The ground under it: looked for as far down as it may be, and remembered for when it can't
+		// be found (tiles not in yet), so the height doesn't jump.
+		const ground = this.groundUnder( d.east, d.north, d.y );
+		if ( ground !== null ) this.ground = ground;
+		if ( this.ground === null ) this.ground = d.y;
+		this.height = Math.max( 0, d.y - this.ground );
+		if ( this.phase === 'dropping' ) {
+
+			this.fall( dt, steerInput );
+			return;
+
+		}
+
+		const top = Math.max( planeTopSpeed( this.height ), d.spec.topSpeed / KMH * CAR_SHARE );
+		const rate = planeClimbRate( this.height );
+
+		// Unfolding (lifting off as it goes) and folding back (settling onto the ground).
+		if ( this.phase === 'unfolding' ) {
+
+			this.time += dt;
+			this.deploy = MathUtils.smootherstep( this.time / UNFOLD, 0, 1 );
+			if ( this.time >= UNFOLD ) this.phase = 'flying';
+
+		} else if ( this.phase === 'folding' ) {
+
+			this.time += dt;
+			this.deploy = 1 - MathUtils.smootherstep( this.time / FOLD, 0, 1 );
+			d.y += ( this.ground - d.y ) * Math.min( 1, dt * 10 );
+			d.speed *= Math.max( 0, 1 - dt * 0.8 );
+			if ( this.time >= FOLD ) {
+
+				d.y = this.ground;
+				this.finish();
+				return;
+
+			}
+
+		}
+
+		const flying = this.phase === 'flying' || this.phase === 'landing';
+		if ( flying || this.phase === 'unfolding' ) {
+
+			// Thrust: W speeds up, S slows down (to a hover), neither keeps the speed, as a plane
+			// cruises. Never over the top speed for its height: coming down, it eases off to that.
+			const accel = Math.max( ACCEL.least, top * ACCEL.share );
+			if ( forward && d.speed < top ) d.speed = Math.min( top, d.speed + accel * dt );
+			if ( back ) d.speed = Math.max( 0, d.speed - accel * 2 * dt );
+			if ( d.speed > top ) d.speed = Math.max( top, d.speed - ( d.speed - top ) * Math.min( 1, dt * 1.5 ) - dt );
+			this.thrust += ( ( forward ? 1 : back ? 0.15 : 0.5 ) - this.thrust ) * Math.min( 1, dt * 3 );
+
+		}
+
+		// Up and down: Space or F climbs, Shift comes down, neither holds the height; coming down to
+		// land, it comes down by itself (steering and thrust still its own). Unfolding, it lifts off.
+		let want = 0;
+		if ( this.phase === 'unfolding' ) want = ( this.from + LIFT - d.y ) * 3;
+		else if ( this.phase === 'landing' ) want = - rate;
+		else if ( flying ) want = up ? rate : down ? - rate : 0;
+		if ( this.height >= CEILING && want > 0 ) want = 0;
+		// Over the ceiling, it comes back down to it: where the frame stays where it was dropped in (the
+		// Moon, Mars, the Earth) the world curves away under a level flight, so in the end flying level
+		// is climbing, up to where others would stop being sent it (live-protocol.js's STATE_RADII).
+		if ( this.height > CEILING ) want = Math.min( want, - Math.min( rate, this.height - CEILING ) );
+		this.vy += ( want - this.vy ) * Math.min( 1, dt * 2.5 );
+		if ( this.vy > 0 ) {
+
+			// Not up through a roof or a bridge.
+			enuToLocal( d.east, d.north, d.y + d.height / 2, _a );
+			if ( d.cast( _a, UP, d.height / 2 + this.vy * dt + 0.3 ) ) this.vy = 0;
+
+		}
+
+		// Turning: banked into it, quicker slow than fast.
+		this.steer += ( steerInput - this.steer ) * Math.min( 1, dt * 3 );
+		const turn = MathUtils.lerp( ...TURN, MathUtils.clamp( d.speed * KMH / TURN_FAST, 0, 1 ) );
+		if ( this.phase !== 'folding' ) d.heading += this.steer * turn * dt;
+		d.course = d.heading;
+		d.steer = this.steer;
+
+		this.move( dt );
+		d.y += this.vy * dt;
+
+		// Never under the ground: kept CLEARANCE over it, or, coming down to land, down on it and
+		// folding back into a car.
+		const below = this.groundUnder( d.east, d.north, d.y );
+		if ( below !== null ) {
+
+			this.ground = below;
+			const floor = below + ( this.phase === 'folding' ? 0 : CLEARANCE );
+			if ( d.y < floor ) {
+
+				d.y = floor;
+				this.vy = Math.max( 0, this.vy );
+
+			}
+
+			if ( this.phase === 'landing' && d.y <= floor + 0.05 ) {
+
+				this.phase = 'folding';
+				this.time = 0;
+				d.hud.flash( 'Landed' );
+
+			}
+
+		}
+
+		this.height = Math.max( 0, d.y - this.ground );
+
+		// Nose up climbing and down diving; banked into turns, more the faster it goes.
+		const pitch = this.phase === 'unfolding' ? 0.12 * Math.sin( Math.PI * this.deploy ) : MathUtils.clamp( Math.atan2( this.vy, Math.max( 8, d.speed ) ), - 0.6, 0.6 );
+		const roll = - this.steer * MathUtils.lerp( 0.25, 0.6, MathUtils.clamp( d.speed / 40, 0, 1 ) ) * this.deploy;
+		d.pitch += ( pitch - d.pitch ) * Math.min( 1, dt * 3 );
+		d.roll += ( roll - d.roll ) * Math.min( 1, dt * 3 );
+		d.vy = this.vy;
+
+		this.kit?.update( dt, this.deploy, this.thrust );
+
+	}
+
+	// A frame of the drop: the kit folding away, falling (or under the parachute, once it's open),
+	// steered a little, until it's down on its wheels and a car again.
+	fall( dt, steerInput ) {
+
+		const d = this.driver;
+		const chute = d.chute ?? ( d.chute = { open: false, t: 0 } );
+		this.time += dt;
+		this.deploy = Math.max( 0, this.deploy - dt / FOLD );
+		if ( ! chute.open && this.vy < 0 && this.height <= Math.max( PARACHUTE.open, - this.vy * PARACHUTE.lead ) ) {
+
+			chute.open = true;
+			d.showChute( true );
+			d.hud.flash( 'Parachute!' );
+
+		}
+
+		const top = d.spec.topSpeed / KMH;
+		if ( chute.open ) {
+
+			chute.t += dt;
+			this.vy += ( - PARACHUTE.sink * Math.sqrt( d.gravity ) - this.vy ) * Math.min( 1, dt * PARACHUTE.settle );
+			d.speed *= Math.exp( - PARACHUTE.drag * dt );
+
+		} else {
+
+			this.vy -= 9.81 * d.gravity * dt;
+			// No faster than a skydiver: the air holds it back.
+			if ( this.vy < - DROP.terminal ) this.vy += ( - DROP.terminal - this.vy ) * Math.min( 1, dt * 2 );
+			if ( d.speed > top ) d.speed = top + ( d.speed - top ) * Math.exp( - DROP.drag * dt );
+
+		}
+
+		d.heading += steerInput * DROP.steer * dt;
+		d.course = d.heading;
+		d.steer = steerInput;
+		this.move( dt );
+		d.y += this.vy * dt;
+		d.vy = this.vy;
+		d.pitch += ( 0 - d.pitch ) * Math.min( 1, dt * PARACHUTE.right );
+		d.roll += ( 0 - d.roll ) * Math.min( 1, dt * PARACHUTE.right );
+		this.kit?.update( dt, this.deploy, 0 );
+		const below = this.groundUnder( d.east, d.north, d.y );
+		if ( below !== null ) this.ground = below;
+		this.height = Math.max( 0, d.y - this.ground );
+		if ( d.y > this.ground ) return;
+
+		// Down: on its wheels, a car again, rolling on at no more than the booster would have it.
+		d.y = this.ground;
+		d.speed = Math.min( d.speed, top * 2 );
+		d.hud.flash( 'Landed' );
+		this.finish();
+
+	}
+
+	// Along the way it points, stopped short of a wall (a building's side, a cliff): a slope is
+	// flown up instead, by keeping over the ground.
+	move( dt ) {
+
+		const d = this.driver;
+		const distance = d.speed * dt;
+		if ( distance < 1e-6 ) return;
+		const rad = d.heading * Math.PI / 180;
+		const de = Math.sin( rad ), dn = Math.cos( rad );
+		_b.set( - de, 0, dn );
+		let travel = distance;
+		for ( const share of [ 0.3, 0.7 ] ) {
+
+			enuToLocal( d.east, d.north, d.y + d.height * share, _a );
+			const hit = d.cast( _a, _b, distance + d.front );
+			if ( ! hit?.face ) continue;
+			const normal = _a.copy( hit.face.normal ).transformDirection( hit.object.matrixWorld );
+			if ( Math.abs( normal.y ) >= 0.5 ) continue;
+			travel = Math.min( travel, Math.max( 0, hit.distance - d.front ) );
+
+		}
+
+		if ( travel < distance ) {
+
+			if ( d.speed > 8 ) d.hud.flash( 'Bonk!' );
+			d.speed = 0;
+
+		}
+
+		d.east += de * travel;
+		d.north += dn * travel;
+
+	}
+
+	// The ground's height under ( east, north ), looked for from just over y as far down as it
+	// could be: null if none is found.
+	groundUnder( east, north, y ) {
+
+		const d = this.driver;
+		enuToLocal( east, north, y + 2, _a );
+		const hit = d.cast( _a, DOWN, Math.max( 400, this.height + 3000 ) );
+		return hit ? hit.point.y : null;
+
+	}
+
+}
+
+// The kit that makes a ride a plane, sized to it: wings that swing down from its sides with a jet
+// under each, and a fin that rises at the back. On `pivot`, the ride's (facing -Z), sized to `box`,
+// the ride's box in the pivot's own frame. update( dt, deploy, thrust ): deploy from 0 (folded away,
+// hidden) to 1 (out), the jets' glow by the thrust. The ride's own parts that can join in (its
+// wheels, folding flat as fans: cars.js, kart.js) do so through onDrive's `plane`. For a car seen
+// driving with you (ghosts.js) too: `noRay` keeps rays off it there.
+export function createPlaneKit( { pivot, box, noRay = null } ) {
+
+	const width = box.max.x - box.min.x;
+	const length = box.max.z - box.min.z;
+	const height = box.max.y - box.min.y;
+	const midX = ( box.min.x + box.max.x ) / 2;
+	const midZ = ( box.min.z + box.max.z ) / 2;
+	const kit = new Group();
+	kit.name = 'plane kit';
+	pivot.add( kit );
+
+	const skin = new MeshStandardMaterial( { color: 0xdde3ea, metalness: 0.55, roughness: 0.35 } );
+	const trim = new MeshStandardMaterial( { color: 0x3de0ff, emissive: 0x3de0ff, emissiveIntensity: 0.8, metalness: 0.2, roughness: 0.4 } );
+	const glow = new MeshBasicMaterial( { color: 0x8ff0ff, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false } );
+	const materials = [ skin, trim, glow ];
+	const geometries = [];
+	const keep = geometry => ( geometries.push( geometry ), geometry );
+
+	// A wing: tapered and swept back, from its root at the body's side out along +X, lying flat.
+	const span = Math.max( 0.9, width * 0.95 );
+	const root = length * 0.34;
+	const tip = length * 0.14;
+	const sweep = length * 0.16;
+	const thick = Math.max( 0.04, height * 0.04 );
+	const shape = new Shape();
+	shape.moveTo( 0, 0 );
+	shape.lineTo( span, sweep );
+	shape.lineTo( span, sweep + tip );
+	shape.lineTo( 0, root );
+	shape.closePath();
+	// (Extruded along +Z and laid flat: the shape's y goes back along +Z, its depth down.)
+	const wingGeometry = keep( new ExtrudeGeometry( shape, { depth: thick, bevelEnabled: false } ).rotateX( Math.PI / 2 ).translate( 0, thick, - root * 0.45 ) );
+	const tipGeometry = keep( new CylinderGeometry( thick * 0.9, thick * 0.9, tip, 8 ).rotateX( Math.PI / 2 ) );
+	const podRadius = Math.max( 0.08, Math.min( width, height ) * 0.09 );
+	const podLength = root * 0.9;
+	const podGeometry = keep( new CylinderGeometry( podRadius * 0.8, podRadius, podLength, 14 ).rotateX( Math.PI / 2 ) );
+	const flameGeometry = keep( new CylinderGeometry( podRadius * 0.75, podRadius * 0.15, podLength * 0.9, 12, 1, true ).rotateX( - Math.PI / 2 ) );
+	const wingY = box.min.y + height * 0.42;
+	const wings = [ - 1, 1 ].map( side => {
+
+		const hinge = new Group();
+		hinge.position.set( midX + side * width * 0.45, wingY, midZ - length * 0.02 );
+		const wing = new Group();
+		wing.scale.x = side;
+		hinge.add( wing );
+		wing.add( new Mesh( wingGeometry, skin ) );
+		const light = new Mesh( tipGeometry, trim );
+		light.position.set( span, thick / 2, - root * 0.45 + sweep + tip / 2 );
+		wing.add( light );
+		const pod = new Mesh( podGeometry, skin );
+		pod.position.set( span * 0.45, - podRadius * 0.6, - root * 0.45 + sweep * 0.45 + podLength * 0.45 );
+		wing.add( pod );
+		const flame = new Mesh( flameGeometry, glow );
+		flame.position.set( 0, 0, podLength * 0.5 + podLength * 0.45 );
+		pod.add( flame );
+		kit.add( hinge );
+		return { hinge, wing, side, flame };
+
+	} );
+
+	// The fin: a swept blade on the roof at the back.
+	const finShape = new Shape();
+	const finHeight = Math.max( 0.5, height * 0.55 );
+	const finRoot = length * 0.26;
+	finShape.moveTo( 0, 0 );
+	finShape.lineTo( finRoot, 0 );
+	finShape.lineTo( finRoot, finHeight );
+	finShape.lineTo( finRoot * 0.55, finHeight );
+	finShape.closePath();
+	const finGeometry = keep( new ExtrudeGeometry( finShape, { depth: thick, bevelEnabled: false } ).rotateY( - Math.PI / 2 ).translate( thick / 2, 0, 0 ) );
+	const fin = new Group();
+	fin.position.set( midX, box.max.y - height * 0.08, box.max.z - finRoot * 1.05 );
+	const blade = new Mesh( finGeometry, skin );
+	fin.add( blade );
+	const stripe = new Mesh( keep( new CylinderGeometry( thick * 0.8, thick * 0.8, finRoot * 0.45, 6 ).rotateX( Math.PI / 2 ) ), trim );
+	stripe.position.set( 0, finHeight * 0.98, finRoot * 0.78 );
+	fin.add( stripe );
+	kit.add( fin );
+
+	kit.traverse( object => {
+
+		if ( ! object.isMesh ) return;
+		object.castShadow = object.material !== glow;
+		// Not something to stand on or bump into (see blocks in walk.js): it's part of the vehicle.
+		object.userData.noCollide = true;
+		if ( noRay ) object.raycast = noRay;
+
+	} );
+
+	let flicker = 0;
+	const update = ( dt, deploy, thrust ) => {
+
+		kit.visible = deploy > 0.01;
+		// Out of the body's sides, folded up against them, then swung down flat.
+		const out = MathUtils.smoothstep( deploy, 0, 0.55 );
+		const down = MathUtils.smoothstep( deploy, 0.3, 1 );
+		for ( const { hinge, side } of wings ) {
+
+			hinge.scale.setScalar( Math.max( 0.001, 0.25 + 0.75 * out ) );
+			hinge.rotation.z = side * ( 1 - down ) * 1.45;
+
+		}
+
+		fin.scale.set( 1, Math.max( 0.001, MathUtils.smoothstep( deploy, 0.45, 1 ) ), 1 );
+		flicker += dt * 30;
+		const burn = deploy * ( 0.35 + 0.65 * thrust ) * ( 0.9 + 0.1 * Math.sin( flicker ) );
+		glow.opacity = burn;
+		for ( const { flame } of wings ) flame.scale.set( 1, 1, 0.4 + burn );
+
+	};
+
+	update( 0, 0, 0 );
+	return {
+		group: kit,
+		update,
+		dispose() {
+
+			kit.removeFromParent();
+			for ( const geometry of geometries ) geometry.dispose();
+			for ( const material of materials ) material.dispose();
+
+		},
+	};
+
+}

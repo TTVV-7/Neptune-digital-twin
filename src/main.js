@@ -9,6 +9,7 @@ import { useSavedPlacements } from './placements.js';
 import { setUpUnderground } from './underground.js';
 import { loadSharedItems } from './shared-items.js';
 import { setUpViews } from './views.js';
+import { setUpBuildStages } from './build-stages.js';
 import { setUpPlayer } from './player.js';
 import { setUpRepairAreas } from './repair-areas.js';
 import { setUpModelEdits } from './model-edits.js';
@@ -233,6 +234,7 @@ function start( apiKey, keySource ) {
 	let repairAreas = null;
 	let modelEdits = null;
 	let repairTimeline = null;
+	let buildStages = null;
 	libraryLoaded.then( async library => {
 
 		sidebar = createSidebar( {
@@ -291,6 +293,8 @@ function start( apiKey, keySource ) {
 		underground = setUpUnderground( features );
 		// Preset views of models that carry them (the B2D2 model's Overview, C31, C32, Pit, Ground).
 		views = setUpViews( { models, controls, onUpdate: features.onUpdate, getUnderground: () => underground, toast } );
+		// How C32's take-up is built, stage by stage (a picker in the views bar).
+		buildStages = setUpBuildStages( { models, bar: views.bar, getUnderground: () => underground } );
 		// Moving the B2D2 model's repair areas, and saving where they go for everyone.
 		repairAreas = setUpRepairAreas( { models, controls, onUpdate: features.onUpdate, toast, bar: views.bar, layers } );
 		// Adding beams to it and painting its walls.
@@ -362,7 +366,11 @@ function start( apiKey, keySource ) {
 	// Handy for poking around from the browser console.
 	// startDriving( entry ) drives a placed vehicle or machine (what the selection's Drive button
 	// calls); with no entry it does what V does. isDrivable( entry ) says whether it can be driven.
-	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, legend, player, get sidebar() {
+	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, legend, player, get buildStages() {
+
+		return buildStages;
+
+	}, get sidebar() {
 
 		return sidebar;
 

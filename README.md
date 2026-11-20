@@ -16,7 +16,8 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
 - **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
 The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: pick
-anywhere on Earth from a globe and drive it, or the Moon.
+anywhere on Earth from a globe and drive it, or the Moon, Mars or the asteroids Vesta and Ceres,
+with others on every one.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -268,6 +269,56 @@ left as it came):
   train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
   shed support beam and B1 to B6. At grade they're under Google's ground (**U** cuts it away over
   the structure), and from inside C31 they're overhead;
+- past C32's tunnel mouth, **C32's take-up** (624-24070-DWG-ST231 and -ST232, -ME208 for levels, -ME217
+  for the counterweight), on C32's centre line:
+  - the new **sheave anchor pedestal** (1.5 × 1.49 m, up to EL 5.325, its top chamfered at the tunnel end
+    for the belt), **P1** (450 × 450, two) and **P2** (450 × 550, two);
+  - the **pad**, the new tower foundation extension (3.24 × 3.13 m, 1067 thick, top EL 3.825) with the
+    take-up **hoist** on it;
+  - the **counterweight tower** (its legs and top frame, up to EL 13.355) with the **counterweight**,
+    CTWT-624-43, in it (1300 × 850 × 3575 concrete, its ten plates, two MC200s and sheave; drawn where
+    -ME208 has it, though it rides up and down with the take-up);
+  - the **embedded items**: the anchor rods with their nuts, 6 for the sheave assembly and 4 for the rope
+    anchor (3/4", 350 in, 125 out), 2 for the conveyor's legs on each P1 and P2, 4 for the hoist frame on
+    the pad, and the counterweight's four 1" rods.
+
+  - what's **being demolished**, see-through so the new work shows through it: the asphalt (75 mm) and the
+    concrete under it (200 mm) broken out over the two areas marked on ST231 (13.62 m² round the sheave
+    anchor pedestal, P1 and P2; 10.5 m² over the pad), and in red the existing C32 rope and sheave anchor
+    pedestal above the ground and the conveyor table pedestals where the new P2s go (their height isn't
+    given: drawn 300 mm). Layers *To demolish: asphalt* and *To demolish: concrete*, which don't stop you
+    walking.
+
+  - the **existing structures round it** (-ME208 Section A, -ST231's plan): the C32 conveyor from the tunnel's
+    mouth up past grid 1X (belt, stringers, idlers, its legs on the P2s), its secondary drive, primary
+    drive, LT bend and take-up pulleys, the take-up carriage's 15° rails, the tower's columns at grids 3
+    and 2 on rows A, A1 and B up to the take-up frame (EL 9.737), and at grids 1 and 1X up to the drive's
+    top steel (EL 12.578) with its platform at EL 7.45. In detail: a troughed belt on three-roll idlers
+    (35°) with return rolls and channel stringers, a walkway with handrails and toe board on the A side,
+    the conveyor's legs and bents, pulleys on shafts in pillow blocks with gearboxes and motors on the two
+    drive pulleys, the take-up carriage on its rails, wide-flange columns and beams with X-bracing, the
+    drive platform's handrails, the counterweight tower's bracing, top sheaves and caged ladder, and the
+    take-up rope reeved from the hoist over the tower's sheaves and round the counterweight to the take-up
+    sheave on the new anchor pedestal. The belt's width (1.2 m) and the members' sizes aren't on these
+    drawings and are drawn typical.
+
+  - **how it's built, stage by stage:** a picker in the views bar (*C32 take-up*: 1 Demolition, 2 Excavation,
+    3 Forms & rebar, 4 Built, All; remembered in your browser, `src/build-stages.js`). Demolition shows what
+    comes out; Excavation the pits (the pad's with 300 mm to work in and 1:1 sides, cut straight where it
+    meets the existing tower foundation; the pedestals' inside the broken-out slab) and lean concrete, with
+    Google's ground cut away over them; Forms & rebar the formwork (19 mm plywood, studs, walers, braces and
+    stakes; column forms with clamps), the reinforcing as ST232 calls it and the anchor rods set in the
+    forms; Built the new concrete, the new counterweight tower with its ladder and the take-up rope, and the
+    conveyor back on. The conveyor is taken out for the work, so it's only there when it's built. The
+    methods are typical, not from the drawings. A model's scene extras `buildStages` and its nodes'
+    `buildStage` drive this, for any model built in stages. The **Take-up close** view looks at the work.
+
+  Concrete in pale new concrete, steel in its own layer (*C32 take-up steel & embedded items*). Where grid 4
+  is along C32 the drawings don't say: `TAKE_UP.GRID_4` in `scripts/b2d2-structure.mjs` puts it 4 m past
+  the tunnel's end, worked out from the belt's height there. Levels are on the C32 tunnel's datum (its floor
+  where it comes out is the take-up's ground, EL 3.825); the model's grade over C31 is about 1.3 m higher
+  (`GRADE` would lift the take-up to it). Concrete level with the ground shows 10 cm proud (`SHOW`). The **C32 take-up**
+  view looks at them;
 - along each of C31's walls under the slab, the **downstand** (0.66 m out from the wall, its underside
   at EL +1.22, where the walls' repair areas stop), as -ST011's beam elevations draw it;
 - the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:
@@ -801,8 +852,9 @@ It shares `src/` with this app but has its own page (`drive/index.html`, `src/dr
 (`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Each page load is one billed Google
 Maps session, so the built site holds no key: the Worker hands it out once per visit, after a
 Cloudflare Turnstile check, and only while the day's visits are under a cap for everyone (300) and
-for each visitor (8); over a cap the page says today's free Earth drives are used up and offers the
-Moon, which is never limited (its ground is our own, so it costs nothing to stream). Teleporting moves the
+for each visitor (1); over a cap the page says today's free Earth drives are used up and opens on the
+Moon, and the other worlds are never limited (their ground is our own, so it costs nothing to
+stream). Teleporting moves the
 loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
 Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderboard keeps each
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
@@ -810,7 +862,7 @@ posted with the visit's signed token and checked against what the game can score
 
 **Driving with others**: everyone else driving the same area (about 11 km across) shows up live as a
 ghost car you pass straight through, with their nickname, ride and Garage look (underglow too);
-**Invite friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere on Earth,
+**Invite friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere, on any world,
 and **H** honks (in the horn picked in the Garage, which the others hear as yours). No chat; the
 others see your nickname (or a guest name), your ride and where your car is in the
 game, including the spot you dropped in, and nothing else of you. On the globe, a glowing dot
@@ -820,25 +872,32 @@ one, down over them till they part). Only those visible nearby count (never a pa
 **Show me to drivers nearby** off), as positions to about a kilometre and counts, no names; the
 rooms add their dots to the reports they already make, and `/api/online` is kept 30 s by
 Cloudflare's cache, each Worker instance and browsers. A page alone on the globe in its Cloudflare
-location still costs about 60 of the day's budget an hour (about 120 an hour in a location however
+location still costs about 90 of the day's budget an hour (about 120 an hour in a location however
 many watch), so it stops asking once nobody has touched it for 10 minutes. Each room is a Durable
 Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
 `src/drive-app/live-protocol.js`). It switches itself off for the rest of the UTC day once it has
 used its daily budget of Durable Object requests (`LIVE_DAILY_BUDGET`), so it can't use up what the
 visits need, and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
-[Driving with others](docs/world-drive.md#driving-with-others), with what it costs). On the Moon it's
-the same in the Moon's own rooms (its areas the Earth's size, cars sent in the Moon's frame and drawn
-on its ground), with its own **Driving now** and dots on the Moon's globe, and parties span both
-worlds: **Go to** and **Join** turn the globe to the friend's world and drop in beside them. The
-Moon's rooms keep a budget of their own (`LIVE_MOON_DAILY_BUDGET`), so the Earth's being spent never
-shuts them (nor can a party's driver let in on the Moon drive on with an Earth that's spent: it's
-closed as it says it's there), and its visits (never limited) are held to 20 a day connecting from
-one address. And on either world, each address's connections (any but the owner's) may spend only
-an eighth of that world's day (`LIVE_ADDRESS_SHARE`: 5,000 requests on the Earth, 2,500 on the
-Moon, hours of driving with others), past which they're closed and turned away there until midnight
-UTC (see
-[Driving with others on the Moon](docs/world-drive.md#driving-with-others-on-the-moon), "Bounded per
-address").
+[Driving with others](docs/world-drive.md#driving-with-others), with what it costs). The Moon, Mars,
+Vesta and Ceres have it the same way, each in rooms of its own (areas about the Earth's 11 km on a
+grid of each world's, `mars:BAND.COL` and the like; cars sent in the world's own frame and drawn on
+its ground, so on Vesta and Ceres they never jump as the scene follows the car), with its own
+**Driving now** and dots on its own globe, and parties span every world: **Go to** and **Join** turn
+the globe to the friend's world and drop in beside them, and a friend elsewhere is "· on Mars". Each
+world keeps a day's budget of its own (`LIVE_MOON_DAILY_BUDGET` 20,000, `LIVE_MARS_DAILY_BUDGET`
+4,000, `LIVE_VESTA_DAILY_BUDGET` and `LIVE_CERES_DAILY_BUDGET` 3,000: with the Earth's 40,000,
+70,000 a day, leaving 30,000 of Cloudflare's Free plan for the rest), so one world's being spent
+never shuts another's (a page drives alone there and with others on the rest, a party carrying on
+through another world), and Mars's, Vesta's and Ceres's pay only for their own rooms and drivers,
+never for page loads or anyone watching their globes (those are the Earth's, else the Moon's). Free
+worlds' visits (never limited) are held to 20 a day connecting from one address, and on each world
+an address's connections (any but the owner's) may spend only an eighth of that world's day
+(`LIVE_ADDRESS_SHARE`), but never less than 1,000 requests (`LIVE_ADDRESS_FLOOR`): 5,000 on the
+Earth, 2,500 on the Moon, 1,000 on the others, past which they're closed and turned away on that
+world alone until midnight UTC. Pages speak protocol v3, which knows the five worlds by name, so
+older pages (v2, v1) carry on and see far drivers as on the globe (see [Driving with others on
+every world](docs/world-drive.md#on-every-world) and [on the
+Moon](docs/world-drive.md#driving-with-others-on-the-moon)).
 
 **Levels**: driving earns XP (each km, air off jumps, drift boosts, boost pads, landed tricks, the
 first drive in each area and at each start spot, minutes with others, and the day's first drive,
@@ -854,77 +913,113 @@ you pick one, which claims it. The Worker caps each report by the time since the
 (`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
 rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
 
-**Challenges**: a daily, a weekly and a monthly challenge on the Earth and on the Moon, six live at
-once, each a place and a route the same for everyone and with its own board of the best times (the
-leaderboard's nicknames and levels): a checkpoint sprint through gates in order, a hunt for stars
-round a place in any order, or a drive to a landmark a few kilometres off, against the clock. Big
-rings, stars and beams of light mark them, on the ground the game has (the Earth's tiles as they
-load, a few rays a frame, the Moon's own heights, its routes kept off crater walls), with an arrow
-to the next on the HUD, a countdown, the timer and a finish card with your place on the board (a
-time that can't be posted for want of a signal is kept and posted when it's back). The rotation
-goes round the game's own places (and busy drop-in places the owner approves) by the Worker's
-secret, so nobody can read next week's from the code, each period's clear of the places fixed for
-the others live and the one before; each period's is fixed in D1 as it's first asked for, and the
-owner can choose any period's by hand on the admin page. Times are posted with the visit's token
-and checked against the route (each leg no quicker than the fastest the game goes) and the visit
-(`worker/drive/challenges.js`, sharing its rules with the page in
-`src/drive-app/challenge-rules.js`). The page loads them as a
-chunk of their own when they're opened, so nothing of them is in its first load; a visit that has
-driven 40 s is told of today's challenge on its world, with a button to them (see
-[Challenges](docs/world-drive.md#challenges)).
+**Challenges**: a daily, a weekly and a monthly challenge on each world, the Earth, the Moon, Mars,
+Vesta and Ceres, fifteen live at once, each a place and a route the same for everyone and with its own board of
+the best times (the leaderboard's nicknames and levels): a checkpoint sprint through gates in order,
+a hunt for stars round a place in any order, or a drive to a landmark a few kilometres off, against
+the clock. Big rings, stars and beams of light mark them, on the ground the game has (the Earth's
+tiles as they load, a few rays a frame, the other worlds' own heights, their routes kept off
+crater and canyon walls, measured on Vesta and Ceres from their level, no more than three of theirs
+laid out an ask so a Worker just started keeps within its CPU, the page asking again for the rest), with an arrow to the next on the HUD, a countdown, the timer and a finish card with
+your place on the board (a time that can't be posted for want of a signal is kept and posted when
+it's back). The rotation goes round the game's own places (and busy drop-in places the owner
+approves) by the Worker's secret, so nobody can read next week's from the code, each period's clear
+of the places fixed for the others live and the one before; each period's is fixed in D1 as it's
+first asked for, and the owner can choose any period's by hand on the admin page. Times are posted
+with the visit's token and checked against the route (each leg no quicker than the fastest the game
+goes) and the visit (`worker/drive/challenges.js`, sharing its rules with the page in
+`src/drive-app/challenge-rules.js`). The page loads them as a chunk of their own when they're
+opened, so nothing of them is in its first load; a visit that has driven 40 s is told of today's
+challenge on its world, with a button to them (see [Challenges](docs/world-drive.md#challenges)).
 
 **Ghosts and "challenge a friend"**: every challenge run is recorded as it's driven (where the car
 is and which way it faces, ten times a second, packed to about 3.6 KB a minute, 4.8 KB as posted
-text) and posted with its
-time; the Worker takes the time only if its ghost agrees with it (through each gate at its pass
-time, as long as the time, never faster between two samples than the game goes) and keeps the
-best's ghost (16 MB of them a challenge at most, the slowest let go first to make room). A run races
-a ghost car in its ride and Garage look, its model made light (the pickup's 219,000 triangles to
-90,000 in 25 draws, simplified as it looks, in a worker of its own so the page never stalls, and
-raced from a run's start only if it's ready by GO), its wheels turning: your own best by default
-(with none yet, the board's quickest time with a ghost the game could plausibly be driven in,
-however far down), a friend's from their link,
-or that one from the board, with splits at each gate ("-1.2 s") and on the finish card, and a button to hide
-it. **Challenge a friend** (the finish card, your own row of a board) shares
-`/c?challenge=<id>&vs=<handle>`, the handle an HMAC the Worker makes once and keeps (never the
-player's id), through the browser's share sheet or copied; the page opens on it with "Ann's time
-to beat: 0:21.40 on the daily checkpoint sprint at Furka Pass, 5 h left" and races their ghost (a
-Moon challenge's in the Moon-only mode, spending no Earth drive), and the Worker gives the link a
-preview card of its own for chat apps at `/c`, the one page it runs for, so the home page stays a
-file served free (`src/drive-app/ghost-rules.js`, `challenge-ghost.js`, migration
-`0007_challenge_ghosts.sql`; see
+text) and posted with its time; the Worker takes the time only if its ghost agrees with it (through
+each gate at its pass time, as long as the time, never faster between two samples than the game
+goes) and keeps the best's ghost (16 MB of them a challenge at most, the slowest let go first to
+make room). A run races a ghost car in its ride and Garage look, its model made light (the pickup's
+219,000 triangles to 90,000 in 25 draws, simplified as it looks, in a worker of its own so the page
+never stalls, and raced from a run's start only if it's ready by GO), its wheels turning: your own
+best by default (with none yet, the board's quickest time with a ghost the game could plausibly be
+driven in, however far down), a friend's from their link, or that one from the board, with splits at
+each gate ("-1.2 s") and on the finish card, and a button to hide it. **Challenge a friend** (the
+finish card, your own row of a board) shares `/c?challenge=<id>&vs=<handle>`, the handle an HMAC the
+Worker makes once and keeps (never the player's id), through the browser's share sheet or copied;
+the page opens on it with "Ann's time to beat: 0:21.40 on the daily checkpoint sprint at Furka Pass,
+5 h left" and races their ghost (another world's challenge's on that world with the Earth closed,
+spending no Earth drive), and the Worker gives the link a preview card of its own for chat apps at
+`/c`, the one page it runs for, so the home page stays a file served free
+(`src/drive-app/ghost-rules.js`, `challenge-ghost.js`, migration `0007_challenge_ghosts.sql`; see
 [Ghosts and challenge a friend](docs/world-drive.md#ghosts-and-challenge-a-friend)).
 
-**Achievements and construction rides**: 25 badges (first drive; 10, 100 and 1,000 km; drives on the
-Moon; challenges finished and placed in, top 10, top 3 and first, on any board and on a daily,
-weekly or monthly one; parties with others; Garage looks changed and rides tried; 3, 7 and 30 days in
-a row), in a grid from the profile card with how far toward each ("34 / 100 km") and when it was
-earned, a toast as one comes ("Achievement: 100 km driven"), never during a challenge's run. Eight
-construction rides from the library come with them, driven at their real size and slow and heavy
-(the bulldozer and the skid steer turning on the spot): a skid steer for 10 km, a telehandler for
-three days in a row, a concrete mixer for a first challenge, a road roller for a party, a wheel loader
-for 100 km, a dump truck for ten challenges, a bulldozer for a top 10 and the vac truck for a weekly
-podium ("Unlocked: Vac truck", with the Garage a tap away), locked in the pickers and the Garage
-until then with what unlocks them. The Worker counts challenge results, placings (from the boards'
-final ranks), parties and days in a row itself; how far you drive, Moon drives, looks and rides
-tried come with the progress reports, a day's worth each at most; it keeps what's earned with the
-nickname (an account has what any of its nicknames earned) and checks a construction ride wherever
-it shows to others (boards, challenge times and ghosts, rooms). The owner's page counts how many
-players have each (`src/drive-app/achievement-rules.js`, `worker/drive/achievements.js`, migration
-`0009_achievements.sql`; see [Achievements and rewards](docs/world-drive.md#achievements-and-rewards)).
+**Achievements and construction rides**: 34 badges (first drive; 10, 100 and 1,000 km; drives on the
+Moon, Mars, Vesta and Ceres; challenges finished and placed in, top 10, top 3 and first, on any
+board and on a daily, weekly or monthly one; parties with others; Garage looks changed and rides tried; 3, 7 and 30
+days in a row), in a grid from the profile card with how far toward each ("34 / 100 km") and when it
+was earned, a toast as one comes ("Achievement: 100 km driven"), never during a challenge's run.
+Eight construction rides from the library come with them, driven at their real size and slow and
+heavy (the bulldozer and the skid steer turning on the spot): a skid steer for 10 km, a telehandler
+for three days in a row, a concrete mixer for a first challenge, a road roller for a party, a wheel
+loader for 100 km, a dump truck for ten challenges, a bulldozer for a top 10 and the vac truck for a
+weekly podium ("Unlocked: Vac truck", with the Garage a tap away), locked in the pickers and the
+Garage until then with what unlocks them. The Worker counts challenge results, placings (from the
+boards' final ranks), parties and days in a row itself; how far you drive, drives on the other worlds,
+looks and rides tried come with the progress reports, a day's worth each at most; it keeps what's
+earned with the nickname (an account has what any of its nicknames earned) and checks a construction
+ride wherever it shows to others (boards, challenge times and ghosts, rooms). The owner's page
+counts how many players have each (`src/drive-app/achievement-rules.js`,
+`worker/drive/achievements.js`, migration `0009_achievements.sql`; see [Achievements and
+rewards](docs/world-drive.md#achievements-and-rewards)).
 
-**The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page
-rather than streamed (`src/drive-app/moon.js`): its shapes are NASA's (LRO's laser altimeter, every
-quarter degree, `drive/public/moon/height.bin`), its colours LRO's camera's mosaic
-(`drive/public/moon/colour.webp`; `npm run make-moon` makes both from NASA's CGI Moon Kit), and the
-craters smaller than a few kilometres are made up, the same on every visit, down to 3 m. Its
-ground is a quadtree of squares on a cube blown up into a sphere, a point every 1.3 m by the
-vehicle. It has a dozen start spots (the Apollo sites, Tycho, Copernicus, a pole, the far side) and
-its own search; you drive it in a sixth of the Earth's gravity (jumps as high, two and a half times
-as long, scored as on the Earth), under black sky with the Earth hanging in it, with no water; and
-driving with others is there too, in the Moon's own rooms (see [Driving with others on the
-Moon](docs/world-drive.md#driving-with-others-on-the-moon)). It needs no Google tiles, so `npm run dev:drive` has the
-real Moon without a key (see [The Moon](docs/world-drive.md#the-moon)).
+**The Moon, Mars, Vesta and Ceres**: **Worlds**, at the top of the globe's panel (or **M** on the
+globe, or a link with `?worlds=1`), opens an orrery: the Solar System, its planets going round (still
+for those who ask for less motion), where the Earth, the Moon, Mars, Vesta and Ceres are picked, each
+with a sheet of its spots, your party's friends there and how many are driving there now (Mercury,
+Venus and the giants are there too, "not in the game yet" or with "no ground to drive on"). It's a
+native modal dialog (the five a radio group for the arrow keys), drawn by the page's own renderer, a
+chunk of its own with its pictures under `/orrery/` (`node scripts/make-orrery.mjs` makes them from
+the game's own maps and NASA's Blue Marble), so none of it is in the page's first load, and the ad
+waits while it's open (see [Picking a world](docs/world-drive.md#picking-a-world-the-orrery)). The worlds but the Earth are
+made in the page rather than streamed, the same way (`src/drive-app/body.js`, its heights and made-up ground in
+`body-height.js`), and what each is (its size, gravity, files, credit and made-up ground) is one
+list, `src/drive-app/worlds.js`, which the page, the Worker, the site and the tests share; each is
+free and never limited. Driving with others is on every world, each in rooms of its own (see
+[Worlds](docs/world-drive.md#worlds), with how to add one).
+
+The Moon's shapes are NASA's (LRO's laser altimeter, every quarter degree,
+`drive/public/moon/height.bin`), its colours LRO's camera's mosaic (`drive/public/moon/colour.webp`;
+`npm run make-moon` makes both from NASA's CGI Moon Kit), and the craters smaller than a few
+kilometres are made up, the same on every visit, down to 3 m. Its ground is a quadtree of squares on
+a cube blown up into a sphere, a point every 1.3 m by the vehicle. It has a dozen start spots (the
+Apollo sites, Tycho, Copernicus, a pole, the far side) and its own search; you drive it in a sixth of
+the Earth's gravity (jumps as high, two and a half times as long, scored as on the Earth), under
+black sky with the Earth hanging in it, with no water; and driving with others is there too, in the
+Moon's own rooms. It needs no Google tiles, so `npm run dev:drive` has the real Moon without a key
+(see [The Moon](docs/world-drive.md#the-moon)).
+
+Mars's shapes are NASA's too (Mars Global Surveyor's laser altimeter, MOLA, every eighth of a degree
+over the areoid, `drive/public/mars/height.bin`, 8.3 MB), its colours the Viking orbiters' mosaic as
+the USGS has it (`drive/public/mars/colour.webp`; `npm run make-mars` makes both, in about half an
+hour), and its craters, fewer and more worn than the Moon's, are made up below that. It has a
+dozen start spots (Olympus Mons's summit caldera, Valles Marineris, the rovers' and landers' sites,
+Hellas, Noctis Labyrinthus, Arsia Mons, Korolev's ice) and its own search of 55 places; you drive it
+in 38% of the Earth's gravity (jumps as high and about 1.6 times as long), under a dusty
+butterscotch sky with Phobos in it, with no water; and driving with others is there too, in Mars's
+own rooms (see [Mars](docs/world-drive.md#mars)).
+
+Vesta's and Ceres's shapes are from NASA's Dawn mission (the DLR's shape models from its framing
+camera, and its photographs, as the USGS has them; `npm run make-asteroids` makes
+`drive/public/vesta/` and `drive/public/ceres/` from them, every eighth of a degree, Vesta's heights
+in steps of 2 m as its 81 km of relief is more than 16-bit metres hold), and their craters under
+about a kilometre are made up. Each has eleven start spots (Rheasilvia's central peak, the Snowman
+craters and the troughs on Vesta; Occator's bright spots, Ahuna Mons and Kerwan on Ceres) and its own
+search of every place the IAU has named; you drive them in 2.5% and 2.9% of the Earth's gravity
+(jumps as high and about six times as long), under a black sky full of stars. They're small and far
+from round, so up there is along a spheroid their gravity holds level, not out from their middle
+(`src/drive-app/level.js`, which the page and the Worker share), and the scene follows the car,
+moved to it every 1 km on Vesta and 1.5 km on Ceres with everything in it carried, a challenge's run
+and its ghost too, and the others' cars driving with you there, in each world's own rooms (see
+[Vesta and Ceres](docs/world-drive.md#vesta-and-ceres)).
 
 World Drive's fourteen cars are models from Sketchfab (CC BY, credited in its About box and ride
 picker): sports cars and supercars (a retro wedge, a formula racer, a hypercar, a cyber muscle car)
@@ -935,22 +1030,26 @@ finding its wheels so they spin and steer (a three-wheeler's too, and standing u
 lying down, or painting over a real place's number plate), and `npm run drive-car-thumbs` draws its
 picture for the picker (see [World Drive's cars](docs/world-drive.md#world-drives-cars)).
 
-A **Supporter Pass** (a subscription, CA$1.99/month, towards the running costs; passes bought before it was one are kept for good) unlocks twenty more
-rides: the six cars levels bring, at once; seven cars of its own (a neon racer, a night cruiser, a
-dune buggy, a farm truck, a police cruiser and two showpieces, a hypercar and a cyber muscle car);
-and seven built in code (a sports coupe, a monster truck, a city bus, a hovercraft, a lunar rover, a
-flying saucer and a rocket dragster), each handling its own way and each with moving parts of its own; every look in the Garage at once (paint, finishes from satin to chrome and colour-shift,
-decals, rims, a neon underglow in eight colours and a rainbow, horns, seventeen more boost styles,
-flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
-30 Earth drives a day (everyone else gets one, then the Moon, which is free). It's bought with a Stripe Payment Link after
+A **Supporter Pass** (a subscription, CA$1.99/month, towards the running costs; passes bought before
+it was one are kept for good) unlocks twenty more rides: the six cars levels bring, at once;
+seven cars of its own (a neon racer, a night cruiser, a dune buggy, a farm truck, a police cruiser
+and two showpieces, a hypercar and a cyber muscle car); and seven built in code (a sports coupe, a
+monster truck, a city bus, a hovercraft, a lunar rover, a flying saucer and a rocket dragster), each
+handling its own way and each with moving parts of its own; every look in the Garage at
+once (paint, finishes from satin to chrome and colour-shift, decals, rims, a neon underglow in eight
+colours and a rainbow, horns, seventeen more boost styles, flame colours and trails, some of which
+levels unlock over time), +50% XP, a ⭐ on the leaderboard and 30 Earth drives a day (everyone else
+gets one, then the Moon, Mars, Vesta and Ceres, which are free). It's bought with a Stripe Payment Link after
 signing in, so it's yours in any browser; Stripe's signed webhook records it. Signing in is with
 Google or with a **username and password** (PBKDF2-SHA-256 at the Workers runtime's most, 100,000
-iterations, with a salt of its own; guessing slowed per address and per username without letting
-a stranger elsewhere lock the owner out (Google's sign-in always works); no email, so a password can't be recovered unless Google is linked too), and
-either can be linked to the other, with fresh proof of each, never the session alone: one account, with its pass, level, times and Garage, whichever
-way you signed in (see [Username and password accounts](docs/world-drive.md#username-and-password-accounts)). Buying
-stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
-[Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
+iterations, with a salt of its own; guessing slowed per address and per username without letting a
+stranger elsewhere lock the owner out (Google's sign-in always works); no email, so a password can't
+be recovered unless Google is linked too), and either can be linked to the other, with fresh proof
+of each, never the session alone: one account, with its pass, level, times and Garage, whichever way
+you signed in (see [Username and password
+accounts](docs/world-drive.md#username-and-password-accounts)). Buying stays off ("Coming soon")
+until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see [Supporter Pass (buying
+it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
 
 **Ads**: one Google AdSense banner on the globe only (never while driving, paused or on the places'
 pages), off until `ADSENSE_CLIENT` is set, never shown (nor Google's script loaded) for a supporter,
@@ -959,17 +1058,19 @@ loaded lazily once the globe is up, with `/ads.txt` from the Worker; consent is 
 
 For search engines and links, the site has a page for each start spot and a few more famous places
 (`/drive/<place>/`, built from `drive/site/`, each with a **Drive here** that opens the game with the
-place pinned), a page about driving on the Moon (`/moon/`) and one for each of the Moon's start spots
-(`/moon/<place>/`, from `drive/site/moon.js`, whose **Drive here** turns the globe to the Moon with
-the spot pinned), a sitemap, robots.txt, structured data and link cards (`npm run drive-site-images`
-draws them, and `npm run drive-site-images -- moon` the Moon's, from the game itself); see
+place pinned), a page about driving on each other world (`/moon/`, `/mars/`, `/vesta/`, `/ceres/`)
+and one for each of their start spots (`/moon/<place>/` and so on, from `drive/site/moon.js`,
+`mars.js`, `vesta.js` and `ceres.js`, whose **Drive here** turns the globe to that world with the
+spot pinned), a sitemap, robots.txt, structured data and link cards (`npm run drive-site-images`
+draws them, and `npm run drive-site-images -- moon mars` the Moon's and Mars's, from the game itself;
+Vesta's and Ceres's aren't drawn yet, so their pages have World Drive's own card); see
 [Search engines](docs/world-drive.md#search-engines).
 
 For the owner, `/admin.html` (signed in with a Google account in `ADMIN_EMAILS`) shows the **play
 stats**, counts a day with nothing of who (no cookie): visits, play time, how far visits get, devices,
-the Moon, searches by kind, problems and the rest; and **where people drop in**, a heat map of the
-Earth and of the Moon with the top places named and a link into the game at each, for today, the
-week or the month; and the **challenges**: the six live and the six next, your picks however far
+the worlds, searches by kind, problems and the rest; and **where people drop in**, a heat map of
+each world with the top places named and a link into the game at each, for today, the
+week or the month; and the **challenges**: the fifteen live and the fifteen next, your picks however far
 ahead, any period's chosen by hand, and busy places approved for the rotation. Each drop-in's place is only its cell of a grid about a kilometre each way, sent
 with the play stats and counted once a day for each visitor and each visit, an Earth place only from
 a visit the Earth's caps let through, and none from the owner's (`src/drive-app/dropin-cells.js`,
@@ -981,7 +1082,8 @@ the owner's Google Cloud steps (a separate project and key, restricted to worldd
 Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
 `npm run test:drive-seo`, `npm run test:drive-live`, `npm run test:drive-live-ui`,
-`npm run test:drive-levels`, `npm run test:drive-levels-ui` and `npm run test:drive-moon-ui`.
+`npm run test:drive-levels`, `npm run test:drive-levels-ui`, `npm run test:drive-moon-ui`,
+`npm run test:drive-mars-ui`, `npm run test:drive-asteroids-ui` and `npm run test:drive-orrery-ui`.
 
 ## About the Sketchfab model
 
@@ -1012,6 +1114,7 @@ src/placements.js   models' positions saved on the live site for everyone (Save 
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
 src/legend.js       the Controls panel: the keys for what you're doing now
+src/build-stages.js the stage picker for a model built in stages (C32's take-up: demolition to built)
 src/player.js       the construction workers you walk as (K): their bones, their walk, third and first person (C)
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()
@@ -1070,6 +1173,9 @@ public/library/     downloaded models and our own, library.json catalog, thumbs/
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
 scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it
+scripts/make-mars.mjs   World Drive's Mars (drive/public/mars/): MOLA's heights and the Viking mosaic
+scripts/make-asteroids.mjs   World Drive's Vesta and Ceres (drive/public/vesta/, ceres/): Dawn's maps
+scripts/make-orrery.mjs   World Drive's orrery pictures (drive/public/orrery/): the worlds' own, small
 scripts/make-towns.mjs  the towns World Drive's admin page names drop-in places by (Natural Earth's)
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here

@@ -11,6 +11,7 @@ import {
 	MathUtils,
 	Mesh,
 	NormalBlending,
+	Quaternion,
 	ShaderMaterial,
 	SRGBColorSpace,
 	Vector3,
@@ -50,6 +51,7 @@ const _a = new Vector3();
 const _b = new Vector3();
 const _r = new Vector3();
 const _hue = new Color();
+const _turn = new Quaternion();
 // A batch's update() with nothing of a style's own.
 const NO_HOOKS = {};
 
@@ -688,10 +690,14 @@ export class Batch {
 			size: 1, grow: 0, aspect: 1, turn: 0, spin: 0, alpha: 1, frame: 0, mode: FACING, drag: 0, fall: 0, phase: 0, kind: 0, fresh: false,
 		} ) );
 		this.next = 0;
-		// What its particles fall by (m/s², the world's own: drive-bursts.js has the Moon's there).
+		// What its particles fall by (m/s², the world's own: drive-fx.js sets it, a positive `fall`'s
+		// share of it; what rises, a negative `fall`, rises by the Earth's on any world).
 		this.gravity = 9.81;
 		this.capacity = particles + quads;
 		this.count = 0;
+		// What a style keeps of its own in the scene besides its particles, carried with them when the
+		// scene's frame moves (see transform): onTransform( matrix, turn ), or null.
+		this.onTransform = null;
 		// What a style's look() may change about how a particle shows this frame (see update).
 		this.view = { position: new Vector3(), sx: 1, sy: 1, turn: 0, alpha: 1, frame: 0 };
 
@@ -836,7 +842,9 @@ export class Batch {
 
 				}
 
-				p.velocity.y -= this.gravity * p.fall * dt;
+				// What falls (a positive `fall`) falls by the world's gravity; what rises (smoke, flame, a
+				// negative `fall`) rises as it always has, on any world.
+				p.velocity.y -= ( p.fall > 0 ? this.gravity : 9.81 ) * p.fall * dt;
 				if ( p.drag ) p.velocity.multiplyScalar( Math.max( 0, 1 - p.drag * dt ) );
 				step?.( p, dt );
 				p.position.addScaledVector( p.velocity, dt ).addScaledVector( p.carry, dt );
@@ -867,6 +875,25 @@ export class Batch {
 			attribute.needsUpdate = true;
 
 		}
+
+	}
+
+	// The scene's frame moved (drive-fx.js's transform): each live particle carried by `matrix`
+	// (turning and moving only), where it is and the ways it moves and lies turned with it.
+	transform( matrix ) {
+
+		_turn.setFromRotationMatrix( matrix );
+		for ( const p of this.items ) {
+
+			if ( p.age >= p.life ) continue;
+			p.position.applyMatrix4( matrix );
+			p.velocity.applyQuaternion( _turn );
+			p.carry.applyQuaternion( _turn );
+			p.axis.applyQuaternion( _turn );
+
+		}
+
+		this.onTransform?.( matrix, _turn );
 
 	}
 
@@ -2996,6 +3023,17 @@ const STYLES = {
 			const batch = new Batch( root, { particles: 60, quads: 50, blending: AdditiveBlending } );
 			const dust = emitter();
 			const tail = Array.from( { length: TAIL }, () => ( { at: new Vector3(), velocity: new Vector3(), born: - Infinity, width: 0 } ) );
+			// The tail's points are in the scene too.
+			batch.onTransform = ( matrix, turn ) => {
+
+				for ( const point of tail ) {
+
+					point.at.applyMatrix4( matrix );
+					point.velocity.applyQuaternion( turn );
+
+				}
+
+			};
 			const white = new Color( 0xc8f2ff );
 			const pale = new Color( 0xcfe6ff );
 			const blue = new Color( 0x3a5cff );
@@ -3167,6 +3205,17 @@ const STYLES = {
 			const notes = emitter();
 			const colours = [ 0xff4d8d, 0x3dbdff, 0xffc21a, 0x4ddc6b, 0xa86bff, 0xff8a3d ];
 			const staff = Array.from( { length: STAFF }, () => ( { at: new Vector3(), velocity: new Vector3(), born: - Infinity } ) );
+			// The staff's points are in the scene too (as the comet's tail's).
+			batch.onTransform = ( matrix, turn ) => {
+
+				for ( const point of staff ) {
+
+					point.at.applyMatrix4( matrix );
+					point.velocity.applyQuaternion( turn );
+
+				}
+
+			};
 			// Inked dark, so it reads on a light road or a pale sky alike.
 			const ink = new Color( 0x2a2440 );
 			const axis = new Vector3();

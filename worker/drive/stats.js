@@ -8,6 +8,7 @@ import { database } from './players.js';
 import { KEEP as KEEP_SCORES } from './scores.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
+import { OFF_EARTH } from '../../src/drive-app/worlds.js';
 
 // Play stats (docs/world-drive.md, "Play stats"): counts a day in D1's stats_daily, for the owner's
 // admin page (drive/public/admin.html). The page counts what's played (src/drive-app/stats.js) and
@@ -98,9 +99,10 @@ export async function postStats( context ) {
 }
 
 // The kinds of visit countVisit counts (metric 'visit_kind'): on the Earth ('earth', a supporter's
-// 'earth_supporter'), the owner's, and on the Moon: opened on a link to it, or over the day's cap for
-// everyone or the visitor's own (the page opens on the Moon instead).
-const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', 'moon_link', 'moon_daily_cap', 'moon_visitor_cap' ] );
+// 'earth_supporter'), the owner's, on a free world opened on a link to it ('moon_link',
+// 'mars_link', 'vesta_link', 'ceres_link'), and on the Moon over the day's cap for everyone or the visitor's own (the page opens
+// on the Moon instead).
+const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', ...OFF_EARTH.map( world => `${ world }_link` ), 'moon_daily_cap', 'moon_visitor_cap' ] );
 
 // A visit handed out at `now`: counted for the day and its hour (UTC). Never in the visit's way: a
 // count that fails is only logged.
@@ -111,7 +113,7 @@ export async function countVisit( env, now, kind = '' ) {
 		if ( ! env.DB ) return;
 		const hour = String( new Date( now ).getUTCHours() ).padStart( 2, '0' );
 		const counts = [ [ 'visit', 'all', 1 ], [ 'visit_hour', hour, 1 ] ];
-		// Where the visit went (VISIT_KINDS): the Earth, or the Moon and why.
+		// Where the visit went (VISIT_KINDS): the Earth, or another world and why.
 		if ( VISIT_KINDS.has( kind ) ) counts.push( [ 'visit_kind', kind, 1 ] );
 		await add( env.DB, dayOf( now ), counts );
 

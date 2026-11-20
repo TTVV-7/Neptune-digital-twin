@@ -1,8 +1,9 @@
 import { json } from '../http.js';
 import { CELL, RADIUS, WORLDS, cellBounds, cellMiddle, cellOf, checkCell, metresOn } from '../../src/drive-app/dropin-cells.js';
 import { dayOf } from '../../src/drive-app/levels.js';
-import { MOON_PLACES } from '../../src/drive-app/moon-places.js';
 import { SPOTS } from '../../src/drive-app/places.js';
+import { PLACES_ON } from '../../src/drive-app/world-places.js';
+import { EARTH, OFF_EARTH, WORLDS as WORLD_DATA } from '../../src/drive-app/worlds.js';
 import { PLACES } from '../../drive/site/places.js';
 import { database } from './players.js';
 import { addressOf, setting } from './settings.js';
@@ -21,8 +22,8 @@ import { KEEP_DAYS, adminAccount, askedDays } from './admin.js';
 // For what comes next (challenges picked from where people go), topPlaces is the query: a world's
 // most dropped-in places over a period, named, a featured place's cells together; and topCells the
 // cells themselves. Their ranking can be pushed by anyone with many addresses passing the robot
-// check (a Moon place most cheaply: Moon visits aren't capped), so it's a list to offer the owner,
-// not one to pick from blindly: see topPlaces.
+// check (a place on a world but the Earth most cheaply: their visits aren't capped), so it's a list
+// to offer the owner, not one to pick from blindly: see topPlaces.
 //
 // Settings, none of which need setting: DROPIN_PLACES_DAILY, DROPIN_PLACES_PER_VISITOR and
 // DROPIN_PLACES_PER_VISIT, the most places counted a day on each world for everyone (DAILY), for
@@ -58,35 +59,38 @@ const KEPT = 10 * 60 * 1000;
 const KEPT_LONG = 60 * 60 * 1000;
 const LONG = 30;
 const ANSWERS = 8;
-// How a cell is named: a featured place (a start spot, a place's page, a Moon place) whose pin is
-// within FEATURED_REACH m of the cell (in it, or so near its edge that a drop-in there, which starts
-// within 60 m of the pin on the street or a bridge's deck found nearest it, or a search of it pinned
-// a little off, can be in it) is its name, and its cells are one place; else the nearest town
+// How a cell is named: a featured place (a start spot, a place's page, another world's place) whose
+// pin is within FEATURED_REACH m of the cell (in it, or so near its edge that a drop-in there, which
+// starts within 60 m of the pin on the street or a bridge's deck found nearest it, or a search of it
+// pinned a little off, can be in it) is its name, and its cells are one place; else the nearest town
 // (drive/public/places/towns.tsv) or featured place within NEAR m: a town's own name within TOWN m,
 // else how far it is and which way ("12 km NE of Lyon", "1 km S of Golden Gate Bridge"); else its
-// coordinates.
+// coordinates. The other worlds' places are few and far apart, so they name cells further off, more
+// or less in step with the world's size: 300 km on the Moon, 500 km on Mars (about twice the
+// Moon's size), 70 km on Vesta (263 km across its sphere, with about 120 named features) and 100 km
+// on Ceres (470 km, about 130).
 const FEATURED_REACH = 250;
 const TOWN = 2000;
-const NEAR = { earth: 50000, moon: 300000 };
+const NEAR = { earth: 50000, moon: 300000, mars: 500000, vesta: 70000, ceres: 100000 };
 const TOWNS = '/places/towns.tsv';
 const SITE = 'https://worlddrive.app';
 const COMPASS = [ 'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW' ];
 const DAY = 24 * 60 * 60 * 1000;
 
-// The game's own places, with the link that opens it there: the start spots and the Moon's places
-// by id, and the places' pages' others by where their Drive here pins them (drive/site/build.js's
-// playLink).
+// The game's own places, with the link that opens it there: the start spots and each other world's
+// places (world-places.js: the Moon's, Mars's, Vesta's, Ceres's) by id, and the places' pages'
+// others by where their Drive here pins them (drive/site/build.js's playLink).
 const FEATURED_PLACES = {
 	earth: [
 		...SPOTS.map( spot => ( { name: spot.name, region: spot.region, lat: spot.lat, lon: spot.lon, link: `/?spot=${ spot.id }` } ) ),
-		...PLACES.filter( place => place.at ).map( place => ( { name: place.name, region: place.region, lat: place.at.lat, lon: place.at.lon, link: atLink( place.at.lat, place.at.lon, place.name, place.region, 'earth', place.at.heading ) } ) ),
+		...PLACES.filter( place => place.at ).map( place => ( { name: place.name, region: place.region, lat: place.at.lat, lon: place.at.lon, link: atLink( place.at.lat, place.at.lon, place.name, place.region, EARTH, place.at.heading ) } ) ),
 	],
-	moon: MOON_PLACES.map( place => ( { name: place.name, region: place.region, lat: place.lat, lon: place.lon, link: `/?spot=${ place.id }` } ) ),
+	...Object.fromEntries( OFF_EARTH.map( world => [ world, ( PLACES_ON[ world ] ?? [] ).map( place => ( { name: place.name, region: place.region, lat: place.lat, lon: place.lon, link: `/?spot=${ place.id }` } ) ) ] ) ),
 };
 
 // The day DriveLimits last said each world's places today were all counted, so this Worker
 // instance asks it no more for that world that day (each ask is a Durable Object request).
-const fullDay = { earth: null, moon: null };
+const fullDay = Object.fromEntries( WORLDS.map( world => [ world, null ] ) );
 // Visits DriveLimits said can add no more places today, by id, each with when that ends (its token
 // running out, or midnight UTC if sooner): this Worker instance asks no more for them, as live.js
 // does with the visits it has turned away.
@@ -105,12 +109,13 @@ let featured = null;
 export async function recordPlaces( { request, env, limits, now }, visit, places ) {
 
 	const day = dayOf( now );
-	// An Earth place only from a visit the Earth's caps let through (a Moon visit's token, which costs
-	// nothing but the robot check, posts the Moon's alone), none from the owner's (who opens the game
-	// at the admin page's places to look at them), and none on a world whose places today are all
-	// counted, nor from a visit that can add no more.
+	// An Earth place only from a visit the Earth's caps let through (a free world's visit's token,
+	// which costs nothing but the robot check, posts the free worlds' alone: worlds.js, every one but
+	// the Earth), none from the owner's (who opens the game at the admin page's places to look at
+	// them), and none on a world whose places today are all counted, nor from a visit that can add
+	// no more.
 	if ( visit.owner ) return 0;
-	const asking = places.filter( cell => ( visit.earth || cell.world === 'moon' ) && fullDay[ cell.world ] !== day );
+	const asking = places.filter( cell => ( visit.earth || WORLD_DATA[ cell.world ].free ) && fullDay[ cell.world ] !== day );
 	if ( ! asking.length || ! env.DB || doneVisits.get( visit.id ) > now ) return 0;
 	try {
 
@@ -144,7 +149,7 @@ export async function recordPlaces( { request, env, limits, now }, visit, places
 
 }
 
-// The most dropped-in cells of `world` ('earth' or 'moon') from the UTC day `from` to `to`
+// The most dropped-in cells of `world` (one of WORLDS) from the UTC day `from` to `to`
 // ('2026-11-16', both included), at most `most` (1 to HEAT): [ { world, row, column, lat, lon, n,
 // days } ], the most first (then those on the most days), with each cell's middle, its drop-ins
 // (each visitor once a day there) and on how many of the days it had any. One query, reading only
@@ -163,13 +168,13 @@ export async function topCells( db, { world, from, to, most = TOP } ) {
 // What challenges picked from where people go start from.
 //
 // Its ranking isn't proof against many addresses: each visitor is an address passing the robot
-// check, and Moon visits aren't capped, so someone with a few hundred addresses (or /48s) and robot
-// checks can put a cell of their choosing (a private address, say) at the top of the Moon's, and of
-// the Earth's at the cost of the day's drives. So a challenge picked by itself should be one of the
-// featured places (featuredOnly), or a cell the owner has approved; the busy cells that aren't
-// featured are for offering the owner to choose from. And it reads the period's rows each time it's
-// called (up to DAILY a day of them), so a caller keeps what it picked (the challenge itself) rather
-// than asking again for each request.
+// check, and visits to the free worlds aren't capped, so someone with a few hundred addresses (or
+// /48s) and robot checks can put a cell of their choosing (a private address, say) at the top of
+// theirs, and of the Earth's at the cost of the day's drives. So a challenge picked by itself should
+// be one of the featured places (featuredOnly), or a cell the owner has approved; the busy cells
+// that aren't featured are for offering the owner to choose from. And it reads the period's rows
+// each time it's called (up to DAILY a day of them), so a caller keeps what it picked (the challenge
+// itself) rather than asking again for each request.
 export async function topPlaces( db, { world, from, to, most = TOP, featuredOnly = false }, named = null ) {
 
 	return placesOf( world, await topCells( db, { world, from, to, most: HEAT } ), named, Math.max( 1, Math.floor( most ) || 1 ), featuredOnly );
@@ -238,17 +243,17 @@ function placesOf( world, cells, named, most, featuredOnly = false ) {
 // GET /api/admin/dropins?days=30, for the last `days` UTC days, today's (so far) included (30 if
 // unset, at most a year: admin.js's askedDays), to an account in ADMIN_EMAILS (adminAccount: 401
 // signed out, 403 anyone else, 429 past ADMIN_LOOKS a minute):
-//   { from, to, first, cell, kept, worlds: { earth: WORLD, moon: WORLD } }
+//   { from, to, first, cell, kept, worlds: { earth: WORLD, moon: WORLD, mars: WORLD, ... } } (each world's)
 // WORLD: { dropins, places, heat: [ [ lat, lon, n ] ], top: [ { lat, lon, n, days, cells, name, region, link, featured } ] }
 // first: the first day any place was counted (null for none yet); cell: the cells' size (m); kept:
 // how many days rows are kept. dropins and places: the period's drop-ins counted (each visitor once
 // a day in each cell) and the cells they were in; heat: its HEAT most dropped-in cells' middles, the
 // most first; top: its TOP places (placesOf: a featured place's cells together), named with the
-// game's link there. Rows older than KEEP_DAYS go as it's asked, as stats_daily's do. Three queries
-// in one batch: each world's cells, which reads that world's rows for the period once (and no more
-// than DAILY a day of them), and the first day. The answer is kept in this Worker instance KEPT ms
-// (KEPT_LONG past LONG days) for that period and day (X-Dropins-Cache says hit or miss), after the
-// account and ADMIN_LOOKS are checked: the same look again reads nothing.
+// game's link there. Rows older than KEEP_DAYS go as it's asked, as stats_daily's do. A query for
+// each world in one batch, its cells, which reads that world's rows for the period once (and no
+// more than DAILY a day of them), and one for the first day. The answer is kept in this Worker
+// instance KEPT ms (KEPT_LONG past LONG days) for that period and day (X-Dropins-Cache says hit or
+// miss), after the account and ADMIN_LOOKS are checked: the same look again reads nothing.
 export async function adminDropins( context ) {
 
 	const { url, now } = context;
@@ -386,11 +391,11 @@ export function nameCell( world, lat, lon, towns = null ) {
 	let nearest = null;
 	const consider = ( place, metres, town ) => {
 
-		if ( metres <= NEAR[ world ] && ( ! nearest || metres < nearest.metres ) ) nearest = { place, metres, town };
+		if ( metres <= ( NEAR[ world ] ?? 0 ) && ( ! nearest || metres < nearest.metres ) ) nearest = { place, metres, town };
 
 	};
 	for ( const place of FEATURED_PLACES[ world ] ) consider( place, metresOn( world, lat, lon, place.lat, place.lon ), false );
-	if ( world === 'earth' && towns ) {
+	if ( world === EARTH && towns ) {
 
 		const town = towns.nearest( lat, lon, NEAR.earth );
 		if ( town ) consider( town, town.metres, true );
@@ -404,24 +409,25 @@ export function nameCell( world, lat, lon, towns = null ) {
 
 	}
 
-	// (A Moon place's region says what it is, "85 km across, bright rays", which isn't true of a
-	// place some way off it.)
+	// (Another world's place's region says what it is, "85 km across, bright rays", which isn't true
+	// of a place some way off it.)
 	const { place, metres, town } = nearest;
 	const name = town && metres <= TOWN ? place.name : `${ Math.max( 1, Math.round( metres / 1000 ) ) } km ${ bearing( place.lat, place.lon, lat, lon ) } of ${ place.name }`;
-	const region = world === 'earth' ? place.region : '';
+	const region = world === EARTH ? place.region : '';
 	return { name, region, link: atLink( lat, lon, name, region, world ), featured: false };
 
 }
 
 // The game's address with ( lat, lon ) pinned on `world` as `name` in `region` (places.js's
-// linkedPlace; a nameless one is a dropped pin), facing `heading` if given.
+// linkedPlace, which takes world=<id> for any world but the Earth; a nameless one is a dropped pin),
+// facing `heading` if given.
 function atLink( lat, lon, name, region, world, heading ) {
 
 	const params = new URLSearchParams( { at: `${ lat },${ lon }` } );
 	if ( name ) params.set( 'name', name );
 	if ( region ) params.set( 'region', region );
 	if ( Number.isFinite( heading ) ) params.set( 'heading', String( heading ) );
-	if ( world === 'moon' ) params.set( 'world', 'moon' );
+	if ( world !== EARTH ) params.set( 'world', world );
 	return `/?${ params }`;
 
 }

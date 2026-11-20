@@ -39,6 +39,10 @@
 // friend on the other world is "on the Moon" (or "on the Earth") in the list, and Go to or a toast's
 // Join takes you to them across worlds; the party's banner on the Moon's globe; a phone upright and
 // on its side; and the frame time with five others' cars drawn on the Moon.
+// On Mars and Vesta (protocol v3): two pages at Bradbury Landing see each other's cars on Mars's
+// ground; a party from Mars opened on the Earth (banner, "on Mars" in the list, Join and Go to beside
+// her there); on Vesta, across the driver's and the viewer's recentres, the ghost never jumps; and a
+// page told Mars is spent opens no room there but does on Vesta.
 //
 // Visit tokens are made here with Turnstile's documented test secret, as /api/visit makes them
 // (the test pad has no visit of its own: main.js's dev-only seam hands each page one). The
@@ -61,6 +65,8 @@ import {
 	FLAGS, INTERP_MS, NEARBY_SHARDS, PARTY_MAX, PROTOCOL, PROTOCOL_WORLDS, SEND_HZ, STALE_MS, cellOf, makePartyCode, packState, parseRoom, shardOf, toMoonFrame,
 } from '../src/drive-app/live-protocol.js';
 import { MOON_SPOTS } from '../src/drive-app/moon-places.js';
+import { SPOTS_ON } from '../src/drive-app/world-places.js';
+import { WORLDS } from '../src/drive-app/worlds.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { startVite, startWorker } from './worker-harness.mjs';
 
@@ -242,7 +248,9 @@ async function restartWorker( vars ) {
 // now asking and going idle as `online` says ({ poll, idle }, ms), if it says. rooms: the room of
 // each connection it opens to one, in order; sent: what it has sent the rooms, { at, t } (t a
 // message's type, or a keepalive's text), as Playwright saw each frame go.
-async function livePage( { token, player = null, path = '/', touch = false, viewport = touch ? { width: 390, height: 760 } : { width: 900, height: 560 }, online = null, stats = false } ) {
+// config: a function taking /api/config's answer and giving the one the page gets (one world's
+// budget spent, say).
+async function livePage( { token, player = null, path = '/', touch = false, viewport = touch ? { width: 390, height: 760 } : { width: 900, height: 560 }, online = null, stats = false, config = null } ) {
 
 	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch } );
 	await context.addInitScript( ( { visit, player, online, stats } ) => {
@@ -297,6 +305,12 @@ async function livePage( { token, player = null, path = '/', touch = false, view
 
 	} );
 	await page.route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
+	if ( config ) await page.route( '**/api/config', async route => {
+
+		const res = await route.fetch();
+		await route.fulfill( { response: res, json: config( await res.json() ) } );
+
+	} );
 	await openTestPad( page, path );
 	return page;
 
@@ -354,6 +368,17 @@ function whereAll( page ) {
 		return { own, others };
 
 	} );
+
+}
+
+// M back to the globe, as a player presses it: only ever on a page that's driving (or paused), as M
+// on the globe opens the worlds (the orrery) instead. Then on the globe, the orrery not open.
+async function mToGlobe( page ) {
+
+	assert.notEqual( await page.evaluate( () => window.drive.mode ), 'globe', 'M pressed on the globe would open the worlds' );
+	await page.keyboard.press( 'KeyM' );
+	await page.waitForFunction( () => window.drive.mode === 'globe', null, { timeout: 30000 } );
+	assert.equal( await page.evaluate( () => window.drive.orrery.isOpen ), false );
 
 }
 
@@ -537,35 +562,53 @@ describe( 'World Drive, driving with others', () => {
 		await a.evaluate( () => window.track = null );
 		await b.evaluate( () => window.track = null );
 
-		// Each frame B drew while A was moving, against where A was INTERP_MS before.
-		const errors = [];
-		const turns = [];
-		for ( const [ t, ...rest ] of drawn ) {
+		// Each frame B drew while A was moving, against where A was INTERP_MS (and `lag` ms) before.
+		// A state is as of when the room heard it: up to a frame after A's car was there (A sends at
+		// the end of its frame), plus the trip to the room, which B can't take out (it takes out only
+		// the room's trip to it). So B draws A a little later than INTERP_MS, by a lag that's steady:
+		// found here as the one B's drawing fits A's way best, and checked to be no more than one of
+		// A's frames and 50 ms. At that lag, B's drawing is on A's way to a few tens of centimetres.
+		// (On a machine drawing in software at 11 frames a second, the lag was 60 ms, and 0.92 m at
+		// none, 0.11 m at it.)
+		const along = lag => {
 
-			const when = t - INTERP_MS;
-			const i = truth.findIndex( row => row[ 0 ] > when );
-			if ( when < started + 500 || i < 1 ) continue;
-			const [ t0, ...s0 ] = truth[ i - 1 ];
-			const [ t1, ...s1 ] = truth[ i ];
-			const u = ( when - t0 ) / ( t1 - t0 );
-			const p = [ 0, 1, 2 ].map( k => s0[ k ] + ( s1[ k ] - s0[ k ] ) * u );
-			if ( distance( s0, s1 ) < 1e-3 ) continue;
-			errors.push( distance( p, rest ) );
-			// Its turn then, between the two (near enough to a slerp, a frame apart).
-			const sign = Math.sign( [ 3, 4, 5, 6 ].reduce( ( sum, k ) => sum + s0[ k ] * s1[ k ], 0 ) ) || 1;
-			const q = [ 3, 4, 5, 6 ].map( k => s0[ k ] + ( s1[ k ] * sign - s0[ k ] ) * u );
-			const length = Math.hypot( ...q );
-			const dot = Math.abs( q.reduce( ( sum, value, k ) => sum + value / length * rest[ k + 3 ], 0 ) );
-			turns.push( 2 * Math.acos( Math.min( 1, dot ) ) * 180 / Math.PI );
+			const errors = [];
+			const turns = [];
+			for ( const [ t, ...rest ] of drawn ) {
 
-		}
+				const when = t - INTERP_MS - lag;
+				const i = truth.findIndex( row => row[ 0 ] > when );
+				if ( when < started + 500 || i < 1 ) continue;
+				const [ t0, ...s0 ] = truth[ i - 1 ];
+				const [ t1, ...s1 ] = truth[ i ];
+				const u = ( when - t0 ) / ( t1 - t0 );
+				const p = [ 0, 1, 2 ].map( k => s0[ k ] + ( s1[ k ] - s0[ k ] ) * u );
+				if ( distance( s0, s1 ) < 1e-3 ) continue;
+				errors.push( distance( p, rest ) );
+				// Its turn then, between the two (near enough to a slerp, a frame apart).
+				const sign = Math.sign( [ 3, 4, 5, 6 ].reduce( ( sum, k ) => sum + s0[ k ] * s1[ k ], 0 ) ) || 1;
+				const q = [ 3, 4, 5, 6 ].map( k => s0[ k ] + ( s1[ k ] * sign - s0[ k ] ) * u );
+				const length = Math.hypot( ...q );
+				const dot = Math.abs( q.reduce( ( sum, value, k ) => sum + value / length * rest[ k + 3 ], 0 ) );
+				turns.push( 2 * Math.acos( Math.min( 1, dot ) ) * 180 / Math.PI );
 
-		errors.sort( ( x, y ) => x - y );
-		turns.sort( ( x, y ) => x - y );
+			}
+
+			errors.sort( ( x, y ) => x - y );
+			turns.sort( ( x, y ) => x - y );
+			return { lag, errors, turns };
+
+		};
 		const at = ( list, share ) => list[ Math.min( list.length - 1, Math.floor( list.length * share ) ) ];
-		const summary = `${ errors.length } frames: median ${ at( errors, 0.5 )?.toFixed( 2 ) } m, 90 % ${ at( errors, 0.9 )?.toFixed( 2 ) } m, most ${ errors.at( - 1 )?.toFixed( 2 ) } m; turned ${ at( turns, 0.5 )?.toFixed( 1 ) }° (median), ${ turns.at( - 1 )?.toFixed( 1 ) }° at most`;
+		const frames = truth.slice( 1 ).map( ( row, i ) => row[ 0 ] - truth[ i ][ 0 ] ).sort( ( x, y ) => x - y );
+		const frame = at( frames, 0.5 );
+		const fits = [];
+		for ( let lag = 0; lag <= 200; lag += 5 ) fits.push( along( lag ) );
+		const { lag, errors, turns } = fits.filter( fit => fit.errors.length >= 8 ).sort( ( x, y ) => at( x.errors, 0.5 ) - at( y.errors, 0.5 ) )[ 0 ] ?? fits[ 0 ];
+		const summary = `${ errors.length } frames, ${ lag } ms after INTERP_MS (A's frames ${ Math.round( frame ) } ms): median ${ at( errors, 0.5 )?.toFixed( 2 ) } m, 90 % ${ at( errors, 0.9 )?.toFixed( 2 ) } m, most ${ errors.at( - 1 )?.toFixed( 2 ) } m; turned ${ at( turns, 0.5 )?.toFixed( 1 ) }° (median), ${ turns.at( - 1 )?.toFixed( 1 ) }° at most`;
 		console.log( `    ghost following: ${ summary }` );
 		assert.ok( errors.length >= 8, `too few frames to tell: ${ summary }` );
+		assert.ok( lag <= frame + 50, `B draws A too late: ${ summary }` );
 		// (Each state comes with how long the room held it, so the error is the drawing's, not the
 		// batching's: words a fifth of a second apart, curved between with their velocities, a few
 		// tens of centimetres at 15 to 25 m/s.)
@@ -644,6 +687,48 @@ describe( 'World Drive, driving with others', () => {
 		// Each level (a car's sent at once when its flags change, and they're 0.8 s and more apart),
 		// and the mini-turbo once.
 		assert.deepEqual( { tier: after.tier - before.tier, turbo: after.turbo - before.turbo }, { tier: 3, turbo: 1 }, JSON.stringify( { before, after } ) );
+
+	} );
+
+	test( 'A turns into a plane (T): B\'s ghost unfolds its wings, flies up with it, and folds them away as A lands', async () => {
+
+		await placeCar( a, 0, 0, 0 );
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible, null, { timeout: 15000 } );
+		await a.evaluate( () => window.drive.driver.press( 'KeyT' ) );
+		// The flag, then the kit on B's ghost, all the way out and drawn.
+		await b.waitForFunction( flag => {
+
+			const ghost = window.drive.ghosts.list()[ 0 ];
+			return ghost.flags & flag && ghost.plane === 1 && ghost.kit;
+
+		}, FLAGS.plane, { timeout: 15000 } );
+		await shot( b, 'live-plane' );
+		// Up 40 m and more on A: B's ghost goes up with it, wings and all.
+		const height = () => b.evaluate( () => window.drive.ghosts.list()[ 0 ].position[ 1 ] );
+		const before = await height();
+		await a.evaluate( () => window.drive.driver.keys.add( 'Space' ) );
+		await a.waitForFunction( () => window.drive.driver.aircraft.height > 40, null, { timeout: 60000 } );
+		await a.evaluate( () => window.drive.driver.keys.delete( 'Space' ) );
+		await b.waitForFunction( least => window.drive.ghosts.list()[ 0 ].position[ 1 ] > least, before + 35, { timeout: 15000 } );
+		assert.ok( await b.evaluate( () => window.drive.ghosts.list()[ 0 ].kit ), 'the wings went from B\'s ghost while A flew' );
+		await shot( b, 'live-plane-up' );
+		// T again: A flies down and folds back into a car; B's ghost folds its wings away, and the kit goes.
+		await a.evaluate( () => window.drive.driver.press( 'KeyT' ) );
+		await a.waitForFunction( () => ! window.drive.driver.aircraft.on, null, { timeout: 90000 } );
+		await b.waitForFunction( flag => {
+
+			const ghost = window.drive.ghosts.list()[ 0 ];
+			return ! ( ghost.flags & flag ) && ghost.plane === 0 && ! ghost.kit;
+
+		}, FLAGS.plane, { timeout: 15000 } );
+		const left = await b.evaluate( () => {
+
+			let kits = 0;
+			window.drive.ghosts.group.traverse( o => kits += o.name === 'plane kit' ? 1 : 0 );
+			return kits;
+
+		} );
+		assert.equal( left, 0, 'a plane kit left on B after A landed' );
 
 	} );
 
@@ -916,6 +1001,8 @@ describe( 'World Drive, driving with others', () => {
 			const before = d.score;
 			d.hop();
 			d.vy = 12;
+			// (Thrown up, as a launch is: all of its air counts, none of it the hop's own.)
+			d.air.hop = 0;
 			d.press( 'KeyS' );
 			for ( let i = 0; i < 300; i ++ ) {
 
@@ -937,7 +1024,7 @@ describe( 'World Drive, driving with others', () => {
 
 	test( 'A goes back to the globe: gone on B; dropping in again: back', async () => {
 
-		await a.keyboard.press( 'KeyM' );
+		await mToGlobe( a );
 		await a.waitForFunction( () => window.drive.mode === 'globe' );
 		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.away && ! window.drive.ghosts.list()[ 0 ].visible, null, { timeout: 15000 } );
 		await b.locator( '#drive-ui .live-chip' ).click();
@@ -1143,7 +1230,7 @@ describe( 'World Drive, a party', () => {
 
 	test( 'a friend going somewhere else: a toast to join them', async () => {
 
-		await a.keyboard.press( 'KeyM' );
+		await mToGlobe( a );
 		await a.waitForFunction( () => window.drive.mode === 'globe' );
 		await dropIn( a, THERE );
 		await placeCar( a, 0, 0, 0 );
@@ -1165,7 +1252,7 @@ describe( 'World Drive, a party', () => {
 		await a.waitForFunction( () => window.drive.live.players.size === 1 );
 		// A back to the globe and in again: the banner says so, and no toast says it again.
 		await b.evaluate( () => document.getElementById( 'toast' ).textContent = '' );
-		await a.keyboard.press( 'KeyM' );
+		await mToGlobe( a );
 		await banner.locator( 'span', { hasText: 'Waiting for your friends' } ).waitFor( { timeout: 15000 } );
 		await dropIn( a, THERE );
 		await placeCar( a, 0, 0, 0 );
@@ -1199,7 +1286,7 @@ describe( 'World Drive, a party', () => {
 		// The area full (LIVE_NEARBY_MAX here) with drivers on the globe.
 		const full = cellOf( FULL.lat, FULL.lon );
 		const fillers = await Promise.all( Array.from( { length: NEARBY_MAX }, async () => connectAs( await visitToken(), full ) ) );
-		await b.keyboard.press( 'KeyM' );
+		await mToGlobe( b );
 		await dropIn( b, FULL );
 		await waitLive( b, shardOf( full, 1 ) );
 		await b.locator( '#drive-ui .live-chip', { hasText: 'Nearby · just you' } ).waitFor();
@@ -1208,7 +1295,7 @@ describe( 'World Drive, a party', () => {
 		const busy = cellOf( BUSY.lat, BUSY.lon );
 		const shards = Array.from( { length: NEARBY_SHARDS }, ( _, shard ) => shard ? shardOf( busy, shard ) : busy );
 		for ( const shard of shards ) fillers.push( ...await Promise.all( Array.from( { length: NEARBY_MAX }, async () => connectAs( await visitToken(), shard ) ) ) );
-		await b.keyboard.press( 'KeyM' );
+		await mToGlobe( b );
 		await dropIn( b, BUSY );
 		const dropped = Date.now();
 		await b.locator( '#drive-ui .live-chip', { hasText: 'Nearby is busy' } ).waitFor( { timeout: 20000 } );
@@ -1224,7 +1311,7 @@ describe( 'World Drive, a party', () => {
 		await b.locator( '#drive-ui .live-chip' ).click();
 		// The crowd gone, a drop-in there again tries its first room again.
 		for ( const ws of fillers ) ws.close();
-		await b.keyboard.press( 'KeyM' );
+		await mToGlobe( b );
 		await dropIn( b, BUSY );
 		await waitLive( b, busy );
 
@@ -1232,7 +1319,7 @@ describe( 'World Drive, a party', () => {
 
 	test( 'a dropped connection comes back', async () => {
 
-		await b.keyboard.press( 'KeyM' );
+		await mToGlobe( b );
 		await dropIn( b );
 		await waitLive( b, cellOf( PAD.lat, PAD.lon ) );
 		const first = ( await live( b ) ).you;
@@ -1345,10 +1432,11 @@ describe( 'World Drive, driving with others ending, on a phone, and moving on', 
 		await dropIn( page );
 		const cell = cellOf( PAD.lat, PAD.lon );
 		await waitLive( page, cell );
-		// 25 km east, well into another area (parked there: the pad doesn't reach that far).
+		// 25 km east, well into another area (parked there: the pad doesn't reach that far). (The time
+		// it moved taken just before: on a loaded machine the Escape after can be a second coming.)
+		const moved = Date.now();
 		await page.evaluate( () => Object.assign( window.drive.driver, { east: 25000 } ) );
 		await page.keyboard.press( 'Escape' );
-		const moved = Date.now();
 		await page.waitForFunction( cell => window.drive.live.room && window.drive.live.room !== cell, cell, { timeout: 20000 } );
 		const waited = Date.now() - moved;
 		const { room } = await live( page );
@@ -1501,9 +1589,12 @@ describe( 'World Drive, who\'s driving now on the globe', () => {
 			[ 'Near Las Vegas Strip', '1 driver' ], [ 'Near Golden Gate Bridge', '1 driver' ],
 		] );
 		// No names, nothing anyone typed, no pids: the Worker says only where and how many (and how
-		// many on the Moon).
-		assert.deepEqual( Object.keys( now ).sort(), [ 'areas', 'moon', 'on', 'total' ] );
+		// many on the Moon, and on each world: worlds, only { on, total } each).
+		assert.deepEqual( Object.keys( now ).sort(), [ 'areas', 'moon', 'on', 'total', 'worlds' ] );
 		assert.equal( now.moon, 0 );
+		assert.deepEqual( Object.keys( now.worlds ), [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] );
+		assert.ok( Object.values( now.worlds ).every( w => Object.keys( w ).sort().join() === 'on,total' ), JSON.stringify( now.worlds ) );
+		assert.equal( now.worlds.earth.total, now.total );
 		assert.ok( now.areas.every( area => Object.keys( area ).sort().join() === 'count,height,lat,lon' ), JSON.stringify( now ) );
 		await shot( b, 'online-0-panel' );
 		assert.deepEqual( [ a.errors, b.errors, c.errors, d.errors ], [ [], [], [], [] ] );
@@ -1512,7 +1603,7 @@ describe( 'World Drive, who\'s driving now on the globe', () => {
 
 	test( 'back on the globe, a page doesn\'t count itself where it was driving, though its room hasn\'t said yet', async () => {
 
-		await a.keyboard.press( 'KeyM' );
+		await mToGlobe( a );
 		await a.waitForFunction( () => window.drive.mode === 'globe' );
 		await a.waitForFunction( () => window.drive.online.areas.length >= 4, null, { timeout: 20000 } );
 		assert.ok( ( await onlineNow() ).areas.some( area => near( area, P, 1 ) ), 'her room has already said she went' );
@@ -1658,7 +1749,7 @@ describe( 'World Drive, who\'s driving now on the globe', () => {
 
 		}
 
-		await a.keyboard.press( 'KeyM' );
+		await mToGlobe( a );
 		await a.waitForFunction( () => window.drive.mode === 'globe' );
 		await a.waitForFunction( r => window.drive.online.areas.some( area => Math.abs( area.lat - r.lat ) < 0.005 && Math.abs( area.lon - r.lon ) < 0.005 ), R, { timeout: 20000 } );
 		assert.ok( has( await onlineNow(), P, 2 ), 'her room has already said she went' );
@@ -2023,7 +2114,13 @@ describe( 'World Drive, driving with others on the Moon', () => {
 		await a.evaluate( () => window.drive.driver.release( 'KeyW' ) );
 		await a.waitForTimeout( 2000 );
 		await d.locator( '#drive-ui .live-chip' ).click();
-		await d.locator( '#drive-ui .players li .go' ).first().click();
+		// Tabbed to, Go to keeps the focus as the list refreshes (twice a second): its row is only
+		// moved when the order changes, as moving it takes it out of the page and the focus with it.
+		const go = d.locator( '#drive-ui .players li .go' ).first();
+		await go.focus();
+		await d.waitForTimeout( 1500 );
+		assert.ok( await go.evaluate( button => document.activeElement === button ), 'Go to lost the focus as the list refreshed' );
+		await go.click();
 		await d.waitForTimeout( 3000 );
 		const [ hersNow, mineNow ] = await Promise.all( [ whereOnMoon( a ), whereOnMoon( d ) ] );
 		const beside = Math.hypot( ...mineNow.own.at.map( ( x, i ) => x - hersNow.own.at[ i ] ) );
@@ -2110,6 +2207,285 @@ describe( 'World Drive, driving with others on the Moon', () => {
 
 } );
 
+// --- Mars, Vesta and Ceres (protocol v3) --------------------------------------------------------
+
+const CURIOSITY = SPOTS_ON.mars.find( spot => spot.id === 'mars-curiosity' );
+const CURIOSITY_AREA = cellOf( CURIOSITY.lat, CURIOSITY.lon, 'mars' );
+const CORNELIA = SPOTS_ON.vesta.find( spot => spot.id === 'vesta-cornelia' );
+const CORNELIA_AREA = cellOf( CORNELIA.lat, CORNELIA.lon, 'vesta' );
+
+// A drop-in on another world: slow in the software renderer.
+// (Only from the globe, as main.js's dropIn: a page driving goes back to it first.)
+async function dropInOn( page, place ) {
+
+	if ( await page.evaluate( () => window.drive.mode ) !== 'globe' ) {
+
+		await page.evaluate( () => window.drive.toGlobe() );
+		await page.waitForFunction( () => window.drive.mode === 'globe', null, { timeout: 60000 } );
+
+	}
+
+	await page.evaluate( p => window.drive.dropIn( p ), place );
+	await page.waitForFunction( world => window.drive.mode === 'driving' && window.drive.world === world, place.world, { timeout: 180000 } );
+
+}
+
+// Where a page's own car and its drawn ghosts are on `world`: in that world's own frame (through its
+// body's group's matrix as it is now), each with its height over the world's sphere and its ground's
+// there, and each ghost's scene position.
+function whereOn( page, world ) {
+
+	return page.evaluate( ( [ world, radius ] ) => {
+
+		const { bodies, entry, ghosts } = window.drive;
+		const body = bodies[ world ];
+		body.group.updateWorldMatrix( true, false );
+		const inverse = body.group.matrixWorld.clone().invert();
+		const v = body.group.position.clone();
+		const at = p => {
+
+			const r = p.length();
+			const lat = Math.asin( p.z / r ) * 180 / Math.PI;
+			const lon = Math.atan2( p.y, p.x ) * 180 / Math.PI;
+			return { at: p.toArray(), lat, lon, height: r - radius, ground: body.heightAt( lat, lon ) };
+
+		};
+		const own = entry ? at( entry.pivot.getWorldPosition( v.clone() ).applyMatrix4( inverse ) ) : null;
+		const others = ghosts.list().filter( g => g.position && g.drawn ).map( g => ( { pid: g.pid, scene: g.position, ...at( v.clone().fromArray( g.position ).applyMatrix4( inverse ) ) } ) );
+		return { own, others };
+
+	}, [ world, WORLDS[ world ].radius ] );
+
+}
+
+const apartOf = ( p, q ) => Math.hypot( p[ 0 ] - q[ 0 ], p[ 1 ] - q[ 1 ], p[ 2 ] - q[ 2 ] );
+
+describe( 'World Drive, driving with others on Mars and Vesta, in a party across worlds, and closed on one world', () => {
+
+	let a;
+	let b;
+	let c;
+	// Every page opened here, closed after (one a failed test left open would slow those after it).
+	const opened = [];
+
+	before( async () => {
+
+		[ a, b ] = await Promise.all( [
+			livePage( { token: await visitToken(), player: ana, viewport: { width: 640, height: 400 } } ),
+			livePage( { token: await visitToken(), viewport: { width: 640, height: 400 } } ),
+		] );
+		opened.push( a, b );
+
+	} );
+
+	after( async () => {
+
+		for ( const page of opened ) await page.context().close().catch( () => {} );
+
+	} );
+
+	test( 'two drivers dropping in at Bradbury Landing share Mars\'s area\'s room (protocol v3), and each sees the other\'s car on Mars\'s ground', async () => {
+
+		await Promise.all( [ dropInOn( a, CURIOSITY ), dropInOn( b, CURIOSITY ) ] );
+		await Promise.all( [ waitLive( a, CURIOSITY_AREA ), waitLive( b, CURIOSITY_AREA ) ] );
+		assert.match( CURIOSITY_AREA, /^mars:/ );
+		const her = await b.evaluate( () => [ ...window.drive.live.players.values() ][ 0 ] );
+		assert.deepEqual( [ her.world, her.place.world, her.name ], [ 'mars', 'mars', 'Ana' ] );
+		assert.match( her.place.name, /Bradbury Landing/ );
+		await a.evaluate( () => window.drive.driver.press( 'KeyW' ) );
+		await a.waitForTimeout( 2500 );
+		await a.evaluate( () => window.drive.driver.release( 'KeyW' ) );
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible, null, { timeout: 60000 } );
+		await a.waitForTimeout( 2000 );
+		const [ hers, seen ] = await Promise.all( [ whereOn( a, 'mars' ), whereOn( b, 'mars' ) ] );
+		const ghost = seen.others[ 0 ];
+		assert.ok( ghost, JSON.stringify( seen ) );
+		const off = apartOf( ghost.at, hers.own.at );
+		assert.ok( off < 3, `B draws A's car ${ off.toFixed( 2 ) } m from where it is` );
+		assert.ok( Math.abs( ghost.height - ghost.ground ) < 1.5, `A's car drawn ${ ( ghost.height - ghost.ground ).toFixed( 2 ) } m over Mars's ground` );
+		const tag = ( await ghosts( b ) )[ 0 ];
+		assert.deepEqual( [ tag.label.startsWith( 'Ana' ), tag.tagShown ], [ true, true ] );
+		await b.locator( '#drive-ui .live-chip', { hasText: 'Nearby · 2' } ).waitFor();
+		await shot( b, 'worlds-live-1-mars-two-drivers' );
+		assert.deepEqual( [ a.errors, b.errors ], [ [], [] ] );
+
+	} );
+
+	test( 'a party from Mars: its link opened on the Earth has a banner to join her there and her "on Mars" in the list; Join drops in beside her on Mars', async () => {
+
+		// (B gone for now: three pages drawing Mars at once in the software renderer take minutes to drop
+		// in. A new B for Vesta, after.)
+		await b.context().close();
+		b = null;
+		await a.keyboard.press( 'Escape' );
+		await a.locator( '#pause .friends .invite' ).click();
+		await a.waitForFunction( () => window.drive.live.party && window.drive.live.status === 'live', null, { timeout: 30000 } );
+		const code = await a.evaluate( () => window.drive.live.party );
+		await a.keyboard.press( 'Escape' );
+		c = await livePage( { token: await visitToken(), path: `/?party=${ code }`, viewport: { width: 640, height: 400 } } );
+		opened.push( c );
+		// (Slow with two pages drawing Mars beside it.)
+		await c.waitForFunction( room => window.drive.live.status === 'live' && window.drive.live.room === room, `party:${ code }`, { timeout: 90000 } );
+		const banner = c.locator( '#globe-ui .party-banner' );
+		await banner.locator( '.join' ).waitFor( { timeout: 30000 } );
+		assert.match( await banner.locator( 'span' ).first().textContent(), /^Ana ⭐ is driving at Bradbury Landing.*\(Mars\)$/ );
+		assert.equal( await c.evaluate( () => window.drive.world ), 'earth' );
+		const friend = await c.evaluate( () => ( ( { world, away, place } ) => ( { world, away, placeWorld: place?.world } ) )( [ ...window.drive.live.players.values() ][ 0 ] ) );
+		assert.deepEqual( friend, { world: 'mars', away: false, placeWorld: 'mars' } );
+		await shot( c, 'worlds-live-2-banner-on-earth' );
+		await banner.locator( '.join' ).click();
+		await c.waitForFunction( () => window.drive.mode === 'driving' && window.drive.world === 'mars', null, { timeout: 180000 } );
+		await c.waitForFunction( () => window.drive.ghosts.list().some( g => g.visible ), null, { timeout: 60000 } );
+		const [ hers, mine ] = await Promise.all( [ whereOn( a, 'mars' ), whereOn( c, 'mars' ) ] );
+		const apart = apartOf( mine.own.at, hers.own.at );
+		assert.ok( apart > 2 && apart < 12, `C dropped in ${ apart.toFixed( 1 ) } m from A` );
+		assert.ok( Math.abs( mine.own.height - mine.own.ground ) < 1.5 );
+		await a.locator( '#drive-ui .live-chip', { hasText: 'Party · 2' } ).waitFor( { timeout: 30000 } );
+		// C back to the Earth's globe and in there: A has C "on the Earth" in her list; and C, on the
+		// Earth, has A "on Mars".
+		await mToGlobe( c );
+		await c.evaluate( () => window.drive.setWorld( 'earth' ) );
+		await c.waitForFunction( () => window.drive.world === 'earth' && ! window.drive.globe.flight, null, { timeout: 120000 } );
+		await dropIn( c );
+		await a.locator( '#drive-ui .live-chip' ).click();
+		await a.waitForFunction( () => / · on the Earth$/.test( document.querySelector( '#drive-ui .players li .what' )?.textContent ?? '' ), null, { timeout: 30000 } );
+		await a.locator( '#drive-ui .live-chip' ).click();
+		await c.locator( '#drive-ui .live-chip' ).click();
+		await c.waitForFunction( () => / · on Mars$/.test( document.querySelector( '#drive-ui .players li .what' )?.textContent ?? '' ), null, { timeout: 30000 } );
+		await shot( c, 'worlds-live-3-list-on-mars' );
+		// Go to from the list: to Mars, beside her.
+		await c.locator( '#drive-ui .players li .go' ).first().click();
+		await c.waitForFunction( () => window.drive.mode === 'driving' && window.drive.world === 'mars', null, { timeout: 180000 } );
+		const [ hersNow, mineNow ] = await Promise.all( [ whereOn( a, 'mars' ), whereOn( c, 'mars' ) ] );
+		assert.ok( apartOf( mineNow.own.at, hersNow.own.at ) < 15, `Go to put C ${ apartOf( mineNow.own.at, hersNow.own.at ).toFixed( 1 ) } m from A` );
+		assert.deepEqual( [ a.errors, c.errors ], [ [], [] ] );
+		await c.context().close();
+		c = null;
+
+	} );
+
+	test( 'on Vesta, across a recentre: the driver\'s (its car where it was on Vesta, its state unbroken) and the viewer\'s (the ghost carried by exactly the frame\'s move): the ghost never jumps', async () => {
+
+		await a.evaluate( () => window.drive.friends.leaveParty?.() ?? window.drive.live.leaveParty() );
+		b ??= await livePage( { token: await visitToken(), viewport: { width: 640, height: 400 } } );
+		opened.push( b );
+		await Promise.all( [ dropInOn( a, CORNELIA ), dropInOn( b, CORNELIA ) ] );
+		await Promise.all( [ waitLive( a, CORNELIA_AREA ), waitLive( b, CORNELIA_AREA ) ] );
+		assert.match( CORNELIA_AREA, /^vesta:/ );
+		await a.evaluate( () => window.drive.driver.press( 'KeyW' ) );
+		await a.waitForTimeout( 2000 );
+		await a.evaluate( () => {
+
+			const d = window.drive.driver;
+			d.release( 'KeyW' );
+			d.speed = 0;
+
+		} );
+		await b.waitForFunction( () => window.drive.ghosts.list().some( g => g.visible ), null, { timeout: 60000 } );
+		await a.waitForFunction( () => Math.abs( window.drive.driver.speed ) < 0.3, null, { timeout: 30000 } );
+		await a.waitForTimeout( 2500 );
+		const settled = await Promise.all( [ whereOn( a, 'vesta' ), whereOn( b, 'vesta' ) ] );
+		assert.ok( settled[ 1 ].others[ 0 ] && apartOf( settled[ 1 ].others[ 0 ].at, settled[ 0 ].own.at ) < 3, JSON.stringify( settled ) );
+
+		// The driver's recentre (230 m north of where its frame is): its car where it was on Vesta, in
+		// the same frame.
+		const driven = await a.evaluate( () => {
+
+			const { bodies: { vesta }, entry, origin, shiftTo } = window.drive;
+			const own = () => {
+
+				vesta.group.updateWorldMatrix( true, false );
+				entry.pivot.updateWorldMatrix( true, false );
+				return entry.pivot.getWorldPosition( vesta.group.position.clone() ).applyMatrix4( vesta.group.matrixWorld.clone().invert() ).toArray();
+
+			};
+			const before = own();
+			const moved = !! shiftTo( { lat: origin.lat + 0.05, lon: origin.lon, height: origin.height } );
+			return { before, after: own(), moved };
+
+		} );
+		assert.equal( driven.moved, true );
+		assert.ok( apartOf( driven.before, driven.after ) < 0.05, `A's car ${ apartOf( driven.before, driven.after ) } m from where it was on Vesta` );
+		// B's ghost of A, sampled for 3 s: always with A's car, never a jump.
+		let last = null;
+		for ( let i = 0; i < 12; i ++ ) {
+
+			await b.waitForTimeout( 250 );
+			const [ hers, seen ] = await Promise.all( [ whereOn( a, 'vesta' ), whereOn( b, 'vesta' ) ] );
+			const ghost = seen.others[ 0 ];
+			assert.ok( ghost, JSON.stringify( seen ) );
+			assert.ok( apartOf( ghost.at, hers.own.at ) < 3, `B draws A's car ${ apartOf( ghost.at, hers.own.at ).toFixed( 2 ) } m from it after A's recentre` );
+			if ( last ) assert.ok( apartOf( ghost.at, last ) < 1, `B's ghost moved ${ apartOf( ghost.at, last ).toFixed( 2 ) } m in 250 ms` );
+			last = ghost.at;
+
+		}
+
+		// The viewer's recentre: in the same frame and the ten after, the ghost where it was on Vesta,
+		// its scene position carried by exactly the move.
+		const viewer = await b.evaluate( () => new Promise( resolve => {
+
+			const { bodies: { vesta }, ghosts, origin, shiftTo } = window.drive;
+			const inBody = g => {
+
+				vesta.group.updateWorldMatrix( true, false );
+				return vesta.group.position.clone().fromArray( g.position ).applyMatrix4( vesta.group.matrixWorld.clone().invert() ).toArray();
+
+			};
+			const first = ghosts.list().find( g => g.position && g.drawn );
+			const body = inBody( first );
+			const scene = first.position;
+			const move = shiftTo( { lat: origin.lat - 0.05, lon: origin.lon, height: origin.height } );
+			const carried = vesta.group.position.clone().fromArray( scene ).applyMatrix4( move ).toArray();
+			const frames = [];
+			const step = () => {
+
+				const g = ghosts.list().find( x => x.pid === first.pid && x.position && x.drawn );
+				frames.push( g ? { body: inBody( g ), scene: g.position } : null );
+				if ( frames.length >= 10 ) return resolve( { body, carried, frames, moved: move ? Math.hypot( move.elements[ 12 ], move.elements[ 13 ], move.elements[ 14 ] ) : 0 } );
+				requestAnimationFrame( step );
+
+			};
+			requestAnimationFrame( step );
+
+		} ) );
+		assert.ok( viewer.moved > 100, `the frame moved ${ viewer.moved } m` );
+		for ( const frame of viewer.frames ) {
+
+			assert.ok( frame, 'the ghost still drawn' );
+			assert.ok( apartOf( frame.body, viewer.body ) < 0.5, `the ghost ${ apartOf( frame.body, viewer.body ).toFixed( 2 ) } m from where it was on Vesta` );
+
+		}
+
+		assert.ok( apartOf( viewer.frames[ 0 ].scene, viewer.carried ) < 0.5, `the ghost ${ apartOf( viewer.frames[ 0 ].scene, viewer.carried ).toFixed( 2 ) } m from where the move carries it` );
+		await shot( b, 'worlds-live-4-vesta-after-recentres' );
+		assert.deepEqual( [ a.errors, b.errors ], [ [], [] ] );
+
+	} );
+
+	test( 'closed on one world: a page told at load that Mars\'s budget is spent opens no room on Mars and shows nothing of driving with others there, but does on the Earth and on Vesta', async () => {
+
+		const spent = json => ( { ...json, liveWorlds: { ...json.liveWorlds, mars: { open: false, reason: 'budget' } } } );
+		await c?.context().close().catch( () => {} );
+		c = await livePage( { token: await visitToken(), config: spent, viewport: { width: 640, height: 400 } } );
+		opened.push( c );
+		assert.deepEqual( await c.evaluate( () => [ [ ...window.drive.live.closedWorlds ], window.drive.live.openWorlds() ] ), [ [ 'mars' ], [ 'earth', 'moon', 'vesta', 'ceres' ] ] );
+		await dropInOn( c, CURIOSITY );
+		await c.waitForTimeout( 3000 );
+		assert.deepEqual( c.rooms, [] );
+		assert.deepEqual( await c.evaluate( () => [ window.drive.live.closedHere, window.drive.live.status, window.drive.ghosts.list().filter( g => g.visible ).length ] ), [ true, 'closed', 0 ] );
+		assert.equal( await c.locator( '#drive-ui .live-chip' ).isHidden(), true );
+		// On Vesta (open): its area's room, and the chip.
+		await mToGlobe( c );
+		await dropInOn( c, CORNELIA );
+		await waitLive( c, CORNELIA_AREA );
+		await c.locator( '#drive-ui .live-chip' ).waitFor( { timeout: 15000 } );
+		assert.deepEqual( c.rooms, [ CORNELIA_AREA ] );
+		assert.deepEqual( c.errors, [] );
+
+	} );
+
+} );
+
 describe( 'World Drive, driving with others switched off on the Worker', () => {
 
 	test( 'LIVE off: an open page stops without a word, a new one shows none of it, and both drive as ever', async () => {
@@ -2167,14 +2543,14 @@ describe( 'World Drive, driving with others switched off on the Worker', () => {
 
 describe( 'World Drive, the day\'s budget for driving with others spent', () => {
 
-	test( 'turned away for the Earth\'s budget: a toast once that it\'s back after midnight UTC (and that you can still drive with others on the Moon), none of it shows on the Earth, and driving goes on; a party\'s link on a new page says why', async () => {
+	test( 'turned away for the Earth\'s budget: a toast once that it\'s back after midnight UTC (and that you can still drive with others on every other world), none of it shows on the Earth, and driving goes on; a party\'s link on a new page says why, and keeps the party through the Moon\'s rooms', async () => {
 
 		// The Worker again (LIVE on) with a budget of 40 Durable Object requests a day on the Earth,
 		// which this test then spends by connecting to rooms, as drivers do (page loads ask DriveLimits
 		// only every 30 s, so they spend little). The Moon's is its own, and isn't spent. (Every
 		// connection here is from one address, so its share is the whole budget: one address's share
 		// of a small one would turn it away first, as too many from here.)
-		const toast = 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. You can still drive with others on the Moon.';
+		const toast = 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. You can still drive with others on the Moon, Mars, Vesta and Ceres.';
 		await restartWorker( { LIVE_DAILY_BUDGET: '40', LIVE_ADDRESS_SHARE: '1' } );
 		const page = await livePage( { token: await visitToken() } );
 		assert.ok( await page.locator( '#globe-ui .friends' ).isVisible() );
@@ -2215,19 +2591,24 @@ describe( 'World Drive, the day\'s budget for driving with others spent', () => 
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
-		// A friend opening a party's link now: told why nothing comes of it on the Earth, and drives
-		// alone there.
+		// A friend opening a party's link now: told why nothing comes of it on the Earth; the party isn't
+		// dropped for a budget it needn't use: its room is kept through the Moon's (the page on the
+		// globe to the others), and it drives alone on the Earth, sending no car.
 		const friend = await livePage( { token: await visitToken(), path: '/?party=ABCDEFG' } );
-		assert.deepEqual( await friend.evaluate( () => [ window.drive.live.closedHere, window.drive.live.party ] ), [ true, 'ABCDEFG' ] );
+		assert.deepEqual( await friend.evaluate( () => [ window.drive.live.closedHere, window.drive.live.party, window.drive.live.world ] ), [ true, 'ABCDEFG', 'moon' ] );
 		await friend.locator( '#toast', { hasText: toast } ).waitFor();
-		assert.equal( await friend.locator( '#globe-ui .friends' ).isHidden(), true );
-		assert.equal( await friend.locator( '#globe-ui .party-banner' ).isHidden(), true );
+		await waitLive( friend, 'party:ABCDEFG' );
+		assert.deepEqual( friend.rooms, [ 'party:ABCDEFG' ] );
+		// (The party goes on, so its banner shows: nobody's driving in it yet.)
+		await friend.locator( '#globe-ui .party-banner' ).waitFor( { timeout: 15000 } );
 		await dropIn( friend );
-		assert.equal( await friend.locator( '#drive-ui .live-chip' ).isHidden(), true );
+		const since = Date.now();
 		await friend.evaluate( () => window.drive.driver.press( 'KeyW' ) );
 		await friend.waitForFunction( () => window.drive.driver.speed > 2 );
 		await friend.evaluate( () => window.drive.driver.release( 'KeyW' ) );
-		assert.deepEqual( friend.rooms, [] );
+		await friend.waitForTimeout( 1500 );
+		assert.deepEqual( statesSent( friend, since ), [] );
+		assert.deepEqual( friend.rooms, [ 'party:ABCDEFG' ] );
 		assert.deepEqual( friend.errors, [] );
 		await friend.context().close();
 
