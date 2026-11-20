@@ -2096,25 +2096,6 @@ describe( 'World Drive boost and driving effects', () => {
 
 	} );
 
-	test( 'the pause menu\'s "Music" switch: on to begin, off kept in the browser, and on again; the Earth\'s song for the Earth', async () => {
-
-		await page.keyboard.press( 'Escape' );
-		await page.locator( '#pause' ).waitFor();
-		const toggle = page.locator( '#pause .music-toggle' );
-		assert.ok( await toggle.isChecked() );
-		// (This test browser can't play AAC, so it's which song, not the sound itself.)
-		assert.ok( await page.evaluate( () => !! window.drive.music ) );
-		await toggle.uncheck();
-		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.music' ) ), 'off' );
-		assert.equal( await page.evaluate( () => window.drive.music.playing ), false );
-		await toggle.check();
-		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.music' ) ), 'on' );
-		await page.locator( '#pause .resume' ).click();
-		await page.waitForFunction( () => window.drive.mode === 'driving' );
-		assert.deepEqual( page.errors, [] );
-
-	} );
-
 	test( 'the pause menu\'s "Camera effects" switch turns off the jolts, shakes, speed lines and white edges, kept across a reload, and on again', async () => {
 
 		await page.keyboard.press( 'Escape' );

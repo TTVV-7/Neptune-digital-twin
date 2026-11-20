@@ -4739,19 +4739,6 @@ UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
 - No receipts or purchase history in the page: Stripe emails its own receipt if that's on in its
   settings.
 
-## Music
-
-A song for each world, made by the owner with Suno, looping from the first drive on (a browser only
-plays sound after a click or a key, and a drive is always one) and changing with the world, fading
-from one to the next: **Road to Nowhere** on the Earth, **The Long Way Round the Moon** on the Moon,
-and **The Long Way Round** on Mars, Vesta and Ceres (`src/drive-app/music.js`, the songs in
-`drive/public/music/`, AAC at 128 kbps so every browser plays them, about 3.5 MB each). It goes on
-through pausing (quieter) and the globe. The pause menu's **Music** switch turns it off, kept in the
-browser (`world-drive.music`); on unless it's been switched off. Nothing is downloaded until a song
-plays, and only the song of the world being driven. On an iPhone or iPad a page can't set its
-sound's volume, so the music plays at the phone's own volume there. Suno's terms let songs be used
-commercially only if they were made on a paid plan.
-
 ## Username and password accounts
 
 Beside **Sign in with Google**, an account can be made with a **username and a password**, for
