@@ -21,7 +21,7 @@ import { createScreenFx } from './screen-fx.js';
 import { createWater } from './water.js';
 import { createSea, lakeShore, lakesNear, seaLevel, seaLevelNow, waterAt, waterAtNow } from './sea.js';
 import { setUpLeaderboard } from './leaderboard.js';
-import { buyArea, onPassOpen } from './pass.js';
+import { buyArea, onPassOpen, openPass } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
 import { isPro, onProChange } from './pro.js';
 import { applyLook } from './paint.js';
@@ -925,7 +925,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Signed in, the account's player is this browser's too (one player on every device): taken in
 	// place of the one made here, which the Worker has folded into it.
 	const supporter = setUpSupporter( {
-		worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, onBuy: () => stats.add( 'pass', 'buy' ),
+		worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, onBuy: kind => stats.add( 'pass', { day: 'buy_day', ask: 'ask_signin' }[ kind ] ?? 'buy' ),
 		adopt: ( player, { merged = false, from = null } = {} ) => {
 
 			board.adopt( player );
@@ -2883,6 +2883,13 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		},
 		dropIn, toGlobe, resume, recentre, shiftTo, waterOver, watchSea, moveCar, besideOf, goBeside,
+		// The pass's sheet, opened from the used-up notice's pitch (boot.js), counted as that.
+		pitchPass: () => {
+
+			stats.add( 'pass', 'pitch' );
+			openPass();
+
+		},
 		where: () => formatLatLon( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ),
 	};
 	// The same, for boot.js (which world the globe is on, once it's up).

@@ -195,7 +195,7 @@ export async function leaderboard( { env, url, now } ) {
 		const [ top, count ] = await db.batch( [
 			db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at, ${ hasPass( 'p.account_id', '?4' ) } AS supporter,
 				${ xpOf( 'p' ) } AS xp, p.title FROM best_scores b JOIN players p ON p.id = b.player_id
-				WHERE b.period = ?1 AND b.place_key = ?2 ORDER BY b.score DESC, b.created_at, b.player_id LIMIT ?3` ).bind( period, where, TOP, supporterEmails( env ) ),
+				WHERE b.period = ?1 AND b.place_key = ?2 ORDER BY b.score DESC, b.created_at, b.player_id LIMIT ?3` ).bind( period, where, TOP, supporterEmails( env, now ) ),
 			db.prepare( 'SELECT COUNT(*) AS total FROM best_scores WHERE period = ? AND place_key = ?' ).bind( period, where ),
 		] );
 		board = { total: count.results[ 0 ].total, rows: top.results.map( ( row, i ) => ( { rank: i + 1, ...entry( row ) } ) ) };
@@ -215,7 +215,7 @@ export async function leaderboard( { env, url, now } ) {
 
 			const row = await db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at,
 				( SELECT COUNT(*) FROM best_scores o WHERE ${ ahead( 'o', 'b' ) } ) + 1 AS rank, ${ hasPass( 'p.account_id', '?4' ) } AS supporter,
-				${ xpOf( 'p' ) } AS xp, p.title FROM best_scores b JOIN players p ON p.id = b.player_id WHERE b.player_id = ?1 AND b.period = ?2 AND b.place_key = ?3` ).bind( id, period, where, supporterEmails( env ) ).first();
+				${ xpOf( 'p' ) } AS xp, p.title FROM best_scores b JOIN players p ON p.id = b.player_id WHERE b.player_id = ?1 AND b.period = ?2 AND b.place_key = ?3` ).bind( id, period, where, supporterEmails( env, now ) ).first();
 			answer.me = row ? { rank: row.rank, ...entry( row ) } : null;
 			await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
 

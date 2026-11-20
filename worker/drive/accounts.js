@@ -105,7 +105,7 @@ export async function signOut( { request, env, url } ) {
 
 // What's read of an account wherever it's used: its id, its Google email and name ('' with no
 // Google account linked), whether Google is linked, and its username (null without one).
-const ACCOUNT = `SELECT accounts.id, accounts.email, accounts.name, accounts.google_sub NOT LIKE 'none:%' AS google, logins.username
+const ACCOUNT = `SELECT accounts.id, accounts.email, accounts.name, accounts.google_sub NOT LIKE 'none:%' AS google, logins.username, accounts.contact_email
 	FROM accounts LEFT JOIN logins ON logins.account_id = accounts.id`;
 
 // The signed-in account ({ id, email, name, google, username }), or null: none without a session
@@ -127,24 +127,28 @@ export async function accountById( db, id ) {
 
 }
 
-// GET /api/me: { signedIn, name?, email?, google?, username?, supporter, subscribed?, purchase:
-// { enabled, link?, price?, manage?, clientReferenceId? } }. subscribed: the pass is a running
+// GET /api/me: { signedIn, name?, email?, google?, username?, supporter, subscribed?, dayPassUntil?,
+// purchase: { enabled, link?, price?, day?: { link, price }, manage?, clientReferenceId? } }.
+// dayPassUntil: all the pass this account has is a day pass, ending then (ms). contactEmail: the
+// email the account gave for its receipts (logins.js's setContactEmail; never checked, so only ever
+// put on the checkout, never used to say whose a purchase is), or ''. subscribed: the pass is a running
 // subscription's (manage: Stripe's portal, to cancel it or change the card). google: whether a Google account is linked (name and email
 // are its, '' without one); username: the account's own username, or null (it's shown to its owner
 // only, never on the boards).
 export async function getMe( context ) {
 
-	return json( await meFor( context.env, await currentAccount( context ) ) );
+	return json( await meFor( context.env, await currentAccount( context ), context.now ) );
 
 }
 
-export async function meFor( env, account ) {
+export async function meFor( env, account, now = Date.now() ) {
 
 	if ( ! account ) return { signedIn: false, supporter: false, purchase: purchaseFor( env, null ) };
-	const pass = await supporterPass( env, account );
+	const pass = await supporterPass( env, account, now );
 	return {
-		signedIn: true, name: account.name, email: account.email, google: !! account.google, username: account.username ?? null,
-		supporter: pass.supporter, ...( pass.subscribed ? { subscribed: true } : {} ), purchase: purchaseFor( env, account ),
+		signedIn: true, name: account.name, email: account.email, google: !! account.google, username: account.username ?? null, contactEmail: account.contact_email ?? '',
+		supporter: pass.supporter, ...( pass.subscribed ? { subscribed: true } : {} ), ...( pass.dayPassUntil ? { dayPassUntil: pass.dayPassUntil } : {} ),
+		purchase: purchaseFor( env, account ),
 	};
 
 }

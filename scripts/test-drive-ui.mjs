@@ -6114,7 +6114,8 @@ const CLIENT = 'test-client.apps.googleusercontent.com';
 // Made up, in Stripe's format: never opened (window.open is stood in for, and nothing off this
 // machine is reached).
 const PASS_LINK = 'https://buy.stripe.com/test_madeUpLink000';
-const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99' } };
+const DAY_LINK = 'https://buy.stripe.com/test_madeUpDayLink000';
+const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', day: { link: DAY_LINK, price: 'CA$0.89' } } };
 const ALICE = { signedIn: true, name: 'Alice Example', email: 'alice@example.com', supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '42' } };
 const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' };
 
@@ -6205,7 +6206,7 @@ async function openPass( page ) {
 
 describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
-	test( 'the sheet signs in with Google, then Buy opens the link saying whose it is', async () => {
+	test( 'the sheet shows both passes\' prices; one picked signed out asks to sign in with Google first, then opens its link saying whose it is', async () => {
 
 		const page = await supporterPage();
 		const { asked } = page;
@@ -6216,10 +6217,19 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( page.google, 0, 'Google\'s script loaded before anyone could sign in' );
 		await openPass( page );
 		const area = sheet( page );
+		// Both ways to buy, with their prices, for everyone; the ways to sign in (and Google's script)
+		// only once one's picked.
+		await area.locator( '.buy-life' ).waitFor();
+		assert.equal( await area.locator( '.buy-life' ).textContent(), 'For good: CA$4.99' );
+		assert.equal( await area.locator( '.buy-day' ).textContent(), '24 hours: CA$0.89' );
+		assert.match( await area.textContent(), /Have the pass already\? Sign in[\s\S]*No subscription/ );
+		assert.equal( await area.locator( '.stub-google' ).count(), 0 );
+		assert.equal( page.google, 0 );
+		await area.locator( '.buy-life' ).click();
+		await area.locator( '.supporter-status', { hasText: 'Sign in or make a free account first, so the pass is yours on any device.' } ).waitFor();
 		await area.locator( '.stub-google' ).waitFor();
 		assert.equal( page.google, 1 );
-		assert.match( await area.textContent(), /Sign in to buy, so the pass is yours in any browser\. Bought it already\? Signing in brings it back\./ );
-		assert.equal( await area.locator( '.buy' ).count(), 0, 'Buy shows to someone signed out' );
+		assert.deepEqual( await page.evaluate( () => window.opened ?? [] ), [] );
 		await shot( page, 'pass-1-signed-out' );
 
 		// A token Google didn't sign, then a good one.
@@ -6228,13 +6238,13 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await area.locator( '.supporter-status', { hasText: 'Signing in didn\'t work. Try again.' } ).waitFor();
 		await page.evaluate( () => window.testCredential = 'good-token' );
 		await area.locator( '.stub-google' ).click();
-		await area.locator( '.buy' ).waitFor();
+		await area.locator( '.supporter-status', { hasText: 'Signed in. Tap For good to pay.' } ).waitFor();
 		assert.deepEqual( asked.sessions, [ { credential: 'forged', type: 'application/json' }, { credential: 'good-token', type: 'application/json' } ] );
-		assert.equal( await area.locator( '.buy' ).textContent(), 'Buy for CA$4.99' );
+		assert.ok( await area.locator( '.buy-life.picked' ).isVisible(), 'the pass picked doesn\'t stand out' );
 		assert.match( await area.textContent(), /Signed in as alice@example\.com · Restore purchases · Sign out/ );
 		await shot( page, 'pass-2-signed-in' );
 
-		await area.locator( '.buy' ).click();
+		await area.locator( '.buy-life' ).click();
 		const opened = await page.evaluate( () => window.opened );
 		assert.equal( opened.length, 1 );
 		const [ href, target, features ] = opened[ 0 ];
@@ -6242,6 +6252,11 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( `${ url.origin }${ url.pathname }`, PASS_LINK );
 		assert.deepEqual( Object.fromEntries( url.searchParams ), { client_reference_id: '42', prefilled_email: 'alice@example.com' } );
 		assert.deepEqual( [ target, features ], [ '_blank', 'noopener' ] );
+		// The day pass's own link, the same way.
+		await area.locator( '.buy-day' ).click();
+		const day = new URL( ( await page.evaluate( () => window.opened ) )[ 1 ][ 0 ] );
+		assert.equal( `${ day.origin }${ day.pathname }`, DAY_LINK );
+		assert.equal( day.searchParams.get( 'client_reference_id' ), '42' );
 		await area.locator( '.supporter-line', { hasText: 'Finish paying in the new tab' } ).waitFor();
 		assert.equal( await locked( page ), LOCKED );
 		// Asked before Stripe's word has come: it says so, rather than that there's no pass.
@@ -6298,6 +6313,23 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( page.asked.signOuts, 1 );
 		assert.equal( await locked( page ), LOCKED );
 		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'with a day pass running, the sheet says how long it has left and offers the pass for good, not another day', async () => {
+
+		const page = await supporterPage( { me: { ...ALICE, supporter: true, dayPassUntil: Date.now() + 14 * 3600000 - 30000 } } );
+		await testPad( page );
+		await page.waitForFunction( () => document.querySelectorAll( '#globe-ui .vehicle.locked:not( :has( .feat-chip ) )' ).length === 0, null, { timeout: 10000 } );
+		await openPass( page );
+		const area = sheet( page );
+		await area.locator( '.supporter-thanks', { hasText: 'Your 24-hour pass has 14 h left.' } ).waitFor();
+		assert.equal( await area.locator( '.buy-life' ).textContent(), 'Keep it for good: CA$4.99' );
+		assert.equal( await area.locator( '.buy-day' ).count(), 0 );
+		await area.locator( '.buy-life' ).click();
+		assert.equal( new URL( ( await page.evaluate( () => window.opened ) )[ 0 ][ 0 ] ).pathname, new URL( PASS_LINK ).pathname );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
@@ -6457,14 +6489,20 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( await page.locator( '#notice' ).getAttribute( 'data-kind' ), 'used-up' );
 		await page.context().close();
 
-		// Everyone's drives used up, not this address's: no sign-in on the Earth's notice.
+		// Everyone's drives used up, not this address's: the pass gets past that too, so the toast on
+		// the Moon and the Earth's notice both offer it ("Get more Earth drives", the pass's sheet), with
+		// a sign-in.
 		page = await usedUpPage( [ usedUp( 'daily' ) ] );
 		await page.goto( BASE );
 		await onMoon( page );
+		await page.locator( '#toast .toast-action', { hasText: 'Get more Earth drives' } ).waitFor();
 		await toEarth( page );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
-		await page.waitForTimeout( 500 );
-		assert.ok( await notice( page ).locator( '.account' ).isHidden() );
+		await notice( page ).locator( '.account .stub-google' ).waitFor();
+		assert.match( await notice( page ).locator( '.message' ).textContent(), /a 24-hour pass, or the Supporter Pass for good: 10 Earth drives a day/ );
+		await notice( page ).locator( 'button', { hasText: 'Get more Earth drives' } ).click();
+		await page.locator( '#pass .buy-day', { hasText: '24 hours: CA$0.89' } ).waitFor();
+		await shot( page, 'pass-8-used-up-pitch' );
 		await page.context().close();
 
 	} );
@@ -6893,11 +6931,21 @@ async function unfold( account, heading ) {
 
 }
 
+// Signed out, the pass's sheet shows its prices alone until "Sign in" (or a price) is tapped: its
+// ways to sign in, shown.
+async function showSignIn( page ) {
+
+	const link = sheet( page ).locator( 'button.link', { hasText: /^Sign in$/ } );
+	if ( await link.count() ) await link.click();
+
+}
+
 // The pass's sheet's link to the account panel (the sheet opened first, if it isn't), followed: the
 // panel, open.
 async function openAccountPanel( page, words ) {
 
 	if ( ! await page.locator( '#pass' ).isVisible() ) await openPass( page );
+	await showSignIn( page );
 	await sheet( page ).locator( 'button', { hasText: words } ).click();
 	await panel( page ).waitFor();
 	return panel( page );
@@ -6918,6 +6966,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
 		await openPass( page );
+		await showSignIn( page );
 		await sheet( page ).locator( '.supporter-passwords' ).waitFor();
 		assert.deepEqual( page.chunks, [], 'the account panel loaded before it was opened' );
 		const account = await openAccountPanel( page, 'Or use a username and password' );
@@ -6930,7 +6979,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		const form = account.locator( 'form.account-sign-up' );
 		assert.deepEqual( await fields( form ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ] ] );
 		assert.equal( await form.locator( 'input[name="username"]' ).getAttribute( 'autocapitalize' ), 'none' );
-		assert.match( await form.textContent(), /There's no email here, so a forgotten password can't be recovered, unless you also link Google\./ );
+		assert.match( await form.textContent(), /The email is only for receipts: nothing is sent to it, so a forgotten password can't be recovered, unless you also link Google\./ );
 		await shot( page, 'account-1-create-desktop' );
 		// The rules, before anything is sent.
 		await form.locator( 'input[name="username"]' ).fill( 'Racer 1' );

@@ -1028,20 +1028,22 @@ finding its wheels so they spin and steer (a three-wheeler's too, and standing u
 lying down, or painting over a real place's number plate), and `npm run drive-car-thumbs` draws its
 picture for the picker (see [World Drive's cars](docs/world-drive.md#world-drives-cars)).
 
-A **Supporter Pass** (a subscription, CA$1.99/month, towards the running costs; passes bought before
-it was one are kept for good) unlocks seventeen more rides: the six cars levels bring, at once;
+A **Supporter Pass** (CA$9.99 once and kept for good, or CA$0.99 for 24 hours, towards the running
+costs; no subscription, though passes bought while it was one keep working) unlocks seventeen more rides: the six cars levels bring, at once;
 seven cars of its own (a neon racer, a night cruiser, a dune buggy, a farm truck, a police cruiser
 and two showpieces, a hypercar and a cyber muscle car); and four built in code (a sports coupe, a
 monster truck, a city bus and a hovercraft), each handling its own way; every look in the Garage at
 once (paint, finishes from satin to chrome and colour-shift, decals, rims, a neon underglow in eight
 colours and a rainbow, horns, seventeen more boost styles, flame colours and trails, some of which
-levels unlock over time), +50% XP, a ⭐ on the leaderboard and 30 Earth drives a day (everyone else
-gets one, then the Moon, Mars, Vesta and Ceres, which are free). It's bought with a Stripe Payment Link after
-signing in, so it's yours in any browser; Stripe's signed webhook records it. Signing in is with
+levels unlock over time), +50% XP, a ⭐ on the leaderboard and 10 Earth drives a day, even past the
+day's cap for everyone (everyone else gets one, then the Moon, Mars, Vesta and Ceres, which are
+free). It's offered where it matters most, as a visit runs out of Earth drives ("Get more Earth
+drives"), and bought with a Stripe Payment Link (from any country) after signing in, so it's yours
+in any browser; Stripe's signed webhook records it. Signing in is with
 Google or with a **username and password** (PBKDF2-SHA-256 at the Workers runtime's most, 100,000
 iterations, with a salt of its own; guessing slowed per address and per username without letting a
-stranger elsewhere lock the owner out (Google's sign-in always works); no email, so a password can't
-be recovered unless Google is linked too), and either can be linked to the other, with fresh proof
+stranger elsewhere lock the owner out (Google's sign-in always works); an email only for receipts, if given, so a password can't be recovered unless Google is linked
+too), and either can be linked to the other, with fresh proof
 of each, never the session alone: one account, with its pass, level, times and Garage, whichever way
 you signed in (see [Username and password
 accounts](docs/world-drive.md#username-and-password-accounts)). Buying stays off ("Coming soon")

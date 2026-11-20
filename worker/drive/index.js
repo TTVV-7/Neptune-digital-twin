@@ -7,7 +7,7 @@ import { postProgress, setTitle } from './progress.js';
 import { addressOf, adsense, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
 import { accountPlayer, currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
-import { linkGoogle, passwordSignIn, passwordsOn, removePassword, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
+import { linkGoogle, passwordSignIn, passwordsOn, removePassword, setContactEmail, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
@@ -51,7 +51,8 @@ export { DriveRoom } from './live.js';
 //   PER_VISITOR_DAILY     Earth visits a day per visitor (1 if unset); past it, the page opens on the Moon
 //   NAMES_PER_VISITOR_DAILY, SCORES_PER_VISITOR_DAILY   the leaderboard's new names and renames
 //                         (20 if unset) and scores (1500) a day per visitor
-//   PER_VISITOR_DAILY_SUPPORTER   a supporter's visits a day (30 if unset), counted by account
+//   PER_VISITOR_DAILY_SUPPORTER   a supporter's visits a day (10 if unset), counted by account,
+//                                 and never turned away by DAILY_VISITS
 //   GOOGLE_CLIENT_ID, SUPPORTER_*, STRIPE_WEBHOOK_SECRET   the Supporter Pass (see supporter.js)
 //   PASSWORD_ACCOUNTS     'off' switches usernames and passwords off (logins.js); PASSWORD_ITERATIONS
 //                         tests only (or to lower PBKDF2's count, see logins.js)
@@ -140,6 +141,7 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/account/google', handler: linkGoogle },
 	{ method: 'DELETE', path: '/api/account/google', handler: unlinkGoogle },
 	{ method: 'POST', path: '/api/account/sign-out-everywhere', handler: signOutEverywhere },
+	{ method: 'POST', path: '/api/account/email', handler: setContactEmail },
 	{ method: 'GET', path: '/api/live', handler: live },
 	{ method: 'GET', path: '/api/online', handler: online },
 	{ method: 'POST', path: '/api/stats', handler: postStats },
@@ -329,10 +331,12 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 
 	}
 
+	// A supporter (a lifetime pass or a day pass) has paid for their drives, so the day's cap for
+	// everyone doesn't turn them away (their drives still count towards it, for everyone else).
 	const outcome = await limits.visit( supporter ? `account:${ supporter.id }` : addressOf( request ), {
 		now,
-		daily: setting( env.DAILY_VISITS, 300 ),
-		perVisitor: supporter ? setting( env.PER_VISITOR_DAILY_SUPPORTER, 30 ) : setting( env.PER_VISITOR_DAILY, 1 ),
+		daily: supporter ? Number.MAX_SAFE_INTEGER : setting( env.DAILY_VISITS, 300 ),
+		perVisitor: supporter ? setting( env.PER_VISITOR_DAILY_SUPPORTER, 10 ) : setting( env.PER_VISITOR_DAILY, 1 ),
 	} );
 	if ( ! outcome.ok ) {
 
@@ -361,7 +365,7 @@ async function whoIsVisiting( context, { supporter = true } = {} ) {
 		const account = await currentAccount( context );
 		if ( ! account ) return { supporter: null, admin: false };
 		if ( isAdmin( context.env, account ) ) return { supporter: null, admin: true };
-		return { supporter: supporter && await isSupporter( context.env, account ) ? account : null, admin: false };
+		return { supporter: supporter && await isSupporter( context.env, account, context.now ) ? account : null, admin: false };
 
 	} catch ( err ) {
 
