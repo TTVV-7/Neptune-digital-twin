@@ -512,9 +512,14 @@ export function createCrashes( root, effects = {} ) {
 
 			}
 
+			// The dust ring thick enough to read over a pale road from the chase camera (and, as dust
+			// rather than light, still there for a visitor asking for less motion, only spreading
+			// less), a thin white shock ring racing out ahead of it, and the dust thrown up round it.
 			_p.copy( at ).addScaledVector( UP, 0.05 );
-			ring( dust, _p, UP, 0.35 + 0.25 * power, width * 0.5, width * ( 0.6 + 1.4 * power ), DUSTY, 0.35 + 0.2 * power, SHAPES.shock );
-			ground( at, count( 6 + 10 * power ), width * 0.5, 1.5 + 3 * power, 0.4 + 0.6 * Math.random(), 0.7 + 0.5 * power, 0.25 + 0.1 * power, 0.5 + 0.8 * power, DUSTY, 0.4 );
+			const skirt = ring( dust, _p, UP, 0.45 + 0.25 * power, width * 0.5, width * ( 0.7 + 1.5 * power ), DUSTY, 0.55 + 0.25 * power, SHAPES.shock );
+			if ( calm() ) skirt.alpha = 0.45;
+			ring( sparks, _p.addScaledVector( UP, 0.02 ), UP, 0.3, width * 0.45, width * ( 1 + 1.8 * power ), WHITE, 0.3 + 0.35 * power );
+			ground( at, count( 8 + 12 * power ), width * 0.5, 1.8 + 3.2 * power, 0.5 + 0.7 * Math.random(), 0.7 + 0.5 * power, 0.28 + 0.12 * power, 0.5 + 0.9 * power, DUSTY, 0.55 );
 
 		},
 
