@@ -438,8 +438,9 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	// its Earth drive (with a key from the start, at once), kept in step with that frame (frameOn).
 	// Until then a drop-in on the Earth asks for them first (openEarth). With no way to them at all
 	// (no Worker, or maps off) the test pad is driven instead: flat ground at whatever place you drop in.
+	// (The test pad's globe, with no way to Google's tiles, keeps the drawn one: no picture to fetch.)
 	let tiles = null;
-	const { group: earth, mesh: testEarth, ellipsoid } = createTestGlobe( { picture: EARTH_PICTURE } );
+	const { group: earth, mesh: testEarth, ellipsoid } = createTestGlobe( { picture: key || earthVisit ? EARTH_PICTURE : null } );
 	placeEarth( earth, ellipsoid, home );
 	// Where the Earth's frame is now (placeEarth's place), where Google's tiles are centred as they come.
 	let earthAt = home;

@@ -6,9 +6,9 @@ import { levelFrame } from './level.js';
 // NASA's Blue Marble on it (`picture`: drive/public/earth/colour.webp, scripts/make-earth.mjs), the
 // globe a place is picked on until someone drives on the Earth, which costs nothing to show where
 // Google's tiles cost a billed session a page (main.js asks for those at the first Earth drive). Until
-// the picture has come (or if it doesn't), and with none, ocean blue with a line every 15°. With no
-// Maps key at all (the dev server on its own, or the test pad when maps are off) it's the globe the
-// pins, flights and drop-ins work on for testing too.
+// the picture has come (or if it doesn't), and with none, ocean blue with a line every 15°: with no
+// way to Google's tiles at all (the dev server on its own, or the test pad when maps are off), the
+// test globe the pins, flights and drop-ins work on for testing, which has no picture to fetch.
 
 const _m = new Matrix4();
 const _east = new Vector3();
