@@ -100,21 +100,26 @@ export async function postStats( context ) {
 
 // The kinds of visit countVisit counts (metric 'visit_kind'): on the Earth ('earth', a supporter's
 // 'earth_supporter'), the owner's, on a free world opened on a link to it ('moon_link',
-// 'mars_link', 'vesta_link', 'ceres_link'), and on the Moon over the day's cap for everyone or the visitor's own (the page opens
-// on the Moon instead).
-const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', ...OFF_EARTH.map( world => `${ world }_link` ), 'moon_daily_cap', 'moon_visitor_cap' ] );
+// 'mars_link', 'vesta_link', 'ceres_link'), on the page's own globe with no Earth drive yet
+// ('globe': every page opened without a link to another world starts so, and asks for the Earth's
+// drive only when it drives there), and turned away by the day's cap for everyone or the visitor's
+// own ('moon_daily_cap', 'moon_visitor_cap': as the page opened on the Moon instead when it asked as
+// it loaded; from the globe, it stays on the globe).
+const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', ...OFF_EARTH.map( world => `${ world }_link` ), 'globe', 'moon_daily_cap', 'moon_visitor_cap' ] );
 
-// A visit handed out at `now`: counted for the day and its hour (UTC). Never in the visit's way: a
-// count that fails is only logged.
-export async function countVisit( env, now, kind = '' ) {
+// A visit handed out at `now`: counted for the day and its hour (UTC). again: an Earth drive asked
+// for by a page that was counted as a visit already (its globe's or a link's), so only where it went
+// is counted, not another visit. Never in the visit's way: a count that fails is only logged.
+export async function countVisit( env, now, kind = '', { again = false } = {} ) {
 
 	try {
 
 		if ( ! env.DB ) return;
 		const hour = String( new Date( now ).getUTCHours() ).padStart( 2, '0' );
-		const counts = [ [ 'visit', 'all', 1 ], [ 'visit_hour', hour, 1 ] ];
+		const counts = again ? [] : [ [ 'visit', 'all', 1 ], [ 'visit_hour', hour, 1 ] ];
 		// Where the visit went (VISIT_KINDS): the Earth, or another world and why.
 		if ( VISIT_KINDS.has( kind ) ) counts.push( [ 'visit_kind', kind, 1 ] );
+		if ( ! counts.length ) return;
 		await add( env.DB, dayOf( now ), counts );
 
 	} catch ( err ) {
