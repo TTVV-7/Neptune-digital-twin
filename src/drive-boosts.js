@@ -4194,7 +4194,9 @@ const STYLES = {
 	// bright sky rather than washing out to yellow; the embers glow. In overdrive, blue-hot breath and
 	// volleys of fireballs; let go, a snort of smoke, and run dry, a choke.
 	dragon: {
-		flame: { outer: 0xc8160a, inner: 0xff6a14, halo: 0xff4a1a, length: 1.35, flicker: 1.8, deep: true, diamonds: false },
+		// (A short, ragged cone: drawn over the scene, any longer it reads from the chase camera as a
+		// flat red stick down the view; its tongues of fire carry the length.)
+		flame: { outer: 0xc8160a, inner: 0xff6a14, halo: 0xff4a1a, length: 0.7, flicker: 2.2, deep: true, diamonds: false },
 		tint: 0xff5a2a,
 		make( root ) {
 
@@ -4220,7 +4222,8 @@ const STYLES = {
 
 				const p = fire.spawn( 0.3 + Math.random() * 0.15 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.25 * f.scale, ( Math.random() - 0.5 ) * 0.2 * f.scale, p.position );
-				thrown( f, p, 0.9, 4.5 + Math.random() * 2, 0.8, 1 );
+				// (Kept up with it, a couple of metres of fire behind it, never thrown back at the lens.)
+				thrown( f, p, 0.96, 3 + Math.random() * 1.5, 0.8, 1 );
 				p.mode = ALONG;
 				p.frame = SHAPES.wisp;
 				p.axis.copy( f.back ).addScaledVector( f.up, 0.2 + Math.random() * 0.3 ).addScaledVector( f.right, ( Math.random() - 0.5 ) * 0.6 ).normalize();
@@ -4260,12 +4263,12 @@ const STYLES = {
 
 				const p = fire.spawn( 1.1 + Math.random() * 0.4 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.3 * f.scale, 0.15 * f.scale, p.position );
-				thrown( f, p, 0.9, 1.5 + Math.random(), 0.9, 0.5 );
+				thrown( f, p, 0.95, 1.5 + Math.random(), 0.9, 0.5 );
 				p.frame = SHAPES.puff;
 				p.size = 0.15 * f.scale;
-				p.grow = 0.5 * f.scale;
+				p.grow = 0.4 * f.scale;
 				p.colour.set( colour );
-				p.alpha = 0.38;
+				p.alpha = 0.3;
 				p.fall = - 0.06;
 				p.drag = 1;
 				p.spin = ( Math.random() < 0.5 ? - 1 : 1 ) * ( 0.8 + Math.random() );
@@ -4277,23 +4280,23 @@ const STYLES = {
 			const fireball = () => {
 
 				// (Kept up with it, a couple of metres back, not flung back into the chase camera.)
-				const p = fire.spawn( 0.45 );
+				const p = fire.spawn( 0.4 );
 				p.position.copy( f.nozzle );
-				thrown( f, p, 0.9, 5, 0.4, 0.5 );
+				thrown( f, p, 0.97, 3, 0.4, 0.5 );
 				p.mode = ALONG;
 				p.frame = SHAPES.wisp;
 				p.axis.copy( f.back ).multiplyScalar( 0.45 * f.scale );
 				p.size = 0.26 * f.scale;
 				p.alpha = 0.95;
 				p.kind = 2;
-				const glow = sparks.spawn( 0.45 );
+				const glow = sparks.spawn( 0.4 );
 				glow.position.copy( p.position );
 				glow.carry.copy( p.carry );
 				glow.velocity.copy( p.velocity );
 				glow.frame = SHAPES.glow;
-				glow.size = 0.36 * f.scale;
+				glow.size = 0.3 * f.scale;
 				glow.colour.set( 0xff7a2a );
-				glow.alpha = 0.5;
+				glow.alpha = 0.45;
 				glow.kind = 1;
 				for ( let i = 0; i < 4; i ++ ) {
 
@@ -4383,8 +4386,9 @@ const STYLES = {
 							chokeDue = 0.12;
 							if ( frame.air ) {
 
-								const p = puff( 1, 0x1e1a18 );
-								p.alpha = 0.6;
+								const p = puff( 1, 0x2a1a14 );
+								p.alpha = 0.45;
+								p.life = 0.8;
 
 							}
 
@@ -5535,14 +5539,16 @@ export function createSupersonic( root, { tint = null, rainbow = false, deep = f
 // growth (times the vehicle's size), colour, alpha, height for its width ]. The rings keep up with
 // the vehicle (0.97 of its speed, drifting back a metre or few over their life): any slower and at
 // overdrive's speed they fall back through the chase camera while still growing, and with the
-// camera inside a ring's bright band the whole view goes white, twice.
+// camera inside a ring's bright band the whole view goes white, twice. And none of them grows much
+// past three times the vehicle's size: any wider, from the chase camera a few metres behind it, the
+// rings stack into a pale tunnel over the whole of the view, sky and road washed out.
 const BOOM = [
-	[ SHAPES.shock, 0.5, 0.97, 0.6, 4.5, 'white' ],
-	[ SHAPES.ring, 0.4, 0.97, 0.4, 3, 'pale' ],
-	[ SHAPES.glow, 0.18, 1, 1.1, 1, 'white', 0.75 ],
-	[ SHAPES.shock, 0.95, 0.97, 1, 6, 'rich', 0.6 ],
-	[ SHAPES.ring, 0.75, 0.97, 0.8, 4, 'rich', 0.6 ],
-	[ SHAPES.flare, 0.22, 1, 1.4, 1.2, 'white', 0.5, 0.25 ],
+	[ SHAPES.shock, 0.42, 0.98, 0.6, 2, 'white', 0.6 ],
+	[ SHAPES.ring, 0.34, 0.98, 0.4, 1.5, 'pale', 0.8 ],
+	[ SHAPES.glow, 0.15, 1, 0.8, 0.5, 'white', 0.45 ],
+	[ SHAPES.shock, 0.7, 0.98, 0.9, 2.4, 'rich', 0.32 ],
+	[ SHAPES.ring, 0.6, 0.98, 0.7, 1.9, 'rich', 0.45 ],
+	[ SHAPES.flare, 0.2, 1, 1.1, 0.8, 'white', 0.4, 0.25 ],
 ];
 // How bright the boom's rings are for a visitor asking for less motion.
 const CALM_RINGS = 0.6;
