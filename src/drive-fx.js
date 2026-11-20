@@ -955,11 +955,12 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 				const pop = 1 + SURGE * surge;
 				const swell = 1 + 0.35 * surge;
 				const width = air ? 1 - 0.1 * hot : 1 + 0.5 * hot;
-				const reach = air ? 1 + 0.3 * hot : 1;
+				// (A style's deep cone, drawn over the scene, burns shorter in overdrive instead: its own
+				// ragged tongues and fireballs carry the overdrive there, not a long solid stick.)
+				const reach = deep && style ? 1 - 0.3 * hot : air ? 1 + 0.3 * hot : 1;
 				flame.scale.set( scale * burn * swell * width, scale * burn * swell * width, scale * ( 0.6 + burn * 2.6 ) * jitter * ( styled?.length ?? 1 ) * pop * reach );
-				// (A style's deep cone, drawn over the scene, thins a little as it burns longer in
-				// overdrive, so it stays fire rather than a solid stick: its own particles carry it.)
-				outer.material.opacity = Math.min( 1, 0.25 + 0.35 * jitter + 0.3 * surge + 0.15 * hot ) * ( air ? 1 : 1 - 0.4 * hot ) * ( deep && style ? 1 - 0.35 * hot : 1 );
+				// (A style's deep cone thins out in overdrive too, so it stays fire rather than a solid stick.)
+				outer.material.opacity = Math.min( 1, 0.25 + 0.35 * jitter + 0.3 * surge + 0.15 * hot ) * ( air ? 1 : 1 - 0.4 * hot ) * ( deep && style ? 1 - 0.6 * hot : 1 );
 				inner.material.opacity = 0.9 + 0.1 * hot;
 				// (The rainbow's core is white already.)
 				if ( ! hued ) inner.material.color.lerpColors( core, WHITE_HOT, hot * ( deep ? 0.35 : 0.8 ) );

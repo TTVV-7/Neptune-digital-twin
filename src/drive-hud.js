@@ -466,6 +466,9 @@ const CSS = `
 .dhud .dhud-pop.wham {
 	text-shadow: none;
 	filter: drop-shadow( 0 6px 0 rgba( 0, 0, 0, 0.35 ) );
+	/* Its own layer, shadow and all, moved by the compositor: the keyframes only move and fade it,
+	   so the filter isn't redrawn on every step of them. */
+	will-change: transform, opacity;
 	animation: dhud-wham-hit 0.9s ease-out forwards;
 }
 

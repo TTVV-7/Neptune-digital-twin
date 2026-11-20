@@ -2057,9 +2057,11 @@ const STYLES = {
 				p.drag = 1;
 				if ( big ) {
 
-					nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position );
-					thrown( f, p, 0.94, 1.2 + Math.random() * 0.8, 1.1, 0.6 );
-					p.size = ( 0.22 + Math.random() * 0.04 ) * f.scale;
+					// Started a little behind the seat, so the big ones don't rise over the driver.
+					nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.35, ( Math.random() - 0.2 ) * 0.15 * f.scale, p.position )
+						.addScaledVector( f.back, 0.3 * f.scale );
+					thrown( f, p, 0.95, 1.6 + Math.random() * 0.8, 1.2, 0.3 );
+					p.size = ( 0.16 + Math.random() * 0.04 ) * f.scale;
 					p.grow = p.size * 0.2;
 					p.kind = 1;
 
@@ -2095,16 +2097,19 @@ const STYLES = {
 					if ( p.kind === 2 ) {
 
 						// A ring of heart, going out round it.
-						view.alpha = p.alpha * ( 1 - t ) ** 1.5;
+						view.alpha = p.alpha * ( 1 - t ) ** 2;
 						return;
 
 					}
 
 					// All beating together, the big ones harder; a broken heart doesn't.
-					if ( p.kind < 2 ) view.sx *= 1 + beat * ( p.kind === 1 ? 0.25 : 0.12 );
+					if ( p.kind < 2 ) view.sx *= 1 + beat * ( p.kind === 1 ? 0.18 : 0.12 );
 					view.sy = view.sx;
 					if ( p.kind < 3 ) view.turn = 0.3 * Math.sin( p.age * 3 + p.phase );
 					view.alpha = t < 0.7 ? 1 : ( 1 - t ) / 0.3;
+					// Faded out over the vehicle itself, so the hearts never hide the driver.
+					const near = view.position.distanceTo( f.middle ) / f.scale;
+					if ( near < 1.1 ) view.alpha *= Math.max( 0, ( near - 0.5 ) / 0.6 );
 
 				},
 			};
@@ -2123,17 +2128,19 @@ const STYLES = {
 					beating = beat > 0.8 * ( frame.calm ? 0.3 : 1 );
 					if ( beating && ! was && overdrive( frame ) > 0 && fl > 0.01 ) {
 
-						const p = batch.spawn( 0.5 );
-						p.position.copy( frame.nozzle );
-						p.carry.copy( frame.velocity ).multiplyScalar( 0.96 );
+						// Kept at the exhaust, quick and faint: a pulse round it, never a blob drifting back
+						// over the view.
+						const p = batch.spawn( 0.35 );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.2 * frame.scale );
+						p.carry.copy( frame.velocity );
 						p.axis.copy( frame.back );
 						p.mode = FLAT;
 						p.frame = SHAPES.heart;
-						p.size = 0.3 * frame.scale;
-						p.grow = ( frame.calm ? 1 : 1.6 ) * frame.scale;
+						p.size = 0.25 * frame.scale;
+						p.grow = ( frame.calm ? 0.4 : 0.6 ) * frame.scale;
 						p.turn = Math.PI;
 						p.colour.set( 0xff6fb5 );
-						p.alpha = frame.calm ? 0.3 : 0.55;
+						p.alpha = frame.calm ? 0.2 : 0.35;
 						p.kind = 2;
 
 					}
@@ -2171,8 +2178,11 @@ const STYLES = {
 					f = frame;
 					for ( const p of batch.items ) if ( p.age < p.life && p.kind < 2 ) {
 
+						// Drifting back as they rise, not hanging over it: what's thrown them back is
+						// kept (no more drag), and the stream carries them on a little less.
 						p.fall = frame.air ? - 0.35 : 0;
-						p.drag = 2;
+						p.carry.multiplyScalar( 0.95 );
+						p.velocity.addScaledVector( frame.up, frame.air ? 1.6 : 0 );
 
 					}
 
@@ -2355,7 +2365,9 @@ const STYLES = {
 			const stars = new Batch( root, { particles: 210 } );
 			const rockets = emitter();
 			const colours = [ 0xff3355, 0xffb000, 0x22ff88, 0x33aaff, 0xcc55ff ];
-			const CARRIED = 0.97;
+			const CARRIED = 1;
+			// (A burst's stars the same: they hang where they burst, in view, as they spread.)
+			const STARS_CARRIED = 1;
 			let f = null;
 			let scale = 1;
 			let pair = 1;
@@ -2375,11 +2387,13 @@ const STYLES = {
 			};
 			const rocket = k => {
 
-				// Up a little and only a little back, so they burst just over and behind it, in view.
+				// Straight up, kept up with it, so they burst a metre and a half over it just behind the
+				// driver: the chase camera's only a few metres back, looking down, so anything lower or
+				// further back is below the bottom of the view or right in front of the lens.
 				const h = overdrive( f );
-				const p = batch.spawn( 0.5 + Math.random() * 0.1 );
+				const p = batch.spawn( 0.45 + Math.random() * 0.1 );
 				nozzleAt( f, k, 0, 0, p.position );
-				thrown( f, p, 0.97, 0.6 + Math.random() * 0.4, 3 + Math.random() * 0.8, 0.8 );
+				thrown( f, p, 1, 0.2 + Math.random() * 0.3, 4.6 + Math.random() * 0.6, 0.4 );
 				launch( p, f.calm ? 3 : 1 );
 				if ( h > 0 ) {
 
@@ -2405,11 +2419,14 @@ const STYLES = {
 					spark.position.copy( from.position );
 					if ( form === 1 ) around( f, ( i + Math.random() * 0.2 ) / count * Math.PI * 2, _v );
 					else _v.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 ).normalize();
-					// All round, carried on with the rocket.
+					// All round, carried on with the rocket: each star a bold streak of colour drawn back
+					// along the way it flies out (see starHooks), wide enough to read in daylight.
 					spark.carry.copy( from.carry );
-					spark.velocity.copy( from.velocity ).multiplyScalar( 0.3 ).addScaledVector( _v, ( form === 1 ? 2.6 : 2.2 + Math.random() * 0.6 ) * scale );
-					spark.frame = SHAPES.star;
-					spark.size = 0.095 * scale;
+					spark.velocity.copy( from.velocity ).multiplyScalar( 0.3 ).addScaledVector( _v, form === 1 ? 3 : 2.6 + Math.random() * 0.5 );
+					spark.mode = ALONG;
+					spark.frame = SHAPES.spark;
+					spark.axis.copy( spark.velocity ).multiplyScalar( - 0.07 );
+					spark.size = 0.1 * scale;
 					spark.colour.set( colour );
 					spark.fall = willow ? 0.9 : 0.45;
 					// With no air, nothing slows them: perfect spheres widening as they fall.
@@ -2459,7 +2476,7 @@ const STYLES = {
 				}
 
 			};
-			// Carried along at nearly the vehicle's speed now, not what it was going as it was thrown:
+			// Carried along at the vehicle's speed now, not what it was going as it was thrown:
 			// out of a fast-gathering boost a rocket would otherwise fall metres behind before it burst,
 			// out of the chase camera's view.
 			const keepUp = {
@@ -2473,6 +2490,9 @@ const STYLES = {
 				step: keepUp.step,
 				died( p ) {
 
+					// Where it's got to this frame (it dies before it moves): a burst left where it was a
+					// frame ago would start that far behind, a metre or two at speed.
+					p.position.addScaledVector( p.velocity, f.dt ).addScaledVector( p.carry, f.dt );
 					if ( p.kind === 1 || p.kind === 3 ) burst( p, p.kind === 1 );
 					else if ( p.kind === 7 || p.kind === 8 ) burst( p, p.kind === 7, true );
 					else if ( p.kind === 5 ) fizzle( p );
@@ -2492,22 +2512,24 @@ const STYLES = {
 				},
 			};
 			const starHooks = {
-				step: keepUp.step,
+				step( p ) {
+
+					p.carry.copy( f.velocity ).multiplyScalar( STARS_CARRIED );
+
+				},
 				look( p, t, view ) {
 
+					// Drawn back along the way it flies, shortening as it slows (never shorter than a dot).
+					p.axis.copy( p.velocity ).multiplyScalar( - 0.07 );
+					const length = p.axis.length();
+					if ( length < 0.06 * scale ) p.axis.multiplyScalar( length > 1e-6 ? 0.06 * scale / length : 0 ).add( length > 1e-6 ? _a.set( 0, 0, 0 ) : _a.copy( f.up ).multiplyScalar( - 0.06 * scale ) );
 					// Crackling as it fades (only fading for a visitor asking for less motion).
 					if ( p.kind === 2 && t > 0.5 ) {
 
 						if ( ! f.calm ) view.alpha *= 0.5 + 0.5 * Math.sin( p.age * 50 + p.phase );
 
-					// A willow droops, drawn along the way it falls as it slows.
-					} else if ( p.kind === 4 && t > 0.5 ) {
-
-						p.mode = ALONG;
-						p.axis.copy( p.velocity ).multiplyScalar( 0.06 );
-						view.sx = 0.04 * scale;
-
-					}
+					// A willow droops, thinner as it slows.
+					} else if ( p.kind === 4 && t > 0.5 ) view.sx = 0.06 * scale;
 
 				},
 			};
@@ -2516,9 +2538,9 @@ const STYLES = {
 
 				for ( let i = 0; i < 3; i ++ ) {
 
-					const p = batch.spawn( 0.18 + i * 0.05 );
+					const p = batch.spawn( 0.3 + i * 0.06 );
 					p.position.copy( frame.nozzle );
-					thrown( frame, p, 0.95, 1.2, 4.5 + Math.random(), 1 );
+					thrown( frame, p, 1, 0.3, 5.5 + Math.random(), 0.4 );
 					p.velocity.addScaledVector( frame.right, ( i - 1 ) * 2.5 );
 					launch( p, calm ? 8 : 7 );
 
@@ -3071,14 +3093,15 @@ const STYLES = {
 			// The staff's points, round a ring: one every STEP s, laid over the exhaust and drifting
 			// after the vehicle for LIFE s; LINES lines along them.
 			const STAFF = 12;
-			const STEP = 1 / 30;
-			const LIFE = 0.45;
+			const LIFE = 0.7;
+			const STEP = LIFE / ( STAFF - 1 );
 			const LINES = 5;
 			const batch = new Batch( root, { particles: 90, quads: ( STAFF - 1 ) * LINES } );
 			const notes = emitter();
 			const colours = [ 0xff4d8d, 0x3dbdff, 0xffc21a, 0x4ddc6b, 0xa86bff, 0xff8a3d ];
 			const staff = Array.from( { length: STAFF }, () => ( { at: new Vector3(), velocity: new Vector3(), born: - Infinity } ) );
-			const paper = new Color( 0xfff6dc );
+			// Inked dark, so it reads on a light road or a pale sky alike.
+			const ink = new Color( 0x2a2440 );
 			const axis = new Vector3();
 			const middle = new Vector3();
 			const a = new Vector3();
@@ -3137,7 +3160,10 @@ const STYLES = {
 				for ( let i = 0; i < count; i ++ ) {
 
 					const p = note( 1 );
-					p.position.copy( f.nozzle ).addScaledVector( f.up, ( 0.1 + i * 0.12 ) * f.scale );
+					// Stacked a little behind it and drifting back, not piled on the driver.
+					p.position.copy( f.nozzle ).addScaledVector( f.back, 0.4 * f.scale ).addScaledVector( f.up, ( 0.1 + i * 0.12 ) * f.scale );
+					p.carry.copy( f.velocity ).multiplyScalar( 0.85 );
+					p.velocity.copy( f.back ).multiplyScalar( 1.5 ).addScaledVector( f.up, f.air ? 0.3 : 0 );
 					p.frame = SHAPES.note;
 					p.size *= 1.25;
 					p.colour.set( colours[ ( beats + i * 2 ) % colours.length ] );
@@ -3183,8 +3209,17 @@ const STYLES = {
 					}
 
 					batch.begin();
-					// The staff, laid over the exhaust and rippling out behind it.
-					for ( const point of staff ) point.at.addScaledVector( point.velocity, dt );
+					// The staff, laid just behind the exhaust and rippling out behind it (never carried on
+					// faster than it's going now, so it can't overtake it as it slows).
+					const ahead = _r.copy( frame.back ).negate();
+					const most = Math.max( 0, frame.velocity.dot( ahead ) );
+					for ( const point of staff ) {
+
+						const over = point.velocity.dot( ahead ) - most;
+						if ( over > 0 ) point.velocity.addScaledVector( ahead, - over );
+						point.at.addScaledVector( point.velocity, dt );
+
+					}
 					if ( fl > 0.01 ) {
 
 						due -= dt;
@@ -3193,16 +3228,16 @@ const STYLES = {
 							due = STEP;
 							head = ( head + 1 ) % STAFF;
 							staff[ head ].born = clock;
-							staff[ head ].velocity.copy( frame.velocity ).multiplyScalar( 0.9 ).addScaledVector( frame.back, 2 );
+							staff[ head ].velocity.copy( frame.velocity ).multiplyScalar( 0.97 ).addScaledVector( frame.back, 2 );
 
 						}
 
-						staff[ head ].at.copy( frame.nozzle ).addScaledVector( frame.up, 0.15 * scale );
+						staff[ head ].at.copy( frame.nozzle ).addScaledVector( frame.back, 0.3 * scale ).addScaledVector( frame.up, 0.15 * scale );
 
 					} else due = 0;
 					const lines = frame.detail < 1 ? 3 : LINES;
-					const width = ( 0.022 + 0.008 * hot ) * scale;
-					const bright = 0.55 + 0.2 * hot;
+					const width = ( 0.038 + 0.007 * hot ) * scale;
+					const bright = 0.7 + 0.15 * hot;
 					const wave = 0.12 * scale * ( frame.calm ? 0.5 : 1 );
 					for ( let i = 0; i < STAFF - 1; i ++ ) {
 
@@ -3215,12 +3250,14 @@ const STYLES = {
 						const sq = wave * Math.sin( clock * 6 - ( clock - q.born ) * 10 );
 						for ( let j = 0; j < lines; j ++ ) {
 
-							const off = ( lines === LINES ? j - 2 : ( j - 1 ) * 2 ) * 0.06 * scale;
-							a.copy( p.at ).addScaledVector( frame.up, off ).addScaledVector( frame.right, sp );
-							b.copy( q.at ).addScaledVector( frame.up, off ).addScaledVector( frame.right, sq );
+							// Its lines side by side, lying back along the road like lanes, so the chase
+							// camera, looking down on them, sees all five (stacked up, they'd be end on).
+							const off = ( lines === LINES ? j - 2 : ( j - 1 ) * 2 ) * 0.08 * scale;
+							a.copy( p.at ).addScaledVector( frame.right, off ).addScaledVector( frame.up, sp );
+							b.copy( q.at ).addScaledVector( frame.right, off ).addScaledVector( frame.up, sq );
 							middle.addVectors( a, b ).multiplyScalar( 0.5 );
 							axis.subVectors( a, b ).multiplyScalar( 0.5 );
-							batch.put( middle, axis, ALONG, width, 1, 0, SHAPES.streak, paper, bright * ( 1 - t ) * fl );
+							batch.put( middle, axis, ALONG, width, 1, 0, SHAPES.streak, ink, bright * ( 1 - t ) * fl );
 
 						}
 
@@ -3287,7 +3324,7 @@ const STYLES = {
 						p.frame = SHAPES.streak;
 						p.axis.copy( frame.up ).multiplyScalar( 0.11 * frame.scale );
 						p.size = ( i ? 0.025 : 0.01 ) * frame.scale;
-						p.colour.copy( paper );
+						p.colour.copy( ink );
 						p.kind = 2;
 
 					}
@@ -4239,13 +4276,14 @@ const STYLES = {
 			// A fireball thrown back out of it, in a glow, embers flying off it.
 			const fireball = () => {
 
+				// (Kept up with it, a couple of metres back, not flung back into the chase camera.)
 				const p = fire.spawn( 0.45 );
 				p.position.copy( f.nozzle );
-				thrown( f, p, 0.85, 8, 0.4, 0.5 );
+				thrown( f, p, 0.9, 5, 0.4, 0.5 );
 				p.mode = ALONG;
 				p.frame = SHAPES.wisp;
-				p.axis.copy( f.back ).multiplyScalar( 0.5 * f.scale );
-				p.size = 0.3 * f.scale;
+				p.axis.copy( f.back ).multiplyScalar( 0.45 * f.scale );
+				p.size = 0.26 * f.scale;
 				p.alpha = 0.95;
 				p.kind = 2;
 				const glow = sparks.spawn( 0.45 );
@@ -4253,7 +4291,7 @@ const STYLES = {
 				glow.carry.copy( p.carry );
 				glow.velocity.copy( p.velocity );
 				glow.frame = SHAPES.glow;
-				glow.size = 0.45 * f.scale;
+				glow.size = 0.36 * f.scale;
 				glow.colour.set( 0xff7a2a );
 				glow.alpha = 0.5;
 				glow.kind = 1;
@@ -4640,8 +4678,9 @@ const STYLES = {
 			const ghost = k => {
 
 				const p = ghosts.spawn( 1.4 + Math.random() * 0.4 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, 0.1 * f.scale, p.position );
-				thrown( f, p, 0.93, 1.3, 1.2, 0.4 );
+				// Out a little behind the exhaust, not over the driver.
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, 0.1 * f.scale, p.position ).addScaledVector( f.back, 0.3 * f.scale );
+				thrown( f, p, 0.93, 1.6, 1, 0.3 );
 				p.frame = SHAPES.ghost;
 				p.size = ( 0.17 + Math.random() * 0.05 ) * f.scale;
 				p.colour.set( pick( shades ) );
@@ -4694,6 +4733,9 @@ const STYLES = {
 						view.alpha = p.alpha * ( 1 - u ) ** 2;
 
 					} else view.alpha = p.alpha * Math.min( 1, t / 0.15, ( 1 - t ) / 0.3 );
+					// One that's crept up over the vehicle fades out there, so it never hides the driver.
+					const near = view.position.distanceTo( f.middle ) / f.scale;
+					if ( near < 1.1 ) view.alpha *= Math.max( 0, ( near - 0.5 ) / 0.6 );
 
 				},
 			};
@@ -4771,9 +4813,10 @@ const STYLES = {
 
 					if ( ! dry ) return;
 					const p = ghost( 1 );
-					p.position.copy( frame.nozzle );
-					p.velocity.copy( frame.up ).multiplyScalar( 1.2 );
-					p.size = 0.4 * frame.scale;
+					// Rising up out of it fast, so it's seen over the driver's head rather than in front.
+					p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.4 * frame.scale ).addScaledVector( frame.up, 1.1 * frame.scale );
+					p.velocity.copy( frame.up ).multiplyScalar( 2.2 ).addScaledVector( frame.back, 0.8 );
+					p.size = 0.3 * frame.scale;
 					p.life = 1.2;
 					p.fall = 0;
 					p.drag = 0.5;
