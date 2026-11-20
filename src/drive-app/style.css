@@ -995,13 +995,15 @@ body.touch #pause kbd {
 	to { transform: translateX( 0 ); }
 }
 
-#robot-check {
+#robot-check,
+#loading .robot-check {
 	display: flex;
 	justify-content: center;
 	margin-top: 14px;
 }
 
-#robot-check:empty {
+#robot-check:empty,
+#loading .robot-check:empty {
 	margin: 0;
 }
 
@@ -2265,7 +2267,7 @@ body:not( .touch ) #drive-ui .horn {
    It follows the banner's own offset from the bottom, --party-banner-bottom (above). */
 @media ( max-width: 760px ) and ( orientation: landscape ) {
 
-	body[data-mode='globe']:has( #globe-ui .party-banner:not( [hidden] ) ) :is( #moon-credit, #attribution ) {
+	body[data-mode='globe']:has( #globe-ui .party-banner:not( [hidden] ) ) :is( #earth-credit, #moon-credit, #attribution ) {
 		top: calc( 100% - var( --party-banner-bottom ) + 6px );
 	}
 
