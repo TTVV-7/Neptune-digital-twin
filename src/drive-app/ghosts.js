@@ -65,6 +65,16 @@ const _turn = new Quaternion();
 const _half = new Quaternion();
 const _axis = new Vector3();
 const _chord = new Vector3();
+const _hit = new Vector3();
+const _away = new Vector3();
+// A ghost's hits and hard landings aren't sent (its flags have no room left: see live-protocol.js),
+// so they're seen in how its velocity changes: thrown back the way it came, faster than HIT_SPEED
+// (m/s) along the ground, is a hit; coming down onto its wheels faster than LAND_SPEED, a hard
+// landing. Each at most once every CRASH_EVERY s, so a jolt in what's heard of it isn't taken for
+// a string of them.
+const HIT_SPEED = 6;
+const LAND_SPEED = 5;
+const CRASH_EVERY = 0.4;
 const _splash = new Vector3();
 const noRay = () => {};
 
@@ -169,7 +179,10 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 			p: new Vector3(), q: new Quaternion(), v: new Vector3(), flags: 0, scene: new Vector3(), distance: Infinity,
 			model: null, loading: null, failed: false, lookAt: 0, builtAt: - Infinity, builds: 0, fx: null, fxFlags: 0, faded: false, drawn: false,
 			// How many of each burst its effects have set off (for the tests).
-			bursts: { ignite: 0, cool: 0, tier: 0, turbo: 0 },
+			bursts: { ignite: 0, cool: 0, tier: 0, turbo: 0, hit: 0, land: 0 },
+			// Its velocity (in the scene) the frame before, and when it last hit something or landed
+			// hard (s, this page's clock), for its crashes (see crash).
+			lastV: new Vector3(), lastHit: - Infinity, lastLand: - Infinity,
 			yaw: null, steer: 0, splashLevel: 0,
 			tag: makeTag( p ),
 		};
@@ -388,12 +401,43 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 
 	}
 
+	// A ghost's hit or hard landing, seen in how its velocity `_v` (in the scene) changed since the
+	// frame before (see HIT_SPEED): a hit's burst at its front, over it, where it was going; or dust
+	// as it comes down onto its wheels. `was`: its flags the frame before.
+	function crash( ghost, was ) {
+
+		const { lastV } = ghost;
+		const { pivot, size } = ghost.model;
+		const now = performance.now() / 1000;
+		const before = lastV.x * lastV.x + lastV.z * lastV.z;
+		if ( before > HIT_SPEED * HIT_SPEED && _v.x * lastV.x + _v.z * lastV.z < - 0.25 * before && now - ghost.lastHit > CRASH_EVERY ) {
+
+			ghost.lastHit = now;
+			const speed = Math.sqrt( before );
+			_away.set( - lastV.x / speed, 0, - lastV.z / speed );
+			_hit.copy( pivot.position ).addScaledVector( _away, - ( size.length ?? size.width ) / 2 );
+			_hit.y += size.height * 0.9;
+			ghost.fx.burst( _hit, _away, MathUtils.clamp( speed / 30, 0, 1 ), _hit, pivot.position.y );
+			ghost.bursts.hit ++;
+
+		}
+
+		if ( was & FLAGS.air && ! ( ghost.flags & FLAGS.air ) && lastV.y < - LAND_SPEED && now - ghost.lastLand > CRASH_EVERY ) {
+
+			ghost.lastLand = now;
+			ghost.fx.dust( pivot.position, MathUtils.clamp( - lastV.y / 15, 0, 1 ), size.width );
+			ghost.bursts.land ++;
+
+		}
+
+	}
+
 	function updateFx( ghost, dt ) {
 
 		const { model, flags } = ghost;
 		const { pivot, size } = model;
 		const fresh = ! ghost.fx;
-		ghost.fx ??= createDriveFx( group, fxOf( cleanLook( model.vehicle, ghost.look ) ), { water: true, effects } );
+		ghost.fx ??= createDriveFx( group, fxOf( cleanLook( model.vehicle, ghost.look ) ), { water: true, effects, gravity: effects?.gravity ?? 1, ...effects?.dust ? { dust: effects.dust } : {} } );
 		const firing = flags & FLAGS.firing;
 		const boosting = flags & FLAGS.boost;
 		const speed = _v.length();
@@ -407,7 +451,12 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 		else if ( ! firing && was & FLAGS.firing ) burst( ghost, 'cool' );
 		if ( flags & FLAGS.drift && level > wasLevel ) burst( ghost, 'tier', level );
 		if ( was & FLAGS.drift && ! ( flags & FLAGS.drift ) && boosting && wasLevel > 0 ) burst( ghost, 'turbo', wasLevel );
-		// The boom as it goes supersonic, and the splash as it goes in.
+		// The boom as it goes supersonic (before the update, which sets it off), and the splash as it
+		// goes in.
+		if ( flags & FLAGS.supersonic && ! ( ghost.fxFlags & FLAGS.supersonic ) ) ghost.fx.boom();
+		// Its hits and hard landings, which it doesn't send (not as it comes in sight).
+		if ( ! fresh ) crash( ghost, was );
+		ghost.lastV.copy( _v );
 		if ( flags & FLAGS.splash && ! ( ghost.fxFlags & FLAGS.splash ) ) {
 
 			ghost.splashLevel = pivot.position.y;
@@ -426,7 +475,6 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 			water: flags & FLAGS.splash ? { level: ghost.splashLevel, sinking: true } : flags & FLAGS.spray ? { level: pivot.position.y, spray: MathUtils.clamp( speed / 25, 0, 1 ) } : null,
 			dt,
 		} );
-		if ( flags & FLAGS.supersonic && ! ( ghost.fxFlags & FLAGS.supersonic ) ) ghost.fx.boom();
 		ghost.fxFlags = flags;
 
 	}

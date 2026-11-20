@@ -559,7 +559,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		plane: true,
 		canPlane: () => challenges?.run && [ 'countdown', 'racing' ].includes( challenges.run.phase ) ? 'No plane during a challenge run' : null,
 	} );
-	// Speed lines, overdrive's white edges and the camera's jolts and shakes, with their switch in
+	// Speed lines, overdrive's flashing edges and the camera's jolts and shakes, with their switch in
 	// the pause menu (screen-fx.js).
 	const screenFx = createScreenFx( { scene, driver, toggle: $( 'pause' ).querySelector( '.camera-toggle' ), touch: () => document.body.classList.contains( 'touch' ) } );
 
@@ -2254,10 +2254,18 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// landing throws up its colour.
 		const other = offEarth();
 		driver.gravity = WORLDS[ world ].gravity ?? 1;
+		// Its effects told too, as the others' cars' share them: a world with no air (the Moon, Vesta,
+		// Ceres: no glow round them in body.js's LOOKS) has none for a boom's vapour, smoke or billowing
+		// dust (regolith thrown up instead), and the bursts' embers and the crash's sparks fall in its
+		// gravity. (Mars's thin air still carries its dust.)
+		driver.effects.air = ! other || !! LOOKS[ world ].air;
+		driver.effects.gravity = driver.gravity;
 		driver.water = other ? null : water;
 		water.none = other;
 		pads.rules = other ? MOON_RULES : EARTH_RULES;
 		driver.dust = other ? LOOKS[ world ].dust : null;
+		// Others' cars here throw up the same dust (ghosts.js reads it as each one's effects are made).
+		driver.effects.dust = driver.dust;
 		driver.start( state.entry, specOf( state.vehicle ) );
 		// Put down here: Discoveries within a kilometre count only once it's been that far from them.
 		// Only on a real placement: not a resume from a pause or a change of ride (the car hasn't

@@ -1,6 +1,7 @@
 // A driving HUD any app can use with a Driver (drive.js): the speed, a boost gauge (which glows on
 // and off when it's full, flashes red as it runs dry, and fills up before your eyes when something
-// tops it up), FLYING with the height, SUPERSONIC, drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
+// tops it up), FLYING with the height, OVERDRIVE (supersonic, as drive.js has it: glowing in the
+// ride's colour, the gauge with it), drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
 // buttons to drive with. With kart handling a DRIFT button (SPACE) sits under the speed, and its
 // chip lights up while drifting with the mini-turbo's charge. With stunts (crash: 'launch') a hit
 // pops up a word ("WHAM!"), tricks pop up as they're landed, and the score, its combo multiplier
@@ -20,8 +21,10 @@ const SPEED_SCALE = 200;
 // How long a message stays (ms), a little longer for a long one.
 const FLASH_TIME = 1500;
 const FLASH_PER_CHAR = 30;
-// How long a hit's word and landed tricks stay (ms), and a top-up's on the boost gauge.
-const POP_TIME = 750;
+// How long a hit's word and landed tricks stay (ms), and a top-up's on the boost gauge. Hits within
+// CHAIN_TIME ms of each other count up (×2, ×3...), each word a little bigger.
+const POP_TIME = 900;
+const CHAIN_TIME = 1200;
 const REFUEL_TIME = 700;
 const EMPTY_TIME = 650;
 const TRICKS_TIME = 2200;
@@ -189,12 +192,18 @@ const CSS = `
 	background: var( --fly );
 }
 
-/* Supersonic: white-hot, arriving with a jolt. */
+/* Overdrive (supersonic): heavy and slanted as the hits' words are, white-hot through the ride's
+   colour (--sonic, its flame's) to the accent's yellow and glowing in its colour, slamming in from
+   big with a little overshoot, and a sheen sweeping across it while it lasts. */
 .dhud .dhud-sonic {
-	background: linear-gradient( 100deg, #ffffff, #bfe4ff 45%, #ffd23f );
+	background: linear-gradient( 100deg, #ffffff 0%, var( --sonic, #bfe4ff ) 35%, var( --accent ) 60%, #ffffff 80%, var( --sonic, #bfe4ff ) 100% );
+	background-size: 250% 100%;
 	box-shadow: 0 0 16px rgba( 191, 228, 255, 0.9 );
+	box-shadow: 0 0 16px color-mix( in srgb, var( --sonic, #bfe4ff ) 85%, transparent );
+	font-weight: 900;
 	font-style: italic;
-	animation: dhud-sonic 0.45s ease-out;
+	letter-spacing: 0.02em;
+	animation: dhud-sonic 0.45s cubic-bezier( 0.3, 1.6, 0.5, 1 ), dhud-sonic-sheen 1.4s linear 0.45s infinite;
 }
 
 @keyframes dhud-sonic {
@@ -202,6 +211,25 @@ const CSS = `
 		opacity: 0;
 		transform: scale( 1.8 );
 	}
+}
+
+@keyframes dhud-sonic-sheen {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -150% 0;
+	}
+}
+
+/* The booster burning: the gauge glows hot; in overdrive, in the ride's colour. (On the bar, which
+   clips its fill; its other states' glows, animated, show over this while they run.) */
+.dhud.boosting .dhud-boost .dhud-bar {
+	box-shadow: 0 0 8px 1px color-mix( in srgb, var( --boost ) 80%, transparent );
+}
+
+.dhud.sonic .dhud-boost .dhud-bar {
+	box-shadow: 0 0 10px 2px color-mix( in srgb, var( --sonic, var( --boost ) ) 85%, transparent );
 }
 
 /* The gauge topped up (a boost pad): a ring of light round it, and what it took by BOOST. */
@@ -273,8 +301,12 @@ const CSS = `
 	}
 }
 
-/* Asked for less motion: a steady glow when full, and one flash run dry. */
+/* Asked for less motion: a steady glow when full, one flash run dry, and OVERDRIVE just there. */
 @media ( prefers-reduced-motion: reduce ) {
+
+	.dhud .dhud-sonic {
+		animation: none;
+	}
 
 	.dhud .dhud-boost.ready .dhud-bar {
 		animation: none;
@@ -403,10 +435,13 @@ const CSS = `
 }
 
 /* A hit's word: big, tilted and gone in a moment, bursting off the vehicle (in the middle of the
-   view, below the tricks). */
+   view, over it rather than on its roof, between it and the tricks), each in its own way by how hard the
+   hit was: BONK! a small white pop that drops away, BOING! a springy squash and stretch, WHAM! hot
+   on a starburst, shaken; WIPEOUT! rolls over and drops. A hit's word is there from its first
+   frame (it comes in mostly solid, not out of nothing), so even a quick look at the hit sees it. */
 .dhud .dhud-pop {
 	position: absolute;
-	top: 58%;
+	top: 40%;
 	left: 50%;
 	font-size: clamp( 34px, 7vw, 80px );
 	font-weight: 900;
@@ -421,14 +456,57 @@ const CSS = `
 	animation: dhud-wham 0.75s ease-out forwards;
 }
 
+.dhud .dhud-pop.bonk {
+	font-size: calc( clamp( 34px, 7vw, 80px ) * 0.8 );
+	color: #fff;
+	-webkit-text-stroke: 4px var( --accent );
+	text-shadow: 0 0 2px #1a1206, 0 5px 0 rgba( 0, 0, 0, 0.35 );
+	animation: dhud-bonk 0.45s ease-out forwards;
+}
+
+.dhud .dhud-pop.boing {
+	animation: dhud-boing 0.75s ease-out forwards;
+}
+
+/* WHAM!'s word in a hot gradient (a span of its own, so the starburst behind it is under the word:
+   the pop's own background would be under the starburst), shadowed as a whole rather than by
+   text-shadow, which would cover the gradient. */
+.dhud .dhud-pop.wham {
+	text-shadow: none;
+	filter: drop-shadow( 0 6px 0 rgba( 0, 0, 0, 0.35 ) );
+	/* Its own layer, shadow and all, moved by the compositor: the keyframes only move and fade it,
+	   so the filter isn't redrawn on every step of them. */
+	will-change: transform, opacity;
+	animation: dhud-wham-hit 0.9s ease-out forwards;
+}
+
+.dhud .dhud-pop.wham span {
+	background: linear-gradient( #ffd23a 25%, #ff4a1a 80% );
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+
+.dhud .dhud-pop.wham::before {
+	content: '';
+	position: absolute;
+	inset: -30% -6%;
+	z-index: -1;
+	background: var( --accent );
+	opacity: 0.85;
+	clip-path: polygon( 50% 0%, 61% 24%, 85% 15%, 76% 39%, 100% 50%, 76% 61%, 85% 85%, 61% 76%, 50% 100%, 39% 76%, 15% 85%, 24% 61%, 0% 50%, 24% 39%, 15% 15%, 39% 24% );
+	animation: dhud-plate 0.9s ease-out forwards;
+}
+
 .dhud .dhud-pop.wipeout {
 	color: #ff5a5a;
 	font-size: clamp( 28px, 5.5vw, 60px );
+	animation: dhud-wipeout 0.9s ease-out forwards;
 }
 
 @keyframes dhud-wham {
 	0% {
-		opacity: 0;
+		opacity: 0.7;
 		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.3 ) );
 	}
 	18% {
@@ -447,6 +525,154 @@ const CSS = `
 	}
 }
 
+/* A quick pop, and down it drops. */
+@keyframes dhud-bonk {
+	0% {
+		opacity: 0.7;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.3 ) );
+	}
+	25% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.15 ) );
+	}
+	45% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -10% ) rotate( calc( var( --tilt, -6deg ) * 2 ) ) scale( calc( var( --size, 1 ) * 0.9 ) );
+	}
+}
+
+/* Squashed flat, stretched tall, and springing back. */
+@keyframes dhud-boing {
+	0% {
+		opacity: 0.7;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 0.4, 0.3 );
+	}
+	14% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 1.35, 0.6 );
+	}
+	32% {
+		transform: translate( -50%, -55% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 0.82, 1.25 );
+	}
+	50% {
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 1.1, 0.9 );
+	}
+	64% {
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 1, 1 );
+	}
+	78% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -58% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 1, 1 );
+	}
+}
+
+/* Slammed in big, shaken for a moment, and gone. */
+@keyframes dhud-wham-hit {
+	0% {
+		opacity: 0.6;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 2.2 ) );
+	}
+	12% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.92 ) );
+	}
+	18% {
+		transform: translate( calc( -50% + 4px ), calc( -50% - 3px ) ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.05 ) );
+	}
+	22% {
+		transform: translate( calc( -50% - 4px ), calc( -50% + 2px ) ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	26% {
+		transform: translate( calc( -50% + 3px ), calc( -50% + 3px ) ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	30% {
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	75% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -58% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.08 ) );
+	}
+}
+
+@keyframes dhud-plate {
+	0% {
+		transform: scale( 0 ) rotate( -20deg );
+	}
+	20% {
+		transform: scale( 1.15 ) rotate( 0deg );
+	}
+	35% {
+		transform: scale( 1 );
+	}
+	100% {
+		transform: scale( 1.05 ) rotate( 6deg );
+	}
+}
+
+/* Rolled over once as it comes, dropping a little, and settling. */
+@keyframes dhud-wipeout {
+	0% {
+		opacity: 0;
+		transform: translate( -50%, -56% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.4 ) );
+	}
+	39% {
+		opacity: 1;
+		transform: translate( -50%, -44% ) rotate( calc( var( --tilt, -6deg ) + 360deg ) ) scale( calc( var( --size, 1 ) * 1.1 ) );
+	}
+	55% {
+		transform: translate( -50%, -50% ) rotate( calc( var( --tilt, -6deg ) + 360deg ) ) scale( var( --size, 1 ) );
+	}
+	78% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -50% ) rotate( calc( var( --tilt, -6deg ) + 360deg ) ) scale( var( --size, 1 ) );
+	}
+}
+
+/* Asked for less motion: the words just fade in and out where they are, the starburst still. */
+@keyframes dhud-pop-calm {
+	0% {
+		opacity: 0;
+	}
+	15% {
+		opacity: 1;
+	}
+	70% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.dhud .dhud-pop,
+	.dhud .dhud-pop.bonk,
+	.dhud .dhud-pop.boing,
+	.dhud .dhud-pop.wham,
+	.dhud .dhud-pop.wipeout {
+		animation: dhud-pop-calm 0.75s ease-out forwards;
+	}
+
+	.dhud .dhud-pop.wham::before {
+		animation: none;
+	}
+
+}
+
 /* Tricks: what it's doing in the air (dim), then what it landed and the points (bright), or what a
    wipeout lost (struck through). */
 .dhud .dhud-tricks {
@@ -461,6 +687,13 @@ const CSS = `
 	padding: 0 16px;
 	text-align: center;
 	text-shadow: 0 2px 0 rgba( 0, 0, 0, 0.35 ), 0 4px 14px rgba( 0, 0, 0, 0.45 );
+	transition: opacity 0.15s ease-out;
+}
+
+/* Out of the way of a hit's word while it's up (see pop). */
+.dhud.popping .dhud-tricks {
+	opacity: 0;
+	transition: none;
 }
 
 .dhud .dhud-tricks b {
@@ -510,6 +743,39 @@ const CSS = `
 
 .dhud .dhud-flash:not( [hidden] ) {
 	animation: dhud-pop 0.25s ease-out;
+}
+
+/* "Crash!": red, and knocked side to side for a moment (just there for a visitor asking for less
+   motion). */
+.dhud .dhud-flash.crash {
+	color: #ff4a4a;
+}
+
+.dhud .dhud-flash.crash:not( [hidden] ) {
+	animation: dhud-pop 0.25s ease-out, dhud-knock 0.3s linear;
+}
+
+@keyframes dhud-knock {
+	20% {
+		translate: 4px 0;
+	}
+	40% {
+		translate: -4px 0;
+	}
+	60% {
+		translate: 3px 0;
+	}
+	80% {
+		translate: -2px 0;
+	}
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.dhud .dhud-flash.crash:not( [hidden] ) {
+		animation: dhud-pop 0.25s ease-out;
+	}
+
 }
 
 @keyframes dhud-pop {
@@ -865,6 +1131,9 @@ export function createDriveHud( parent = document.body ) {
 	let emptyTimer;
 	let scoring = false;
 	let tilt = 1;
+	let chain = 0;
+	let lastPop = - Infinity;
+	let popTimer;
 	let panel = null;
 	let flying = false;
 	let plane = false;
@@ -989,6 +1258,7 @@ export function createDriveHud( parent = document.body ) {
 				boostRow.hidden = ! driver?.booster;
 				flyBadge.hidden = ! flying;
 				sonicBadge.hidden = true;
+				root.classList.remove( 'sonic' );
 				shown.delete( 'sonic' );
 				driftBadge.hidden = true;
 				scoreRow.hidden = ! scoring;
@@ -1013,6 +1283,8 @@ export function createDriveHud( parent = document.body ) {
 			boostRow.classList.remove( 'refuel', 'empty' );
 			boostLabel.textContent = 'BOOST';
 			pops.replaceChildren();
+			clearTimeout( popTimer );
+			root.classList.remove( 'popping' );
 			panel?.remove();
 			panel = null;
 			for ( const button of root.querySelectorAll( '.dhud-touch .down' ) ) button.classList.remove( 'down' );
@@ -1063,18 +1335,33 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		// A hit's word ("WHAM!"), `power` 0 to 1 by how hard; kind 'wipeout' for a wipeout.
+		// A hit's word ("WHAM!"), `power` 0 to 1 by how hard; `kind` how it shows: 'bonk', 'boing',
+		// 'wham' (by how hard, as drive.js has them) or 'wipeout'. A hit within CHAIN_TIME of the last
+		// counts up (×2, ×3...) and is a little bigger each time.
 		pop( word, power = 0.5, kind = '' ) {
 
+			// Hits count up together; a wipeout is a word of its own.
+			const now = performance.now();
+			const hit = kind !== 'wipeout';
+			chain = hit && now - lastPop < CHAIN_TIME ? chain + 1 : 1;
+			lastPop = hit ? now : - Infinity;
 			const element = document.createElement( 'div' );
 			element.className = `dhud-pop ${ kind }`.trim();
-			element.textContent = word;
+			// The word in a span of its own (WHAM!'s starburst goes behind it: see the CSS).
+			const text = document.createElement( 'span' );
+			text.textContent = chain > 1 ? `${ word } ×${ chain }` : word;
+			element.append( text );
 			// Tilted one way, then the other.
 			tilt = - tilt;
 			element.style.setProperty( '--tilt', `${ tilt * ( 4 + power * 5 ) }deg` );
-			element.style.setProperty( '--size', String( 0.75 + power * 0.5 ) );
+			element.style.setProperty( '--size', String( 0.75 + power * 0.5 + 0.1 * Math.min( 5, chain - 1 ) ) );
 			pops.replaceChildren( element );
 			setTimeout( () => element.remove(), POP_TIME );
+			// The tricks (a wall bounce landing a big air, say) stand aside while the word's up, so
+			// it's never read through them; they come back as it goes.
+			clearTimeout( popTimer );
+			root.classList.add( 'popping' );
+			popTimer = setTimeout( () => root.classList.remove( 'popping' ), kind === 'bonk' ? 420 : 680 );
 
 		},
 
@@ -1147,10 +1434,18 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		// Supersonic (boosting flat out, see drive.js), or not.
-		setSupersonic( on ) {
+		// Supersonic (boosting flat out, see drive.js), or not; `tint`, the ride's colour (a three.js
+		// Color, its fx's), which the tag and the gauge glow in.
+		setSupersonic( on, tint = null ) {
 
-			set( 'sonic', !! on && ! panel, value => sonicBadge.hidden = ! value );
+			set( 'sonic', !! on && ! panel, value => {
+
+				sonicBadge.hidden = ! value;
+				root.classList.toggle( 'sonic', value );
+
+			} );
+			// (With none, a rainbow flame's, the CSS's own ice blue, not the last ride's.)
+			if ( on ) set( 'sonic-tint', tint ? tint.getHexString() : '', hex => hex ? root.style.setProperty( '--sonic', `#${ hex }` ) : root.style.removeProperty( '--sonic' ) );
 
 		},
 
@@ -1176,11 +1471,13 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		flash( message ) {
+		// A big message for a moment; `kind` 'crash' for "Crash!", knocked side to side in red.
+		flash( message, kind = '' ) {
 
 			if ( root.classList.contains( 'touch' ) ) for ( const [ keys, buttons ] of TOUCH_WORDS ) message = message.replace( keys, buttons );
 			flash.textContent = message;
 			flash.classList.toggle( 'long', message.length > 18 );
+			flash.classList.toggle( 'crash', kind === 'crash' );
 			// Restart the pop for a new message on top of the last.
 			flash.hidden = true;
 			void flash.offsetWidth;
