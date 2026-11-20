@@ -4255,7 +4255,7 @@ The pass is a **subscription** (`SUPPORTER_PRICE`, CA$1.99/month as set), throug
 Link in World Drive's own Stripe account, and lasts while the subscription is active. Passes bought
 before it was a subscription (one payment each, no subscription id) are **legacy passes, kept for
 good**. It comes with what's [above](#supporter-pass-content) (seven cars of its
-own, the six levels bring, the four rides and every Garage look at once), **+50% XP** for
+own, the six levels bring, the seven rides and every Garage look at once), **+50% XP** for
 [levels](#levels), a **⭐ by your name on the leaderboard**, and **30 Earth drives a day** instead of 1.
 A pass is an account's (Google's sign-in, or a [username and password](#username-and-password-accounts)),
 so it's yours in any browser you sign in on: signing in is only ever for the pass and your level
