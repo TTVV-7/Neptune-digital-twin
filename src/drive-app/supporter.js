@@ -73,6 +73,9 @@ let picked = null;
 // (until then it's the prices alone, short enough for a laptop's screen, and Google's script isn't
 // loaded).
 let signingIn = false;
+// The ways to sign in have just been revealed: the sheet scrolls to them as it's next drawn (Google's
+// button is only drawn once it's on screen).
+let revealSignIn = false;
 let handle = null;
 const areas = new Map();
 const observers = new Set();
@@ -235,6 +238,7 @@ export async function signOut( { everywhere = false } = {} ) {
 
 	// Signed out on the sheet, its ways to sign in again show at once.
 	signingIn = true;
+	revealSignIn = true;
 
 	say( 'Signing out...' );
 	// The account's player, handed to this browser as it signed in (not one made here), goes with
@@ -645,9 +649,9 @@ function renderBuy( root ) {
 			if ( me.signedIn ) return openSupporterCheckout( kind );
 			picked = kind;
 			signingIn = true;
+			revealSignIn = true;
 			onBuy( 'ask' );
 			say( 'Sign in or make a free account first, so the pass is yours on any device.' );
-			root.querySelector( '.supporter-status' )?.scrollIntoView( { block: 'nearest' } );
 
 		};
 		// 24 hours, monthly (the main one: the subscription people buy) and for good, each with its
@@ -670,6 +674,7 @@ function renderBuy( root ) {
 		if ( ! me.signedIn ) parts.push( ...( signingIn ? signInParts() : [ line( 'Have the pass already? ', linkButton( 'Sign in', () => {
 
 			signingIn = true;
+			revealSignIn = true;
 			render();
 
 		} ) ) ] ) );
@@ -687,6 +692,12 @@ function renderBuy( root ) {
 	if ( status ) parts.push( statusLine() );
 	if ( ! lifetime ) parts.push( Object.assign( line( purchase.enabled ? ( purchase.monthly ? 'Monthly is a subscription: cancel any time. For good and 24 hours are paid once. ' : 'Pay once: for good, or 24 hours and it simply ends. ' ) + 'Paid securely with Stripe, in any country.' : 'Pay once, keep it for good. Buying opens soon.' ), { className: 'small' } ) );
 	root.replaceChildren( ...parts );
+	if ( revealSignIn && ! me.signedIn && root.isConnected ) {
+
+		revealSignIn = false;
+		( root.querySelector( '.supporter-google' ) ?? root.querySelector( '.supporter-passwords' ) )?.scrollIntoView( { block: 'nearest' } );
+
+	}
 
 }
 
