@@ -16,7 +16,7 @@
 // every bad token turned away), the session cookie, /api/me, the webhook (signatures, five minutes,
 // a payment once, bank debits, bought before signing in, refunds, chargebacks, either delivered
 // before their checkout, another link's checkouts, test-mode payments with a live link), the
-// same-origin checks it alone goes without, SUPPORTER_EMAILS, 10 drives a day for a supporter, the
+// same-origin checks it alone goes without, SUPPORTER_EMAILS, 30 drives a day for a supporter, the
 // ⭐ on the leaderboard, the owner's SQL, and buying off without its settings. And the play stats:
 // each metric's keys checked and held to what a post may add, MAX_COUNTS a post, only with a visit's
 // token, and the admin page's answer (ADMIN_EMAILS only): the counts a day with what the
@@ -1235,6 +1235,7 @@ const PASS_LINK = 'https://buy.stripe.com/test_7sYmadeUp00000000000';
 const PASS_LINK_ID = 'plink_1MadeUpSupporterLink0000';
 const DAY_LINK = 'https://buy.stripe.com/test_dayMadeUp000000000000';
 const DAY_LINK_ID = 'plink_1MadeUpDayPassLink00000';
+const MONTH_LINK = 'https://buy.stripe.com/test_monthMadeUp0000000000';
 const WEBHOOK_SECRET = 'whsec_made_up_for_world_drive_tests_0123';
 // Tuesday 3 November 2026 at noon UTC: everything on the Supporter Pass's Worker happens then,
 // sessions included, unless a test says otherwise.
@@ -1333,6 +1334,7 @@ describe( 'World Drive Supporter Pass', () => {
 				// counts here, and the day pass is its own made-up link.
 				SUPPORTER_PAYMENT_LINK_ID: '',
 				DAY_PASS_PAYMENT_LINK: DAY_LINK,
+				SUPPORTER_MONTHLY_PAYMENT_LINK: MONTH_LINK,
 				DAY_PASS_PAYMENT_LINK_ID: DAY_LINK_ID,
 				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
 				SUPPORTER_EMAILS: ' Friend@Example.com, ',
@@ -1405,7 +1407,7 @@ describe( 'World Drive Supporter Pass', () => {
 		const res = await me();
 		assert.equal( res.status, 200 );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
-		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$9.99', day: { link: DAY_LINK, price: 'CA$0.99' } } } );
+		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$19.99', monthly: { link: MONTH_LINK, price: 'CA$1.99/month' }, day: { link: DAY_LINK, price: 'CA$0.99' } } } );
 		assert.equal( ( await call( server, '/api/config' ) ).json.googleClientId, CLIENT_ID );
 
 	} );
@@ -1419,7 +1421,7 @@ describe( 'World Drive Supporter Pass', () => {
 		// the whole site, never from http or another site).
 		assert.equal( alice.headers.get( 'Set-Cookie' ), `__Host-wd_session=${ alice.token }; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax; Secure` );
 		const [ account ] = server.d1( 'SELECT id, google_sub, email, name FROM accounts WHERE google_sub = \'1001\'' );
-		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, contactEmail: '', supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$9.99', day: { link: DAY_LINK, price: 'CA$0.99' }, clientReferenceId: String( account.id ) } } );
+		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, contactEmail: '', supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$19.99', monthly: { link: MONTH_LINK, price: 'CA$1.99/month' }, day: { link: DAY_LINK, price: 'CA$0.99' }, clientReferenceId: String( account.id ) } } );
 		alice.id = account.id;
 		assert.deepEqual( ( await me( alice.cookie ) ).json, alice.json );
 		// Only the token's SHA-256 is kept.
@@ -1593,9 +1595,9 @@ describe( 'World Drive Supporter Pass', () => {
 		const now = ( await me( gus.cookie ) ).json;
 		assert.equal( now.supporter, true );
 		assert.equal( now.dayPassUntil, PASS_DAY + 24 * hour );
-		// Ten drives that day, by the account, even with the address's own spent.
+		// Thirty drives that day, by the account, even with the address's own spent.
 		const drive = time => call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json', Cookie: gus.cookie }, body: JSON.stringify( { token: TOKEN } ), ip: nextIp(), time } );
-		assert.equal( ( await drive( PASS_DAY + hour ) ).json.left, 9 );
+		assert.equal( ( await drive( PASS_DAY + hour ) ).json.left, 29 );
 		// Still there a minute before the 24 hours are up; gone after.
 		assert.equal( ( await me( gus.cookie, PASS_DAY + 24 * hour - 60000 ) ).json.supporter, true );
 		const after = ( await me( gus.cookie, PASS_DAY + 24 * hour + 60000 ) ).json;
@@ -1618,7 +1620,7 @@ describe( 'World Drive Supporter Pass', () => {
 	test( 'with only some links counted (SUPPORTER_PAYMENT_LINK_ID), the day pass\'s link still counts, as a day pass', () => {
 
 		assert.deepEqual( purchaseFor( { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, SUPPORTER_PAYMENT_LINK_ID: `${ PASS_LINK_ID }, plink_1Other`, DAY_PASS_PAYMENT_LINK: DAY_LINK, DAY_PASS_PAYMENT_LINK_ID: DAY_LINK_ID, DAY_PASS_PRICE: 'CA$0.99', SUPPORTER_PRICE: 'CA$9.99' }, null ),
-			{ enabled: true, link: PASS_LINK, price: 'CA$9.99', day: { link: DAY_LINK, price: 'CA$0.99' } } );
+			{ enabled: true, link: PASS_LINK, price: 'CA$19.99', monthly: { link: MONTH_LINK, price: 'CA$1.99/month' }, day: { link: DAY_LINK, price: 'CA$0.99' } } );
 		// Without its id, the day pass isn't offered (its checkouts couldn't be told from a lifetime pass's).
 		assert.equal( purchaseFor( { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, DAY_PASS_PAYMENT_LINK: DAY_LINK }, null ).day, undefined );
 
@@ -1745,16 +1747,16 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
-	test( 'a supporter gets 10 drives a day, counted by their account; anyone else 8, by their address', async () => {
+	test( 'a supporter gets 30 drives a day, counted by their account; anyone else 8, by their address', async () => {
 
 		const ip = nextIp();
 		const drive = ( cookie, time = PASS_DAY ) => call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json', ...( cookie ? { Cookie: cookie } : {} ) }, body: JSON.stringify( { token: TOKEN } ), ip, time } );
-		// Alice has the pass: 10, all from one address.
-		for ( let i = 1; i <= 10; i ++ ) {
+		// Alice has the pass: 30, all from one address.
+		for ( let i = 1; i <= 30; i ++ ) {
 
 			const res = await drive( alice.cookie );
 			assert.equal( res.status, 200, `drive ${ i }: ${ res.text }` );
-			assert.equal( res.json.left, 10 - i );
+			assert.equal( res.json.left, 30 - i );
 
 		}
 
@@ -1768,8 +1770,8 @@ describe( 'World Drive Supporter Pass', () => {
 		for ( let i = 6; i >= 0; i -- ) assert.equal( ( await drive( carol.cookie ) ).json.left, i );
 		assert.equal( ( await drive( carol.cookie ) ).status, 429 );
 		assert.equal( ( await drive() ).status, 429 );
-		// The next day, Alice's 10 again.
-		assert.equal( ( await drive( alice.cookie, PASS_DAY + DAY ) ).json.left, 9 );
+		// The next day, Alice's 30 again.
+		assert.equal( ( await drive( alice.cookie, PASS_DAY + DAY ) ).json.left, 29 );
 		// Counted as a hash, like an address: the account's id isn't stored either.
 		assert.ok( ! listFiles( server.state ).some( file => readFileSync( file ).toString( 'latin1' ).includes( `account:${ alice.id }` ) ) );
 
@@ -3197,6 +3199,7 @@ describe( 'World Drive username and password accounts', () => {
 				// counts here, and the day pass is its own made-up link.
 				SUPPORTER_PAYMENT_LINK_ID: '',
 				DAY_PASS_PAYMENT_LINK: DAY_LINK,
+				SUPPORTER_MONTHLY_PAYMENT_LINK: MONTH_LINK,
 				DAY_PASS_PAYMENT_LINK_ID: DAY_LINK_ID,
 				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
 				ADMIN_EMAILS: 'boss@example.com',

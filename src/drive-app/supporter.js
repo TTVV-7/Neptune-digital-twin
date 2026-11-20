@@ -1,6 +1,6 @@
 import './supporter.css';
 import { accountPlayer, endSession, getMe, send, startSession } from './api.js';
-import { DAY_PRICE, PRICE, setPrice } from './pass.js';
+import { DAY_PRICE, MONTHLY_PRICE, PRICE, setPrice } from './pass.js';
 import { isPro, setPro } from './pro.js';
 import { storage } from './places.js';
 import { toast } from './screens.js';
@@ -172,7 +172,7 @@ function addArea( root, kind ) {
 export function openSupporterCheckout( kind = 'life' ) {
 
 	const purchase = me?.purchase;
-	const link = kind === 'day' ? purchase?.day?.link : purchase?.link;
+	const link = { day: purchase?.day?.link, month: purchase?.monthly?.link }[ kind ] ?? ( kind === 'life' ? purchase?.link : null );
 	if ( ! me?.signedIn || ! purchase?.enabled || ! link ) return false;
 	picked = null;
 	const url = new URL( link );
@@ -364,7 +364,7 @@ function update( next ) {
 
 	if ( me.supporter ) waitingSince = 0;
 	// Signed in now, having picked a pass signed out: its button stands out, one tap from paying.
-	if ( me.signedIn && picked && ! me.supporter ) status = `Signed in. Tap ${ picked === 'day' ? '24 hours' : 'For good' } to pay.`;
+	if ( me.signedIn && picked && ! me.supporter ) status = `Signed in. Tap ${ { day: '24 hours', month: 'Monthly' }[ picked ] ?? 'For good' } to pay.`;
 	else if ( me.supporter ) picked = null;
 	render();
 	for ( const fn of changed ) fn();
@@ -650,16 +650,19 @@ function renderBuy( root ) {
 			root.querySelector( '.supporter-status' )?.scrollIntoView( { block: 'nearest' } );
 
 		};
-		const life = button( me.supporter ? `Keep it for good: ${ purchase.price || PRICE }` : `For good: ${ purchase.price || PRICE }`, choose( 'life' ) );
-		life.className = 'primary buy buy-life';
-		const options = [ life ];
-		if ( purchase.day && ! me.supporter ) {
+		// 24 hours, monthly (the main one: the subscription people buy) and for good, each with its
+		// price; with a day pass running, monthly and for good to keep it.
+		const options = [];
+		const option = ( kind, words, primary = false ) => {
 
-			const day = button( `24 hours: ${ purchase.day.price || DAY_PRICE }`, choose( 'day' ) );
-			day.className = 'buy buy-day';
-			options.push( day );
+			const b = button( words, choose( kind ) );
+			b.className = `${ primary ? 'primary ' : '' }buy buy-${ kind }`;
+			options.push( b );
 
-		}
+		};
+		if ( purchase.day && ! me.supporter ) option( 'day', `24 hours: ${ purchase.day.price || DAY_PRICE }` );
+		if ( purchase.monthly ) option( 'month', `Monthly: ${ purchase.monthly.price || MONTHLY_PRICE }`, true );
+		option( 'life', `${ me.supporter ? 'Keep it for good' : 'For good' }: ${ purchase.price || PRICE }`, ! purchase.monthly );
 
 		if ( me.signedIn && picked ) for ( const option of options ) option.classList.toggle( 'picked', option.classList.contains( `buy-${ picked }` ) );
 		parts.push( Object.assign( document.createElement( 'div' ), { className: 'buy-options' } ) );
@@ -682,7 +685,7 @@ function renderBuy( root ) {
 	}
 
 	if ( status ) parts.push( statusLine() );
-	if ( ! lifetime ) parts.push( Object.assign( line( purchase.enabled ? 'No subscription: pay once and the pass is yours for good, or 24 hours and it simply ends. Paid securely with Stripe, in any country.' : 'Pay once, keep it for good. Buying opens soon.' ), { className: 'small' } ) );
+	if ( ! lifetime ) parts.push( Object.assign( line( purchase.enabled ? ( purchase.monthly ? 'Monthly is a subscription: cancel any time. For good and 24 hours are paid once. ' : 'Pay once: for good, or 24 hours and it simply ends. ' ) + 'Paid securely with Stripe, in any country.' : 'Pay once, keep it for good. Buying opens soon.' ), { className: 'small' } ) );
 	root.replaceChildren( ...parts );
 
 }

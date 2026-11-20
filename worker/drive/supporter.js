@@ -3,11 +3,10 @@ import { LINK_ID_PATTERN, cleanEmail, readEvent, stripeId } from '../stripe.js';
 import { database } from './players.js';
 import { googleClientId } from './settings.js';
 
-// The Supporter Pass (docs/world-drive.md): bought once through a Stripe Payment Link and kept for
-// good (a lifetime pass), towards World Drive's running costs, or for 24 hours through a second
-// link (a day pass: the same pass, the day's drives included, for a day). Passes bought while it
-// was a subscription keep it while their subscription runs; one-time passes from before that are
-// kept for good, as lifetime ones are. What it unlocks in the page (four more rides, the whole Garage) the
+// The Supporter Pass (docs/world-drive.md), towards World Drive's running costs, three ways, each
+// through a Stripe Payment Link of its own: a subscription (monthly, kept while it runs), bought once
+// and kept for good (a lifetime pass), or for 24 hours (a day pass: the same pass for a day).
+// One-time passes from before there was a choice are kept for good, as lifetime ones are. What it unlocks in the page (four more rides, the whole Garage) the
 // page locks itself (src/drive-app/pro.js); the Worker keeps who has it, gives supporters more
 // drives a day (index.js) and puts a ⭐ by their names on the leaderboard (scores.js). Stripe tells
 // us about each payment, refund and chargeback through a webhook, signed (checked in ../stripe.js,
@@ -23,6 +22,8 @@ import { googleClientId } from './settings.js';
 //                                Stripe account is World Drive's own, so without it every paid
 //                                checkout on the account is a pass.
 //   SUPPORTER_PRICE              what it costs, as the page shows it: "CA$9.99"
+//   SUPPORTER_MONTHLY_PAYMENT_LINK  optional (public): the subscription's Payment Link
+//   SUPPORTER_MONTHLY_PRICE      its price as the page shows it: "CA$1.99/month"
 //   DAY_PASS_PAYMENT_LINK        optional (public): the 24-hour pass's Payment Link
 //   DAY_PASS_PAYMENT_LINK_ID     its plink_... (public). Both are needed for the page to offer it,
 //                                since a checkout is told to be a day pass (not a pass for good)
@@ -33,7 +34,7 @@ import { googleClientId } from './settings.js';
 //                                or changes their card. The pass's sheet links to it.
 //   STRIPE_WEBHOOK_SECRET        secret: the webhook endpoint's signing secret, whsec_...
 //   SUPPORTER_EMAILS             optional secret, comma-separated: people with the pass without paying
-//   PER_VISITOR_DAILY_SUPPORTER  a supporter's drives a day, a day pass's too (10 if unset)
+//   PER_VISITOR_DAILY_SUPPORTER  a supporter's drives a day, a day pass's too (30 if unset)
 // Buying is on only when GOOGLE_CLIENT_ID, the link and the secret are all set. A link that isn't
 // https, a secret that isn't a whsec_ one (an API key pasted there by mistake) or a link id that
 // isn't a plink_ one leaves it off.
@@ -118,7 +119,7 @@ function urlOf( value ) {
 }
 
 // What the page is told about buying: { enabled: false }, or where and for how much (the lifetime
-// pass's link and price, and day: the day pass's, when it's offered), and for an account the id
+// pass's link and price; monthly: the subscription's, and day: the day pass's, when they're offered), and for an account the id
 // the page puts on the link as client_reference_id, which Stripe hands back with the payment, so we
 // know whose it is.
 export function purchaseFor( env, account ) {
@@ -126,6 +127,8 @@ export function purchaseFor( env, account ) {
 	const settings = purchaseSettings( env );
 	if ( ! settings ) return { enabled: false };
 	const purchase = { enabled: true, link: settings.link, price: settings.price };
+	const monthly = urlOf( env.SUPPORTER_MONTHLY_PAYMENT_LINK );
+	if ( monthly?.protocol === 'https:' ) purchase.monthly = { link: monthly.href, price: cleanPrice( env.SUPPORTER_MONTHLY_PRICE ) };
 	const day = dayPassSettings( env );
 	if ( day ) purchase.day = day;
 	const manage = manageLink( env );

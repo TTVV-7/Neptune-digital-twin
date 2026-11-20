@@ -51,7 +51,7 @@ export { DriveRoom } from './live.js';
 //   PER_VISITOR_DAILY     Earth visits a day per visitor (1 if unset); past it, the page opens on the Moon
 //   NAMES_PER_VISITOR_DAILY, SCORES_PER_VISITOR_DAILY   the leaderboard's new names and renames
 //                         (20 if unset) and scores (1500) a day per visitor
-//   PER_VISITOR_DAILY_SUPPORTER   a supporter's visits a day (10 if unset), counted by account,
+//   PER_VISITOR_DAILY_SUPPORTER   a supporter's visits a day (30 if unset), counted by account,
 //                                 and never turned away by DAILY_VISITS
 //   GOOGLE_CLIENT_ID, SUPPORTER_*, STRIPE_WEBHOOK_SECRET   the Supporter Pass (see supporter.js)
 //   PASSWORD_ACCOUNTS     'off' switches usernames and passwords off (logins.js); PASSWORD_ITERATIONS
@@ -336,7 +336,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	const outcome = await limits.visit( supporter ? `account:${ supporter.id }` : addressOf( request ), {
 		now,
 		daily: supporter ? Number.MAX_SAFE_INTEGER : setting( env.DAILY_VISITS, 300 ),
-		perVisitor: supporter ? setting( env.PER_VISITOR_DAILY_SUPPORTER, 10 ) : setting( env.PER_VISITOR_DAILY, 1 ),
+		perVisitor: supporter ? setting( env.PER_VISITOR_DAILY_SUPPORTER, 30 ) : setting( env.PER_VISITOR_DAILY, 1 ),
 	} );
 	if ( ! outcome.ok ) {
 

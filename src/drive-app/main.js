@@ -18,6 +18,7 @@ import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
 import { createBoostPads, EARTH_RULES, MOON_RULES } from './pads.js';
 import { createScreenFx } from './screen-fx.js';
+import { createMusic } from './music.js';
 import { createWater } from './water.js';
 import { createSea, lakeShore, lakesNear, seaLevel, seaLevelNow, waterAt, waterAtNow } from './sea.js';
 import { setUpLeaderboard } from './leaderboard.js';
@@ -546,6 +547,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Speed lines, overdrive's white edges and the camera's jolts and shakes, with their switch in
 	// the pause menu (screen-fx.js).
 	const screenFx = createScreenFx( { scene, driver, toggle: $( 'pause' ).querySelector( '.camera-toggle' ), touch: () => document.body.classList.contains( 'touch' ) } );
+	// A song for each world, from the first drive on (music.js).
+	const music = createMusic( { toggle: $( 'pause' ).querySelector( '.music-toggle' ) } );
 
 	const state = { mode: 'globe', place: null, entry: null, vehicle: null, drop: null, leaving: false };
 	// Where the scene's frame is now ({ lat, lon, height }: degrees, and m over the world's ellipsoid
@@ -925,7 +928,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Signed in, the account's player is this browser's too (one player on every device): taken in
 	// place of the one made here, which the Worker has folded into it.
 	const supporter = setUpSupporter( {
-		worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, onBuy: kind => stats.add( 'pass', { day: 'buy_day', ask: 'ask_signin' }[ kind ] ?? 'buy' ),
+		worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, onBuy: kind => stats.add( 'pass', { day: 'buy_day', month: 'buy_month', ask: 'ask_signin' }[ kind ] ?? 'buy' ),
 		adopt: ( player, { merged = false, from = null } = {} ) => {
 
 			board.adopt( player );
@@ -1142,6 +1145,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// A level-up waiting shows as the drive starts, and one showing goes as it pauses or ends.
 		if ( mode === 'driving' ) profile.driving();
 		else profile.hideLevelUp();
+		if ( mode === 'driving' ) music.start();
+		else if ( mode === 'paused' ) music.setPaused( true );
 		globe.setEnabled( mode === 'globe' );
 		$( 'globe-ui' ).hidden = mode !== 'globe';
 		$( 'drive-ui' ).hidden = mode !== 'driving' && mode !== 'paused';
@@ -1448,6 +1453,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// The world left lets go of all but its coarsest ground (built again when it's back).
 		body()?.release();
 		world = next;
+		music.setWorld( world );
 		if ( offEarth() ) stats.add( 'world', world );
 		for ( const [ id, other ] of Object.entries( bodies ) ) other.group.visible = id === world;
 		earth.visible = ! offEarth();
@@ -2882,7 +2888,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			return body();
 
 		},
-		dropIn, toGlobe, resume, recentre, shiftTo, waterOver, watchSea, moveCar, besideOf, goBeside,
+		dropIn, toGlobe, resume, recentre, shiftTo, waterOver, watchSea, moveCar, besideOf, goBeside, music,
 		// The pass's sheet, opened from the used-up notice's pitch (boot.js), counted as that.
 		pitchPass: () => {
 
