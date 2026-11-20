@@ -1865,7 +1865,8 @@ describe( 'World Drive boost and driving effects', () => {
 
 						if ( p.age >= p.life ) continue;
 						if ( p.frame === SHAPES.burst ) flashes.add( p );
-						if ( p.frame === SHAPES.star ) sparks.add( p );
+						// (A burst's stars are streaks of colour: a burst's kind 2, or a willow's 4.)
+						if ( p.frame === SHAPES.spark && ( p.kind === 2 || p.kind === 4 ) ) sparks.add( p );
 
 					}
 
