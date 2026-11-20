@@ -22,7 +22,7 @@ import { APPROACH, bearing, destination, distance, placeOf } from '../src/drive-
 import { TELEPORT } from '../src/drive-app/live-protocol.js';
 import { WORLDS } from '../src/drive-app/worlds.js';
 import { startVite } from './worker-harness.mjs';
-import { pickWorld, radio, openWorlds } from './worlds-ui.mjs';
+import { pickWorld, openWorlds, showSheet } from './worlds-ui.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5583;
@@ -202,7 +202,7 @@ describe( 'World Drive Discoveries', () => {
 		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
 		assert.deepEqual( await page.evaluate( () => window.drive.finds.ids.sort() ), [ BASE_ID, 'moon-apollo-17' ].sort() );
 		await openWorlds( page );
-		await page.locator( radio( 'moon' ) ).click();
+		await showSheet( page, 'moon' );
 		await page.waitForFunction( () => /2 \/ \d+ discovered/.test( document.querySelector( '#orrery' )?.innerText ?? '' ), null, { timeout: 10000 } );
 		assert.match( await page.locator( '#orrery' ).innerText(), /laser altimeter/ );
 		assert.deepEqual( page.errors, [] );

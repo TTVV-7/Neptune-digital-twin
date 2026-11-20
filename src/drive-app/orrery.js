@@ -20,7 +20,7 @@ import { LAST_WORLD, readStored, writeStored } from './orrery-first.js';
 // the scene shows behind its buttons; a full-screen layer in it (.orrery-stage) takes the pointer, and
 // the bodies are picked by casting a ray from it. Everything drawn is also in the DOM: the five worlds
 // you can drive on are a radiogroup (the arrow keys move along it, a world's sheet following the
-// focus; Enter, or the sheet's Drive, turns the game's globe to it), the rest plain buttons, and each
+// focus; Enter, a click or a tap, or the sheet's Drive, turns the game's globe to it), the rest plain buttons, and each
 // world's count of drivers now goes in its radio's name ("Mars, 3 driving now"), never in a live
 // region. It opens on the whole Solar System; picking a body zooms in on it and opens its sheet.
 //
@@ -50,7 +50,8 @@ import { LAST_WORLD, readStored, writeStored } from './orrery-first.js';
 // open( opener, { last: true } ) (a plain load's, which opens on it first: main.js) opens with the
 // world last picked here already chosen (LAST_WORLD, written on each Drive) and its Drive in focus,
 // so a returning player is one tap or Enter from where they were; the first time, the whole Solar
-// System with nothing chosen, as any other open.
+// System with nothing chosen, as any other open. A world you can drive on, tapped or clicked (in the
+// scene, its tag or its radio), is driven to at once; its sheet is for the arrow keys and the rest.
 
 const FOV = 40;
 const HALF = Math.tan( FOV / 2 * Math.PI / 180 );
@@ -209,10 +210,13 @@ export function createOrrery( {
 			}
 
 		} );
+		// A click or a tap on a world you can drive on goes straight to it; the arrows and Space only
+		// pick, the sheet following, and Enter drives.
 		worlds.addEventListener( 'click', event => {
 
+			// (Space on a radio clicks it with no pointer, detail 0: that only picks, as the arrows do.)
 			const id = event.target.closest( '[role=radio]' )?.dataset.world;
-			if ( id ) choose( id );
+			if ( id ) event.detail === 0 ? choose( id ) : tapped( id );
 
 		} );
 		others.addEventListener( 'click', event => {
@@ -224,7 +228,7 @@ export function createOrrery( {
 		tags.addEventListener( 'click', event => {
 
 			const id = event.target.closest( '[data-tag]' )?.dataset.tag;
-			if ( id ) choose( id );
+			if ( id ) tapped( id );
 
 		} );
 		close.addEventListener( 'click', () => closeOrrery() );
@@ -343,7 +347,7 @@ export function createOrrery( {
 			if ( wasPress ) {
 
 				const id = bodyAt( event.clientX, event.clientY );
-				if ( id ) choose( id );
+				if ( id ) tapped( id );
 				else if ( chosen ) overview();
 
 			}
@@ -421,6 +425,16 @@ export function createOrrery( {
 		dialog.classList.add( 'has-sheet' );
 		changed && ui.sheet.root.querySelector( '.orrery-sheet-body' ).scrollTo?.( 0, 0 );
 		relayout();
+
+	}
+
+	// A body tapped (on the stage, its tag or its button): a world you can drive on is driven to at once,
+	// with no sheet in between; anything else (the Sun, a planet with no ground), and the Earth when
+	// it's used up for today (its sheet says so), opens its sheet.
+	function tapped( id ) {
+
+		if ( bodyById[ id ]?.world && ! ( id === 'earth' && earthState() === 'used-up' ) ) drive( id );
+		else choose( id );
 
 	}
 

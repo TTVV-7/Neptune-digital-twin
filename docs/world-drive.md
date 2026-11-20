@@ -1710,8 +1710,12 @@ coming it reads "Loading Mars…" ("Loading the Moon…"), busy (`aria-busy`). I
 the Solar System, the Sun with Mercury, Venus, the Earth and the Moon, Mars, the asteroid belt with
 Vesta and Ceres, and Jupiter, Saturn (with its rings), Uranus and Neptune, not to scale, the planets
 going round and turning (none of it with the system asking for less motion), drawn over the page's
-stars. It opens on the whole of it; a world picked (its button, its tag or its body in the scene,
-which a drag turns and a scroll or pinch zooms) is flown to, with a sheet beside it (under it on a
+stars. It opens on the whole of it. **A world you can drive on, tapped or clicked** (its button, its
+tag or its body in the scene, which a drag turns and a scroll or pinch zooms), **is driven to at
+once**: the orrery closes on that world's globe, where you pick a place, with no sheet in between
+(the Earth too, unless this visit's Earth drives are spent: then its sheet opens, saying so). The
+arrow keys along the worlds still pick, the sheet following, and Enter drives. Anything else picked
+(the Sun, a planet with no ground) is flown to, with a sheet beside it (under it on a
 phone): what it is, its radius and gravity, how many are driving there now, up to four of its start
 spots (each flying the globe to it there), your party's friends there (**Join**, or "on its globe"
 for one looking at it from its globe), and **Drive on Mars** (or **Back to the Earth** for the
@@ -5559,14 +5563,7 @@ last one in that browser): a sunset coast, a night city, an alpine pass, a deser
 Mars or a neon night, with two layers of scenery rolling by at different speeds and a car of a random
 colour (or now and then a monster truck) bumping along the road, hopping every few seconds. Under it,
 tips (the keys, the other worlds, challenges, a few real facts) change every few seconds. The drop-in's
-loading card shows the same scene, smaller, and the same tips.
-
-Both scenes are a **mini game**: tap the scene, or press Space or ↑, and the car hops. Once it has,
-things come down the road to hop over (cones; rocks on the Moon and Mars; neon blocks in the neon
-night), faster and faster, a point for each cleared. Hitting one ends the run (tap to go again); the
-best score is kept in the browser (`worldDriveLoadingBest`). Nothing comes before the first hop, so
-the scene is only a picture to anyone not playing. While a scene is up its Space and ↑ go to the game
-alone (not to a button or field that has them), and the drop-in's card going away ends a run. It's drawn by a small script in
+loading card shows the same scene, smaller, and the same tips. It's drawn by a small script in
 `drive/index.html`, right after the splash, so it's there at the first paint, before the game's code;
 `?scene=<id>` (`sunset`, `city`, `alps`, `desert`, `moon`, `mars`, `neon`) picks one. With reduced
 motion asked for, nothing moves.
@@ -8388,6 +8385,15 @@ flying, other drivers as ghosts and party links, levels, free in the browser wit
 download. "Drive on the Moon" is a search with only throwaway games in it, and World Drive's Moon
 is made from NASA's own maps of it, so [the Moon has pages of its own](#the-moons-pages) too, and so,
 made the same way, have [Mars](#marss-pages) and [Vesta and Ceres](#vestas-and-ceress-pages).
+
+Two pages more go across the worlds, for searches that name none of them: **`/space/`** ("Drive on
+the Moon, Mars and Asteroids in 3D": the four other worlds together, each with its gravity, what
+it's made from, a few of its places and its own page) and **`/multiplayer/`** ("Multiplayer Driving
+Game in Your Browser": driving with everyone nearby and with friends by a party link, on every
+world, challenges, ghosts and "challenge a friend", what others see). Both are made by the build
+(`spacePage`, `multiplayerPage` in `drive/site/build.js`), are in the sitemap, and are linked from
+the home page's words (the "Drive with others" line, "Can I play with friends?" and "Can I drive on
+other planets?") and from each other. The home page's title stays the Earth's.
 
 ### What a search engine reads
 

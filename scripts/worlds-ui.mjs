@@ -21,17 +21,35 @@ export async function openWorlds( page, { tap = false } = {} ) {
 // Is it open?
 export const worldsOpen = page => page.evaluate( () => !! document.querySelector( '#orrery' )?.open );
 
-// `id` picked in the orrery and driven to: Worlds, its radio, its Drive (or Back to). The orrery is
+// `id` picked in the orrery and driven to: Worlds, then its radio, clicked or tapped, which drives
+// there at once (or, for the Earth used up today, opens its sheet: then its Drive). The orrery is
 // closed when this returns; the world may still be loading (wait on window.drive.world).
 export async function pickWorld( page, id, { tap = false } = {} ) {
 
 	if ( ! await worldsOpen( page ) ) await openWorlds( page, { tap } );
 	const pick = page.locator( radio( id ) );
 	await ( tap ? pick.tap() : pick.click() );
-	const drive = page.locator( `${ ORRERY } .orrery-drive` );
-	await drive.waitFor();
-	await ( tap ? drive.tap() : drive.click() );
+	if ( await worldsOpen( page ) ) {
+
+		const drive = page.locator( `${ ORRERY } .orrery-drive` );
+		await drive.waitFor();
+		await ( tap ? drive.tap() : drive.click() );
+
+	}
+
 	await page.waitForFunction( () => ! document.querySelector( '#orrery' ).open );
+
+}
+
+// `id`'s sheet shown in the open orrery without driving there, as the arrow keys show it (a click
+// or a tap would drive): the focus on the world before it, then →.
+export async function showSheet( page, id ) {
+
+	const ids = await page.locator( `${ ORRERY } .orrery-worlds [role=radio]` ).evaluateAll( radios => radios.map( r => r.dataset.world ) );
+	const before = ids[ ( ids.indexOf( id ) - 1 + ids.length ) % ids.length ];
+	await page.locator( radio( before ) ).focus();
+	await page.keyboard.press( 'ArrowRight' );
+	await page.waitForFunction( id => document.querySelector( '#orrery .orrery-worlds [role=radio][aria-checked="true"]' )?.dataset.world === id && ! document.querySelector( '#orrery .orrery-sheet' ).hidden, id );
 
 }
 

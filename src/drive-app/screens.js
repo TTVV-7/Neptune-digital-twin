@@ -127,11 +127,10 @@ export function hideLoading() {
 
 	$( 'loading' ).hidden = true;
 	clearInterval( tipTimer );
-	window.worldDriveLoading?.resetGame?.();
 
 }
 
-// The drop-in's card's tips (drive/index.html's, as its mini game is), a new one every few seconds
+// The drop-in's card's tips (drive/index.html's, as its scene is), a new one every few seconds
 // while it's up.
 let tipTimer;
 function startTips( root ) {

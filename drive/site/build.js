@@ -50,6 +50,7 @@ const SOURCES = {
 	home: [ 'drive/index.html', 'drive/site/places.js', ...OFF_EARTH.map( id => `drive/site/${ id }.js` ) ],
 	places: [ 'drive/site/places.js', 'drive/site/build.js', 'drive/site/site.css', ...OFF_EARTH.map( id => `drive/site/${ id }.js` ) ],
 	world: id => [ `drive/site/${ id }.js`, 'drive/site/build.js', 'drive/site/site.css', `src/drive-app/${ id }-places.js` ],
+	topics: [ 'drive/site/build.js', 'drive/site/site.css', ...OFF_EARTH.map( id => `drive/site/${ id }.js` ) ],
 };
 // The footer's credit for the Earth's map and search (each other world's is its own: its `credit`).
 const EARTH_CREDIT = 'World Drive is a free arcade driving game on Google\'s photorealistic 3D map; it isn\'t made or endorsed by Google. Map data © Google and its data providers; place search © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.';
@@ -115,11 +116,18 @@ export function sitePages( { when = lastChanged } = {} ) {
 		];
 
 	} );
+	// The two pages across the worlds: driving in space (the other worlds together) and driving
+	// with others.
+	const topicPages = [
+		{ path: '/space/', file: 'space/index.html', html: spacePage() },
+		{ path: '/multiplayer/', file: 'multiplayer/index.html', html: multiplayerPage() },
+	];
 	const homeDate = when( SOURCES.home );
 	const placesDate = when( SOURCES.places );
 	const sitemap = sitemapXml( [
 		{ path: '/', date: homeDate },
 		...earthPages.map( page => ( { path: page.path, date: placesDate } ) ),
+		...topicPages.map( page => ( { path: page.path, date: when( SOURCES.topics ) } ) ),
 		...OFF_EARTH.flatMap( ( id, i ) => {
 
 			const date = when( SOURCES.world( id ) );
@@ -127,7 +135,7 @@ export function sitePages( { when = lastChanged } = {} ) {
 
 		} ),
 	] );
-	return { pages: [ ...earthPages, ...worldPages.flat() ], sitemap };
+	return { pages: [ ...earthPages, ...topicPages, ...worldPages.flat() ], sitemap };
 
 }
 
@@ -148,8 +156,9 @@ export function worldPlacesList( id ) {
 
 }
 
-// The addresses the site's pages are at: /drive/... and each other world's, /moon/... to /ceres/...
-const PAGES_AT = new RegExp( `^/(${ [ 'drive', ...OFF_EARTH ].join( '|' ) })(/|$)` );
+// The addresses the site's pages are at: /drive/..., /space/, /multiplayer/ and each other world's,
+// /moon/... to /ceres/...
+const PAGES_AT = new RegExp( `^/(${ [ 'drive', 'space', 'multiplayer', ...OFF_EARTH ].join( '|' ) })(/|$)` );
 
 // A Vite plugin (vite.drive.config.js): the places' pages, /drive/, each other world's pages and
 // /sitemap.xml in the build and from the dev server, and the home page's lists of places.
@@ -275,6 +284,149 @@ function placePage( place, places ) {
 		</ul>
 		<p>Or anywhere else: search for any city, landmark or address on the globe, type coordinates, or tap the globe to drop a pin.</p>
 	</section>`,
+	} );
+
+}
+
+// Driving in space: the other worlds together, for those searching for a game to drive on other
+// planets, the Moon or Mars rather than one of them by name. Each with its gravity, what it's made
+// from, a few of its places and its own page.
+function spacePage() {
+
+	const title = 'Drive on the Moon, Mars and Asteroids in 3D';
+	const description = 'A free space driving game in your browser: drive the real Moon, Mars and the asteroids Vesta and Ceres in 3D from NASA\'s maps, in low gravity, with friends.';
+	const worlds = OFF_EARTH.map( id => ( { id, site: WORLD_SITES[ id ], places: worldPlaces( id ), gravity: Math.round( WORLDS[ id ].gravity * 1000 ) / 10 } ) );
+	const data = [
+		breadcrumbs( [ [ NAME, '/' ], [ 'Drive in space', '/space/' ] ] ),
+		{
+			'@context': 'https://schema.org',
+			'@type': 'CollectionPage',
+			name: title,
+			description,
+			url: `${ SITE }/space/`,
+			inLanguage: 'en',
+			isPartOf: { '@type': 'WebSite', name: NAME, url: `${ SITE }/` },
+			mainEntity: {
+				'@type': 'ItemList',
+				itemListElement: worlds.map( ( { id }, i ) => ( { '@type': 'ListItem', position: i + 1, url: `${ SITE }/${ id }/`, name: `Drive on ${ TheWorld( id ).replace( /^The /, 'the ' ) }` } ) ),
+			},
+		},
+	];
+
+	return page( {
+		title: `${ title } – ${ NAME }`,
+		social: title,
+		description,
+		path: '/space/',
+		card: existsSync( join( PUBLIC, 'og', 'moon.png' ) ) ? '/og/moon.png' : CARD,
+		cardAlt: 'World Drive in space: drive the Moon, Mars, Vesta and Ceres in 3D, free in your browser',
+		data,
+		body: `
+	<nav class="crumbs" aria-label="Breadcrumb"><a href="/">World Drive</a> <span aria-hidden="true">›</span> <span aria-current="page">Drive in space</span></nav>
+	<section class="hero">
+		<h1>${ esc( title ) }</h1>
+		<p class="lede">World Drive's globe turns to ${ listed( OFF_EARTH.map( id => WORLDS[ id ].the ), 'and' ) }: real worlds, built from NASA's own maps of their ground, that you drive in your browser with nothing to download. Every crater, canyon and mountain is where it really is, and the low gravity turns every bump into a long, slow jump.</p>
+		<p><a class="go" href="${ esc( worlds[ 0 ].places[ 0 ]?.play ?? '/' ) }">Drive on ${ esc( TheWorld( worlds[ 0 ].id ).replace( /^The /, 'the ' ) ) }</a></p>
+		<p class="note">Free, as much as you like: the other worlds have no daily limit. On a computer, a phone or a tablet.</p>
+	</section>
+	<ul class="cards">
+		${ worlds.map( ( { id, site, places, gravity } ) => `<li>
+			<h2><a href="/${ id }/">Drive on ${ esc( TheWorld( id ).replace( /^The /, 'the ' ) ) }</a></h2>
+			<p class="region">${ esc( site.tagline ) } · ${ gravity }% of the Earth's gravity</p>
+			<p>${ site.others }</p>
+			<p>${ places.slice( 0, 4 ).map( place => `<a href="${ place.path }">${ esc( place.name ) }</a>` ).join( ' · ' ) }</p>
+			<p><a class="small-go" href="${ esc( places[ 0 ]?.play ?? `/${ id }/` ) }">Drive here</a></p>
+		</li>` ).join( '\n\t\t' ) }
+	</ul>
+	<section>
+		<h2>What's it like to drive there?</h2>
+		<ul>
+			<li><b>Low gravity.</b> A sixth of the Earth's on the Moon, 38% on Mars, under 3% on Vesta and Ceres: a ramp or a crater's rim throws you high, and a jump can last many seconds.</li>
+			<li><b>Real places to find.</b> Drive to the Apollo landing sites, Olympus Mons and Valles Marineris, the rovers' landing sites, Vesta's Rheasilvia peak and Ceres's bright salt spots, and collect each one's card of real facts.</li>
+			<li><b>The real heights.</b> Press <kbd>L</kbd> to colour the ground by its measured height, from the spacecraft's own laser and camera data.</li>
+			<li><b>With others.</b> Everyone driving the same area is there with you, as on the Earth, and a party link brings friends to any world. <a href="/multiplayer/">Driving with friends</a>.</li>
+			<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on every world, with a leaderboard and ghosts to race.</li>
+		</ul>
+	</section>
+	<section>
+		<h2>And the Earth</h2>
+		<p>Back home, drive anywhere on Earth in Google's photorealistic 3D map: your own street, Times Square, a pass in the Alps. <a href="/drive/">Places to drive on Earth</a>.</p>
+	</section>
+	${ howToPlay() }`,
+	} );
+
+}
+
+// Driving with others: for those searching for a multiplayer driving game in the browser, to play
+// with friends. What's true of World Drive's (docs/world-drive.md, "Driving with others"): everyone
+// driving an area together, as ghosts, party links, on every world, no chat; challenges with ghosts
+// and a friend's link.
+function multiplayerPage() {
+
+	const title = 'Multiplayer Driving Game in Your Browser';
+	const description = 'Drive with friends in World Drive, free in your browser: send a party link and drive together anywhere on Earth, on the Moon or Mars, and race each other\'s ghosts.';
+	const data = [
+		breadcrumbs( [ [ NAME, '/' ], [ 'Drive with friends', '/multiplayer/' ] ] ),
+		{
+			'@context': 'https://schema.org',
+			'@type': 'WebPage',
+			name: title,
+			description,
+			url: `${ SITE }/multiplayer/`,
+			inLanguage: 'en',
+			isPartOf: { '@type': 'WebSite', name: NAME, url: `${ SITE }/` },
+		},
+	];
+
+	return page( {
+		title: `${ title } – ${ NAME }`,
+		social: title,
+		description,
+		path: '/multiplayer/',
+		card: CARD,
+		cardAlt: 'World Drive: drive with friends anywhere on Earth or on the Moon, free in your browser',
+		data,
+		body: `
+	<nav class="crumbs" aria-label="Breadcrumb"><a href="/">World Drive</a> <span aria-hidden="true">›</span> <span aria-current="page">Drive with friends</span></nav>
+	<section class="hero">
+		<h1>${ esc( title ) }</h1>
+		<p class="lede">World Drive is a free online driving game you play with others in your browser, with nothing to download and no account needed. Drop in anywhere on Earth in photorealistic 3D, or on ${ listed( OFF_EARTH.map( id => WORLDS[ id ].the ), 'and' ) }, and drive with whoever is there, or bring your friends with a link.</p>
+		<p><a class="go" href="/">Play World Drive</a></p>
+	</section>
+	<section>
+		<h2>Two ways to drive together</h2>
+		<ul>
+			<li><b>Nearby.</b> When you drop in you're in the room for the area you're in, about 11 km across, and see everyone else driving there in their own rides, with their names over them. A busy spot is busy.</li>
+			<li><b>A party with your friends.</b> Press <b>Invite friends</b> and send the link. Whoever opens it joins your party wherever each of you is, on any world, and can jump straight to where you're driving.</li>
+		</ul>
+		<p>On the globe, glowing dots show where people are driving right now and how many, so you can drop in where it's busy.</p>
+	</section>
+	<section>
+		<h2>Race your friends</h2>
+		<ul>
+			<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on every world: checkpoint sprints, collecting them all, or racing to a landmark, each with its own leaderboard.</li>
+			<li><b>Ghosts.</b> Every run is recorded, so you race a ghost of the best time, or of your own.</li>
+			<li><b>Challenge a friend.</b> Share a link to your best run: it opens the game racing your ghost, so a friend has a time to beat.</li>
+			<li><b>Levels and leaderboards.</b> Driving earns XP for 50 levels of cars, paint, boost trails and titles, and the stunt boards keep the best scores.</li>
+		</ul>
+	</section>
+	<section>
+		<h2>Good to know</h2>
+		<ul>
+			<li>Cars are ghosts that pass through each other, so nobody can ram you off the road, and there's no chat: just driving. Press <kbd>H</kbd> for the horn.</li>
+			<li>Others see your nickname (or a guest name), your level, your ride and where your car is in the game, never where you really are. You can switch it off in the pause menu.</li>
+			<li>It works on a computer, a phone or a tablet, so friends on different devices can drive together.</li>
+		</ul>
+	</section>
+	<section>
+		<h2>Where to drive</h2>
+		<ul class="places">
+			<li><a href="/drive/">Places on Earth<span>Famous roads, bridges and cities</span></a></li>
+			<li><a href="/space/">Drive in space<span>The Moon, Mars, Vesta and Ceres</span></a></li>
+			${ OFF_EARTH.map( worldLink ).join( '\n\t\t\t' ) }
+		</ul>
+	</section>
+	${ howToPlay() }`,
 	} );
 
 }

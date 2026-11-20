@@ -205,11 +205,11 @@ function builtFile( path ) {
 
 describe( 'what search engines read', () => {
 
-	test( 'the pages: the home page, the list of places, one page for each place, and the other worlds\', each at a clean address', () => {
+	test( 'the pages: the home page, the list of places, one page for each place, the other worlds\', and driving in space and with friends, each at a clean address', () => {
 
 		assert.deepEqual( OFF_EARTH, [ 'moon', 'mars', 'vesta', 'ceres' ] );
 		const paths = pages.map( page => page.path ).sort();
-		const expected = [ '/', '/drive/', ...PLACES.map( place => `/drive/${ place.slug }/` ), ...OFF_EARTH.flatMap( id => [ `/${ id }/`, ...WORLD_SITES[ id ].pages.map( place => `/${ id }/${ place.slug }/` ) ] ) ].sort();
+		const expected = [ '/', '/drive/', '/space/', '/multiplayer/', ...PLACES.map( place => `/drive/${ place.slug }/` ), ...OFF_EARTH.flatMap( id => [ `/${ id }/`, ...WORLD_SITES[ id ].pages.map( place => `/${ id }/${ place.slug }/` ) ] ) ].sort();
 		assert.deepEqual( paths, expected );
 		assert.ok( paths.includes( '/mars/olympus-mons/' ) && paths.includes( '/moon/tycho/' ) && paths.includes( '/vesta/' ) && paths.includes( '/ceres/' ) );
 		for ( const place of [ ...PLACES, ...OFF_EARTH.flatMap( id => WORLD_SITES[ id ].pages ) ] ) assert.match( place.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${ place.slug } isn't a clean address` );

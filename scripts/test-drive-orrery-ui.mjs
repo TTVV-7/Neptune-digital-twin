@@ -34,7 +34,7 @@ import { CERES_SPOTS } from '../src/drive-app/ceres-places.js';
 import { MOON_SPOTS } from '../src/drive-app/moon-places.js';
 import { SPOTS } from '../src/drive-app/places.js';
 import { startVite } from './worker-harness.mjs';
-import { OPENER, openWorlds, pickWorld, radio, worldShown, worldsOpen } from './worlds-ui.mjs';
+import { OPENER, openWorlds, pickWorld, radio, showSheet, worldShown, worldsOpen } from './worlds-ui.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5601;
@@ -394,11 +394,10 @@ async function loadedAt( page, match ) {
 
 }
 
-// The Earth picked on the orrery's sheet: Drive (the page turns to the Earth's globe in place).
+// The Earth clicked on the orrery: driven to at once (the page turns to the Earth's globe in place).
 async function driveEarth( page ) {
 
 	await page.locator( radio( 'earth' ) ).click();
-	await page.locator( '#orrery .orrery-drive' ).click();
 
 }
 
@@ -493,7 +492,7 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 			await page.goto( BASE );
 			await orreryUp( page );
 			await page.evaluate( () => window.__marker = 'same page' );
-			await page.locator( radio( 'earth' ) ).click();
+			await showSheet( page, 'earth' );
 			assert.doesNotMatch( await page.locator( '#orrery .orrery-note' ).textContent(), /reload/ );
 			assert.equal( await page.locator( '#orrery .orrery-note' ).evaluate( el => el.classList.contains( 'closed' ) ), false );
 			assert.equal( await page.locator( '#orrery .orrery-hint-used' ).isVisible(), false );
@@ -502,6 +501,44 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 			assert.equal( await page.evaluate( () => window.__marker ), 'same page' );
 			assert.deepEqual( page.visits.length, 1 );
 			assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.last-world' ) ), 'mars' );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'one click on a world goes straight to its globe, with no sheet in between; the arrows and Space only pick, showing its sheet', async () => {
+
+		const page = await firstPage();
+		try {
+
+			await page.goto( BASE );
+			await orreryUp( page );
+			// Watch for the sheet coming up at all.
+			await page.evaluate( () => {
+
+				window.__sheetSeen = false;
+				const sheet = document.querySelector( '#orrery .orrery-sheet' );
+				new MutationObserver( () => window.__sheetSeen ||= ! sheet.hidden ).observe( sheet, { attributes: true } );
+
+			} );
+			await page.locator( radio( 'mars' ) ).click();
+			await closed( page );
+			await page.waitForFunction( () => window.drive.world === 'mars' && window.drive.mode === 'globe', null, { timeout: 90000 } );
+			assert.equal( await page.evaluate( () => window.__sheetSeen ), false );
+			assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.last-world' ) ), 'mars' );
+
+			// The keyboard still looks first: Space on a radio picks it, its sheet up, still open.
+			await openWorlds( page );
+			await page.locator( radio( 'vesta' ) ).focus();
+			await page.keyboard.press( 'Space' );
+			assert.equal( await worldsOpen( page ), true );
+			assert.equal( await sheetShown( page ), true );
+			assert.equal( await page.locator( radio( 'vesta' ) ).getAttribute( 'aria-checked' ), 'true' );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {
@@ -550,7 +587,7 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 
 			await spot.goto( BASE );
 			await orreryUp( spot );
-			await spot.locator( radio( 'earth' ) ).click();
+			await showSheet( spot, 'earth' );
 			await spot.locator( `#orrery .orrery-spots button[data-spot="${ SPOTS[ 0 ].id }"]` ).click();
 			await closed( spot );
 			await spot.waitForFunction( id => window.drive.world === 'earth' && window.drive.panel.pinned?.id === id, SPOTS[ 0 ].id, { timeout: 60000 } );
@@ -823,7 +860,7 @@ describe( 'World Drive\'s orrery: the worlds', () => {
 
 		// From the sheet, a spot: closed, the globe flies there and pins it.
 		await openWorlds( page );
-		await page.locator( radio( 'earth' ) ).click();
+		await showSheet( page, 'earth' );
 		const spot = page.locator( '#orrery .orrery-spots [data-spot]' ).first();
 		const name = await spot.textContent();
 		assert.equal( await page.locator( '#orrery .orrery-spots [data-spot]' ).count(), 4 );
@@ -861,7 +898,7 @@ describe( 'World Drive\'s orrery: switching', () => {
 
 			// The orrery again: the game's still on the Earth, so the Earth's is Back to.
 			await openWorlds( page );
-			await page.locator( radio( 'earth' ) ).click();
+			await showSheet( page, 'earth' );
 			assert.equal( await driveText( page ), 'Back to the Earth→' );
 			await page.locator( '#orrery .orrery-drive' ).click();
 			await closed( page );
@@ -892,7 +929,7 @@ describe( 'World Drive\'s orrery: switching', () => {
 			await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
 			await openWorlds( page );
 			assert.equal( await focused( page ), 'moon' );
-			await page.locator( radio( 'earth' ) ).click();
+			await showSheet( page, 'earth' );
 			assert.match( await page.locator( '#orrery .orrery-note' ).textContent(), /The Earth is used up for today/ );
 			assert.equal( await driveText( page ), 'Drive on the Earth→' );
 			await page.locator( '#orrery .orrery-drive' ).click();
@@ -930,10 +967,10 @@ describe( 'World Drive\'s orrery: how many are driving', () => {
 				[ 'Earth, 0 driving now', 'Moon, 2 driving now', 'Mars, 3 driving now', 'Vesta', 'Ceres, 0 driving now' ] );
 			assert.equal( await page.locator( '#orrery .orrery-total' ).textContent(), '5 driving now' );
 			assert.equal( await page.locator( '#orrery [aria-live], #orrery [role=status]' ).count(), 0 );
-			await page.locator( radio( 'mars' ) ).click();
+			await showSheet( page, 'mars' );
 			assert.equal( await page.locator( '#orrery .orrery-count' ).textContent(), '3 driving now' );
 			assert.match( await page.locator( '#orrery .orrery-counted' ).textContent(), /Counted: drivers in an area's room/ );
-			await page.locator( radio( 'vesta' ) ).click();
+			await showSheet( page, 'vesta' );
 			assert.equal( await page.locator( '#orrery .orrery-count' ).textContent(), 'Driving with others is off there today' );
 			assert.equal( await page.locator( '#orrery .orrery-counted' ).isVisible(), false );
 			// Still drivable, on your own.
@@ -1007,7 +1044,7 @@ describe( 'World Drive\'s orrery on a phone', () => {
 				await openGlobe( page );
 				assert.ok( big( await page.locator( OPENER ).boundingBox() ) );
 				await openWorlds( page, { tap: true } );
-				await page.locator( radio( 'mars' ) ).tap();
+				await showSheet( page, 'mars' );
 				assert.equal( await sheetShown( page ), true );
 				await page.waitForTimeout( 300 );
 				await fits( page, viewport, `${ viewport.width } × ${ viewport.height }` );
@@ -1075,7 +1112,7 @@ describe( 'World Drive\'s orrery with reduced motion', () => {
 			assert.equal( await draws( still, 2500 ), 0, 'drawn again with nothing changing' );
 			assert.ok( await draws( moving, 2500 ) > 0, 'never drawn with motion allowed' );
 			// A pick is a change: drawn (at once, no easing), then still again.
-			await still.locator( radio( 'mars' ) ).click();
+			await showSheet( still, 'mars' );
 			await still.waitForTimeout( 1000 );
 			assert.equal( await draws( still, 2000 ), 0, 'still drawn after the pick settled' );
 			assert.deepEqual( still.errors, [] );

@@ -48,7 +48,7 @@
 				"@type": [ "VideoGame", "WebApplication" ],
 				"name": "World Drive",
 				"url": "https://worlddrive.app/",
-				"description": "A free arcade driving game in the browser: pick anywhere on Earth from a globe and drive it in photorealistic 3D, built from Google's 3D map of the real world, or turn the globe to the Moon, Mars or the asteroids Vesta and Ceres and drive that, made from NASA's maps, in low gravity; with stunts, boosts, drifting, flying, levels and other drivers as ghost cars.",
+				"description": "A free arcade driving game in the browser: pick anywhere on Earth from a globe and drive it in photorealistic 3D, built from Google's 3D map of the real world, or turn the globe to the Moon, Mars or the asteroids Vesta and Ceres and drive that, made from NASA's maps, in low gravity; with stunts, boosts, drifting, flying, levels, challenges, and multiplayer: drive with everyone nearby or with friends in a party, on every world.",
 				"image": "https://worlddrive.app/og/world-drive.png",
 				"genre": [ "Racing", "Driving", "Arcade", "Open world" ],
 				"gamePlatform": "Web browser",
@@ -157,7 +157,7 @@
 						<li><b>Drive on Vesta.</b> Switch the globe to the asteroid Vesta and drive the giant Rheasilvia basin and its central peak, the Snowman's craters and the troughs round its middle, in 2.5% of the Earth's gravity, so a hop lasts about six times as long.</li>
 						<li><b>Drive on Ceres.</b> Switch the globe to the dwarf planet Ceres and drive Occator and its bright salt spots, the lone ice volcano Ahuna Mons and the great basin Kerwan, in 2.9% of the Earth's gravity.</li>
 						<li><b>Discoveries.</b> On the Moon, Mars, Vesta and Ceres, drive to real named places, from the Apollo and rover landing sites to Olympus Mons and Rheasilvia's central peak, to collect each one's card of real facts and its height in the mission data the ground is built from, and fill each world's collection book. Press <kbd>L</kbd> to colour the ground by its real measured height.</li>
-						<li><b>Drive with others.</b> See who's driving nearby as ghost cars, on every world, or invite friends to a party with a link, wherever each of you is.</li>
+						<li><b>Drive with others.</b> See who's driving nearby as ghost cars, on every world, or invite friends to a party with a link, wherever each of you is. <a href="/multiplayer/">More on driving with friends</a>.</li>
 						<li><b>Levels and the leaderboard.</b> Driving earns XP for 50 levels of cars, paint, boost trails and titles, and your best runs go on the leaderboard.</li>
 						<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on each world, the Earth, the Moon, Mars, Vesta and Ceres: race through checkpoints, collect stars or drive to a landmark against the clock, each with its own board of the best times.</li>
 						<li><b>Your ride.</b> A pickup, a go-kart or a muscle car to start, and six more cars as you level up, from a golf cart and a tuk-tuk to a formula racer, all painted in the Garage; the optional Supporter Pass adds more.</li>
@@ -187,6 +187,8 @@
 						<dd>Yes, in the browser on a phone, a tablet or a computer with 3D graphics (WebGL). Touch screens get driving buttons.</dd>
 						<dt>Can I drive my own street?</dt>
 						<dd>Yes: search for your address. Where Google's 3D map has no buildings modelled, you drive on the land itself.</dd>
+						<dt>Can I drive on other planets?</dt>
+						<dd>Yes: the Moon, Mars and the asteroids Vesta and Ceres, each built from NASA's maps of its real ground, in its own low gravity, free with no daily limit. See <a href="/space/">driving in space</a>.</dd>
 						<dt>Can I drive on the Moon?</dt>
 						<dd>Yes: press Worlds at the top of this panel and pick the Moon, or pick one of its places above. Its mountains, craters and seas are the real Moon's, from NASA's maps, and its gravity is a sixth of the Earth's, so a jump lasts two and a half times as long. You can drive with others there too: those near you on the Moon, and your party's friends wherever they are.</dd>
 						<dt>Can I drive on Mars?</dt>
@@ -196,7 +198,7 @@
 						<dt>Can I drive on Ceres?</dt>
 						<dd>Yes: press Worlds at the top of this panel and pick Ceres, or pick one of its places above. Ceres, a dwarf planet and the biggest body in the asteroid belt, is the real Ceres from NASA's Dawn mission: Occator crater and its bright salt spots, and Ahuna Mons, a 4 km ice volcano. Its gravity is 2.9% of the Earth's, so a hop stays up about 6 times as long. You can drive with others on Ceres too, in its own rooms.</dd>
 						<dt>Can I play with friends?</dt>
-						<dd>Yes. Invite friends gives you a link; whoever opens it joins your party and can drive beside you. Cars are ghosts that pass through each other, and there's no chat.</dd>
+						<dd>Yes. Invite friends gives you a link; whoever opens it joins your party and can drive beside you, on any world. Cars are ghosts that pass through each other, and there's no chat. See <a href="/multiplayer/">driving with friends</a>.</dd>
 						<dt>What does World Drive keep about me?</dt>
 						<dd>Only what the leaderboard and levels need, and never where you really are: see About World Drive.</dd>
 					</dl>
@@ -247,7 +249,7 @@
 
 		<section id="loading" hidden aria-live="polite">
 			<div class="card">
-				<div class="scene game" aria-label="Mini game: tap or press Space to jump"></div>
+				<div class="scene" aria-hidden="true"></div>
 				<p class="title"></p>
 				<div class="bar" hidden><i></i></div>
 				<p class="tip"></p>
@@ -281,7 +283,7 @@
 
 		<section id="splash">
 			<div class="card">
-				<div class="scene game" aria-label="Mini game: tap or press Space to jump"></div>
+				<div class="scene" aria-hidden="true"></div>
 				<h1 class="logo">World <b>Drive</b></h1>
 				<p class="pitch">Drive anywhere on Earth in photorealistic 3D: real cities, bridges and mountain roads, with stunts, boosts and friends. Free, right here in your browser.</p>
 				<p class="status">Warming up the engine...</p>
@@ -294,7 +296,7 @@
 			// The loading screen's scene, new each load (docs/world-drive.md, "The loading screen"): a sky,
 			// two layers of scenery rolling by at different speeds, and a car of a random colour (or a
 			// monster truck) bouncing along the road, drawn here before the first paint so it's there at
-			// once, on the splash and the drop-in's card, each a mini game to hop things on the road; and tips that change every few seconds, on the splash and the drop-in's card
+			// once, on the splash and the drop-in's card; and tips that change every few seconds, on the splash and the drop-in's card
 			// (screens.js reads them from window.worldDriveLoading). ?scene=<id> picks one.
 			( () => {
 
@@ -326,7 +328,7 @@
 					'Olympus Mons on Mars is about two and a half times as tall as Everest.',
 					'You can drive to Tranquility Base, where Apollo 11 landed in 1969.',
 					'Ceres is the biggest thing in the asteroid belt, about 940 km across.',
-					'Vesta\'s Rheasilvia crater has a mountain in the middle about 22 km high.',
+					'Vesta\'s Rheasilvia crater has a mountain in the middle about 20 km high.',
 				];
 				const CARS = [ '#ffd23f', '#ff4d4d', '#3ec1ff', '#7cff6b', '#ff8ad8', '#ffffff', '#ff9a2e' ];
 				const pick = list => list[ Math.floor( Math.random() * list.length ) ];
@@ -419,168 +421,21 @@
 					? `<path d="M-30 -22h16l8-10h20l8 10h10v12h-62z" fill="${ colour }"/><path d="M-11 -21l6-8h8v8zM6 -21v-8h6l5 8z" fill="#bfe6ff" opacity=".85"/><g transform="translate(0 0)">${ wheel( -18, 10 ) }${ wheel( 20, 10 ) }</g>`
 					: `<path d="M-32 -6c0-6 3-8 10-9l9-9h20l10 9c8 1 15 3 15 9v4h-64z" fill="${ colour }"/><path d="M-11 -14l7-8h9v8zM8 -14v-8h4l8 8z" fill="#bfe6ff" opacity=".85"/><rect x="26" y="-9" width="6" height="3" rx="1" fill="#fff6b0"/>${ wheel( -19, 7 ) }${ wheel( 19, 7 ) }`;
 				const carY = truck ? 133 : 136;
-				const car = `<g transform="translate(175 ${ carY })"><g class="hop"><g class="car">${ body }</g></g></g>`;
+				const car = `<g transform="translate(175 ${ carY })"><g class="car">${ body }</g></g>`;
 				const road = `<rect y="${ ROAD }" width="${ W }" height="${ H - ROAD }" fill="${ scene.land === 'grid' ? '#170030' : '#1c2230' }"/><g class="dashes">${ Array.from( { length: 12 }, ( _, i ) => `<rect x="${ i * 44 }" y="140" width="24" height="3" rx="1.5" fill="${ scene.land === 'grid' ? '#3ef0ff' : '#ffd23f' }"/>` ).join( '' ) }</g>`;
 				// (Each copy's gradients have their own ids: one in a hidden copy wouldn't draw for the other.)
-				const svg = id => `<svg viewBox="0 0 ${ W } ${ H }" preserveAspectRatio="xMidYMid slice">${ sky.replaceAll( 'sc-', `${ id }-` ) }${ layer( far, scene.far, 'far' ) }${ grid }${ near ? layer( near, scene.near, 'near' ) : '' }${ road }<g class="obstacles"></g>${ car }</svg>`;
+				const svg = id => `<svg viewBox="0 0 ${ W } ${ H }" preserveAspectRatio="xMidYMid slice">${ sky.replaceAll( 'sc-', `${ id }-` ) }${ layer( far, scene.far, 'far' ) }${ grid }${ near ? layer( near, scene.near, 'near' ) : '' }${ road }${ car }</svg>`;
 
-				// The mini game: tap the scene, or press Space or ↑, and the car hops; once it has, things
-				// come down the road to hop over (cones, rocks on the Moon and Mars, neon blocks), faster
-				// and faster, a point for each. Hitting one ends the run; the best is kept in this browser.
-				// Nothing comes till the first hop, so the scene is only a picture to anyone not playing.
-				const OBSTACLE = {
-					rock: [ 16, 11, '<path d="M0 0c0-6 3-11 8-11s8 5 8 11z" fill="#8b8b93"/><path d="M4 -3c1-3 3-5 5-5" stroke="#5c5c64" stroke-width="1.4" fill="none"/>' ],
-					neon: [ 12, 15, '<rect x="1" y="-14" width="10" height="13" fill="#170030" stroke="#3ef0ff" stroke-width="2"/>' ],
-					cone: [ 12, 16, '<path d="M0 0h12l-4-16h-4z" fill="#ff7a1a"/><path d="M2.6 -6h6.8l-.7 -3h-5.4z" fill="#fff"/>' ],
-				};
-				const [ OW, OH, OSHAPE ] = OBSTACLE[ scene.id === 'moon' || scene.id === 'mars' ? 'rock' : scene.id === 'neon' ? 'neon' : 'cone' ];
-				const BASE = 143, LEFT = 175 - 25, RIGHT = 175 + 25, GRAVITY = 900, LIFT = 300;
-				let best = 0;
-				try { best = Number( localStorage.getItem( 'worldDriveLoadingBest' ) ) || 0; } catch {}
-				const games = [];
-				const game = ( host, id, named ) => {
-
-					host.innerHTML = `${ svg( id ) }${ named ? `<span class="scene-name">${ scene.name }</span>` : '' }<span class="game-say">Tap to jump${ best ? ` · best ${ best }` : '' }</span>`;
-					const hop = host.querySelector( '.hop' ), road = host.querySelector( '.obstacles' ), say = host.querySelector( '.game-say' );
-					let state = 'idle', y = 0, vy = 0, list = [], speed = 0, score = 0, wait = 0, last = 0, running = false;
-					const words = text => { say.textContent = text; };
-					const start = () => {
-
-						for ( const o of list ) o.el.remove();
-						list = [];
-						state = 'play';
-						speed = 170;
-						score = 0;
-						wait = 0.9;
-						host.classList.add( 'playing' );
-						host.classList.remove( 'crashed' );
-						words( '0' );
-
-					};
-					const frame = t => {
-
-						const dt = Math.min( 0.05, ( t - last ) / 1000 || 0 );
-						last = t;
-						if ( y > 0 || vy > 0 ) {
-
-							vy -= GRAVITY * dt;
-							y = Math.max( 0, y + vy * dt );
-							if ( y === 0 ) vy = 0;
-
-						}
-
-						hop.setAttribute( 'transform', `translate(0 ${ ( - y ).toFixed( 1 ) })` );
-						if ( state === 'play' ) {
-
-							speed = Math.min( 340, speed + 5 * dt );
-							wait -= dt;
-							if ( wait <= 0 ) {
-
-								const el = document.createElementNS( 'http://www.w3.org/2000/svg', 'g' );
-								el.innerHTML = OSHAPE;
-								road.append( el );
-								list.push( { el, x: W + 10, passed: false } );
-								wait = 0.85 + Math.random() * 1.2;
-
-							}
-
-							for ( const o of list ) {
-
-								o.x -= speed * dt;
-								o.el.setAttribute( 'transform', `translate(${ o.x.toFixed( 1 ) } ${ BASE })` );
-								if ( ! o.passed && o.x + OW < LEFT ) {
-
-									o.passed = true;
-									words( String( ++ score ) );
-
-								}
-
-								if ( o.x < RIGHT && o.x + OW > LEFT && y < OH - 3 ) {
-
-									state = 'over';
-									host.classList.add( 'crashed' );
-									if ( score > best ) {
-
-										best = score;
-										try { localStorage.setItem( 'worldDriveLoadingBest', String( best ) ); } catch {}
-
-									}
-
-									words( `Crash! ${ score }${ best ? ` · best ${ best }` : "" } · tap to go again` );
-
-								}
-
-							}
-
-							list = list.filter( o => o.x > - 30 || ( o.el.remove(), false ) );
-
-						}
-
-						running = state === 'play' || y > 0;
-						if ( running ) requestAnimationFrame( frame );
-
-					};
-					const jump = () => {
-
-						if ( state !== 'play' ) start();
-						if ( y === 0 ) vy = LIFT;
-						if ( ! running ) {
-
-							running = true;
-							last = performance.now();
-							requestAnimationFrame( frame );
-
-						}
-
-					};
-					// Back to the picture, as when the card goes away mid-run.
-					const reset = () => {
-
-						for ( const o of list ) o.el.remove();
-						list = [];
-						state = 'idle';
-						y = vy = 0;
-						hop.setAttribute( 'transform', '' );
-						host.classList.remove( 'playing', 'crashed' );
-						words( `Tap to jump${ best ? ` · best ${ best }` : '' }` );
-
-					};
-					host.addEventListener( 'pointerdown', event => {
-
-						event.preventDefault();
-						jump();
-
-					} );
-					const entry = { host, jump, reset, shown: () => ! host.closest( '[hidden]' ) };
-					games.push( entry );
-					return entry;
-
-				};
 				const splash = document.getElementById( 'splash' );
 				splash.dataset.scene = scene.id;
-				game( splash.querySelector( '.scene' ), 'sp', true );
-				const loadingGame = game( document.querySelector( '#loading .scene' ), 'ld', false );
-				// Space or ↑ hops while a scene is up (and isn't kept from the game, which would take Space
-				// as a drift's); not when a button or a field has the key.
-				const keys = event => {
-
-					if ( event.key !== ' ' && event.key !== 'ArrowUp' ) return;
-					if ( event.target.closest?.( 'button, input, textarea, select, a, iframe' ) ) return;
-					const on = games.find( g => g.shown() );
-					if ( ! on ) return;
-					event.preventDefault();
-					event.stopImmediatePropagation();
-					if ( event.type === 'keydown' && ! event.repeat ) on.jump();
-
-				};
-				window.addEventListener( 'keydown', keys, true );
-				window.addEventListener( 'keyup', keys, true );
+				splash.querySelector( '.scene' ).innerHTML = `${ svg( 'sp' ) }<span class="scene-name">${ scene.name }</span>`;
+				document.querySelector( '#loading .scene' ).innerHTML = svg( 'ld' );
 
 				// The tips, shuffled, one every few seconds while the splash is up.
 				const order = TIPS.map( t => [ Math.random(), t ] ).sort( ( a, b ) => a[ 0 ] - b[ 0 ] ).map( ( [ , t ] ) => t );
 				let next = 0;
 				const nextTip = () => order[ next ++ % order.length ];
-				window.worldDriveLoading = { scene: scene.id, colour, truck, nextTip, resetGame: loadingGame.reset };
+				window.worldDriveLoading = { scene: scene.id, colour, truck, nextTip };
 				const tip = splash.querySelector( '.tip' );
 				const show = () => {
 
