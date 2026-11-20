@@ -7,6 +7,7 @@ import {
 import { BELT, BODIES, DRIVE_BODIES, ICONS, OTHER_BODIES, SUN, bodyById, EARTH_GRAVITY } from './orrery-bodies.js';
 import { PLACES_ON } from './world-places.js';
 import { WORLDS, WORLD_IDS, onWorld } from './worlds.js';
+import { LAST_WORLD, readStored, writeStored } from './orrery-first.js';
 
 // The orrery: the Sun's family, the worlds you can drive on picked from it (docs/world-drive.md,
 // "The orrery"). A lazy chunk of its own (main.js imports it the first time it opens), with its styles
@@ -28,15 +29,28 @@ import { WORLDS, WORLD_IDS, onWorld } from './worlds.js';
 //   dialog,              the #orrery <dialog>
 //   renderer,            the page's WebGLRenderer (never disposed here; its clear colour, alpha,
 //                        autoClear and render target are put back after each frame drawn)
-//   current: () => id,   the game's world, read again each frame (a switch can finish while it's open)
+//   current: () => id,   the game's world, read again each frame (a switch can finish while it's open);
+//                        null while it's on none yet (a plain load's, which opens here before any
+//                        world's loaded: then no world says "You're here", and the Earth's checked)
 //   counts: () => map,   { earth: { on, total }, … } (online.js's, discounted of this page), or null
 //   party: () => [ { pid, name, world, away, globe } ],
 //   spots: id => [ { id, name, place } ],  up to 4 of a world's start spots
-//   earthClosed: () => bool,               today's Earth drives used up (its sheet says so)
+//   earthClosed: () => null | { later, usedUp, hint },   no Earth this visit: a reload away (later:
+//                                          a plain load, or a page on another world's link; hint: the
+//                                          last Earth visit here was turned away today), or used up
+//                                          (its sheet says which; a bare true, from before, is used up)
+//   sheetExtra: id => null | { data, text, action: { label, run } },   asked each time a world's sheet
+//                                          opens: a line on the data its ground is made from, a line
+//                                          more (Discoveries found there) and a button (run once closed)
 //   reducedMotion: () => bool,             nothing orbits or spins, the camera moves at once
 //   onDrive: id => …, onPlace: place => …, onJoin: pid => …,   each after it's closed
 //   onClose: () => …,                      called by close() before it returns
-// } ) → { open( opener ), close(), render( dt ), update(), isOpen, dispose() }
+// } ) → { open( opener, { last } ), close(), render( dt ), update(), isOpen, dispose() }
+//
+// open( opener, { last: true } ) (a plain load's, which opens on it first: main.js) opens with the
+// world last picked here already chosen (LAST_WORLD, written on each Drive) and its Drive in focus,
+// so a returning player is one tap or Enter from where they were; the first time, the whole Solar
+// System with nothing chosen, as any other open.
 
 const FOV = 40;
 const HALF = Math.tan( FOV / 2 * Math.PI / 180 );
@@ -66,7 +80,8 @@ export function createOrrery( {
 	counts = () => null,
 	party = () => [],
 	spots = () => [],
-	earthClosed = () => false,
+	earthClosed = () => null,
+	sheetExtra = () => null,
 	reducedMotion = () => false,
 	onDrive = () => {},
 	onPlace = () => {},
@@ -80,7 +95,7 @@ export function createOrrery( {
 	// The body whose sheet is open (null: the whole Solar System), and the drivable world checked in
 	// the radiogroup (the game's, until another's picked).
 	let chosen = null;
-	let picked = current();
+	let picked = current() ?? WORLD_IDS[ 0 ];
 	let shownCurrent = null;
 	let countsKey = '';
 	let partyKey = '';
@@ -115,6 +130,9 @@ export function createOrrery( {
 		const tags = el( 'div', { class: 'orrery-tags', 'aria-hidden': 'true' } );
 		const total = el( 'p', { class: 'orrery-total', hidden: true } );
 		const close = el( 'button', { type: 'button', class: 'orrery-close', 'aria-label': 'Close the worlds', html: '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>' } );
+		// What a first-time visitor, a renderer and a screen reader meet first (the dialog's description):
+		// what this is for, and that the ground is real.
+		const intro = el( 'p', { id: 'orrery-intro', class: 'orrery-intro', text: 'Every surface here is built from real spacecraft maps.' } );
 		const bar = el( 'header', { class: 'orrery-bar' },
 			el( 'h2', { id: 'orrery-title', text: 'Pick a world' } ),
 			total,
@@ -143,7 +161,7 @@ export function createOrrery( {
 
 		}
 
-		const pick = el( 'div', { class: 'orrery-pick' }, worlds, others );
+		const pick = el( 'div', { class: 'orrery-pick' }, intro, worlds, others );
 		const sheet = {
 			kicker: el( 'p', { class: 'orrery-kicker' } ),
 			name: el( 'h3', { id: 'orrery-sheet-name' } ),
@@ -154,15 +172,19 @@ export function createOrrery( {
 			spots: el( 'div', { class: 'orrery-spots' } ),
 			party: el( 'div', { class: 'orrery-party' } ),
 			note: el( 'p', { class: 'orrery-note' } ),
+			hint: el( 'p', { class: 'orrery-note orrery-hint-used' } ),
+			// sheetExtra's: the data a world's ground is made from, a line more and its button.
+			extra: el( 'div', { class: 'orrery-extra', hidden: true } ),
 			source: el( 'p', { class: 'orrery-source' } ),
 			drive: el( 'button', { type: 'button', class: 'orrery-drive' } ),
 		};
-		const content = el( 'div', { class: 'orrery-sheet-body' }, sheet.kicker, sheet.name, sheet.count, sheet.lede, sheet.facts, sheet.spots, sheet.party, sheet.note, sheet.counted, sheet.source );
+		const content = el( 'div', { class: 'orrery-sheet-body' }, sheet.kicker, sheet.name, sheet.count, sheet.lede, sheet.facts, sheet.extra, sheet.spots, sheet.party, sheet.note, sheet.hint, sheet.counted, sheet.source );
 		sheet.root = el( 'section', { class: 'orrery-sheet', 'aria-labelledby': 'orrery-sheet-name', hidden: true }, content, el( 'div', { class: 'orrery-go' }, sheet.drive ) );
 		const credit = el( 'p', { class: 'orrery-credit', text: 'Not to scale. Pictures: NASA (Blue Marble, LRO, MGS, Viking, Dawn).' } );
 
 		dialog.replaceChildren( stage, tags, bar, pick, sheet.root, credit );
 		dialog.classList.add( 'orrery' );
+		dialog.setAttribute( 'aria-describedby', 'orrery-intro' );
 
 		// The worlds you can drive on: a radiogroup, the arrows moving along it (and round), Home and
 		// End to its ends, the sheet following; Enter drives there. A click (or Space) only picks.
@@ -215,6 +237,8 @@ export function createOrrery( {
 
 				const place = shownSpots.find( item => item.id === spot.dataset.spot )?.place;
 				if ( ! place ) return;
+				// (A spot's a pick of its world too.)
+				chosen && remember( chosen );
 				closeOrrery();
 				onPlace( place );
 
@@ -222,6 +246,12 @@ export function createOrrery( {
 
 				closeOrrery();
 				onJoin( join.dataset.join );
+
+			} else if ( event.target.closest( '.orrery-extra-go' ) ) {
+
+				const run = extraShown?.action?.run;
+				closeOrrery();
+				run?.();
 
 			}
 
@@ -459,11 +489,18 @@ export function createOrrery( {
 			el( 'ul', {}, ...shownSpots.map( spot => el( 'li', {}, el( 'button', { type: 'button', 'data-spot': spot.id, text: spot.name } ) ) ) ),
 		] : [] ) );
 
-		const closed = id === 'earth' && earthClosed();
+		// The Earth with none this visit: used up for today (Drive says why: boot.js's notice), or a
+		// reload away (a plain load, or a page opened on another world's link), which is said, as it
+		// spends one of the day's free Earth drives.
+		const shut = id === 'earth' ? earthState() : null;
+		const closed = shut === 'used-up';
 		sheet.note.textContent = ! drivable ? ( body.ground === 'later' ? 'Coming later, maybe.' : 'Nothing to land on.' )
 			: closed ? 'The Earth is used up for today: this visit\'s Earth drives are spent.'
-				: id !== 'earth' ? `Gravity there is ${ +body.gravity.toFixed( 2 ) } m/s², so every bump is a long, slow hop.` : '';
+				: shut ? 'The Earth uses one of today\'s free Earth drives (Google\'s 3D tiles). Picking it reloads the page.'
+					: id !== 'earth' ? `Gravity there is ${ +body.gravity.toFixed( 2 ) } m/s², so every bump is a long, slow hop.` : '';
 		sheet.note.classList.toggle( 'closed', closed );
+		sheet.hint.textContent = shut === 'later-hint' ? 'Today\'s free Earth drive may be used up.' : '';
+		fillExtra( id );
 		sheet.source.textContent = body.credit ?? '';
 
 		sheet.drive.hidden = ! drivable;
@@ -479,6 +516,46 @@ export function createOrrery( {
 		fillCount();
 		partyKey = '';
 		fillParty();
+
+	}
+
+	// The Earth's state this visit, from earthClosed(): null (open), 'later' (a reload away),
+	// 'later-hint' (the same, and the last Earth visit here was turned away today) or 'used-up'.
+	function earthState() {
+
+		const shut = earthClosed();
+		if ( ! shut ) return null;
+		if ( shut === true || shut.usedUp ) return 'used-up';
+		return shut.hint ? 'later-hint' : 'later';
+
+	}
+
+	// sheetExtra's lines and button for world `id` (asked afresh each time: what's been found there
+	// changes as you drive). One that throws leaves the sheet without them rather than broken.
+	let extraShown = null;
+	function fillExtra( id ) {
+
+		const { sheet } = ui;
+		let extra = null;
+		try {
+
+			extra = bodyById[ id ].world ? sheetExtra( id ) ?? null : null;
+
+		} catch ( err ) {
+
+			console.error( err );
+
+		}
+
+		extraShown = extra;
+		const action = extra?.action?.label && typeof extra.action.run === 'function' ? extra.action : null;
+		sheet.extra.hidden = ! extra || ! ( extra.data || extra.text || action );
+		sheet.extra.replaceChildren( ...( sheet.extra.hidden ? [] : [
+			extra.data ? el( 'p', { class: 'orrery-data', text: extra.data } ) : '',
+			extra.text || action ? el( 'p', { class: 'orrery-extra-line' },
+				el( 'span', { text: extra.text ?? '' } ),
+				action ? el( 'button', { type: 'button', class: 'orrery-extra-go', text: action.label } ) : '' ) : '',
+		] ) );
 
 	}
 
@@ -543,8 +620,16 @@ export function createOrrery( {
 
 	function drive( id ) {
 
+		remember( id );
 		closeOrrery();
 		onDrive( id );
+
+	}
+
+	// The world picked, for the next plain load's first open (open's `last`).
+	function remember( id ) {
+
+		if ( bodyById[ id ]?.world ) writeStored( LAST_WORLD, id );
 
 	}
 
@@ -1056,7 +1141,7 @@ export function createOrrery( {
 
 	// --- the API ---
 
-	function open() {
+	function open( opener = null, { last = false } = {} ) {
 
 		if ( isOpen ) return;
 		ui ??= buildUi();
@@ -1068,8 +1153,8 @@ export function createOrrery( {
 		}
 
 		isOpen = true;
-		picked = current();
-		shownCurrent = picked;
+		picked = current() ?? WORLD_IDS[ 0 ];
+		shownCurrent = current();
 		countsKey = null;
 		fillCounts();
 		chosen = null;
@@ -1080,7 +1165,14 @@ export function createOrrery( {
 		window.addEventListener( 'keydown', guard, true );
 		relayout();
 		settledOnce = false;
-		ui.radios[ picked ]?.focus( { preventScroll: true } );
+		// The world last picked here, its sheet up and Drive in focus (a plain load's first open).
+		const lastWorld = last ? readStored( LAST_WORLD ) : null;
+		if ( lastWorld && bodyById[ lastWorld ]?.world ) {
+
+			choose( lastWorld );
+			ui.sheet.drive.focus( { preventScroll: true } );
+
+		} else ui.radios[ picked ]?.focus( { preventScroll: true } );
 		dirty = true;
 
 	}

@@ -72,8 +72,11 @@ const _inverse = new Matrix4();
 // layer: the element the dots go in; panel: panel.js's; covers: the elements a dot isn't drawn
 // under; mode(): main.js's; paused(): whether something covers the globe (the Garage), so it asks
 // nothing; onPick( place ): fly the globe to a place and pin it; onZoom( { lat, lon, distance } ):
-// fly the globe straight down over a spot, from `distance` (m) up; earthless: no Earth this visit
-// (main.js's earthClosed), so no row for it. poll and idle: POLL_MS and IDLE_MS unless the tests say.
+// fly the globe straight down over a spot, from `distance` (m) up; earthless: no Earth this visit at
+// all, today's Earth drives being used up (main.js's earthShut), so no row for it. (A plain load,
+// opened on the orrery, or a page opened on another world's link, has the Earth a reload away: its
+// row stays, and picking an Earth driver reloads the page there, main.js's setWorld and boot.js's
+// onEarth.) poll and idle: POLL_MS and IDLE_MS unless the tests say.
 export function createOnline( {
 	camera, earth, ellipsoid, bodies = {}, moon = null, world = () => EARTH, onWorld = () => {}, onOthers = () => {}, onCounts = () => {}, canvas, live, layer, panel, covers, mode,
 	paused = () => false, onPick, onZoom, earthless = false, poll = POLL_MS, idle = IDLE_MS,

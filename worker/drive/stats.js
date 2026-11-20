@@ -100,9 +100,11 @@ export async function postStats( context ) {
 
 // The kinds of visit countVisit counts (metric 'visit_kind'): on the Earth ('earth', a supporter's
 // 'earth_supporter'), the owner's, on a free world opened on a link to it ('moon_link',
-// 'mars_link', 'vesta_link', 'ceres_link'), and on the Moon over the day's cap for everyone or the visitor's own (the page opens
-// on the Moon instead).
-const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', ...OFF_EARTH.map( world => `${ world }_link` ), 'moon_daily_cap', 'moon_visitor_cap' ] );
+// 'mars_link', 'vesta_link', 'ceres_link'), a plain load's, which opens on the orrery with none of
+// the Earth's drives spent until the Earth's picked ('orrery': picking it then reloads the page into
+// an 'earth' visit of its own), and on the Moon over the day's cap for everyone or the visitor's own
+// (the page opens on the Moon instead).
+const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', ...OFF_EARTH.map( world => `${ world }_link` ), 'orrery', 'moon_daily_cap', 'moon_visitor_cap' ] );
 
 // A visit handed out at `now`: counted for the day and its hour (UTC). Never in the visit's way: a
 // count that fails is only logged.

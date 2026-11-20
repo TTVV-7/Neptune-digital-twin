@@ -1,22 +1,27 @@
-import { AdditiveBlending, CylinderGeometry, ExtrudeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, Shape, Vector3 } from 'three';
+import { AdditiveBlending, CylinderGeometry, Euler, ExtrudeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, Shape, Vector3 } from 'three';
 import { enuToLocal } from './geo.js';
+import { PLANE_TRICKS, countTricks, followLoop, loopGate, loopOffset, noseAngle, planeTricksOf } from './plane-tricks.js';
 
 // Plane mode (World Drive): T turns the ride into a little plane. Wings swing down from its sides
 // with a jet under each, a fin rises at the back and (on a ride whose wheels can, cars.js) the
 // wheels fold flat as fans, and it lifts off. T again flies it down and folds it back into a car on
-// the ground. It's for looking round, not for points: drive.js keeps it apart from everything
-// that's scored (no tricks, no boost, no challenge runs, and a new stunt run once it's down), and
-// the app keeps it out of the levels' distance.
+// the ground. It does tricks of its own: Q/E (or , and .) roll it, Z (or /) loops it nose up and
+// over and X nose down and under (on a touch screen, the ↺ button is TRICK: tapped, a roll; held with
+// UP or DOWN, a loop), scored as the car's tricks are, but bounded (plane-tricks.js), since a plane
+// never has to land a trick. Nothing else of the car's scoring goes with it (no drifts or boost, no
+// challenge runs), and the app keeps it out of the levels' distance. Its run carries on when it's
+// down: the points it scored flying are kept.
 //
 // How fast it may go depends on how high it is (SPEEDS): a crawl just off the ground, for looking
 // at a place, and faster the higher it climbs, as the ground below it gets further away. Climbing
 // and coming down are quicker the higher it is too (CLIMB).
 //
 // Never slower than CAR_SHARE times the ride's own top speed, though: a plane's speed even low
-// down. T again, flying, drops out of it: the kit folds away, the car falls (no faster than a
-// skydiver, DROP.terminal, its speed across the ground easing off) and a parachute opens over it
-// as it nears the ground (drive.js's PARACHUTE), steered a little with A/D, onto its wheels; T while
-// dropping unfolds it again. Within DROP.low m of the ground it lands and folds back as it always did.
+// down. T again, flying, drops out of it: the kit folds away, the car falls (as fast as a skydiver,
+// DROP, faster head-down with W, its speed across the ground shed quickly) and a parachute opens
+// over it in good time before the ground (PARACHUTE), lowering it slowly, steered a little with A/D,
+// S spilling air to come down faster, onto its wheels; T while dropping unfolds it again. Within
+// DROP.low m of the ground it lands and folds back as it always did.
 //
 // It's made by the Driver it belongs to (the `plane` option) and drives that Driver's vehicle,
 // using its position (east, north, y, heading, speed), its rays and its camera.
@@ -29,8 +34,13 @@ const LIFT = 3;
 const CLEARANCE = 0.8;
 const CEILING = 12000;
 // The fastest it may go (km/h) at each height over the ground (m), and in between, on a log
-// scale of the height: 60 km/h just off the ground, 250 km/h at 150 m, 900 km/h at 2 km.
-const SPEEDS = [ [ 0, 60 ], [ 30, 100 ], [ 150, 250 ], [ 600, 500 ], [ 2000, 900 ], [ 6000, 1800 ], [ 12000, 2700 ] ];
+// scale of the height: 60 km/h just off the ground, 325 km/h at 150 m, 1,170 km/h at 2 km, and
+// 3,500 km/h (972 m/s) at its ceiling. (Each a third faster than it was, but the crawl near the
+// ground. Faster over the Earth means more of Google's tiles fetched a minute: not more of Google's
+// bill, which is by the session (main.js), but more for the device to download, and this table is
+// the one place to turn it back.) The live protocol's top speed is over the last of these
+// (live-protocol.js's TOP_SPEED, live.js's MAX_SPEED): they go up together.
+const SPEEDS = [ [ 0, 60 ], [ 30, 130 ], [ 150, 325 ], [ 600, 650 ], [ 2000, 1170 ], [ 6000, 2340 ], [ 12000, 3500 ] ];
 // Climbing or coming down (m/s): this much, plus this share of the height, up to the most.
 const CLIMB = { base: 6, share: 0.12, most: 250 };
 // Speeding up (m/s²): at least this, or this share of the top speed there a second; slowing down
@@ -38,24 +48,41 @@ const CLIMB = { base: 6, share: 0.12, most: 250 };
 const ACCEL = { least: 6, share: 0.35 };
 // Turning (°/s) slow and at TURN_FAST km/h and over.
 const TURN = [ 80, 28 ];
-const TURN_FAST = 900;
+const TURN_FAST = 1170;
 const KMH = 3.6;
 const CAR_SHARE = 2;
-// The parachute a plane's drop comes down under (here, and drive.js's fallStep): opened PARACHUTE.open m over the
-// ground (or, falling faster, `lead` s of the fall over it), it slows the fall to `sink` m/s at
-// `settle` (1/s), its speed across the ground slowing at `drag` (1/s), and turns it back upright at
-// `right` (1/s), so it lands on its wheels. `size`: the canopy's radius as a share of the
-// vehicle's width (at least `least` m).
-export const PARACHUTE = { open: 30, lead: 0.8, sink: 5, settle: 3, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
-// The drop (T, flying): falling at most `terminal` m/s; its speed across the ground easing off to
-// the ride's own top speed at `drag` (1/s); turned `steer` °/s with A/D; and under `low` m over the
-// ground, no drop, it lands and folds as before.
-const DROP = { terminal: 55, drag: 0.35, steer: 30, low: 12 };
+// The parachute a plane's drop comes down under (here; drive.js's fallStep and airSpin read it
+// too): opened PARACHUTE.open m over the ground, or on the Earth `floor` m (where the drop is
+// fastest, and over buildings), or, coming at the ground faster, `lead` s of it out (see
+// closingSpeed), it slows the fall at `settle` (1/s) to `sink` m/s times the square root of the
+// gravity, but never slower than `sinkLeast` m/s (on Vesta and Ceres that would be minutes of
+// hanging there), and S held spills air from it for `spill` times that. Its speed across the ground
+// slows at `drag` (1/s), and it turns back upright at `right` (1/s), so it lands on its wheels.
+// `size`: the canopy's radius as a share of the vehicle's width (at least `least` m). On the
+// Earth that's 2.5 m/s, half what it was: a long, slow float down from 108 m.
+export const PARACHUTE = { open: 30, floor: 60, lead: 1.2, sink: 2.5, sinkLeast: 1, settle: 3, spill: 2, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
+// The drop (T, flying): falling at `pull` m/s² at least (in weak gravity a fall would crawl), and at
+// most at a skydiver's speed: `terminal` m/s spread out on the Earth, `least` m/s on the Moon and
+// lighter worlds, in between by the gravity, and `dive` times that head-down (W held). Above the
+// ride's own top speed, its speed across the ground is shed at `shed` (1/s, gone in a couple of
+// seconds after a bail-out at 3,500 km/h, so it reads as a fall); turned `steer` °/s with A/D;
+// and under `low` m over the ground, no drop, it lands and folds as before. (There's no air on
+// the Moon, Vesta or Ceres to set a falling speed: `least` is a game's cap there, which keeps the
+// parachute's opening sane and everything far under the live protocol's top speed.)
+export const DROP = { terminal: 90, least: 60, dive: 1.6, pull: 5, shed: 1.5, steer: 30, low: 12 };
+// The gravity (a share of the Earth's) from which a fall is the Earth's, and under which `least`.
+const LIGHT = 0.165;
 
 const _a = new Vector3();
 const _b = new Vector3();
+const _e = new Euler();
 const DOWN = new Vector3( 0, - 1, 0 );
 const UP = new Vector3( 0, 1, 0 );
+// The parachute looks this far ahead (s, along the way the drop is going) for ground rising to
+// meet it (see closingSpeed).
+const AHEAD = 1;
+// A ↺ (TRICK) tap rolls it this much of a whole turn under the key; it coasts on round the rest.
+const TAP_ROLL = 0.9;
 
 // The top speed (m/s) at `height` m over the ground.
 export function planeTopSpeed( height ) {
@@ -82,6 +109,39 @@ export function planeClimbRate( height ) {
 
 }
 
+// The drop's falling speed at most (m/s) in `gravity` (a share of the Earth's), `diving` (W held)
+// or spread out: 90 (144 diving) on the Earth, about 68 on Mars, 60 (96) on the Moon and lighter.
+export function dropTerminal( gravity, diving = false ) {
+
+	const earthly = MathUtils.clamp( ( gravity - LIGHT ) / ( 1 - LIGHT ), 0, 1 );
+	return ( DROP.least + ( DROP.terminal - DROP.least ) * earthly ) * ( diving ? DROP.dive : 1 );
+
+}
+
+// How fast (m/s²) the drop falls faster, in `gravity`: its own, but never under DROP.pull.
+export function dropPull( gravity ) {
+
+	return Math.max( 9.81 * gravity, DROP.pull );
+
+}
+
+// The speed (m/s, down) under the parachute in `gravity`, `spilling` air (S held) or not: 2.5 m/s
+// on the Earth, 1.5 on Mars, 1 on the Moon, Vesta and Ceres; twice that spilling.
+export function chuteSink( gravity, spilling = false ) {
+
+	return Math.max( PARACHUTE.sink * Math.sqrt( gravity ), PARACHUTE.sinkLeast ) * ( spilling ? PARACHUTE.spill : 1 );
+
+}
+
+// The height (m over the ground) the parachute opens at, coming at the ground at `closing` m/s, in
+// `gravity`: PARACHUTE.open, PARACHUTE.floor on the Earth (gravity 1), or `lead` s of the closing
+// speed out, whichever is highest.
+export function chuteHeight( closing, gravity ) {
+
+	return Math.max( PARACHUTE.open, gravity >= 1 ? PARACHUTE.floor : 0, PARACHUTE.lead * closing );
+
+}
+
 export class PlaneMode {
 
 	constructor( driver ) {
@@ -99,10 +159,20 @@ export class PlaneMode {
 
 	}
 
-	// Off at once (a new drive, or getting out), with the kit gone.
+	// Off at once (a new drive, or getting out), with the kit gone, and a trick being flown with
+	// it, unpaid.
 	reset() {
 
 		this.driver.showChute?.( false );
+		if ( this.driver.air?.plane ) {
+
+			this.driver.air = null;
+			this.driver.hud?.setPending?.( null );
+
+		}
+
+		this.clearPass();
+		this.counts = {};
 		this.phase = null;
 		this.deploy = 0;
 		this.time = 0;
@@ -137,14 +207,16 @@ export class PlaneMode {
 
 	}
 
-	// Out of the plane, in the air: the kit folds away and it falls, the parachute to come.
+	// Out of the plane, in the air: the kit folds away and it falls, the parachute to come. A trick
+	// being flown is paid for its whole turns.
 	drop() {
 
+		this.endPass();
 		this.phase = 'dropping';
 		this.time = 0;
 		this.vy = Math.min( this.vy, 0 );
 		this.driver.chute = { open: false, t: 0 };
-		this.driver.hud.flash( 'Bail out!' );
+		this.driver.hud.flash( 'Freefall! W dive · A/D steer' );
 
 	}
 
@@ -169,18 +241,23 @@ export class PlaneMode {
 		this.steer = d.steer;
 		this.from = d.y;
 		this.kit = createPlaneKit( { pivot: d.entry.pivot, box: d.ownBox } );
+		this.counts = {};
 		d.speed = Math.max( 0, d.speed );
-		d.hud.flash( d.fly ? 'Plane! Space up · Shift down · T to bail out' : 'Plane! Space up · Shift down · F to bail out' );
+		// (Bailing out is the same key as this: T, or F too where F doesn't fly.)
+		d.hud.flash( `Plane! Space up · Shift down · Q/E roll · Z loop · ${ d.fly ? 'T' : 'F/T' } to bail out` );
 		d.onPlane?.( true );
 
 	}
 
-	// Back into a car, on the ground: it drives on from here, at what speed it landed with, and a
-	// new stunt run starts (the last one's place may be far behind).
+	// Back into a car, on the ground: it drives on from here, at what speed it landed with. Its run
+	// carries on (what it scored flying is kept: drive.js's newRun isn't called), but a trick boost
+	// paid in the air is dropped, or the car would shoot off as it lands.
 	finish() {
 
 		const d = this.driver;
+		this.endPass();
 		this.reset();
+		d.boost = null;
 		d.grounded = true;
 		d.flying = false;
 		d.vy = 0;
@@ -189,7 +266,6 @@ export class PlaneMode {
 		d.lastSafe = { east: d.east, north: d.north, y: d.y };
 		d.lastGood = d.recentGood = { east: d.east, north: d.north, y: d.y };
 		d.hud.setPlane?.( false );
-		d.newRun?.();
 		d.onPlane?.( false );
 
 	}
@@ -204,7 +280,146 @@ export class PlaneMode {
 		if ( ! this.on ) return;
 		if ( this.from !== undefined ) this.from += dy;
 		if ( this.ground !== null ) this.ground += dy;
-		this.vy = this.driver.vy;
+		// (The driver's climb has the loop's hump in it, which isn't the plane's own: see update.)
+		this.vy = this.driver.vy - this.loopVy;
+
+	}
+
+	// A key going down while it's a plane (drive.js's press: the car's own keys do nothing as one).
+	// ↺ (R; TRICK on a touch screen), flying: a whole roll, toward the way it's steered (right if it
+	// isn't), unless UP or DOWN is held with it, which loops it instead (see trickInput).
+	press( code ) {
+
+		if ( code !== 'KeyR' || this.phase !== 'flying' ) return;
+		const { keys } = this.driver;
+		if ( keys.has( 'Space' ) || downHeld( keys ) ) return;
+		this.tapRoll = { dir: this.driver.steerInput() < 0 ? 1 : - 1, from: null };
+
+	}
+
+	// What the keys ask of a trick, each -1 to 1 about the plane's own axes (drive.js's turn): pitch,
+	// + nose up (Z or /, or TRICK with UP: a loop) or - nose down (X, or TRICK with DOWN: an outside
+	// loop); roll, + over to the left (Q or ,) or - to the right (E or .), or a TRICK tap's roll.
+	trickInput( keys ) {
+
+		const trick = keys.has( 'KeyR' );
+		const tap = this.tapRoll?.dir ?? 0;
+		const left = keys.has( 'KeyQ' ) || keys.has( 'Comma' ) || tap > 0;
+		const right = keys.has( 'KeyE' ) || keys.has( 'Period' ) || tap < 0;
+		const loop = keys.has( 'KeyZ' ) || keys.has( 'Slash' ) || trick && keys.has( 'Space' );
+		const outside = keys.has( 'KeyX' ) || trick && downHeld( keys );
+		return { yaw: 0, pitch: loop ? 1 : outside ? - 1 : 0, roll: left ? 1 : right ? - 1 : 0 };
+
+	}
+
+	// A frame of a trick (flying only), on top of how it flies (the driver's `air`, made by the first
+	// trick key, so plain flying is untouched): turned by the keys and righted once they're let go
+	// (Driver.planeSpin, as a car's tricks flying with F were), and over the loop's hump: this frame's
+	// share of it (m) goes in `loopStep`, for update to move it by. Paid once the plane has settled
+	// (see endPass).
+	trick( dt, keys ) {
+
+		const d = this.driver;
+		this.loopStep = 0;
+		const input = this.trickInput( keys );
+		const asked = input.pitch !== 0 || input.roll !== 0;
+		if ( ! d.air ) {
+
+			if ( ! asked ) return;
+			// (A pass from nothing: but a TRICK tap that asked for it stays asked.)
+			const { tapRoll } = this;
+			d.enterAir( true );
+			d.air.plane = true;
+			this.clearPass();
+			this.tapRoll = tapRoll;
+			this.passTop = this.height;
+
+		}
+
+		const { air } = d;
+		// A TRICK tap rolls it until it's most of the way round; it coasts round the rest.
+		if ( this.tapRoll ) {
+
+			if ( this.tapRoll.from === null ) this.tapRoll.from = air.turned.z;
+			if ( Math.abs( air.turned.z - this.tapRoll.from ) >= TAP_ROLL * 2 * Math.PI ) this.tapRoll = null;
+
+		}
+
+		// The loop's size: a circle of this radius (m) is what the nose turning at the trick's rate
+		// traces at this speed (speed / ω; see loopOffset). Flat out (972 m/s) that's 177 m for a
+		// kart (ω = 5.5 rad/s) and 321 m for the biggest rides (trickRate 0.55, ω = 3.0 rad/s); at
+		// 325 km/h (150 m up) 16 to 30 m; at the 60 km/h crawl 3 to 6 m. The hump goes up (or down)
+		// by as much as the radius at most (LOOP.lift).
+		const radius = Math.max( 0, d.speed ) / d.loopRate;
+		// Too low to start a loop that way: no nose up or down until it's higher, and righted twice as
+		// fast. (Rolls go at any height; a loop already going carries on.)
+		let righting = 1;
+		if ( input.pitch && Math.abs( this.loop ) < 0.1 && this.height < loopGate( radius, input.pitch < 0 ) ) {
+
+			input.pitch = 0;
+			righting = 2;
+
+		}
+
+		d.planeSpin( dt, input, righting );
+		this.loop = followLoop( this.loop, noseAngle( air.q ) );
+		const lift = loopOffset( this.loop, radius );
+		this.loopStep = lift - this.loopLift;
+		this.loopLift = lift;
+		this.passTop = Math.max( this.passTop, this.height - lift );
+
+		// Settled: no trick key for a moment, and back about level.
+		this.idle = asked ? 0 : this.idle + dt;
+		const off = 2 * Math.acos( Math.min( 1, Math.abs( air.q.w ) ) ) * MathUtils.RAD2DEG;
+		if ( this.idle >= PLANE_TRICKS.settle && off <= PLANE_TRICKS.level ) {
+
+			this.endPass();
+			return;
+
+		}
+
+		// What it's done so far, on the HUD, when that changes.
+		const { lines } = planeTricksOf( air, { height: this.passTop, counts: this.counts } );
+		const text = lines.join( '\n' );
+		if ( text === this.pending ) return;
+		this.pending = text;
+		d.hud.setPending?.( lines.length ? lines : null );
+
+	}
+
+	// The end of a pass of tricks (settled, or cut short by bailing out, coming down to land or
+	// getting out of the plane): its whole turns paid (drive.js's payTricks, with the combo bonus,
+	// the multiplier, the leaderboard's best jump and the XP), counted for the repeats rule, and the
+	// trick's turn handed to the plane's own pitch and roll, which ease back from there rather than
+	// snapping level.
+	endPass() {
+
+		const d = this.driver;
+		if ( ! d.air?.plane ) return;
+		const { tricks } = planeTricksOf( d.air, { height: this.passTop, counts: this.counts } );
+		_e.setFromQuaternion( d.air.q, 'YXZ' );
+		d.pitch += _e.x;
+		d.roll += _e.z;
+		d.air = null;
+		d.hud.setPending?.( null );
+		this.clearPass();
+		if ( tricks.length === 0 ) return;
+		countTricks( this.counts, tricks );
+		d.payTricks( tricks );
+
+	}
+
+	// A pass's own state back to nothing (its hump left where it is: the plane is where it is).
+	clearPass() {
+
+		this.loop = 0;
+		this.loopLift = 0;
+		this.loopStep = 0;
+		this.loopVy = 0;
+		this.idle = 0;
+		this.passTop = 0;
+		this.tapRoll = null;
+		this.pending = '';
 
 	}
 
@@ -215,9 +430,11 @@ export class PlaneMode {
 		const { keys } = d;
 		const forward = keys.has( 'KeyW' ) || keys.has( 'ArrowUp' );
 		const back = keys.has( 'KeyS' ) || keys.has( 'ArrowDown' );
-		// (F only climbs where it doesn't also turn the plane back into a car: the `fly` option on.)
-		const up = keys.has( 'Space' ) || d.fly && keys.has( 'KeyF' );
-		const down = keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' ) || keys.has( 'KeyB' );
+		// (F only climbs where it doesn't also turn the plane back into a car: the `fly` option on.
+		// With TRICK held, UP and DOWN loop it instead: see trickInput.)
+		const trick = keys.has( 'KeyR' );
+		const up = ( keys.has( 'Space' ) || d.fly && keys.has( 'KeyF' ) ) && ! trick;
+		const down = downHeld( keys ) && ! trick;
 		const steerInput = d.steerInput();
 
 		// The ground under it: looked for as far down as it may be, and remembered for when it can't
@@ -299,8 +516,23 @@ export class PlaneMode {
 		d.course = d.heading;
 		d.steer = this.steer;
 
+		// Tricks, flying (with stunts on: drive.js's crash: 'launch', World Drive's); anything else
+		// (coming down to land, folding) ends a pass.
+		this.loopStep = 0;
+		if ( this.phase === 'flying' && d.launch ) this.trick( dt, keys );
+		else this.endPass();
+		if ( this.loopStep > 0 ) {
+
+			// Not up through a roof or a bridge on a loop's hump either.
+			enuToLocal( d.east, d.north, d.y + d.height / 2, _a );
+			if ( d.cast( _a, UP, d.height / 2 + this.loopStep + 0.3 ) ) this.loopStep = 0;
+
+		}
+
 		this.move( dt );
-		d.y += this.vy * dt;
+		// Its own climb, and the loop's hump (not kept in this.vy: the climb is as it was).
+		d.y += this.vy * dt + this.loopStep;
+		this.loopVy = dt > 0 ? this.loopStep / dt : 0;
 
 		// Never under the ground: kept CLEARANCE over it, or, coming down to land, down on it and
 		// folding back into a car.
@@ -333,7 +565,9 @@ export class PlaneMode {
 		const roll = - this.steer * MathUtils.lerp( 0.25, 0.6, MathUtils.clamp( d.speed / 40, 0, 1 ) ) * this.deploy;
 		d.pitch += ( pitch - d.pitch ) * Math.min( 1, dt * 3 );
 		d.roll += ( roll - d.roll ) * Math.min( 1, dt * 3 );
-		d.vy = this.vy;
+		// The climb others are sent (live.js) has the hump in it, so they see the plane loop up and
+		// over rather than flat.
+		d.vy = this.vy + this.loopVy;
 
 		this.kit?.update( dt, this.deploy, this.thrust );
 
@@ -344,32 +578,39 @@ export class PlaneMode {
 	fall( dt, steerInput ) {
 
 		const d = this.driver;
+		const { keys } = d;
 		const chute = d.chute ?? ( d.chute = { open: false, t: 0 } );
 		this.time += dt;
 		this.deploy = Math.max( 0, this.deploy - dt / FOLD );
-		if ( ! chute.open && this.vy < 0 && this.height <= Math.max( PARACHUTE.open, - this.vy * PARACHUTE.lead ) ) {
+		if ( ! chute.open && this.vy < 0 && this.height <= chuteHeight( this.closingSpeed(), d.gravity ) ) {
 
 			chute.open = true;
 			d.showChute( true );
-			d.hud.flash( 'Parachute!' );
+			d.hud.flash( 'Parachute! A/D steer · S to drop faster' );
 
 		}
 
 		const top = d.spec.topSpeed / KMH;
 		if ( chute.open ) {
 
+			// Lowered slowly; S (or ↓) spills air from the canopy, to come down faster.
 			chute.t += dt;
-			this.vy += ( - PARACHUTE.sink * Math.sqrt( d.gravity ) - this.vy ) * Math.min( 1, dt * PARACHUTE.settle );
+			const spilling = keys.has( 'KeyS' ) || keys.has( 'ArrowDown' );
+			this.vy += ( - chuteSink( d.gravity, spilling ) - this.vy ) * Math.min( 1, dt * PARACHUTE.settle );
 			d.speed *= Math.exp( - PARACHUTE.drag * dt );
 
 		} else {
 
-			this.vy -= 9.81 * d.gravity * dt;
-			// No faster than a skydiver: the air holds it back.
-			if ( this.vy < - DROP.terminal ) this.vy += ( - DROP.terminal - this.vy ) * Math.min( 1, dt * 2 );
-			if ( d.speed > top ) d.speed = top + ( d.speed - top ) * Math.exp( - DROP.drag * dt );
+			// Falling faster up to a skydiver's speed (more head-down, W or ↑), and no faster: one
+			// falling faster than that (out of a plane diving, or let go of W) eases back to it.
+			const terminal = dropTerminal( d.gravity, keys.has( 'KeyW' ) || keys.has( 'ArrowUp' ) );
+			if ( this.vy > - terminal ) this.vy = Math.max( - terminal, this.vy - dropPull( d.gravity ) * dt );
+			else this.vy += ( - terminal - this.vy ) * Math.min( 1, dt * 2 );
 
 		}
+
+		// What's left of the plane's speed over the car's own is shed fast, chute or not.
+		if ( d.speed > top ) d.speed = Math.max( top, d.speed * Math.exp( - DROP.shed * dt ) );
 
 		d.heading += steerInput * DROP.steer * dt;
 		d.course = d.heading;
@@ -390,6 +631,21 @@ export class PlaneMode {
 		d.speed = Math.min( d.speed, top * 2 );
 		d.hud.flash( 'Landed' );
 		this.finish();
+
+	}
+
+	// How fast (m/s) it's coming at the ground: its fall, and the ground rising to meet it along the
+	// way it's going, from the ground AHEAD s along it (a slope on Mars or Vesta, a hill). (Ground
+	// ahead higher than it is isn't found, and counts as none: it would be a wall, which move()
+	// stops it at.)
+	closingSpeed() {
+
+		const d = this.driver;
+		const rad = d.heading * Math.PI / 180;
+		const reach = Math.max( 0, d.speed ) * AHEAD;
+		const ahead = this.groundUnder( d.east + Math.sin( rad ) * reach, d.north + Math.cos( rad ) * reach, d.y );
+		const rise = ahead === null || this.ground === null ? 0 : ( ahead - this.ground ) / AHEAD;
+		return Math.max( 0, - this.vy ) + Math.max( 0, rise );
 
 	}
 
@@ -437,6 +693,13 @@ export class PlaneMode {
 		return hit ? hit.point.y : null;
 
 	}
+
+}
+
+// DOWN held (Shift, or B: the DOWN button on a touch screen).
+function downHeld( keys ) {
+
+	return keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' ) || keys.has( 'KeyB' );
 
 }
 

@@ -64,8 +64,12 @@ const SCORES_DAILY = 1500;
 // A UTC day (ms): DriveLimits' days end at its midnights.
 const DAY = 24 * 60 * 60 * 1000;
 export const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDES, ...DRIVE_CARS, ...PASS_RIDES ] );
-// The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + ".
-const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
+// The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + "; and a
+// plane's (src/plane-tricks.js): its rolls are barrel rolls, and its loops "Loop!" or "Outside
+// loop!", two at most in a pass (×2), which is all the page scores. (Its other limits, three rolls
+// a pass, repeats worth less and height worth less, are the page's: a plane's barrel roll can't be
+// told from a car's here, the same trust as every car trick.)
+export const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|(?:Outside loop|Loop)(?:!| ×2)|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
 const MAX_TRICKS = 120;
 // Kept: the log, and the day and week boards, for this long (ms). (The admin page's scores a day
 // come from the log, so go back this far: stats.js.)

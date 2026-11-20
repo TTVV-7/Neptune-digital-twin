@@ -184,6 +184,16 @@ body.touch .orrery-hint-touch {
 	width: min( 520px, calc( 100% - var( --orrery-sheet ) - 48px ) );
 }
 
+/* The line under the title on what this is (orrery.js's intro): above the worlds, so the scene's room
+   is measured below it. */
+.orrery-intro {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.4;
+	color: var( --muted );
+	text-shadow: 0 1px 3px #000;
+}
+
 .orrery-worlds,
 .orrery-others {
 	pointer-events: auto;
@@ -500,6 +510,49 @@ body.touch .orrery-hint-touch {
 	color: var( --muted );
 }
 
+/* sheetExtra's (main.js): the data a world's ground is made from, then a line (what's been found
+   there) and its button (the collection). */
+.orrery-extra {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.orrery-extra[hidden] {
+	display: none;
+}
+
+.orrery-data {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.45;
+	color: var( --ink );
+}
+
+.orrery-extra-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 12px;
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.orrery-extra-go {
+	min-height: 44px;
+	padding: 0 14px;
+	border: 1px solid var( --line );
+	border-radius: 999px;
+	background: var( --chip );
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.orrery-extra-go:hover {
+	background: var( --chip-hover );
+}
+
 .orrery-go {
 	flex: none;
 	padding: 10px max( 22px, env( safe-area-inset-right, 0px ) ) calc( 16px + var( --safe-bottom ) ) 22px;
@@ -625,6 +678,10 @@ body.touch .orrery-hint-touch {
 
 	.orrery-worlds button {
 		min-height: 48px;
+	}
+
+	.orrery-intro {
+		font-size: 12px;
 	}
 
 	.orrery-sheet {
