@@ -108,6 +108,7 @@ export function notice( kind, { retryAfter = 0, reason = '', message = '', onRet
 export function loading( title, progress = null ) {
 
 	const root = $( 'loading' );
+	if ( root.hidden ) startTips( root );
 	root.hidden = false;
 	root.querySelector( '.title' ).textContent = title;
 	setProgress( progress );
@@ -125,6 +126,38 @@ export function setProgress( progress ) {
 export function hideLoading() {
 
 	$( 'loading' ).hidden = true;
+	clearInterval( tipTimer );
+
+}
+
+// The drop-in's card's car (the splash's, drive/index.html) and a tip, a new one every few seconds
+// while it's up.
+let tipTimer;
+function startTips( root ) {
+
+	const loading = window.worldDriveLoading;
+	const tip = root.querySelector( '.tip' );
+	const ride = root.querySelector( '.mini .ride' );
+	clearInterval( tipTimer );
+	if ( ! loading ) {
+
+		tip.hidden = true;
+		root.querySelector( '.mini' ).hidden = true;
+		return;
+
+	}
+
+	if ( ! ride.firstChild ) ride.innerHTML = loading.car;
+	const show = () => {
+
+		tip.classList.remove( 'in' );
+		void tip.offsetWidth;
+		tip.innerHTML = `<b>Tip</b> ${ loading.nextTip() }`;
+		tip.classList.add( 'in' );
+
+	};
+	show();
+	tipTimer = setInterval( show, 5000 );
 
 }
 

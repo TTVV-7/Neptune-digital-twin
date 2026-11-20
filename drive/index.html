@@ -247,8 +247,10 @@
 
 		<section id="loading" hidden aria-live="polite">
 			<div class="card">
+				<div class="mini" aria-hidden="true"><div class="ride"></div><div class="road"><i></i></div></div>
 				<p class="title"></p>
 				<div class="bar" hidden><i></i></div>
+				<p class="tip"></p>
 				<button type="button" class="link cancel">Back to the globe</button>
 			</div>
 		</section>
@@ -276,13 +278,169 @@
 
 		<section id="splash">
 			<div class="card">
+				<div class="scene" aria-hidden="true"></div>
 				<h1 class="logo">World <b>Drive</b></h1>
 				<p class="pitch">Drive anywhere on Earth in photorealistic 3D: real cities, bridges and mountain roads, with stunts, boosts and friends. Free, right here in your browser.</p>
 				<p class="status">Warming up the engine...</p>
 				<div class="road" aria-hidden="true"><i></i></div>
+				<p class="tip" aria-live="off"></p>
 				<div id="robot-check"></div>
 			</div>
 		</section>
+		<script>
+			// The loading screen's scene, new each load (docs/world-drive.md, "The loading screen"): a sky,
+			// two layers of scenery rolling by at different speeds, and a car of a random colour (or a
+			// monster truck) bouncing along the road, drawn here before the first paint so it's there at
+			// once; and tips that change every few seconds, on the splash and the drop-in's card
+			// (screens.js reads them from window.worldDriveLoading). ?scene=<id> picks one.
+			( () => {
+
+				const SCENES = [
+					{ id: 'sunset', name: 'Sunset coast', sky: [ '#4b1d5e', '#ff5f6d', '#ffb36b' ], sun: '#ffe7a0', far: '#7a3566', near: '#2b1638', land: 'hills', sea: '#3a1c4e' },
+					{ id: 'city', name: 'Night city', sky: [ '#050b1f', '#14275a', '#2e3f8f' ], sun: '#f4f1d0', far: '#1a2756', near: '#0a1029', land: 'city', stars: true },
+					{ id: 'alps', name: 'Alpine pass', sky: [ '#3f9be0', '#8fd0ff', '#e3f4ff' ], sun: '#fff6c8', far: '#8aa0c0', near: '#2f5a43', land: 'peaks', },
+					{ id: 'desert', name: 'Desert highway', sky: [ '#f08a4b', '#ffb35c', '#ffe09a' ], sun: '#fff4c4', far: '#c9733d', near: '#7e4024', land: 'mesas' },
+					{ id: 'moon', name: 'The Moon', sky: [ '#000000', '#04040c', '#0d0d1c' ], far: '#77777f', near: '#3d3d44', land: 'craters', stars: true, earth: true },
+					{ id: 'mars', name: 'Mars', sky: [ '#7e3522', '#c9724d', '#e9b08a' ], sun: '#fdeedd', small: true, far: '#a4532f', near: '#5e2a19', land: 'dunes' },
+					{ id: 'neon', name: 'Neon night', sky: [ '#0d0024', '#3b0a5e', '#ff3d7f' ], sun: 'neon', far: '#7a1a9e', near: '#170030', land: 'grid', stars: true },
+				];
+				const TIPS = [
+					'Hold <kbd>Space</kbd> and steer to drift, then let go for a boost.',
+					'<kbd>Shift</kbd> is boost: stay flat out for a moment and you hit overdrive.',
+					'Press <kbd>F</kbd> to turn into a plane, and <kbd>F</kbd> again to bail out and parachute down.',
+					'Plane tricks: <kbd>Q</kbd> <kbd>E</kbd> roll, <kbd>Z</kbd> loops. They score best low down.',
+					'In the air, <kbd>A</kbd> <kbd>D</kbd> spin and <kbd>W</kbd> <kbd>S</kbd> flip. Land on your wheels to score.',
+					'Stuck or upside down? <kbd>R</kbd> puts you back on the road.',
+					'<kbd>M</kbd> takes you back to the globe to drive somewhere else.',
+					'<kbd>C</kbd> changes the camera, and the mouse wheel moves it nearer or farther.',
+					'Hit a ramp, a crest or a wall to get some air.',
+					'The buildings, bridges and hills are a 3D map of the real world: try your own street.',
+					'The Moon, Mars, Vesta and Ceres are free, as much as you like.',
+					'On another world, press <kbd>L</kbd> to colour the ground by its real measured height.',
+					'On the other worlds, drive to real named places to collect their discovery cards.',
+					'There\'s a daily, a weekly and a monthly challenge on every world.',
+					'Invite friends from the globe\'s panel and drive together.',
+					'Olympus Mons on Mars is about two and a half times as tall as Everest.',
+					'You can drive to Tranquility Base, where Apollo 11 landed in 1969.',
+					'Ceres is the biggest thing in the asteroid belt, about 940 km across.',
+					'Vesta\'s Rheasilvia crater has a mountain in the middle about 22 km high.',
+				];
+				const CARS = [ '#ffd23f', '#ff4d4d', '#3ec1ff', '#7cff6b', '#ff8ad8', '#ffffff', '#ff9a2e' ];
+				const pick = list => list[ Math.floor( Math.random() * list.length ) ];
+				let last = null;
+				try { last = localStorage.getItem( 'worldDriveScene' ); } catch {}
+				const asked = new URLSearchParams( location.search ).get( 'scene' );
+				const scene = SCENES.find( s => s.id === asked ) ?? pick( SCENES.filter( s => s.id !== last ) );
+				try { localStorage.setItem( 'worldDriveScene', scene.id ); } catch {}
+				const colour = pick( CARS );
+				const truck = Math.random() < 0.3;
+
+				// A skyline 400 wide that joins up end to end, so two side by side roll by seamlessly: sines
+				// with whole periods over the width, or blocks for a city, sharp peaks, flat-topped mesas.
+				const W = 400, H = 150, ROAD = 118;
+				const wave = ( base, parts ) => {
+
+					let d = `M0 ${ H }`;
+					for ( let x = 0; x <= W; x += 5 ) d += ` L${ x } ${ ( base + parts.reduce( ( y, [ a, k, p ] ) => y + a * Math.sin( 2 * Math.PI * k * x / W + p ), 0 ) ).toFixed( 1 ) }`;
+					return d + ` L${ W } ${ H } Z`;
+
+				};
+				const rnd = () => Math.random() * 6.3;
+				const peaks = ( base, high ) => {
+
+					let d = `M0 ${ H } L0 ${ base }`;
+					for ( let x = 40; x < W; x += 40 ) d += ` L${ x - 20 } ${ base - high * ( 0.4 + Math.random() * 0.6 ) } L${ x } ${ base - Math.random() * 10 }`;
+					return d + ` L${ W - 20 } ${ base - high * 0.6 } L${ W } ${ base } L${ W } ${ H } Z`;
+
+				};
+				const blocks = ( base, high, windows ) => {
+
+					let out = '';
+					for ( let x = 0; x < W; ) {
+
+						const w = 14 + Math.floor( Math.random() * 22 );
+						const h = high * ( 0.3 + Math.random() * 0.7 );
+						const right = Math.min( W, x + w );
+						out += `<rect x="${ x }" y="${ ( base - h ).toFixed( 1 ) }" width="${ right - x + 0.5 }" height="${ ( H - base + h ).toFixed( 1 ) }"/>`;
+						if ( windows ) for ( let wy = base - h + 5; wy < base - 4; wy += 7 ) for ( let wx = x + 3; wx < right - 4; wx += 6 ) if ( Math.random() < 0.35 ) out += `<rect class="lit" x="${ wx }" y="${ wy.toFixed( 1 ) }" width="2.5" height="3"/>`;
+						x = right;
+
+					}
+
+					return out;
+
+				};
+				const mesas = ( base, high ) => {
+
+					let d = `M0 ${ H } L0 ${ base }`;
+					for ( let x = 0; x < W; x += 100 ) {
+
+						const top = base - high * ( 0.5 + Math.random() * 0.5 );
+						const a = x + 20 + Math.random() * 15, b = a + 30 + Math.random() * 25;
+						d += ` L${ a.toFixed( 0 ) } ${ base } L${ ( a + 8 ).toFixed( 0 ) } ${ top.toFixed( 0 ) } L${ ( b - 8 ).toFixed( 0 ) } ${ top.toFixed( 0 ) } L${ b.toFixed( 0 ) } ${ base }`;
+
+					}
+
+					return d + ` L${ W } ${ base } L${ W } ${ H } Z`;
+
+				};
+				const layer = ( shape, fill, cls ) => `<g class="${ cls }" fill="${ fill }"><g>${ shape }</g><g transform="translate(${ W } 0)">${ shape }</g></g>`;
+				const path = d => `<path d="${ d }"/>`;
+				let far, near;
+				switch ( scene.land ) {
+
+					case 'city': far = blocks( 92, 45, false ); near = blocks( 112, 55, true ); break;
+					case 'peaks': far = path( peaks( 95, 60 ) ); near = path( wave( 108, [ [ 4, 3, rnd() ], [ 2, 7, rnd() ] ] ) ); break;
+					case 'mesas': far = path( mesas( 100, 40 ) ); near = path( wave( 112, [ [ 2, 4, rnd() ], [ 1, 9, rnd() ] ] ) ); break;
+					case 'craters': far = path( wave( 98, [ [ 5, 2, rnd() ], [ 2, 5, rnd() ] ] ) ); near = path( wave( 110, [ [ 2, 3, rnd() ], [ 1.5, 8, rnd() ] ] ) ) + [ 60, 190, 320 ].map( x => `<ellipse cx="${ x }" cy="${ 116 }" rx="16" ry="2.5" fill="rgba(0,0,0,.35)"/>` ).join( '' ); break;
+					case 'dunes': far = path( wave( 96, [ [ 8, 2, rnd() ], [ 3, 5, rnd() ] ] ) ); near = path( wave( 110, [ [ 4, 3, rnd() ], [ 2, 6, rnd() ] ] ) ); break;
+					case 'grid': far = path( peaks( 100, 40 ) ); near = ''; break;
+					default: far = path( wave( 92, [ [ 10, 2, rnd() ], [ 4, 5, rnd() ] ] ) ); near = path( wave( 108, [ [ 5, 3, rnd() ], [ 2, 7, rnd() ] ] ) );
+
+				}
+
+				let sky = `<defs><linearGradient id="sc-sky" x1="0" y1="0" x2="0" y2="1">${ scene.sky.map( ( c, i ) => `<stop offset="${ i / ( scene.sky.length - 1 ) }" stop-color="${ c }"/>` ).join( '' ) }</linearGradient>`;
+				sky += '<linearGradient id="sc-sun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe46b"/><stop offset="1" stop-color="#ff3d9a"/></linearGradient></defs>';
+				sky += `<rect width="${ W }" height="${ H }" fill="url(#sc-sky)"/>`;
+				if ( scene.stars ) for ( let i = 0; i < 40; i ++ ) sky += `<circle class="star" cx="${ ( Math.random() * W ).toFixed( 0 ) }" cy="${ ( Math.random() * 80 ).toFixed( 0 ) }" r="${ ( 0.4 + Math.random() * 0.8 ).toFixed( 1 ) }" fill="#fff" style="animation-delay:${ ( Math.random() * 3 ).toFixed( 1 ) }s"/>`;
+				const sunX = 60 + Math.random() * 280;
+				if ( scene.earth ) sky += `<g transform="translate(${ sunX.toFixed( 0 ) } 38)"><circle r="16" fill="#2a6fd6"/><path d="M-8 -9c6 2 4 8 10 7s6 6 2 9-9-1-11 3c-4-4-5-13-1-19z" fill="#4caf50"/><path d="M-16 0a16 16 0 0 0 32 0a16 7 0 0 1-32 0z" fill="rgba(0,0,0,.45)"/></g>`;
+				else if ( scene.sun === 'neon' ) sky += `<g transform="translate(200 92)"><circle r="40" fill="url(#sc-sun)"/>${ [ 0, 8, 15, 21, 26 ].map( y => `<rect x="-42" y="${ y }" width="84" height="${ 2 + y / 8 }" fill="#3b0a5e"/>` ).join( '' ) }</g>`;
+				else if ( scene.sun ) sky += `<circle cx="${ sunX.toFixed( 0 ) }" cy="${ scene.land === 'city' ? 30 : 58 }" r="${ scene.small ? 7 : 16 }" fill="${ scene.sun }" opacity=".95"/>`;
+				if ( scene.sea ) sky += `<rect y="100" width="${ W }" height="20" fill="${ scene.sea }"/>`;
+				const grid = scene.land === 'grid' ? `<g stroke="#ff4fd8" stroke-width=".8" opacity=".7">${ [ -400, -250, -150, -80, -30, 0, 30, 80, 150, 250, 400 ].map( dx => `<line x1="${ 200 + dx * 0.15 }" y1="100" x2="${ 200 + dx }" y2="${ ROAD }"/>` ).join( '' ) }<line x1="0" y1="104" x2="400" y2="104"/><line x1="0" y1="110" x2="400" y2="110"/></g>` : '';
+
+				// The car (or a monster truck, on big wheels), wheels turning.
+				const wheel = ( x, r ) => `<g transform="translate(${ x } ${ 0 })"><g class="wheel"><circle r="${ r }" fill="#14161a"/><circle r="${ r * 0.45 }" fill="#9aa3ad"/><rect x="${ -r * 0.12 }" y="${ -r * 0.8 }" width="${ r * 0.24 }" height="${ r * 1.6 }" fill="#14161a"/></g></g>`;
+				const body = truck
+					? `<path d="M-30 -22h16l8-10h20l8 10h10v12h-62z" fill="${ colour }"/><path d="M-11 -21l6-8h8v8zM6 -21v-8h6l5 8z" fill="#bfe6ff" opacity=".85"/><g transform="translate(0 0)">${ wheel( -18, 10 ) }${ wheel( 20, 10 ) }</g>`
+					: `<path d="M-32 -6c0-6 3-8 10-9l9-9h20l10 9c8 1 15 3 15 9v4h-64z" fill="${ colour }"/><path d="M-11 -14l7-8h9v8zM8 -14v-8h4l8 8z" fill="#bfe6ff" opacity=".85"/><rect x="26" y="-9" width="6" height="3" rx="1" fill="#fff6b0"/>${ wheel( -19, 7 ) }${ wheel( 19, 7 ) }`;
+				const car = `<g transform="translate(175 ${ truck ? 133 : 136 })"><g class="car">${ body }</g></g>`;
+				const road = `<rect y="${ ROAD }" width="${ W }" height="${ H - ROAD }" fill="${ scene.land === 'grid' ? '#170030' : '#1c2230' }"/><g class="dashes">${ Array.from( { length: 12 }, ( _, i ) => `<rect x="${ i * 44 }" y="140" width="24" height="3" rx="1.5" fill="${ scene.land === 'grid' ? '#3ef0ff' : '#ffd23f' }"/>` ).join( '' ) }</g>`;
+				const svg = `<svg viewBox="0 0 ${ W } ${ H }" preserveAspectRatio="xMidYMid slice">${ sky }${ layer( far, scene.far, 'far' ) }${ grid }${ near ? layer( near, scene.near, 'near' ) : '' }${ road }${ car }</svg>`;
+				const splash = document.getElementById( 'splash' );
+				splash.dataset.scene = scene.id;
+				splash.querySelector( '.scene' ).innerHTML = `${ svg }<span class="scene-name">${ scene.name }</span>`;
+
+				// The tips, shuffled, one every few seconds while the splash is up.
+				const order = TIPS.map( t => [ Math.random(), t ] ).sort( ( a, b ) => a[ 0 ] - b[ 0 ] ).map( ( [ , t ] ) => t );
+				let next = 0;
+				const nextTip = () => order[ next ++ % order.length ];
+				window.worldDriveLoading = { scene: scene.id, colour, truck, nextTip, car: `<svg viewBox="140 ${ truck ? 95 : 108 } 70 ${ truck ? 50 : 36 }">${ car }</svg>` };
+				const tip = splash.querySelector( '.tip' );
+				const show = () => {
+
+					tip.classList.remove( 'in' );
+					void tip.offsetWidth;
+					tip.innerHTML = `<b>Tip</b> ${ nextTip() }`;
+					tip.classList.add( 'in' );
+
+				};
+				show();
+				const timer = setInterval( () => splash.hidden ? clearInterval( timer ) : show(), 4500 );
+
+			} )();
+		</script>
 
 		<section id="notice" hidden role="alert">
 			<div class="card">

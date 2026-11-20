@@ -995,6 +995,152 @@ body.touch #pause kbd {
 	to { transform: translateX( 0 ); }
 }
 
+/* The splash's scene, new each load (drawn by drive/index.html's script): the sky, two layers of
+   scenery rolling by at different speeds, and a car bouncing along the road. */
+#splash .scene {
+	position: relative;
+	height: 150px;
+	margin: -26px -26px 18px;
+	border-radius: 20px 20px 0 0;
+	overflow: hidden;
+	background: #0b1322;
+}
+
+#splash .scene svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+#splash .scene .far { animation: scenery 48s linear infinite; }
+#splash .scene .near { animation: scenery 16s linear infinite; }
+#splash .scene .dashes { animation: dashes 0.5s linear infinite; }
+#splash .scene .car { animation: bounce 2.6s ease-in-out infinite; }
+#splash .scene .wheel,
+#loading .mini .wheel { animation: spin 0.4s linear infinite; }
+#splash .scene .star { animation: twinkle 3s ease-in-out infinite; }
+#splash .scene .lit { fill: #ffd98a; opacity: 0.85; }
+
+#splash .scene .scene-name {
+	position: absolute;
+	right: 10px;
+	bottom: 8px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: rgba( 0, 0, 0, 0.45 );
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+}
+
+@keyframes scenery {
+	from { transform: translateX( 0 ); }
+	to { transform: translateX( -400px ); }
+}
+
+@keyframes dashes {
+	from { transform: translateX( 0 ); }
+	to { transform: translateX( -44px ); }
+}
+
+/* Bumping along, with a hop now and then. */
+@keyframes bounce {
+	0%, 100% { transform: translateY( 0 ) rotate( 0 ); }
+	10% { transform: translateY( -1px ) rotate( -0.5deg ); }
+	20% { transform: translateY( 0 ) rotate( 0 ); }
+	30% { transform: translateY( -1px ) rotate( 0.5deg ); }
+	40% { transform: translateY( 0 ); }
+	62% { transform: translateY( 0 ) rotate( 0 ); }
+	72% { transform: translateY( -16px ) rotate( -6deg ); }
+	82% { transform: translateY( 0 ) rotate( 2deg ); }
+	88% { transform: translateY( -2px ) rotate( 0 ); }
+}
+
+@keyframes spin {
+	to { transform: rotate( 360deg ); }
+}
+
+@keyframes twinkle {
+	50% { opacity: 0.25; }
+}
+
+/* A tip, changing every few seconds, on the splash and the drop-in's card. */
+#splash .tip,
+#loading .tip {
+	min-height: 2.9em;
+	margin: 12px 0 0;
+	color: var( --muted );
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+#loading .tip {
+	max-width: 320px;
+	margin: 8px auto 0;
+	font-size: 13px;
+}
+
+#splash .tip b,
+#loading .tip b {
+	margin-right: 4px;
+	color: var( --accent );
+	font-size: 11px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+}
+
+#splash .tip.in,
+#loading .tip.in {
+	animation: tip-in 0.45s ease-out;
+}
+
+@keyframes tip-in {
+	from { opacity: 0; transform: translateY( 4px ); }
+}
+
+/* The drop-in's card: the same car on a short road. */
+#loading .mini {
+	width: 120px;
+	margin: 0 auto 8px;
+}
+
+#loading .mini .ride svg {
+	display: block;
+	width: 64px;
+	height: 34px;
+	margin: 0 auto -4px;
+	overflow: visible;
+}
+
+#loading .mini .ride .car { animation: bounce 2.6s ease-in-out infinite; }
+
+#loading .mini .road {
+	height: 4px;
+}
+
+#loading .mini .road i {
+	background: repeating-linear-gradient( 90deg, var( --accent ) 0 14px, transparent 14px 26px );
+}
+
+#splash .scene .wheel,
+#loading .mini .wheel {
+	transform-box: fill-box;
+	transform-origin: center;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	#splash .scene *,
+	#loading .mini *,
+	#splash .tip,
+	#loading .tip {
+		animation: none !important;
+	}
+
+}
+
 #robot-check {
 	display: flex;
 	justify-content: center;

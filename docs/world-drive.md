@@ -5483,6 +5483,18 @@ A removed player's browser is asked for a new name the next time it posts. There
 ban; a determined nuisance is limited by the visit caps, and an address can be blocked with a
 Cloudflare WAF rule if it comes to that.
 
+## The loading screen
+
+The splash while World Drive starts has a scene across its top, new each load (never the same as the
+last one in that browser): a sunset coast, a night city, an alpine pass, a desert highway, the Moon,
+Mars or a neon night, with two layers of scenery rolling by at different speeds and a car of a random
+colour (or now and then a monster truck) bumping along the road, hopping every few seconds. Under it,
+tips (the keys, the other worlds, challenges, a few real facts) change every few seconds. The drop-in's
+loading card shows the same car on a short road and the same tips. It's drawn by a small script in
+`drive/index.html`, right after the splash, so it's there at the first paint, before the game's code;
+`?scene=<id>` (`sunset`, `city`, `alps`, `desert`, `moon`, `mars`, `neon`) picks one. With reduced
+motion asked for, nothing moves.
+
 ## Play stats
 
 The owner's page of how World Drive is played: **`https://worlddrive.app/admin.html`**, for a Google
@@ -5497,7 +5509,16 @@ Ceres's from theirs, so their first periods show them rising from none, which th
 after, shows no false rise; the page says which have no ▲ or ▼, and why. The facts from the Worker's
 own tables are always compared. On it:
 
-- **Tiles**: today so far (visits and play time), visits, play time, play per visit, drop-ins, the
+- **What to work on**, first: advice read from the period's numbers, the most pressing first, each
+  marked **Fix**, **Look at** or **Going well**, with what was seen and something to try. Plain rules
+  with thresholds (shown once the period has about 20 visits): the funnel's biggest drop, slow loads
+  and drop-ins, the commonest problem (and whether it's rising), searches finding nothing, the ride
+  that keeps people longest and a popular one driven briefly, another world turned to but rarely
+  driven, the pass's sheet, Stripe and the free-Earth limit, playing alone, the Garage, challenges,
+  phones, and visits and play per visit against the period before. Five shown, the rest under
+  **More**. A row of links under the title jumps to each part of the page.
+- **Tiles**, in groups (who's coming, are they having fun, is it working, money), each with a small
+  line of its days and what it means on hover: today so far (visits and play time), visits, play time, play per visit, drop-ins, the
   share of visits that drove and that drove 10 minutes or more, the share of play with others and on
   each other world (**On the Moon**, **On Mars**, **On Vesta**, **On Ceres**), searches, problems, the mean load time, new
   players, new accounts, passes bought and the revenue.
@@ -5515,6 +5536,10 @@ own tables are always compared. On it:
 - **From the leaderboard and the pass** (the Worker's own tables, below): new players, new bests, new
   accounts (Google and username), passes by status and the revenue; and now, the players, the accounts, the accounts
   with the pass and the passes nobody has signed in for yet.
+- **How far visits get** marks its biggest drop. **Rides compared**: each ride's picks, share, play
+  time and play per pick (green the longest, red the shortest, of rides picked 5 times or more).
+  **Challenges played**: the list opened, runs started, finished and posted, the nudge while driving
+  and links shared to friends, each with its share of the step before.
 - As before: visits by hour of the day (counted in UTC hours, shown in the viewer's time), where
   people come from, play time by ride, the rides dropped in with and the start spots dropped in at,
   the Garage's changes by part, and load time.
