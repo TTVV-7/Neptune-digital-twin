@@ -2653,7 +2653,9 @@ const STYLES = {
 			const batch = new Batch( root, { particles: 240 } );
 			const drops = emitter();
 			const splats = emitter();
-			const colours = [ 0xff2d95, 0x18d4ff, 0xffd400, 0x7cff2e, 0x9b5cff ];
+			// Inks, rich and dark enough to read as ink on a pale road (no lime or yellow: that's
+			// slime's).
+			const colours = [ 0xff2d95, 0x18c8ff, 0x7a3dff, 0x2f5bff, 0xe0249a ];
 			const grey = new Color( 0x666666 );
 			let f = null;
 			let colour = 0;
@@ -2684,7 +2686,7 @@ const STYLES = {
 				} else {
 
 					nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, 0, p.position );
-					thrown( f, p, 0.8, 3.5 + Math.random() * 2, up, 1 );
+					thrown( f, p, 0.92, 3 + Math.random() * 2, up, 1 );
 					p.colour.set( colours[ colour ] );
 
 				}
@@ -2692,14 +2694,14 @@ const STYLES = {
 				p.mode = ALONG;
 				// Twin jets are tight ropes of it; otherwise strings of drops.
 				p.frame = twin ? SHAPES.streak : SHAPES.drop;
-				p.size = ( twin ? 0.05 : 0.06 + Math.random() * 0.03 ) * f.scale;
+				p.size = ( twin ? 0.05 : 0.08 + Math.random() * 0.04 ) * f.scale;
 				p.fall = 1;
 				return p;
 
 			};
 			const splat = () => {
 
-				const p = onRoad( batch, f, 0.35 + Math.random() * 0.35, 5 );
+				const p = onRoad( batch, f, 0.25 + Math.random() * 0.2, 5, 2.5 );
 				p.colour.set( colours[ colour ] );
 				p.kind = 1;
 
@@ -2715,15 +2717,19 @@ const STYLES = {
 
 					}
 
-					// Splats stay as they are until their last second, then fade; drops don't fade.
+					// Splats stay as they are until their last second, then fade; drops don't fade. Either,
+					// well behind it, fades out before it's under the chase camera: left on the road at
+					// speed, a splat there is a huge flat blot over the bottom of the view.
 					view.alpha = p.kind === 1 ? Math.min( 1, p.life - p.age ) : 1;
+					const behind = _a.subVectors( view.position, f.middle ).dot( f.back ) / f.scale;
+					if ( behind > 2.2 ) view.alpha *= Math.max( 0, ( 3.2 - behind ) );
 
 				},
 				// A drop that comes down on the road it's on splats there.
 				died( p ) {
 
 					if ( p.kind !== 0 || ! f.grounded || _a.subVectors( p.position, f.ground ).dot( f.up ) > 0.35 ) return;
-					const splat = splatAt( batch, f, p.position, 0.25, 4, overdrive( f ) > 0 ? 4.5 : 3 );
+					const splat = splatAt( batch, f, p.position, 0.22, 4, overdrive( f ) > 0 ? 3 : 2.5 );
 					splat.colour.copy( p.colour );
 					splat.kind = 1;
 
@@ -2746,7 +2752,7 @@ const STYLES = {
 					}
 
 					drops( fl, frame.dt, ( overdrive( frame ) > 0 ? 70 : 46 ) * frame.detail, drop );
-					splats( frame.grounded ? fl : 0, frame.dt, 7 * frame.detail, splat );
+					splats( frame.grounded ? fl : 0, frame.dt, 10 * frame.detail, splat );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -2777,21 +2783,21 @@ const STYLES = {
 				cool( frame, dry ) {
 
 					f = frame;
-					for ( let i = 0; i < 4; i ++ ) {
+					for ( let i = 0; i < 8; i ++ ) {
 
-						const p = batch.spawn( Math.min( 0.6, landing( 0 ) + i * 0.05 ) );
-						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.2 * frame.scale );
-						thrown( frame, p, 0.9, 0.3, 0, 0.2 );
+						const p = batch.spawn( Math.min( 0.6, landing( 0.6 ) + i * 0.04 ) );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.4 * frame.scale );
+						thrown( frame, p, 0.95, 0.6, 0.6, 0.4 );
 						p.mode = ALONG;
 						p.frame = SHAPES.drop;
-						p.size = 0.05 * frame.scale;
+						p.size = 0.08 * frame.scale;
 						p.colour.set( colours[ colour ] );
 						p.fall = 1;
 
 					}
 
 					if ( ! frame.grounded ) return;
-					const blot = onRoad( batch, frame, 0.6, 5 );
+					const blot = onRoad( batch, frame, 0.45, 5, 2 );
 					blot.colour.set( colours[ colour ] );
 					if ( dry ) blot.colour.lerp( grey, 0.5 );
 					blot.kind = 1;
