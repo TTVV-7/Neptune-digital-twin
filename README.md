@@ -837,7 +837,9 @@ arcade-style: drift (Space), boost (Shift), fly (F: a plane up to 3,500 km/h, wh
 fast free fall, **W** to dive, then a slow parachute), and hit something to bounce off it into the
 air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
 combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
-them. Boosting flat out hits **overdrive** (a sonic boom, streaks of air, a wider view), and glowing
+them. Boosting flat out hits **overdrive** (a sonic boom in your flame's colour with a collar of
+vapour, the flame burning long and white-hot with shock diamonds, streaks of air, a wider view;
+on the Moon, with no air, no vapour), and glowing
 **boost pads** can turn up on open ground as you drive to top the booster up (they're off until a
 switch in the pause menu turns them on). Lighting the booster, running it dry, a pad, each drift
 charge level and its mini-turbo have bursts of their own, the view jolts and streams with speed
@@ -1050,10 +1052,11 @@ lying down, or painting over a real place's number plate), and `npm run drive-ca
 picture for the picker (see [World Drive's cars](docs/world-drive.md#world-drives-cars)).
 
 A **Supporter Pass** (CA$1.99/month, CA$19.99 once and kept for good, or CA$0.99 for 24 hours,
-towards the running costs) unlocks seventeen more rides: the six cars levels bring, at once;
+towards the running costs) unlocks twenty more rides: the six cars levels bring, at once;
 seven cars of its own (a neon racer, a night cruiser, a dune buggy, a farm truck, a police cruiser
-and two showpieces, a hypercar and a cyber muscle car); and four built in code (a sports coupe, a
-monster truck, a city bus and a hovercraft), each handling its own way; every look in the Garage at
+and two showpieces, a hypercar and a cyber muscle car); and seven built in code (a sports coupe, a
+monster truck, a city bus, a hovercraft, a lunar rover, a flying saucer and a rocket dragster), each
+handling its own way and each with moving parts of its own; every look in the Garage at
 once (paint, finishes from satin to chrome and colour-shift, decals, rims, a neon underglow in eight
 colours and a rainbow, horns, seventeen more boost styles, flame colours and trails, some of which
 levels unlock over time), +50% XP, a ⭐ on the leaderboard and 30 Earth drives a day, even past the
@@ -1165,8 +1168,8 @@ src/drive-hud.js    a self-contained driving HUD with touch buttons, the DRIFT b
                     trick pop-ups and the score, for other apps (World Drive)
 src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust;
                     a hovercraft's spray, and a splash's spray and foam (others' cars from older pages)
-src/drive-boosts.js boost styles (plasma, lightning, bubbles, a galaxy...) and the supersonic boom and
-                    streaks, each a fixed batch of quads drawn in one go (two for dragon fire and
+src/drive-boosts.js boost styles (plasma, lightning, bubbles, a galaxy...) and the supersonic boom,
+                    streaks and shock diamonds, each a fixed batch of quads drawn in one go (two for dragon fire and
                     spooky), for drive-fx.js
 src/kart.js         the go-kart model and its library item
 src/layout.js       saves placed items in the browser; export/import

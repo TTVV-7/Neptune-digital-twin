@@ -49,6 +49,8 @@ const _p = new Vector3();
 const _v = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
+const _r = new Vector3();
+const _hue = new Color();
 const _turn = new Quaternion();
 // A batch's update() with nothing of a style's own.
 const NO_HOOKS = {};
@@ -588,6 +590,7 @@ varying vec2 vUv;
 varying vec4 vColour;
 varying vec3 vWorld;
 varying float vFloored;
+varying float vDepth;
 
 vec2 turn( vec2 p, float angle ) {
 
@@ -627,6 +630,7 @@ void main() {
 	}
 
 	gl_Position = projectionMatrix * mv;
+	vDepth = - mv.z;
 	#include <logdepthbuf_vertex>
 	// Where it is in the world (the batch's own frame), for the floor (see Batch.floor): back from
 	// the view, which a camera's matrix, turning and moving only, gives straight back.
@@ -642,7 +646,10 @@ void main() {
 }
 `;
 
+// Quads nearer the camera than NEAR_FADE's second (m) fade out, gone by its first.
+const NEAR_FADE = [ 0.6, 2.2 ];
 const FRAGMENT = /* glsl */`
+#define NEAR_FADE vec2( ${ NEAR_FADE[ 0 ].toFixed( 2 ) }, ${ NEAR_FADE[ 1 ].toFixed( 2 ) } )
 #include <logdepthbuf_pars_fragment>
 uniform sampler2D map;
 uniform vec4 uFloor;
@@ -652,6 +659,7 @@ varying vec2 vUv;
 varying vec4 vColour;
 varying vec3 vWorld;
 varying float vFloored;
+varying float vDepth;
 
 void main() {
 
@@ -660,7 +668,10 @@ void main() {
 	// line; further off, as it is (the floor under the vehicle isn't the ground there).
 	float near = 1.0 - smoothstep( 0.6, 1.0, distance( vWorld, uNear.xyz ) / uNear.w );
 	float floored = mix( 1.0, smoothstep( 0.0, uSoft, dot( uFloor.xyz, vWorld ) + uFloor.w ), near * vFloored );
-	gl_FragColor = vec4( vColour.rgb * picture.rgb, vColour.a * picture.a * floored );
+	// Right in front of the camera (a piece that's caught up with it as the vehicle slows), faded
+	// out rather than filling the view.
+	float clear = smoothstep( NEAR_FADE.x, NEAR_FADE.y, vDepth );
+	gl_FragColor = vec4( vColour.rgb * picture.rgb, vColour.a * picture.a * floored * clear );
 	if ( gl_FragColor.a < 0.004 ) discard;
 	#include <logdepthbuf_fragment>
 	#include <colorspace_fragment>
@@ -679,13 +690,13 @@ export class Batch {
 			size: 1, grow: 0, aspect: 1, turn: 0, spin: 0, alpha: 1, frame: 0, mode: FACING, drag: 0, fall: 0, phase: 0, kind: 0, fresh: false,
 		} ) );
 		this.next = 0;
+		// What its particles fall by (m/s², the world's own: drive-fx.js sets it, a positive `fall`'s
+		// share of it; what rises, a negative `fall`, rises by the Earth's on any world).
+		this.gravity = 9.81;
 		this.capacity = particles + quads;
 		this.count = 0;
-		// The world's gravity, as a share of the Earth's, that what falls (a positive `fall`) falls by
-		// (drive-fx.js sets it): what rises (smoke, flame, a negative `fall`) rises as it always has, on
-		// any world. And what a style keeps of its own in the scene besides its particles, carried with
-		// them when the scene's frame moves (see transform): onTransform( matrix, turn ), or null.
-		this.gravity = 1;
+		// What a style keeps of its own in the scene besides its particles, carried with them when the
+		// scene's frame moves (see transform): onTransform( matrix, turn ), or null.
 		this.onTransform = null;
 		// What a style's look() may change about how a particle shows this frame (see update).
 		this.view = { position: new Vector3(), sx: 1, sy: 1, turn: 0, alpha: 1, frame: 0 };
@@ -831,7 +842,9 @@ export class Batch {
 
 				}
 
-				p.velocity.y -= 9.81 * ( p.fall > 0 ? this.gravity : 1 ) * p.fall * dt;
+				// What falls (a positive `fall`) falls by the world's gravity; what rises (smoke, flame, a
+				// negative `fall`) rises as it always has, on any world.
+				p.velocity.y -= ( p.fall > 0 ? this.gravity : 9.81 ) * p.fall * dt;
 				if ( p.drag ) p.velocity.multiplyScalar( Math.max( 0, 1 - p.drag * dt ) );
 				step?.( p, dt );
 				p.position.addScaledVector( p.velocity, dt ).addScaledVector( p.carry, dt );
@@ -902,7 +915,15 @@ export class Batch {
 // 1, a drift boost about half, 0 when off), grounded, dt, clock (s), nozzle and lastNozzle (the
 // exhaust, world, now and a frame ago), back, up and right (unit, world: out of its back, its up
 // and its right), middle (the middle of its box, world), ground (on its wheels, a point a little
-// over the ground under it, world), scale (1 for a kart, more for something bigger) }.
+// over the ground under it, world), scale (1 for a kart, more for something bigger), hot (how far
+// into overdrive the flame is, 0 to 1, eased in and out), lit (how big the flame burns, 0 to 1:
+// dying down over a few hundredths of a second once it's let go, and stepping through its misfires
+// while it coughs, run dry), dry (coughing now), calm (the visitor asked for less motion), detail
+// (fewer particles on a phone, 0 to 1), air (false where there's none: World Drive's Moon) and
+// gravity (the world's, a share of the Earth's) }. Each style's stream runs at flow( frame ) (see
+// there), so it thins out with the flame as it's let go and sputters with its coughs; in overdrive
+// each has a form of its own; and let go, cool( frame, dry, detail, calm ) gives it a moment of its
+// own (run dry, a sputter).
 //
 // A style: `flame`, colours for the classic flame's cones and glow { outer, inner, halo } or just
 // { halo } for a glow alone, with how long (`length`) and how wildly (`flicker`) it burns and
@@ -913,7 +934,10 @@ export class Batch {
 // phone), with no flash of its own when `calm` (the visitor asked for less motion): no flare, bright
 // core or flash at a bolt's end or in a rocket's burst, and any starburst or ring fainter. What a
 // style does each frame is made once, in make(), so a frame makes nothing new; an ignition reuses
-// its particles, the oldest first.
+// its particles, the oldest first. A style may also cool its exhaust in colours of its own (`ember`
+// and `ash`, see drive-bursts.js), keep the supersonic shock diamonds out of its flame
+// (`flame.diamonds` false: it draws its own overdrive there) or burn them in a colour of its own
+// (`flame.diamondTint`).
 
 // Particles emitted at `rate` a second (times power), spread along the exhaust's path this frame
 // so a fast vehicle doesn't leave them in clumps a frame apart. fn( k ) sets each up, `k` from 0 (a
@@ -988,20 +1012,39 @@ function pick( list ) {
 // speed they join into a trail rather than dots too far apart. Flat on level ground the quad's own
 // across is -Z and its up -X (see the shader), so that's the turn to the way it's going. Returns
 // the particle, for its colour.
-function onRoad( batch, f, size, life ) {
+function onRoad( batch, f, size, life, cap = 3 ) {
 
 	const { size: box } = f;
 	const p = batch.spawn( life );
 	f.pivot.localToWorld( p.position.set( ( Math.random() - 0.5 ) * box.width * 0.7 / box.scale, INK_LIFT / box.scale, ( box.rear + 0.3 + Math.random() * 1.2 ) / box.scale ) );
+	lay( p, f, size, cap );
+	return p;
+
+}
+
+// A splat as onRoad's, where `at` (world) comes down on the road: put on the ground under the
+// vehicle, as onRoad's are (a drop landing, a blob of slime).
+function splatAt( batch, f, at, size, life, cap = 3 ) {
+
+	const p = batch.spawn( life );
+	p.position.copy( at ).addScaledVector( f.up, INK_LIFT - _a.subVectors( at, f.ground ).dot( f.up ) );
+	lay( p, f, size, cap );
+	return p;
+
+}
+
+// Lying flat on the road, `size` m across (times its scale), stretched out along the way it's going
+// (up to `cap` times) the faster it goes.
+function lay( p, f, size, cap ) {
+
 	p.axis.copy( f.up );
 	p.mode = FLAT;
 	p.frame = SHAPES.splat + Math.floor( Math.random() * 3 );
 	const speed = Math.hypot( f.velocity.x, f.velocity.z );
-	const stretch = Math.min( 3, 1 + speed / 15 );
+	const stretch = Math.min( cap, 1 + speed / 15 );
 	p.size = size * f.scale * stretch;
 	p.aspect = 1 / stretch;
 	p.turn = speed > 1 ? Math.atan2( - f.velocity.x, - f.velocity.z ) + ( Math.random() - 0.5 ) * 0.4 : Math.random() * Math.PI * 2;
-	return p;
 
 }
 
@@ -1014,10 +1057,11 @@ function swell( t ) {
 }
 
 // A jagged line from `from` along `toward` (unit) for `length` m in `steps`, wandering up to
-// `wander` m off it, as strips `width` m wide in two layers: a thin bright core and a wide glow.
+// `wander` m off it, as strips `width` m wide in two layers: a thin bright core and a wide glow (at
+// `glowAlpha`). Its pieces are `kind` 1 (flickering, see makeFlicker) unless asked otherwise.
 // Each piece keeps going with the vehicle for its short life, so the bolt stays on it. Returns
 // where it ended (a vector of this module's own: copy it).
-function bolt( batch, frame, from, toward, length, steps, wander, width, life, core, glow ) {
+function bolt( batch, frame, from, toward, length, steps, wander, width, life, core, glow, glowAlpha = 0.45, kind = 1 ) {
 
 	_b.copy( from );
 	for ( let i = 1; i <= steps; i ++ ) {
@@ -1036,9 +1080,9 @@ function bolt( batch, frame, from, toward, length, steps, wander, width, life, c
 			piece.axis.subVectors( _p, _b ).multiplyScalar( 0.5 );
 			piece.size = layer ? width * 2.5 : width;
 			piece.colour.set( layer ? glow : core );
-			piece.alpha = layer ? 0.45 : 1;
+			piece.alpha = layer ? glowAlpha : 1;
 			piece.carry.copy( frame.velocity );
-			piece.kind = 1;
+			piece.kind = kind;
 
 		}
 
@@ -1050,14 +1094,21 @@ function bolt( batch, frame, from, toward, length, steps, wander, width, life, c
 
 }
 
-// A bolt flickers, on and off over its short life, rather than fading.
-const FLICKER = {
-	look( p, t, view ) {
+// A bolt flickers, on and off over its short life, rather than fading; for a visitor asking for less
+// motion (the frame's `calm`) it only shimmers a little. `getFrame()`: the style's frame now.
+function makeFlicker( getFrame ) {
 
-		if ( p.kind === 1 ) view.alpha = p.alpha * ( Math.sin( p.age * 90 + p.phase ) > - 0.3 ? 1 : 0.25 );
+	return {
+		look( p, t, view ) {
 
-	},
-};
+			if ( p.kind !== 1 ) return;
+			if ( getFrame()?.calm ) view.alpha = p.alpha * ( 0.8 + 0.2 * Math.sin( p.age * 12 + p.phase ) );
+			else view.alpha = p.alpha * ( Math.sin( p.age * 90 + p.phase ) > - 0.3 ? 1 : 0.25 );
+
+		},
+	};
+
+}
 
 // A star twinkles as it turns.
 const TWINKLE = {
@@ -1069,53 +1120,179 @@ const TWINKLE = {
 	},
 };
 
+// How hard a style's stream runs this frame (0 to 1), for its rates, sizes and brightness: what the
+// booster asks while it's held, and once it's let go a little less than the flame's own dying down
+// (frame.lit, see drive-fx.js's FLAME_FALL), so a stream thins out over about a quarter of a second
+// with the flame rather than stopping in one frame; run dry, it sputters on the flame's own coughs.
+// Held, the flame burns as hard as it's asked (a drift boost's half included), so that's as it was.
+function flow( f ) {
+
+	return Math.max( f.power, ( f.lit ?? 0 ) * 0.6 );
+
+}
+
+// How far into overdrive, for what changes in a step rather than a blend (a new kind of particle,
+// a faster beat): nothing until the flame is a third of the way hot, then 0 to 1.
+function overdrive( f ) {
+
+	return f.hot > 0.3 ? ( f.hot - 0.3 ) / 0.7 : 0;
+
+}
+
+// With no air (the Moon) nothing floats: whatever of `p`'s own velocity is up is taken out.
+function sink( p, f ) {
+
+	const up = p.velocity.dot( f.up );
+	if ( up > 0 ) p.velocity.addScaledVector( f.up, - up );
+
+}
+
+// Linear colours made once, for looks that change a particle's colour as it ages.
+const PIXEL_RAMP = [ 0xffffff, 0xffe14d, 0xff9a1f, 0xff3b5c, 0xa866ff ].map( hex => new Color( hex ) );
+const RAINBOW = [ 0xff3b3b, 0xff9a1f, 0xffe14d, 0x3ce05a, 0x2f8bff, 0xa866ff ];
+// Colours picked from as particles are made, kept here so making one makes no list.
+const DRAGON_EMBERS = [ 0xffa040, 0xffd070, 0xff6020 ];
+const DRAGON_SMOKE = [ 0x3c3330, 0x544640, 0x2e2826 ];
+const FOIL = [ 0xffd75e, 0xdfe6ee ];
+const SPOOKY_WISPS = [ 0x5dffb4, 0xa98bff, 0x5dd8ff ];
+const VACUUM_SIZE = [ 0.15, 0.3, 0.5 ];
+const VACUUM_ALPHA = [ 0.5, 0.3, 0.15 ];
+
 const STYLES = {
 
-	// A blue-white electric flame that crackles with little arcs, throwing blue sparks.
+	// A blue-white electric flame that crackles with little arcs, pinched by magnetic rings, throwing
+	// blue sparks. In overdrive a cage of arcs reaches back to it off the corners of the body; let go,
+	// a ball of lightning hangs at the exhaust and pops.
 	plasma: {
 		flame: { outer: 0x2f8dff, inner: 0xf2fbff, halo: 0x7cc8ff, length: 1.15, flicker: 2.2 },
 		tint: 0x7cc8ff,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 150, blending: AdditiveBlending } );
+			const PINCHES = 3;
+			const batch = new Batch( root, { particles: 190, quads: PINCHES * 2, blending: AdditiveBlending } );
 			const sparks = emitter();
 			const out = new Vector3();
+			const corner = new Vector3();
+			const blue = new Color( 0x7cc8ff );
+			const violet = new Color( 0xc9b8ff );
+			const ring = new Color();
 			let f = null;
 			let arcDue = 0;
+			let cageDue = 0;
+			let cage = 0;
 			const spark = k => {
 
 				const p = batch.spawn( 0.3 + Math.random() * 0.25 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.4 * f.scale, ( Math.random() - 0.5 ) * 0.4 * f.scale, p.position );
 				thrown( f, p, 0.88, 3 + Math.random() * 3, 0, 1.6 );
-				p.frame = SHAPES.glow;
-				p.size = ( 0.08 + Math.random() * 0.08 ) * f.scale;
+				p.mode = ALONG;
+				p.frame = SHAPES.spark;
+				p.size = ( 0.03 + Math.random() * 0.02 ) * f.scale;
 				p.colour.set( Math.random() < 0.5 ? 0x9fdcff : 0xffffff );
 				p.drag = 1.5;
 
+			};
+			const flicker = makeFlicker( () => f );
+			const hooks = {
+				look( p, t, view ) {
+
+					// A spark is drawn along the way it flies, longer the faster.
+					if ( p.kind === 0 && p.mode === ALONG ) {
+
+						p.axis.copy( p.velocity ).multiplyScalar( 0.025 );
+						if ( p.axis.lengthSq() < ( 0.04 * f.scale ) ** 2 ) p.axis.setLength( 0.04 * f.scale );
+
+					} else if ( p.kind === 1 ) flicker.look( p, t, view );
+					else if ( p.kind === 2 ) {
+
+						// Ball lightning shrinks as it hangs, and pops into a starburst at the end.
+						view.sx = view.sy = p.size * ( 1 - 0.5 * t );
+						view.alpha = p.alpha;
+						if ( t > 0.8 && ! f.calm ) {
+
+							view.frame = SHAPES.burst;
+							view.sx = view.sy = view.sx * 1.6;
+							view.alpha = p.alpha * ( 1 - t ) * 5;
+
+						}
+
+					} else if ( p.kind === 3 ) view.alpha = p.alpha * swell( t );
+
+				},
+				// Popped: a few short arcs down off it.
+				died( p ) {
+
+					if ( p.kind !== 2 || f.calm ) return;
+					for ( let i = 0; i < 3; i ++ ) {
+
+						out.copy( f.back ).sub( f.up ).addScaledVector( f.right, ( i - 1 ) * 0.8 ).normalize();
+						bolt( batch, f, p.position, out, 0.5 * f.scale, 2, 0.08 * f.scale, 0.04 * f.scale, 0.08, 0xf4fbff, 0x4aa8ff, 0.6 );
+
+					}
+
+				},
 			};
 			return {
 				batches: [ batch ],
 				update( frame ) {
 
 					f = frame;
+					const { clock, dt, scale, hot } = frame;
+					const fl = flow( frame );
 					batch.begin();
-					sparks( frame.power, frame.dt, 90, spark );
-					// Every few hundredths of a second, a little arc off the flame.
-					arcDue -= frame.dt;
-					while ( frame.power > 0 && arcDue <= 0 ) {
+					// Magnetic pinches down the flame: rings running back from the nozzle and narrowing as they
+					// go, faster and tighter in overdrive.
+					if ( fl > 0.01 ) {
 
-						arcDue += 0.025 / frame.power;
-						const angle = Math.random() * Math.PI * 2;
-						const reach = 0.22 * frame.scale;
-						_v.copy( frame.nozzle ).addScaledVector( frame.back, Math.random() * 0.7 * frame.scale )
-							.addScaledVector( frame.right, Math.cos( angle ) * reach ).addScaledVector( frame.up, Math.sin( angle ) * reach );
-						out.copy( frame.right ).multiplyScalar( Math.cos( angle ) ).addScaledVector( frame.up, Math.sin( angle ) ).addScaledVector( frame.back, 0.6 ).normalize();
-						bolt( batch, frame, _v, out, ( 0.45 + Math.random() * 0.5 ) * frame.scale, 3, 0.1 * frame.scale, 0.035 * frame.scale, 0.05 + Math.random() * 0.05, 0xf4fbff, 0x4aa8ff );
+						const length = 1.1 * scale;
+						ring.lerpColors( blue, violet, hot );
+						for ( let i = 0; i < PINCHES; i ++ ) {
+
+							const d = ( ( clock * ( 2.2 + 2 * hot ) + i / PINCHES ) % 1 ) * length;
+							const radius = ( 0.2 - 0.06 * hot ) * scale * ( 1 - 0.5 * d / length ) * ( 0.6 + 0.4 * fl );
+							const throb = frame.calm ? 0.7 : 1 + 0.15 * Math.sin( clock * 40 + i );
+							_v.copy( frame.nozzle ).addScaledVector( frame.back, d );
+							batch.put( _v, frame.back, FLAT, radius, radius, 0, SHAPES.ring, ring, fl * ( 1 - d / length ) * 0.8 * throb );
+
+						}
 
 					}
 
-					if ( frame.power <= 0 ) arcDue = 0;
-					batch.update( frame.dt, FLICKER );
+					sparks( fl, dt, 90 * frame.detail, spark );
+					// Every few hundredths of a second, a little arc off the flame (more often in overdrive).
+					arcDue -= dt;
+					while ( fl > 0.01 && arcDue <= 0 ) {
+
+						arcDue += 0.025 / fl * ( 1 - 0.4 * hot );
+						const angle = Math.random() * Math.PI * 2;
+						const reach = 0.22 * scale;
+						_v.copy( frame.nozzle ).addScaledVector( frame.back, Math.random() * 0.7 * scale )
+							.addScaledVector( frame.right, Math.cos( angle ) * reach ).addScaledVector( frame.up, Math.sin( angle ) * reach );
+						out.copy( frame.right ).multiplyScalar( Math.cos( angle ) ).addScaledVector( frame.up, Math.sin( angle ) ).addScaledVector( frame.back, 0.6 ).normalize();
+						bolt( batch, frame, _v, out, ( 0.45 + Math.random() * 0.5 ) * scale, 3, 0.1 * scale, 0.055 * scale, 0.05 + Math.random() * 0.05, 0xf4fbff, 0x4aa8ff, 0.6 );
+
+					}
+
+					if ( fl <= 0.01 ) arcDue = 0;
+					// Overdrive: a Tesla cage, arcs reaching in to the flame off the corners of its back.
+					cageDue -= dt;
+					if ( overdrive( frame ) > 0 && fl > 0.01 ) {
+
+						const { width, height, rear, scale: own } = frame.size;
+						while ( cageDue <= 0 ) {
+
+							cageDue += frame.calm ? 0.12 : 0.06;
+							const c = cage ++ % 4;
+							frame.pivot.localToWorld( corner.set( ( c & 1 ? 0.5 : - 0.5 ) * width / own, height * ( c & 2 ? 0.8 : 0.2 ) / own, rear / own ) );
+							out.copy( frame.nozzle ).addScaledVector( frame.back, scale ).sub( corner );
+							const length = out.length();
+							bolt( batch, frame, corner, out.divideScalar( length ), length, 4, 0.08 * scale, 0.045 * scale, 0.08, 0xffffff, 0x8a7dff, 0.6 );
+
+						}
+
+					} else cageDue = Math.max( cageDue, 0 );
+
+					batch.update( dt, hooks );
 
 				},
 				// Lit: a crackle of arcs all round the exhaust at once, and a spray of sparks.
@@ -1142,60 +1319,164 @@ const STYLES = {
 					}
 
 				},
+				// Let go: a ball of lightning hangs at the exhaust, shrinking, and pops (for a visitor asking
+				// for less motion it only shrinks away). Run dry, a whiff of ozone round it.
+				cool( frame, dry, detail ) {
+
+					f = frame;
+					const ball = batch.spawn( 0.22 );
+					ball.position.copy( frame.nozzle );
+					ball.carry.copy( frame.velocity );
+					ball.frame = SHAPES.glow;
+					ball.size = 0.45 * frame.scale;
+					ball.colour.set( 0xbfe6ff );
+					ball.kind = 2;
+					if ( ! dry || ! frame.air ) return;
+					for ( let i = Math.round( 8 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.6 + Math.random() * 0.3 );
+						p.position.copy( frame.nozzle );
+						flung( frame, p, 0.9, 0.8, 0.5, 0.3 );
+						p.frame = SHAPES.soft;
+						p.size = 0.12 * frame.scale;
+						p.grow = 0.3 * frame.scale;
+						p.colour.set( 0x9fc8ff );
+						p.alpha = 0.25;
+						p.drag = 1.5;
+						p.kind = 3;
+
+					}
+
+				},
 			};
 
 		},
 	},
 
 	// Forked lightning crackling back from the exhaust: bolts with branches, gone in a flicker and
-	// struck again.
+	// struck again, now and then grounding on the road with a scorch. In overdrive a steady return
+	// stroke runs straight back from it and the forks crawl forward round its flanks.
 	lightning: {
 		flame: { outer: 0x7a4dff, inner: 0xffffff, halo: 0xb48cff, length: 0.55, flicker: 2 },
 		tint: 0xc8b0ff,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 220, blending: AdditiveBlending } );
+			const batch = new Batch( root, { particles: 260, blending: AdditiveBlending } );
 			const way = new Vector3();
 			const fork = new Vector3();
 			const tip = new Vector3();
+			const crawl = new Vector3();
+			const glow = new Color( 0x8a5cff );
+			const purple = new Color( 0x8a5cff );
+			const dull = new Color( 0x6a4dbf );
+			let f = null;
 			let due = 0;
+			let returnDue = 0;
+			let strikes = 0;
+			const flicker = makeFlicker( () => f );
+			// Where a strike ends: a hot point of light, a little star (it flickers; a visitor asking
+			// for less motion only sees the core), round a little glow.
+			const flash = ( at, life, size = 1 ) => {
+
+				if ( ! f.calm ) {
+
+					const spark = batch.spawn( life );
+					spark.position.copy( at );
+					spark.carry.copy( f.velocity );
+					spark.frame = SHAPES.star;
+					spark.size = 0.16 * f.scale * size;
+					spark.turn = Math.random() * Math.PI;
+					spark.colour.set( 0xf3eaff );
+					spark.kind = 1;
+
+				}
+
+				const core = batch.spawn( life );
+				core.position.copy( at );
+				core.carry.copy( f.velocity );
+				core.frame = SHAPES.glow;
+				core.size = 0.12 * f.scale * size;
+				core.colour.set( 0xc8b0ff );
+				core.kind = 1;
+
+			};
 			return {
 				batches: [ batch ],
 				update( frame ) {
 
+					f = frame;
+					const { hot, scale } = frame;
+					const fl = flow( frame );
 					batch.begin();
 					due -= frame.dt;
-					while ( frame.power > 0 && due <= 0 ) {
+					while ( fl > 0.01 && due <= 0 ) {
 
-						due += 0.055;
+						due += 0.055 - 0.015 * hot;
 						for ( let n = 0; n < 2; n ++ ) {
 
 							// Back and fanned out to one side or the other and up: crackling round the back
-							// of it rather than reaching all the way back to the camera.
-							const length = ( 1.3 + Math.random() ) * frame.scale * ( 0.6 + 0.4 * frame.power );
+							// of it rather than reaching all the way back to the camera. In overdrive the forks
+							// crawl forward round its flanks.
+							let length = ( 1.3 + Math.random() ) * scale * ( 0.6 + 0.4 * fl );
+							const side = Math.random() < 0.5 ? - 1 : 1;
 							way.copy( frame.back ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 1.4 ).addScaledVector( frame.up, ( Math.random() - 0.15 ) * 0.9 ).normalize();
+							if ( hot > 0 ) way.lerp( crawl.copy( frame.back ).multiplyScalar( - 0.3 ).addScaledVector( frame.right, side ).addScaledVector( frame.up, 0.5 ).normalize(), hot * 0.7 ).normalize();
+							// Every third strike, on the ground, reaches down to the road behind it.
+							const grounding = frame.grounded && strikes ++ % 3 === 0;
+							if ( grounding ) {
+
+								tip.copy( frame.nozzle ).addScaledVector( frame.back, ( 1 + Math.random() * 0.8 ) * scale ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 1.2 * scale );
+								tip.addScaledVector( frame.up, - _a.subVectors( tip, frame.ground ).dot( frame.up ) );
+								way.subVectors( tip, frame.nozzle );
+								length = way.length();
+								way.divideScalar( length );
+
+							}
+
 							const life = 0.07 + Math.random() * 0.06;
-							tip.copy( bolt( batch, frame, frame.nozzle, way, length, 6, 0.16 * frame.scale, 0.045 * frame.scale, life, 0xf3eaff, 0x8a5cff ) );
+							// Sputtering out, its last forks dull as they die.
+							glow.lerpColors( purple, dull, 1 - fl );
+							tip.copy( bolt( batch, frame, frame.nozzle, way, length, 6, 0.16 * scale, 0.045 * scale, life, 0xf3eaff, glow ) );
 							// A branch off it, from somewhere along its first half.
 							fork.copy( frame.nozzle ).lerp( tip, 0.25 + Math.random() * 0.3 );
-							way.addScaledVector( frame.right, ( Math.random() < 0.5 ? - 1 : 1 ) * 0.9 ).addScaledVector( frame.up, ( Math.random() - 0.5 ) * 0.8 ).normalize();
-							bolt( batch, frame, fork, way, length * 0.5, 3, 0.1 * frame.scale, 0.03 * frame.scale, life * 0.8, 0xe4d6ff, 0x7a4dff );
-							// A flash where it ends.
-							const flash = batch.spawn( life );
-							flash.position.copy( tip );
-							flash.carry.copy( frame.velocity );
-							flash.frame = SHAPES.glow;
-							flash.size = 0.28 * frame.scale;
-							flash.colour.set( 0xc8b0ff );
-							flash.alpha = 0.8;
-							flash.kind = 1;
+							way.addScaledVector( frame.right, side * 0.9 ).addScaledVector( frame.up, ( Math.random() - 0.5 ) * 0.8 ).normalize();
+							bolt( batch, frame, fork, way, length * 0.5, 3, 0.1 * scale, 0.03 * scale, life * 0.8, 0xe4d6ff, 0x7a4dff );
+							flash( tip, life );
+							// Grounded, a scorch flashes on the road where it struck.
+							if ( grounding && ! frame.calm ) {
+
+								const scorch = batch.spawn( 0.12 );
+								scorch.position.copy( tip ).addScaledVector( frame.up, INK_LIFT );
+								scorch.carry.copy( frame.velocity ).multiplyScalar( 0.9 );
+								scorch.axis.copy( frame.up );
+								scorch.mode = FLAT;
+								scorch.frame = SHAPES.burst;
+								scorch.size = 0.35 * scale;
+								scorch.colour.set( 0x8a5cff );
+								scorch.alpha = 0.5;
+								scorch.turn = Math.random() * Math.PI;
+
+							}
 
 						}
 
 					}
 
-					if ( frame.power <= 0 ) due = 0;
-					batch.update( frame.dt, FLICKER );
+					if ( fl <= 0.01 ) due = 0;
+					// Overdrive: a return stroke, one straight bright channel back along its path, steady.
+					returnDue -= frame.dt;
+					if ( hot > 0.4 && fl > 0.01 ) {
+
+						while ( returnDue <= 0 ) {
+
+							returnDue += 0.08;
+							bolt( batch, frame, frame.nozzle, frame.back, ( 2.5 + hot ) * scale, 8, 0.06 * scale, 0.07 * scale, 0.1, 0xffffff, 0xb48cff, 0.45, 0 );
+
+						}
+
+					} else returnDue = Math.max( returnDue, 0 );
+
+					batch.update( frame.dt, flicker );
 
 				},
 				// Lit: a strike, four long forks thrown out behind and to both sides at once, each with a
@@ -1220,43 +1501,167 @@ const STYLES = {
 					}
 
 				},
+				// Let go: a last strike straight back, with a flash at its tip.
+				cool( frame ) {
+
+					f = frame;
+					tip.copy( bolt( batch, frame, frame.nozzle, frame.back, 3 * frame.scale, 8, 0.18 * frame.scale, 0.05 * frame.scale, 0.16, 0xf3eaff, 0x8a5cff ) );
+					flash( tip, 0.16, 1.4 );
+
+				},
 			};
 
 		},
 	},
 
-	// Glitter: a stream of tiny twinkling stars in white, gold, pink, sky and lilac.
+	// Glitter: a corkscrew of twinkling stars in white, gold, pink, sky and lilac twisting back from
+	// the exhaust in a scatter of more, now and then a big one catching the light. In overdrive it
+	// tightens into a white-hot spiral of diamond dust with gems in it; let go, the glitter drifts
+	// down.
 	glitter: {
 		flame: { halo: 0xfff3c4, length: 0.6, flicker: 1 },
 		tint: 0xfff3c4,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 230, blending: AdditiveBlending } );
+			// Drawn over what's behind it, not added: added, white and pastel stars all come out near
+			// white, and over a pale road or among the speed lines they're lost. Rich colours, gold
+			// most of all, so it reads as glitter in daylight.
+			const batch = new Batch( root, { particles: 260 } );
 			const stars = emitter();
-			const colours = [ 0xffffff, 0xffe08a, 0xffb3ec, 0xa8f0ff, 0xd9b8ff ];
+			const helices = [ emitter(), emitter() ];
+			const gems = emitter();
+			const colours = [ 0xffc21a, 0xff3fae, 0x22c8ff, 0xffd84d, 0x9a5cff, 0xff8a1f ];
+			const dust = [ 0xffd84d, 0xfff2b0, 0x7fe0ff ];
 			let f = null;
 			let n = 0;
-			const star = k => {
+			let spin = 0;
+			let pinches = 0;
+			let pinchDue = 0;
+			let strand = 0;
+			// A star: every seventh a big one, which glints.
+			const star = ( p, size ) => {
+
+				p.frame = SHAPES.star;
+				if ( n % 7 === 0 ) {
+
+					p.size = ( 0.17 + Math.random() * 0.05 ) * f.scale;
+					p.colour.set( Math.random() < 0.5 ? 0xfff0a0 : 0xffc21a );
+					p.life = 0.9;
+
+				} else {
+
+					p.size = size;
+					p.colour.set( colours[ n % colours.length ] );
+
+				}
+
+				n ++;
+				p.spin = ( Math.random() - 0.5 ) * 4;
+
+			};
+			const scatter = k => {
 
 				const p = batch.spawn( 0.5 + Math.random() * 0.45 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.3 ) * f.size.height * 0.5, p.position );
 				thrown( f, p, 0.9, 2 + Math.random() * 2, 0.4, 1.8 );
-				p.frame = SHAPES.star;
-				p.size = ( 0.07 + Math.random() * 0.08 ) * f.scale;
-				p.colour.set( colours[ n ++ % colours.length ] );
 				p.fall = 0.12;
 				p.drag = 0.8;
-				p.spin = ( Math.random() - 0.5 ) * 4;
+				if ( overdrive( f ) > 0 ) {
 
+					// Diamond dust: streaks of white-hot light.
+					p.mode = ALONG;
+					p.frame = SHAPES.spark;
+					p.axis.copy( f.back ).multiplyScalar( 0.12 * f.scale * f.hot );
+					p.size = ( 0.03 + Math.random() * 0.02 ) * f.scale;
+					p.colour.set( pick( dust ) );
+					p.kind = 1;
+
+				} else star( p, ( 0.09 + Math.random() * 0.08 ) * f.scale );
+
+			};
+			// Two strands of a corkscrew, kept up with it so the twist reads at speed.
+			const helix = k => {
+
+				const p = batch.spawn( 0.7 );
+				const angle = spin + strand * Math.PI;
+				const radius = ( 0.28 - 0.1 * f.hot ) * f.scale;
+				nozzleAt( f, k, Math.cos( angle ) * radius, Math.sin( angle ) * radius, p.position );
+				thrown( f, p, 0.96, 1.2, 0, 0.2 );
+				star( p, ( 0.06 + Math.random() * 0.04 ) * f.scale );
+				if ( f.hot > 0.3 ) p.colour.set( pick( dust ) );
+
+			};
+			const gem = k => {
+
+				const p = batch.spawn( 0.7 );
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.3 * f.scale, ( Math.random() - 0.5 ) * 0.3 * f.scale, p.position );
+				thrown( f, p, 0.95, 1.5, 0.2, 0.4 );
+				p.frame = SHAPES.diamond;
+				p.size = 0.16 * f.scale;
+				p.colour.set( pick( dust ) );
+				p.alpha = 0.8;
+				p.spin = 6;
+				p.kind = 2;
+
+			};
+			const pinch = size => {
+
+				for ( let i = 0; i < 7; i ++ ) {
+
+					const p = batch.spawn( 0.6 + Math.random() * 0.3 );
+					p.position.copy( f.nozzle );
+					flung( f, p, 0.95, 1, 0.5, 0.6 );
+					p.frame = SHAPES.star;
+					p.size = size * f.scale;
+					p.colour.set( colours[ i % colours.length ] );
+					p.fall = 0.3;
+					p.drag = 1;
+
+				}
+
+			};
+			const hooks = {
+				look( p, t, view ) {
+
+					if ( p.kind !== 0 ) return;
+					TWINKLE.look( p, t, view );
+					// A big star catches the light now and then: a cross glint.
+					if ( ! f.calm && p.size > 0.16 * f.scale && Math.sin( p.age * 28 + p.phase ) > 0.96 ) {
+
+						view.frame = SHAPES.flare;
+						view.sx *= 1.4;
+						view.sy = view.sx;
+
+					}
+
+				},
 			};
 			return {
 				batches: [ batch ],
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
+					spin += frame.dt * ( 14 + 8 * frame.hot );
 					batch.begin();
-					stars( frame.power, frame.dt, 260, star );
-					batch.update( frame.dt, TWINKLE );
+					stars( fl, frame.dt, 160 * frame.detail, scatter );
+					for ( strand = 0; strand < 2; strand ++ ) helices[ strand ]( fl, frame.dt, 50 * frame.detail, helix );
+					gems( overdrive( frame ) > 0 ? fl : 0, frame.dt, 2, gem );
+					// Run dry: the shaker running empty, three pinches, each smaller.
+					if ( pinches > 0 ) {
+
+						pinchDue -= frame.dt;
+						if ( pinchDue <= 0 ) {
+
+							pinch( [ 0.13, 0.1, 0.07 ][ 3 - pinches ] );
+							pinches --;
+							pinchDue = 0.12;
+
+						}
+
+					}
+
+					batch.update( frame.dt, hooks );
 
 				},
 				// Lit: a puff of stars bursting out of the exhaust every way.
@@ -1277,45 +1682,147 @@ const STYLES = {
 					}
 
 				},
+				// Let go: the glitter in the air slows and drifts down, and a last puff of it; run dry, the
+				// shaker gives three pinches, each smaller, and is empty.
+				cool( frame, dry, detail ) {
+
+					f = frame;
+					for ( const p of batch.items ) if ( p.age < p.life ) {
+
+						p.drag = 3;
+						p.fall = 0.15;
+
+					}
+
+					for ( let i = Math.round( 18 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.5 + Math.random() * 0.4 );
+						p.position.copy( frame.nozzle );
+						flung( frame, p, 0.9, 1.5, 0.8 );
+						star( p, ( 0.05 + Math.random() * 0.05 ) * frame.scale );
+						p.drag = 3;
+						p.fall = 0.15;
+
+					}
+
+					if ( dry ) {
+
+						pinches = 3;
+						pinchDue = 0;
+
+					}
+
+				},
 			};
 
 		},
 	},
 
-	// Soap bubbles floating up and wobbling away, each popping at the end.
+	// Soap bubbles blown out of a wand at the exhaust, one swelling there as it goes, floating up and
+	// wobbling away, each popping into a ring and droplets at the end. In overdrive the jet goes fizzy:
+	// a stream of little bubbles, and now and then a big one riding along with it.
 	bubbles: {
 		flame: null,
 		tint: 0xbff3ff,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 110 } );
+			const batch = new Batch( root, { particles: 170, quads: 2 } );
 			const bubbles = emitter();
 			const tints = [ 0xc4f6ff, 0xffd4f4, 0xe3d0ff, 0xd2ffe8, 0xfff4c4 ];
+			const wand = new Color();
 			let f = null;
-			const bubble = k => {
+			let since = 0;
+			let rider = 0;
+			// A bubble: wobbling up (kind 0); fizz (1) only streams back. With no air, nothing floats or
+			// wobbles, and they don't last as long.
+			const blow = ( p, size ) => {
 
-				const p = batch.spawn( 0.9 + Math.random() * 0.6 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.4 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.9, 1.5 + Math.random() * 1.5, 0.6, 0.6 );
 				p.frame = SHAPES.bubble;
-				p.size = ( 0.1 + Math.random() * 0.2 ) * f.scale;
+				p.size = size;
 				p.grow = p.size * 0.25;
 				p.colour.set( pick( tints ) );
 				p.alpha = 0.95;
-				p.fall = - 0.05;
+				p.fall = f.air ? - 0.05 : 0.4;
 				p.drag = 0.9;
+				if ( ! f.air ) {
+
+					sink( p, f );
+					p.life *= 0.5;
+
+				}
+
+			};
+			const bubble = k => {
+
+				since = 0;
+				const fizz = overdrive( f ) > 0;
+				const p = batch.spawn( fizz ? 0.35 : 0.9 + Math.random() * 0.6 );
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.5 ) * 0.25 * f.scale, p.position ).addScaledVector( f.back, 0.2 * f.scale );
+				if ( fizz ) {
+
+					thrown( f, p, 0.95, 1.5 + Math.random(), 0.3, 0.2 );
+					blow( p, ( 0.04 + Math.random() * 0.04 ) * f.scale );
+					p.kind = 1;
+
+				} else {
+
+					thrown( f, p, 0.95, 1.5 + Math.random(), 0.6, 0.6 );
+					blow( p, ( 0.08 + Math.random() * 0.14 ) * f.scale );
+
+				}
+
+			};
+			// Droplets of soap flung off a bubble as it pops.
+			const droplets = ( from, count ) => {
+
+				for ( let i = 0; i < count; i ++ ) {
+
+					const p = batch.spawn( 0.2 );
+					p.position.copy( from.position );
+					p.carry.copy( from.carry );
+					_a.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 ).normalize();
+					p.velocity.copy( _a ).multiplyScalar( 1.2 );
+					p.frame = SHAPES.drop;
+					p.size = 0.03 * f.scale;
+					p.colour.copy( from.colour );
+					p.fall = 0.4;
+					p.kind = 2;
+
+				}
 
 			};
 			const hooks = {
 				// Wobbling side to side as it rises.
-				step: ( p, dt ) => p.velocity.addScaledVector( f.right, Math.sin( p.age * 6 + p.phase ) * 1.6 * dt ),
+				step( p, dt ) {
+
+					if ( p.kind === 0 && f.air ) p.velocity.addScaledVector( f.right, Math.sin( p.age * 6 + p.phase ) * 1.6 * dt );
+
+				},
 				look( p, t, view ) {
 
-					// Clear until it pops: a quick swell, and gone.
-					const pop = MathUtils.smoothstep( t, 0.88, 1 );
-					view.sx *= 1 + pop * 0.6;
+					if ( p.kind === 2 ) return;
+					// Clear until it pops: a ring, flicking out. Well behind it, it pops early, before the
+					// chase camera's lens is inside it.
+					const behind = _a.subVectors( view.position, f.middle ).dot( f.back ) / f.scale;
+					if ( behind > 2.6 ) t = Math.max( t, 0.9 + 0.1 * Math.min( 1, behind - 2.6 ) );
+					const end = p.kind === 3 ? 0.7 : 0.9;
+					if ( p.kind === 3 ) view.sx = view.sy = p.size * ( 1 + 2.5 * Math.min( 1, t / end ) );
+					if ( t > end ) {
+
+						view.frame = SHAPES.ring;
+						view.sx *= 1.3;
+						view.alpha = p.alpha * ( 1 - t ) / ( 1 - end ) * 0.6;
+
+					} else view.alpha = p.alpha;
 					view.sy = view.sx;
-					view.alpha = p.alpha * ( 1 - pop );
+
+				},
+				// A big bubble pops into droplets (not for a visitor asking for less motion).
+				died( p ) {
+
+					if ( f.calm ) return;
+					if ( p.kind === 3 ) droplets( p, 5 );
+					else if ( p.kind === 0 && p.size > 0.18 * f.scale ) droplets( p, 3 );
 
 				},
 			};
@@ -1324,66 +1831,176 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
+					const h = overdrive( frame );
+					since += frame.dt;
 					batch.begin();
-					bubbles( frame.power, frame.dt, 55, bubble );
+					// The wand at the exhaust, slowly changing colour, with the next bubble swelling in it.
+					if ( fl > 0.01 ) {
+
+						wand.setHSL( frame.clock * 0.3 % 1, 0.6, 0.85 );
+						const ring = 0.2 * frame.scale;
+						batch.put( frame.nozzle, frame.back, FLAT, ring, ring, 0, SHAPES.ring, wand, 0.7 * fl );
+						const swelling = ( 0.1 + 0.15 * Math.min( 1, since * 55 * fl ) ) * frame.scale;
+						_v.copy( frame.nozzle ).addScaledVector( frame.back, swelling * 0.6 );
+						batch.put( _v, frame.up, FACING, swelling, swelling, 0, SHAPES.bubble, wand, 0.9 * fl );
+
+					}
+
+					bubbles( fl, frame.dt, ( 55 + 85 * h ) * frame.detail, bubble );
+					// Overdrive: now and then a big one riding along with it, over the fizz.
+					rider -= frame.dt;
+					if ( h > 0 && fl > 0.01 && rider <= 0 ) {
+
+						rider = 0.4;
+						const p = batch.spawn( 1 );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.8 * frame.scale ).addScaledVector( frame.up, 0.1 * frame.scale );
+						thrown( frame, p, 0.995, 1, 0.2, 0.2 );
+						blow( p, 0.2 * frame.scale );
+
+					}
+
 					batch.update( frame.dt, hooks );
 
 				},
 				// Lit: a froth of big bubbles blown out round the exhaust, popping sooner.
 				ignite( frame, detail ) {
 
+					f = frame;
 					for ( let i = Math.round( 16 * detail ); i > 0; i -- ) {
 
 						const p = batch.spawn( 0.6 + Math.random() * 0.5 );
 						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.8 * frame.scale ).addScaledVector( frame.up, ( Math.random() - 0.3 ) * 0.5 * frame.scale );
 						flung( frame, p, 0.9, 2.2, 0.5, 1.2 );
-						p.frame = SHAPES.bubble;
-						p.size = ( 0.12 + Math.random() * 0.16 ) * frame.scale;
+						blow( p, ( 0.12 + Math.random() * 0.16 ) * frame.scale );
 						p.grow = p.size * 0.3;
-						p.colour.set( pick( tints ) );
-						p.alpha = 0.95;
-						p.fall = - 0.05;
 						p.drag = 1.6;
 
 					}
 
 				},
+				// Let go: the wand lets go of one last big bubble; run dry, one swells at the exhaust and
+				// pops at once.
+				cool( frame, dry ) {
+
+					f = frame;
+					// (The last one let go behind it and floating up and away, never over the vehicle.)
+					const p = batch.spawn( dry ? 0.15 : 1.4 );
+					p.position.copy( frame.nozzle ).addScaledVector( frame.back, ( dry ? 0 : 0.5 ) * frame.scale );
+					thrown( frame, p, 0.95, dry ? 0.3 : 1.2, dry ? 0.2 : 0.8, 0 );
+					blow( p, ( dry ? 0.1 : 0.3 ) * frame.scale );
+					if ( dry ) {
+
+						p.grow = 0;
+						p.kind = 3;
+
+					} else if ( frame.air ) p.fall = - 0.08;
+
+				},
 			};
 
 		},
 	},
 
-	// Confetti: little paper rectangles in party colours, tumbling down as they flutter behind.
+	// Confetti: little paper rectangles in party colours shot out of two cannons at the corners of
+	// its back, tumbling down as they flutter behind, with curling streamers. In overdrive, a ticker-
+	// tape parade with flashing foil in it; let go, a last popper.
 	confetti: {
 		flame: null,
 		tint: 0xffd84d,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 180 } );
+			const batch = new Batch( root, { particles: 230 } );
 			const pieces = emitter();
+			const streamers = emitter();
 			const colours = [ 0xff3b5c, 0xffc21a, 0x2fd06b, 0x2f9bff, 0xb05cff, 0xff7ad9, 0xffffff ];
 			let f = null;
-			const piece = k => {
+			let side = 1;
+			// A piece of paper (kind 0), or of foil (2), which flashes as it turns to the light.
+			const paper = ( p, size ) => {
 
-				const p = batch.spawn( 1 + Math.random() * 0.5 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.3 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.85, 2 + Math.random() * 2, 2.2, 2 );
 				p.frame = SHAPES.square;
-				p.size = ( 0.06 + Math.random() * 0.03 ) * f.scale;
+				p.size = size;
 				p.aspect = 0.55;
-				p.colour.set( pick( colours ) );
+				const foil = overdrive( f ) > 0 && Math.random() < 0.4;
+				p.colour.set( foil ? pick( FOIL ) : pick( colours ) );
+				p.kind = foil ? 2 : 0;
 				p.fall = 0.3;
-				p.drag = 1.6;
+				p.drag = f.air ? 1.1 : 0;
 				p.spin = ( Math.random() - 0.5 ) * 18;
 				p.turn = Math.random() * Math.PI;
 
 			};
+			// Out of one corner cannon or the other: up and out, a V of confetti behind it.
+			const cannon = ( p, k ) => {
+
+				side = - side;
+				nozzleAt( f, k, side * f.size.width * 0.45, f.size.height * 0.3, p.position );
+				thrown( f, p, 0.93, 2 + Math.random() * 2, 2.8, 1.2 );
+				p.velocity.addScaledVector( f.right, side * 1.5 );
+
+			};
+			const piece = k => {
+
+				const p = batch.spawn( 1 + Math.random() * 0.5 );
+				cannon( p, k );
+				paper( p, ( 0.085 + Math.random() * 0.03 ) * f.scale );
+
+			};
+			// A streamer, curling as it flies (kind 1).
+			const streamer = ( k, limp = false ) => {
+
+				const p = batch.spawn( 1.4 );
+				if ( limp ) {
+
+					p.position.copy( f.nozzle );
+					p.carry.copy( f.velocity ).multiplyScalar( 0.9 );
+					p.velocity.copy( f.back ).multiplyScalar( 0.2 );
+					p.fall = 0.6;
+
+				} else {
+
+					cannon( p, k );
+					p.fall = 0.3;
+					p.drag = f.air ? 1.1 : 0;
+
+				}
+
+				p.mode = ALONG;
+				p.frame = SHAPES.streak;
+				p.size = 0.04 * f.scale;
+				p.axis.copy( limp ? f.up : p.velocity ).setLength( 0.35 * f.scale );
+				p.colour.set( pick( colours ) );
+				p.kind = 1;
+				return p;
+
+			};
 			const hooks = {
+				// A streamer curls one way and the other behind (not with no air), and lies along the way
+				// it goes.
+				step( p, dt ) {
+
+					if ( p.kind !== 1 ) return;
+					if ( f.air ) p.velocity.addScaledVector( f.right, Math.sin( p.age * 9 + p.phase ) * 3 * dt );
+					if ( p.velocity.lengthSq() > 1e-4 ) p.axis.copy( p.velocity ).setLength( 0.35 * f.scale );
+
+				},
 				look( p, t, view ) {
 
-					// Turning over and over: edge on, then flat.
-					view.sy *= 0.15 + 0.85 * Math.abs( Math.cos( p.age * 11 + p.phase ) );
 					view.alpha = t < 0.8 ? 1 : ( 1 - t ) * 5;
+					if ( p.kind === 1 ) return;
+					// Turning over and over: edge on, then flat (with no air, it tumbles rigid).
+					const face = Math.abs( Math.cos( p.age * 11 + p.phase ) );
+					if ( f.air ) view.sy *= 0.15 + 0.85 * face;
+					// Foil flashes as it faces the light (just a little brighter for a visitor asking for
+					// less motion).
+					if ( p.kind === 2 && face > 0.93 && ! f.calm ) {
+
+						view.frame = SHAPES.flare;
+						view.sx *= 1.8;
+						view.sy = view.sx;
+
+					}
 
 				},
 			};
@@ -1392,29 +2009,54 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
+					const h = overdrive( frame );
 					batch.begin();
-					pieces( frame.power, frame.dt, 110, piece );
+					pieces( fl, frame.dt, ( 110 + 50 * h ) * frame.detail, piece );
+					streamers( fl, frame.dt, ( 6 + 4 * h ) * frame.detail, streamer );
 					batch.update( frame.dt, hooks );
 
 				},
-				// Lit: a party popper, a cone of confetti shot up and out behind.
+				// Lit: a party popper, a cone of confetti shot up and out behind (none so big or flung so
+				// far back that it flies into the view).
 				ignite( frame, detail ) {
 
+					f = frame;
 					for ( let i = Math.round( 70 * detail ); i > 0; i -- ) {
 
 						const p = batch.spawn( 1 + Math.random() * 0.6 );
 						p.position.copy( frame.nozzle );
-						flung( frame, p, 0.95, 2.5, Math.random(), 3.5 + Math.random() * 3 );
-						p.frame = SHAPES.square;
-						p.size = ( 0.07 + Math.random() * 0.04 ) * frame.scale;
-						p.aspect = 0.55;
-						p.colour.set( pick( colours ) );
+						flung( frame, p, 0.95, 2.5, 0, 3.5 + Math.random() * 3 );
+						paper( p, ( 0.07 + Math.random() * 0.02 ) * frame.scale );
 						p.fall = 0.35;
-						p.drag = 1.8;
+						p.drag = frame.air ? 1.8 : 0;
 						p.spin = ( Math.random() - 0.5 ) * 20;
-						p.turn = Math.random() * Math.PI;
 
 					}
+
+				},
+				// Let go: a last little popper and a couple of streamers; run dry, one limp streamer flops
+				// out.
+				cool( frame, dry, detail ) {
+
+					f = frame;
+					if ( dry ) {
+
+						streamer( 1, true );
+						return;
+
+					}
+
+					for ( let i = Math.round( 24 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.9 + Math.random() * 0.4 );
+						p.position.copy( frame.nozzle );
+						flung( frame, p, 0.93, 1.5, 0.5, 4 );
+						paper( p, ( 0.07 + Math.random() * 0.02 ) * frame.scale );
+
+					}
+
+					for ( let i = 0; i < 2; i ++ ) streamer( 1 );
 
 				},
 			};
@@ -1422,39 +2064,96 @@ const STYLES = {
 		},
 	},
 
-	// Hearts rising and swaying away, beating as they go.
+	// Hearts streaming out behind, big ones and little ones, all beating together, lub-dub. In
+	// overdrive they spiral out in two strands and each beat sends a ring of heart out round it; let
+	// go, they float up like a blown kiss.
 	hearts: {
 		flame: { halo: 0xff6fb5, length: 0.5, flicker: 0.6 },
 		tint: 0xff6fb5,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 70 } );
+			const batch = new Batch( root, { particles: 100 } );
 			const hearts = emitter();
-			const colours = [ 0xff3d7f, 0xff6fae, 0xff9ccc, 0xe0245e ];
+			const colours = [ 0xff3d7f, 0xff6fae, 0xff9ccc, 0xff2f6e ];
 			let f = null;
+			let n = 0;
+			let phase = 0;
+			let beat = 0;
+			let beating = false;
+			const pulse = x => Math.max( 0, Math.sin( 2 * Math.PI * x ) ) ** 8;
 			const heart = k => {
 
 				const p = batch.spawn( 1 + Math.random() * 0.5 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.88, 1.8 + Math.random() * 1.2, 1.1, 0.6 );
+				const big = n ++ % 4 === 0;
 				p.frame = SHAPES.heart;
-				p.size = ( 0.13 + Math.random() * 0.1 ) * f.scale;
-				p.grow = p.size * 0.4;
 				p.colour.set( pick( colours ) );
 				p.fall = - 0.08;
 				p.drag = 1;
+				if ( big ) {
+
+					// Started a little behind the seat, so the big ones don't rise over the driver.
+					nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.35, ( Math.random() - 0.2 ) * 0.15 * f.scale, p.position )
+						.addScaledVector( f.back, 0.3 * f.scale );
+					thrown( f, p, 0.97, 1.4 + Math.random() * 0.6, 1.2, 0.3 );
+					p.size = ( 0.15 + Math.random() * 0.03 ) * f.scale;
+					p.grow = p.size * 0.2;
+					p.kind = 1;
+
+				} else if ( overdrive( f ) > 0 ) {
+
+					// Two strands spiralling out of the exhaust.
+					const angle = f.clock * 10 + ( n & 1 ) * Math.PI;
+					nozzleAt( f, k, Math.cos( angle ) * 0.35 * f.scale, Math.sin( angle ) * 0.35 * f.scale, p.position );
+					thrown( f, p, 0.97, 1.5, 0.3, 0.2 );
+					p.size = ( 0.08 + Math.random() * 0.04 ) * f.scale;
+					p.colour.set( n & 1 ? 0xffe3f0 : 0xff3d7f );
+
+				} else {
+
+					nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position );
+					// (Kept up with it, a few metres of hearts behind it rather than a stream past the lens.)
+					thrown( f, p, 0.97, 1.2 + Math.random() * 0.6, 1.1, 0.6 );
+					p.size = ( 0.08 + Math.random() * 0.04 ) * f.scale;
+					p.grow = p.size * 0.3;
+
+				}
+
+				return p;
 
 			};
 			const hooks = {
-				step: ( p, dt ) => p.velocity.addScaledVector( f.right, Math.sin( p.age * 4 + p.phase ) * 1.8 * dt ),
+				step( p, dt ) {
+
+					if ( p.kind < 2 ) p.velocity.addScaledVector( f.right, Math.sin( p.age * 4 + p.phase ) * 1.8 * dt );
+
+				},
 				look( p, t, view ) {
 
-					// A heartbeat: a quick swell, and a rest.
-					const beat = Math.max( 0, Math.sin( p.age * 9 + p.phase ) ) ** 6;
-					view.sx *= 1 + beat * 0.22;
+					if ( p.kind === 2 ) {
+
+						// A burst of little hearts on the beat, shrinking away.
+						view.sx *= 1 - t * t;
+						view.sy = view.sx;
+						view.alpha = 1;
+						return;
+
+					}
+
+					// All beating together, the big ones harder; a broken heart doesn't.
+					if ( p.kind < 2 ) view.sx *= 1 + beat * ( p.kind === 1 ? 0.18 : 0.12 );
 					view.sy = view.sx;
-					view.turn = 0.3 * Math.sin( p.age * 3 + p.phase );
-					view.alpha = t < 0.7 ? 1 : ( 1 - t ) / 0.3;
+					if ( p.kind < 3 ) view.turn = 0.3 * Math.sin( p.age * 3 + p.phase );
+					// Going, a heart shrinks away rather than fading: see-through, its pink over the grey
+					// road turns muddy. Shrunk away over the vehicle itself too, so it never hides the driver.
+					let shrink = t < 0.7 ? 1 : ( 1 - t ) / 0.3;
+					const near = view.position.distanceTo( f.middle ) / f.scale;
+					if ( near < 1.2 ) shrink *= Math.max( 0, ( near - 0.55 ) / 0.65 );
+					// And well behind it, before the chase camera's near fade turns it see-through.
+					const behind = _a.subVectors( view.position, f.middle ).dot( f.back ) / f.scale;
+					if ( behind > 2.4 ) shrink *= Math.max( 0, ( 3.4 - behind ) );
+					view.sx *= shrink;
+					view.sy *= shrink;
+					view.alpha = shrink > 0.05 ? 1 : 0;
 
 				},
 			};
@@ -1463,8 +2162,38 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
+					// One heartbeat for all of them, lub-dub, quicker as it boosts harder and in overdrive
+					// (gentler, a single beat, for a visitor asking for less motion).
+					phase += frame.dt * ( 1.4 + 0.6 * fl + frame.hot );
+					beat = frame.calm ? 0.3 * pulse( phase ) : pulse( phase ) + 0.6 * pulse( phase - 0.18 );
+					// Overdrive: on each beat, a ring of heart blown out round it.
+					const was = beating;
+					beating = beat > 0.8 * ( frame.calm ? 0.3 : 1 );
+					if ( beating && ! was && overdrive( frame ) > 0 && fl > 0.01 ) {
+
+						// Little solid hearts, kept at the exhaust and gone quickly (a see-through ring of
+						// heart, pink over the grey road, only turned muddy).
+						const count = frame.calm ? 4 : 6;
+						for ( let i = 0; i < count; i ++ ) {
+
+							const p = batch.spawn( 0.4 );
+							around( frame, ( i + 0.5 ) / count * Math.PI * 2, _v );
+							p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.2 * frame.scale ).addScaledVector( _v, 0.15 * frame.scale );
+							p.carry.copy( frame.velocity );
+							p.velocity.copy( _v ).multiplyScalar( frame.calm ? 1.2 : 2 );
+							p.drag = 2;
+							p.frame = SHAPES.heart;
+							p.size = 0.07 * frame.scale;
+							p.colour.set( i & 1 ? 0xffe3f0 : 0xff3d7f );
+							p.kind = 2;
+
+						}
+
+					}
+
 					batch.begin();
-					hearts( frame.power, frame.dt, 30, heart );
+					hearts( fl, frame.dt, ( 30 + 6 * frame.hot ) * frame.detail, heart );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -1489,43 +2218,122 @@ const STYLES = {
 					}
 
 				},
+				// Let go: a blown kiss, the hearts floating up and away. Run dry: heartbreak, three big
+				// dull hearts drooping out of it.
+				cool( frame, dry ) {
+
+					f = frame;
+					for ( const p of batch.items ) if ( p.age < p.life && p.kind < 2 ) {
+
+						// Drifting back as they rise, not hanging over it: what's thrown them back is
+						// kept (no more drag), and the stream carries them on a little less.
+						p.fall = frame.air ? - 0.3 : 0;
+						p.carry.multiplyScalar( 0.95 );
+						p.velocity.addScaledVector( frame.up, frame.air ? 1.1 : 0 ).addScaledVector( frame.back, 0.8 );
+
+					}
+
+					if ( ! dry ) return;
+					for ( let i = 0; i < 3; i ++ ) {
+
+						const p = batch.spawn( 1 );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( i - 1 ) * 0.15 * frame.scale );
+						thrown( frame, p, 0.9, 0.8, 0.4, 0.3 );
+						p.frame = SHAPES.heart;
+						p.size = 0.22 * frame.scale;
+						p.colour.set( 0xb04a6e );
+						p.fall = 0.6;
+						p.spin = frame.calm ? 0 : ( i - 1 || 1 ) * 4;
+						p.kind = 3;
+
+					}
+
+				},
 			};
 
 		},
 	},
 
-	// Pixels: chunky squares in a bright palette, on a grid in the world, shrinking in steps and
-	// blinking out, as an old game would draw them.
+	// Pixels: chunky squares in three lanes, on a grid that moves with it, white-hot at the exhaust and
+	// cooling through yellow, orange and red to purple, shrinking in steps and blinking out, as an old
+	// game would draw them. In overdrive, a rainbow band of scan lines; let go, the trail powers down
+	// in steps, and run dry it's game over.
 	pixel: {
 		flame: null,
 		tint: 0xffe14d,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 150 } );
+			const batch = new Batch( root, { particles: 190 } );
 			const pixels = emitter();
-			const colours = [ 0xff3b5c, 0xff9a1f, 0xffe14d, 0x3ce05a, 0x2fb6ff, 0xa866ff ];
 			let f = null;
 			let grid = 0.17;
+			let n = 0;
 			const pixel = k => {
 
 				const p = batch.spawn( 0.7 + Math.random() * 0.35 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.4 ) * 0.4 * f.scale, p.position );
-				thrown( f, p, 0.88, 3 + Math.random() * 2, 0.3, 1.2 );
 				p.frame = SHAPES.pixel;
 				p.size = grid;
-				// Hottest nearest the exhaust: the first colours most often.
-				p.colour.set( colours[ Math.floor( Math.random() ** 1.6 * colours.length ) ] );
-				p.drag = 0.6;
+				if ( overdrive( f ) > 0 ) {
+
+					// A rainbow band lying across the road behind it, one pixel in each lane in turn, and now
+					// and then a white one: stacked up, the chase camera sees it end on, a tower of cubes
+					// straight down the view with the top ones over the driver's back.
+					const row = n ++ % 6;
+					nozzleAt( f, k, ( row - 2.5 ) * grid * 0.85, - 0.12 * f.scale, p.position ).addScaledVector( f.back, 0.2 * f.scale );
+					thrown( f, p, 0.97, 2.2, 0, 0 );
+					p.size = grid * 0.8;
+					p.colour.set( RAINBOW[ row ] );
+					p.kind = 2;
+					if ( row === 5 && ( n / 6 | 0 ) % 4 === 0 && ! f.calm ) {
+
+						const white = batch.spawn( p.life );
+						nozzleAt( f, k, ( Math.floor( Math.random() * 6 ) - 2.5 ) * grid * 0.85, - 0.12 * f.scale, white.position ).addScaledVector( f.back, 0.2 * f.scale );
+						white.carry.copy( p.carry );
+						white.velocity.copy( p.velocity );
+						white.frame = SHAPES.pixel;
+						white.size = p.size;
+						white.colour.setHex( 0xffffff );
+						white.kind = 2;
+
+					}
+
+				} else {
+
+					// (Out of the exhaust a little way back, so the white-hot ones aren't stuck on its rear,
+					// and kept up with it, a trail behind it rather than big cubes flying past the lens.)
+					nozzleAt( f, k, ( Math.floor( Math.random() * 3 ) - 1 ) * grid, ( Math.random() - 0.5 ) * 0.25 * f.scale, p.position ).addScaledVector( f.back, 0.3 * f.scale );
+					thrown( f, p, 0.97, 1.6 + Math.random() * 0.8, 0.3, 0.3 );
+					p.drag = 0.6;
+					p.size = grid * 0.75;
+					p.life *= 0.75;
+
+				}
 
 			};
 			const hooks = {
 				look( p, t, view ) {
 
-					view.position.set( Math.round( p.position.x / grid ) * grid, Math.round( p.position.y / grid ) * grid, Math.round( p.position.z / grid ) * grid );
-					view.sx = view.sy = p.size * ( t < 0.4 ? 1 : t < 0.7 ? 0.66 : 0.4 );
+					// On a grid that moves with it: from the exhaust, so many squares right, up and back.
+					_v.subVectors( p.position, f.nozzle );
+					const right = Math.round( _v.dot( f.right ) / grid ) * grid;
+					const up = Math.round( _v.dot( f.up ) / grid ) * grid;
+					const back = Math.round( _v.dot( f.back ) / grid ) * grid;
+					view.position.copy( f.nozzle ).addScaledVector( f.right, right ).addScaledVector( f.up, up ).addScaledVector( f.back, back );
 					view.turn = 0;
-					// Solid, then blinking out.
-					view.alpha = t < 0.85 || Math.floor( p.age * 24 ) % 2 ? 1 : 0;
+					if ( p.kind === 3 ) {
+
+						// Game over: grey, blinking (only fading for a visitor asking for less motion).
+						view.alpha = f.calm ? 1 - t : Math.floor( p.age * 16 ) % 2;
+						return;
+
+					}
+
+					view.sx = view.sy = p.size * ( t < 0.4 ? 1 : t < 0.7 ? 0.66 : 0.4 );
+					// Cooling in steps as it ages, as the palette of an old game would.
+					if ( p.kind === 0 ) p.colour.copy( PIXEL_RAMP[ t < 0.15 ? 0 : t < 0.35 ? 1 : t < 0.55 ? 2 : t < 0.8 ? 3 : 4 ] );
+					// Solid, then blinking out (a rainbow band, or for a visitor asking for less motion any
+					// pixel, only fades).
+					view.alpha = p.kind === 2 || f.calm ? Math.min( 1, ( 1 - t ) * 4 ) : t < 0.85 || Math.floor( p.age * 24 ) % 2 ? 1 : 0;
 
 				},
 			};
@@ -1536,7 +2344,7 @@ const STYLES = {
 					f = frame;
 					grid = 0.17 * frame.scale;
 					batch.begin();
-					pixels( frame.power, frame.dt, 85, pixel );
+					pixels( flow( frame ), frame.dt, ( overdrive( frame ) > 0 ? 110 : 60 ) * frame.detail, pixel );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -1553,8 +2361,59 @@ const STYLES = {
 						p.velocity.copy( _v ).multiplyScalar( 2 + ring * 1.6 ).addScaledVector( frame.back, 1.5 );
 						p.frame = SHAPES.pixel;
 						p.size = grid;
-						p.colour.set( [ 0xffffff, 0xffe14d, 0xff9a1f ][ ring ] );
+						p.colour.copy( PIXEL_RAMP[ ring ] );
 						p.drag = 1.2;
+						// Its own colours, not the cooling ones.
+						p.kind = 1;
+
+					}
+
+				},
+				// Let go: the trail powers down, every pixel shrinking to its next step at once, and the
+				// last of it breaks up into a little puff of pixels, as an old game's sprite does. Run
+				// dry: game over, grey pixels tumbling out of it, blinking.
+				cool( frame, dry ) {
+
+					f = frame;
+					for ( const p of batch.items ) if ( p.age < p.life && p.kind !== 3 ) {
+
+						const t = p.age / p.life;
+						p.age = p.life * ( t < 0.4 ? 0.4 : t < 0.7 ? 0.7 : Math.max( t, 0.85 ) );
+
+					}
+
+					if ( ! dry ) {
+
+						for ( let i = 0; i < 8; i ++ ) {
+
+							const p = batch.spawn( 0.5 + Math.random() * 0.15 );
+							around( frame, i / 8 * Math.PI * 2, _v );
+							p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.2 * frame.scale );
+							p.carry.copy( frame.velocity ).multiplyScalar( 0.95 );
+							p.velocity.copy( _v ).multiplyScalar( 2.2 ).addScaledVector( frame.back, 0.8 );
+							p.frame = SHAPES.pixel;
+							p.size = grid * 0.8;
+							p.colour.copy( PIXEL_RAMP[ 1 + i % 4 ] );
+							p.drag = 2;
+							p.kind = 1;
+
+						}
+
+						return;
+
+					}
+
+					for ( let i = 0; i < 14; i ++ ) {
+
+						const p = batch.spawn( 1 + Math.random() * 0.3 );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.5 * frame.scale );
+						thrown( frame, p, 0.95, 1, 1.2, 0.8 );
+						p.frame = SHAPES.pixel;
+						p.size = grid * 0.8;
+						p.colour.set( i % 4 ? 0x8a8a8a : 0xff3b5c );
+						p.fall = 0.8;
+						p.drag = 0.5;
+						p.kind = 3;
 
 					}
 
@@ -1564,51 +2423,89 @@ const STYLES = {
 		},
 	},
 
-	// Fireworks: little rockets shot out behind that burst into balls of sparks in one colour,
-	// which fall and twinkle out.
+	// Fireworks: little rockets shot out behind on short arcs, trailing sparks, that burst just over
+	// and behind it: peonies, rings and drooping golden willows, in colours that show in daylight. In
+	// overdrive a grand finale, rockets in pairs bursting in rings; let go, a last salvo, and run dry,
+	// a couple of duds.
 	fireworks: {
 		flame: { halo: 0xffe0a0, length: 0.5, flicker: 1 },
 		tint: 0xffe0a0,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 280, blending: AdditiveBlending } );
+			// The rockets, flashes and embers glow (added over the scene); the bursts' stars are drawn over
+			// it in their own colours, so a red or a blue one still reads against a bright daytime sky,
+			// where added light would wash out to nothing.
+			const batch = new Batch( root, { particles: 110, blending: AdditiveBlending } );
+			const stars = new Batch( root, { particles: 210 } );
 			const rockets = emitter();
-			const colours = [ 0xff4d6d, 0xffd23f, 0x4dff9a, 0x4dc3ff, 0xc77dff, 0xffffff ];
+			const colours = [ 0xff3355, 0xffb000, 0x22ff88, 0x33aaff, 0xcc55ff ];
+			const CARRIED = 1;
+			// (A burst's stars the same: they hang where they burst, in view, as they spread.)
+			const STARS_CARRIED = 1;
 			let f = null;
 			let scale = 1;
+			let pair = 1;
 			// Where an ignition's starburst bursts from, as a rocket would.
 			const shell = { position: new Vector3(), carry: new Vector3(), velocity: new Vector3() };
-			const rocket = k => {
+			// A rocket: kind 1, or 3 for one that bursts without its flash (a visitor asking for less
+			// motion); 7 and 8 the same for a salvo's, which always bursts as a peony; 5 a dud.
+			const launch = ( p, kind ) => {
 
-				// Up and only a little back, so they burst over the vehicle rather than by the camera.
-				const p = batch.spawn( 0.32 + Math.random() * 0.12 );
-				nozzleAt( f, k, 0, 0, p.position );
-				thrown( f, p, 0.97, 1.5 + Math.random(), 5 + Math.random() * 1.5, 1.4 );
-				p.frame = SHAPES.glow;
-				p.size = 0.12 * f.scale;
+				p.mode = ALONG;
+				p.frame = SHAPES.spark;
+				p.size = 0.05 * scale;
 				p.colour.set( 0xfff0c0 );
 				p.fall = 0.6;
-				p.kind = 1;
+				p.kind = kind;
 
 			};
-			// A ball of sparks in one colour where `from` is, round a flash (unless not `bright`).
-			const burst = ( from, bright = true ) => {
+			const rocket = k => {
 
-				const colour = pick( colours );
-				for ( let i = 0; i < 14; i ++ ) {
+				// Straight up, kept up with it, so they burst a metre and a half over it just behind the
+				// driver: the chase camera's only a few metres back, looking down, so anything lower or
+				// further back is below the bottom of the view or right in front of the lens.
+				const h = overdrive( f );
+				const p = batch.spawn( 0.45 + Math.random() * 0.1 );
+				nozzleAt( f, k, 0, 0, p.position );
+				thrown( f, p, 1, 0.2 + Math.random() * 0.3, 4.6 + Math.random() * 0.6, 0.4 );
+				launch( p, f.calm ? 3 : 1 );
+				if ( h > 0 ) {
 
-					const spark = batch.spawn( 0.55 + Math.random() * 0.3 );
+					// In pairs, out to both sides.
+					pair = - pair;
+					p.velocity.addScaledVector( f.right, pair * 1.8 );
+
+				}
+
+			};
+			// A burst of sparks in one colour where `from` is, round a flash (unless not `bright`): a
+			// peony every way (`peony`, as an ignition's always is), a ring or a golden willow drooping,
+			// or in overdrive always a ring.
+			const burst = ( from, bright = true, peony = false ) => {
+
+				const form = peony ? 0 : overdrive( f ) > 0 ? 1 : Math.floor( Math.random() * 3 );
+				const willow = form === 2;
+				const colour = willow ? 0xffc04d : pick( colours );
+				const count = form === 0 ? 14 : form === 1 ? 16 : 12;
+				for ( let i = 0; i < count; i ++ ) {
+
+					const spark = stars.spawn( willow ? 1.1 : 0.55 + Math.random() * 0.3 );
 					spark.position.copy( from.position );
-					// All round, carried on with the rocket.
-					_v.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 ).normalize();
+					if ( form === 1 ) around( f, ( i + Math.random() * 0.2 ) / count * Math.PI * 2, _v );
+					else _v.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 ).normalize();
+					// All round, carried on with the rocket: each star a bold streak of colour drawn back
+					// along the way it flies out (see starHooks), wide enough to read in daylight.
 					spark.carry.copy( from.carry );
-					spark.velocity.copy( from.velocity ).multiplyScalar( 0.3 ).addScaledVector( _v, ( 2.2 + Math.random() * 0.6 ) * scale );
-					spark.frame = SHAPES.star;
-					spark.size = 0.065 * scale;
+					spark.velocity.copy( from.velocity ).multiplyScalar( 0.3 ).addScaledVector( _v, form === 1 ? 3 : 2.6 + Math.random() * 0.5 );
+					spark.mode = ALONG;
+					spark.frame = SHAPES.spark;
+					spark.axis.copy( spark.velocity ).multiplyScalar( - 0.07 );
+					spark.size = 0.1 * scale;
 					spark.colour.set( colour );
-					spark.fall = 0.45;
-					spark.drag = 1.6;
-					spark.kind = 2;
+					spark.fall = willow ? 0.9 : 0.45;
+					// With no air, nothing slows them: perfect spheres widening as they fall.
+					spark.drag = ! f.air ? 0 : willow ? 3 : 1.6;
+					spark.kind = willow ? 4 : 2;
 
 				}
 
@@ -1620,29 +2517,122 @@ const STYLES = {
 				flash.size = 0.25 * scale;
 				flash.grow = 0.2 * scale;
 				flash.colour.set( colour );
+				if ( overdrive( f ) > 0 && ! peony ) {
+
+					const flare = batch.spawn( 0.12 );
+					flare.position.copy( from.position );
+					flare.carry.copy( from.carry );
+					flare.frame = SHAPES.flare;
+					flare.size = 0.4 * scale;
+					flare.aspect = 0.3;
+					flare.colour.set( colour );
+
+				}
 
 			};
-			// A rocket (kind 1, or 3 for one of a calm ignition's salvo, which bursts without its flash)
-			// bursts as it dies; its sparks (2) twinkle out.
-			const hooks = {
-				died: p => ( p.kind === 1 || p.kind === 3 ) && burst( p, p.kind === 1 ),
-				look( p, t, view ) {
+			// A dud fizzles out, a few dim embers dropping from it.
+			const fizzle = from => {
 
-					if ( p.kind === 1 || p.kind === 3 ) view.alpha = 1;
-					// Sparks twinkle as they go out.
-					else if ( p.kind === 2 && t > 0.5 ) view.alpha *= 0.5 + 0.5 * Math.sin( p.age * 50 + p.phase );
+				for ( let i = 0; i < 4; i ++ ) {
+
+					const ember = batch.spawn( 0.6 );
+					ember.position.copy( from.position );
+					ember.carry.copy( from.carry );
+					ember.velocity.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 );
+					ember.mode = ALONG;
+					ember.frame = SHAPES.spark;
+					ember.axis.copy( f.up ).multiplyScalar( 0.04 * scale );
+					ember.size = 0.03 * scale;
+					ember.colour.set( 0x884422 );
+					ember.fall = 1;
+					ember.kind = 6;
+
+				}
+
+			};
+			// Carried along at the vehicle's speed now, not what it was going as it was thrown:
+			// out of a fast-gathering boost a rocket would otherwise fall metres behind before it burst,
+			// out of the chase camera's view.
+			const keepUp = {
+				step( p ) {
+
+					p.carry.copy( f.velocity ).multiplyScalar( CARRIED );
 
 				},
 			};
+			const hooks = {
+				step: keepUp.step,
+				died( p ) {
+
+					// Where it's got to this frame (it dies before it moves): a burst left where it was a
+					// frame ago would start that far behind, a metre or two at speed.
+					p.position.addScaledVector( p.velocity, f.dt ).addScaledVector( p.carry, f.dt );
+					if ( p.kind === 1 || p.kind === 3 ) burst( p, p.kind === 1 );
+					else if ( p.kind === 7 || p.kind === 8 ) burst( p, p.kind === 7, true );
+					else if ( p.kind === 5 ) fizzle( p );
+
+				},
+				look( p, t, view ) {
+
+					if ( p.kind === 1 || p.kind === 3 || p.kind === 5 || p.kind === 7 || p.kind === 8 ) {
+
+						// A rocket trails sparks: drawn back along the way it flies.
+						p.axis.copy( p.velocity ).multiplyScalar( - 0.05 );
+						view.sx = 0.05 * scale;
+						view.alpha = p.kind === 5 && ! f.calm ? 0.5 + 0.5 * Math.sin( p.age * 60 + p.phase ) : 1;
+
+					}
+
+				},
+			};
+			const starHooks = {
+				step( p ) {
+
+					p.carry.copy( f.velocity ).multiplyScalar( STARS_CARRIED );
+
+				},
+				look( p, t, view ) {
+
+					// Drawn back along the way it flies, shortening as it slows (never shorter than a dot).
+					p.axis.copy( p.velocity ).multiplyScalar( - 0.07 );
+					const length = p.axis.length();
+					if ( length < 0.06 * scale ) p.axis.multiplyScalar( length > 1e-6 ? 0.06 * scale / length : 0 ).add( length > 1e-6 ? _a.set( 0, 0, 0 ) : _a.copy( f.up ).multiplyScalar( - 0.06 * scale ) );
+					// Crackling as it fades (only fading for a visitor asking for less motion).
+					if ( p.kind === 2 && t > 0.5 ) {
+
+						if ( ! f.calm ) view.alpha *= 0.5 + 0.5 * Math.sin( p.age * 50 + p.phase );
+
+					// A willow droops, thinner as it slows.
+					} else if ( p.kind === 4 && t > 0.5 ) view.sx = 0.06 * scale;
+
+				},
+			};
+			// A salvo of three rockets that burst just over it.
+			const salvo = ( frame, calm ) => {
+
+				for ( let i = 0; i < 3; i ++ ) {
+
+					const p = batch.spawn( 0.3 + i * 0.06 );
+					p.position.copy( frame.nozzle );
+					thrown( frame, p, 1, 0.3, 5.5 + Math.random(), 0.4 );
+					p.velocity.addScaledVector( frame.right, ( i - 1 ) * 2.5 );
+					launch( p, calm ? 8 : 7 );
+
+				}
+
+			};
 			return {
-				batches: [ batch ],
+				batches: [ batch, stars ],
 				update( frame ) {
 
 					f = frame;
 					scale = frame.scale;
 					batch.begin();
-					rockets( frame.power, frame.dt, 8, rocket );
+					stars.begin();
+					const h = overdrive( frame );
+					rockets( flow( frame ), frame.dt, ( h > 0 ? ( frame.calm ? 11 : 14 ) : 8 ) * frame.detail, rocket );
 					batch.update( frame.dt, hooks );
+					stars.update( frame.dt, starHooks );
 
 				},
 				// Lit: a starburst right at the exhaust, and a salvo of three rockets that burst just over
@@ -1654,18 +2644,29 @@ const STYLES = {
 					shell.position.copy( frame.nozzle );
 					shell.carry.copy( frame.velocity ).multiplyScalar( 0.9 );
 					shell.velocity.copy( frame.back ).multiplyScalar( 1.5 );
-					burst( shell, ! calm );
-					for ( let i = 0; i < 3; i ++ ) {
+					burst( shell, ! calm, true );
+					salvo( frame, calm );
 
-						const p = batch.spawn( 0.18 + i * 0.05 );
+				},
+				// Let go: a last salvo. Run dry: a couple of duds, fizzling out.
+				cool( frame, dry, detail, calm ) {
+
+					f = frame;
+					scale = frame.scale;
+					if ( ! dry ) {
+
+						salvo( frame, calm );
+						return;
+
+					}
+
+					for ( let i = 0; i < 2; i ++ ) {
+
+						const p = batch.spawn( 0.3 );
 						p.position.copy( frame.nozzle );
-						thrown( frame, p, 0.95, 1.2, 4.5 + Math.random(), 1 );
-						p.velocity.addScaledVector( frame.right, ( i - 1 ) * 2.5 );
-						p.frame = SHAPES.glow;
-						p.size = 0.12 * frame.scale;
-						p.colour.set( 0xfff0c0 );
-						p.fall = 0.6;
-						p.kind = calm ? 3 : 1;
+						thrown( frame, p, 0.95, 1, 2.5, 0.6 );
+						p.velocity.addScaledVector( frame.right, ( i - 0.5 ) * 2 );
+						launch( p, 5 );
 
 					}
 
@@ -1675,34 +2676,66 @@ const STYLES = {
 		},
 	},
 
-	// Ink: blobs of bright paint flung out behind, leaving splats on the road that stay a few
-	// seconds, in one colour after another.
+	// Ink: strings of bright paint flung out behind, splatting where they land on the road and staying
+	// a few seconds, in one colour after another. In overdrive, twin pressure-washer jets painting two
+	// lanes; let go, a drip and a last blot.
 	ink: {
 		flame: null,
 		tint: 0xff4da6,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 210 } );
+			const batch = new Batch( root, { particles: 240 } );
 			const drops = emitter();
 			const splats = emitter();
-			const colours = [ 0xff2d95, 0x18d4ff, 0xffd400, 0x7cff2e, 0x9b5cff ];
+			// Inks, rich and dark enough to read as ink on a pale road (no lime or yellow: that's
+			// slime's).
+			const colours = [ 0xff2d95, 0x18c8ff, 0x7a3dff, 0x2f5bff, 0xe0249a ];
+			const grey = new Color( 0x666666 );
 			let f = null;
 			let colour = 0;
 			let squirt = 0;
+			let jet = 1;
+			// How long a drop thrown up at `up` m/s takes to come down to the road from the exhaust (it
+			// lands as it dies, see died).
+			const landing = up => {
+
+				const g = batch.gravity;
+				const high = Math.max( 0.05, _a.subVectors( f.nozzle, f.ground ).dot( f.up ) );
+				return Math.min( 0.8, Math.max( 0.15, ( up + Math.sqrt( up * up + 2 * g * high ) ) / g ) );
+
+			};
 			const drop = k => {
 
-				const p = batch.spawn( 0.3 + Math.random() * 0.2 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, 0, p.position );
-				thrown( f, p, 0.65, 3.5 + Math.random() * 2, 1.4, 1 );
-				p.frame = SHAPES.drop;
-				p.size = ( 0.07 + Math.random() * 0.06 ) * f.scale;
-				p.colour.set( colours[ colour ] );
+				const twin = overdrive( f ) > 0;
+				const up = twin ? 0.3 : 1.4;
+				const p = batch.spawn( landing( up ) );
+				if ( twin ) {
+
+					// Two tight ropes, one from each side, in two colours.
+					jet = - jet;
+					nozzleAt( f, k, jet * 0.3 * f.size.width, 0, p.position );
+					thrown( f, p, 0.9, 6, up, 0.3 );
+					p.colour.set( colours[ ( colour + ( jet > 0 ? 2 : 0 ) ) % colours.length ] );
+
+				} else {
+
+					nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, 0, p.position );
+					thrown( f, p, 0.92, 3 + Math.random() * 2, up, 1 );
+					p.colour.set( colours[ colour ] );
+
+				}
+
+				p.mode = ALONG;
+				// Twin jets are tight ropes of it; otherwise strings of drops.
+				p.frame = twin ? SHAPES.streak : SHAPES.drop;
+				p.size = ( twin ? 0.05 : 0.08 + Math.random() * 0.04 ) * f.scale;
 				p.fall = 1;
+				return p;
 
 			};
 			const splat = () => {
 
-				const p = onRoad( batch, f, 0.35 + Math.random() * 0.35, 5 );
+				const p = onRoad( batch, f, 0.25 + Math.random() * 0.2, 5, 2.5 );
 				p.colour.set( colours[ colour ] );
 				p.kind = 1;
 
@@ -1710,8 +2743,29 @@ const STYLES = {
 			const hooks = {
 				look( p, t, view ) {
 
-					// Splats stay as they are until their last second, then fade; drops don't fade.
+					// A drop is drawn as a string along the way it flies.
+					if ( p.kind === 0 ) {
+
+						p.axis.copy( p.velocity ).multiplyScalar( 0.035 );
+						if ( p.axis.lengthSq() < 0.0036 ) p.axis.setLength( 0.06 );
+
+					}
+
+					// Splats stay as they are until their last second, then fade; drops don't fade. Either,
+					// well behind it, fades out before it's under the chase camera: left on the road at
+					// speed, a splat there is a huge flat blot over the bottom of the view.
 					view.alpha = p.kind === 1 ? Math.min( 1, p.life - p.age ) : 1;
+					const behind = _a.subVectors( view.position, f.middle ).dot( f.back ) / f.scale;
+					if ( behind > 2.2 ) view.alpha *= Math.max( 0, ( 3.2 - behind ) );
+
+				},
+				// A drop that comes down on the road it's on splats there.
+				died( p ) {
+
+					if ( p.kind !== 0 || ! f.grounded || _a.subVectors( p.position, f.ground ).dot( f.up ) > 0.35 ) return;
+					const splat = splatAt( batch, f, p.position, 0.22, 4, overdrive( f ) > 0 ? 3 : 2.5 );
+					splat.colour.copy( p.colour );
+					splat.kind = 1;
 
 				},
 			};
@@ -1720,6 +2774,7 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
 					batch.begin();
 					// A new colour every half a second or so of boosting.
 					squirt += frame.dt * frame.power;
@@ -1730,8 +2785,8 @@ const STYLES = {
 
 					}
 
-					drops( frame.power, frame.dt, 46, drop );
-					splats( frame.grounded ? frame.power : 0, frame.dt, 13, splat );
+					drops( fl, frame.dt, ( overdrive( frame ) > 0 ? 70 : 46 ) * frame.detail, drop );
+					splats( frame.grounded ? fl : 0, frame.dt, 10 * frame.detail, splat );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -1749,10 +2804,37 @@ const STYLES = {
 						p.size = ( 0.08 + Math.random() * 0.08 ) * frame.scale;
 						p.colour.set( colours[ colour ] );
 						p.fall = 1;
+						// Round blobs, not strings: a splash.
+						p.kind = 2;
 
 					}
 
 					if ( frame.grounded ) for ( let i = 0; i < 3; i ++ ) splat();
+
+				},
+				// Let go: a drip, a few drops dribbling out, and a last blot on the road. Run dry, the
+				// blot's half grey: the paint's run out.
+				cool( frame, dry ) {
+
+					f = frame;
+					for ( let i = 0; i < 8; i ++ ) {
+
+						const p = batch.spawn( Math.min( 0.6, landing( 0.6 ) + i * 0.04 ) );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.4 * frame.scale );
+						thrown( frame, p, 0.95, 0.6, 0.6, 0.4 );
+						p.mode = ALONG;
+						p.frame = SHAPES.drop;
+						p.size = 0.08 * frame.scale;
+						p.colour.set( colours[ colour ] );
+						p.fall = 1;
+
+					}
+
+					if ( ! frame.grounded ) return;
+					const blot = onRoad( batch, frame, 0.45, 5, 2 );
+					blot.colour.set( colours[ colour ] );
+					if ( dry ) blot.colour.lerp( grey, 0.5 );
+					blot.kind = 1;
 
 				},
 			};
@@ -1760,39 +2842,114 @@ const STYLES = {
 		},
 	},
 
-	// Neon rings: glowing hoops thrown out behind, flat across the way it's going, so the camera
-	// looks through them, widening as they fade.
+	// Neon rings: glowing double hoops thrown out behind in threes, to a beat, flat across the way it's
+	// going, so the camera looks through them, widening as they fade. In overdrive, a warp tunnel of
+	// them walking through the hues; let go, the last hoops implode.
 	rings: {
 		flame: { halo: 0x6ff6ff, length: 0.5, flicker: 0.8 },
 		tint: 0x6ff6ff,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 40, blending: AdditiveBlending } );
-			const rings = emitter();
+			const batch = new Batch( root, { particles: 70, blending: AdditiveBlending } );
+			const tunnel = emitter();
 			const colours = [ 0x3df2ff, 0xff3df0, 0x9dff3d, 0x8f6bff ];
 			let f = null;
 			let n = 0;
-			const ring = k => {
+			let group = 0;
+			let groupDue = 0;
+			let ringDue = 0;
+			let left = 0;
+			let shock = false;
+			// A hoop (kind 0), with a thinner one inside it (1); in the tunnel (2) alone.
+			const hoop = ( k, size, grow, inherit, back, life, alpha ) => {
 
-				const p = batch.spawn( 0.6 );
-				nozzleAt( f, k, 0, 0, p.position );
-				thrown( f, p, 0.9, 3, 0, 0 );
+				const p = batch.spawn( life );
+				nozzleAt( f, k, 0, 0.32 * f.scale, p.position );
+				thrown( f, p, inherit, back, 0, 0 );
 				p.axis.copy( f.back );
 				p.mode = FLAT;
 				p.frame = SHAPES.ring;
-				p.size = 0.3 * f.scale;
-				p.grow = 0.9 * f.scale;
-				p.colour.set( colours[ n ++ % colours.length ] );
+				p.size = size * f.scale;
+				p.grow = grow * f.scale;
+				p.alpha = alpha;
+				return p;
 
+			};
+			// (Slower, and lasting longer, for a visitor asking for less motion.)
+			const double = alpha => {
+
+				const colour = colours[ group % colours.length ];
+				const life = f.calm ? 1 : 0.6;
+				hoop( 1, 0.36, 0.9, 0.9, 3, life, alpha ).colour.set( colour );
+				const inner = hoop( 1, 0.36 * 0.6, 0.9 * 0.6, 0.9, 3, life, 0.6 * alpha );
+				inner.colour.set( colour );
+				inner.kind = 1;
+
+			};
+			const warp = k => {
+
+				// Ring and shock wave by turns (rings alone for a visitor asking for less motion), kept close
+				// up with it (any further back and at overdrive's speed they'd pile up over the chase
+				// camera and white out the view), fainter the more there are.
+				shock = ! shock && ! f.calm;
+				// (Faint: added up, a second's worth of them round it is a bright aura over the driver.)
+				// (And from a little behind its exhaust, so they ring the trail rather than the driver.)
+				const p = hoop( k, 0.45, 0.1, 0.995, 1.5, 0.9, 0.24 );
+				p.position.addScaledVector( f.back, 0.5 * f.scale );
+				p.colour.setHSL( n ++ * 0.04 % 1, 1, 0.6 );
+				if ( shock ) p.frame = SHAPES.shock;
+				p.kind = 2;
+
+			};
+			// Any hoop well behind it fades before the chase camera is inside it: a ring flat across
+			// the view, that near the lens, is a band of colour over the bottom of it.
+			const hooks = {
+				look( p, t, view ) {
+
+					const behind = _a.subVectors( view.position, f.middle ).dot( f.back ) / f.scale;
+					if ( behind > 2 ) view.alpha *= Math.max( 0, 3 - behind );
+
+				},
 			};
 			return {
 				batches: [ batch ],
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
+					const h = overdrive( frame );
 					batch.begin();
-					rings( frame.power, frame.dt, 15, ring );
-					batch.update( frame.dt );
+					// To a beat: three hoops a few hundredths of a second apart, a little over twice a second
+					// (slower for a visitor asking for less motion), each three in one colour.
+					if ( fl > 0.01 && h === 0 ) {
+
+						groupDue -= frame.dt;
+						if ( groupDue <= 0 ) {
+
+							groupDue += frame.calm ? 1 / 1.5 : 1 / 2.3;
+							left = 3;
+							ringDue = 0;
+							group ++;
+
+						}
+
+					} else groupDue = left = 0;
+					if ( left > 0 ) {
+
+						ringDue -= frame.dt;
+						if ( ringDue <= 0 ) {
+
+							ringDue += 0.06;
+							left --;
+							double( fl );
+
+						}
+
+					}
+
+					// Overdrive: a tunnel of them, walking through the hues.
+					tunnel( h > 0 ? fl : 0, frame.dt, ( frame.calm ? 16 : 26 ) * frame.detail, warp );
+					batch.update( frame.dt, hooks );
 
 				},
 				// Lit: three hoops at once, one inside the next, thrown out wider and faster than the rest.
@@ -1813,24 +2970,57 @@ const STYLES = {
 					}
 
 				},
+				// Let go: the last three hoops implode. Run dry, one big faint ring.
+				cool( frame, dry ) {
+
+					f = frame;
+					for ( let i = 0; i < 3; i ++ ) {
+
+						let youngest = null;
+						for ( const p of batch.items ) if ( p.age < p.life && p.kind !== 3 && ( ! youngest || p.age < youngest.age ) ) youngest = p;
+						if ( ! youngest ) break;
+						youngest.grow = - youngest.size;
+						youngest.life = youngest.age + 0.35;
+						youngest.kind = 3;
+
+					}
+
+					if ( ! dry ) return;
+					const p = batch.spawn( 0.7 );
+					p.position.copy( frame.nozzle );
+					thrown( frame, p, 0.95, 1, 0, 0 );
+					p.axis.copy( frame.back );
+					p.mode = FLAT;
+					p.frame = SHAPES.ring;
+					p.size = 0.3 * frame.scale;
+					p.grow = 2.4 * frame.scale;
+					p.colour.set( colours[ group % colours.length ] );
+					p.alpha = 0.4;
+					p.kind = 3;
+
+				},
 			};
 
 		},
 	},
 
-	// A comet: a bright white-blue head at the exhaust and a long glowing tail that narrows and
-	// fades behind it, with a dust of sparks.
+	// A comet: a small bright head in a faint blue coma at the exhaust, a straight blue ion tail and
+	// a long curving tail of dust that narrows and fades behind it, with a dust of sparks. In
+	// overdrive, perihelion: the tails longer and brighter and a flare across the head; let go, it
+	// breaks up.
 	comet: {
 		flame: { outer: 0x7fd8ff, inner: 0xffffff, halo: 0xd6f4ff, length: 0.45, flicker: 0.6 },
 		tint: 0xd6f4ff,
+		ember: 0x7fa8ff,
+		ash: 0x2a3050,
 		make( root ) {
 
-			// The tail's points, round a ring: one every STEP s, laid at the exhaust and drifting
-			// after the vehicle for LIFE s.
+			// The dust tail's points, round a ring: laid at the exhaust and drifting after the vehicle
+			// for `life` s (longer in overdrive), as many as there are spread over that. The ion tail,
+			// ION strips straight back.
 			const TAIL = 40;
-			const STEP = 1 / 50;
-			const LIFE = 0.7;
-			const batch = new Batch( root, { particles: 60, quads: TAIL + 1, blending: AdditiveBlending } );
+			const ION = 6;
+			const batch = new Batch( root, { particles: 60, quads: 50, blending: AdditiveBlending } );
 			const dust = emitter();
 			const tail = Array.from( { length: TAIL }, () => ( { at: new Vector3(), velocity: new Vector3(), born: - Infinity, width: 0 } ) );
 			// The tail's points are in the scene too.
@@ -1844,8 +3034,13 @@ const STYLES = {
 				}
 
 			};
-			const white = new Color( 0xeaffff );
-			const blue = new Color( 0x4a6dff );
+			const white = new Color( 0xc8f2ff );
+			const pale = new Color( 0xcfe6ff );
+			const blue = new Color( 0x3a5cff );
+			const coma = new Color( 0x7fa8ff );
+			const ionNear = new Color( 0x5a8cff );
+			const ionFar = new Color( 0x2a46e0 );
+			const ionHot = new Color( 0xdff4ff );
 			const colour = new Color();
 			const axis = new Vector3();
 			const middle = new Vector3();
@@ -1856,57 +3051,87 @@ const STYLES = {
 
 				const p = batch.spawn( 0.35 + Math.random() * 0.25 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.4 * f.scale, ( Math.random() - 0.5 ) * 0.4 * f.scale, p.position );
-				thrown( f, p, 0.7, 3, 0, 1.2 );
+				thrown( f, p, 0.7 + 0.2 * f.hot, 3, 0, 1.2 );
 				p.size = ( 0.05 + Math.random() * 0.05 ) * f.scale;
-				p.colour.set( Math.random() < 0.5 ? 0xbfe8ff : 0xffffff );
+				// Ice and dust: blue and gold, so they show over a pale road and among the speed lines.
+				p.colour.set( Math.random() < 0.5 ? 0x5fb8ff : 0xffcf6a );
 
+			};
+			const hooks = {
+				look( p, t, view ) {
+
+					if ( p.kind === 1 ) TWINKLE.look( p, t, view );
+
+				},
 			};
 			return {
 				batches: [ batch ],
 				update( frame ) {
 
 					f = frame;
-					const { clock, dt } = frame;
+					const { clock, dt, scale, hot } = frame;
+					const fl = flow( frame );
+					const life = 0.7 + 0.35 * hot;
 					batch.begin();
 					for ( const point of tail ) point.at.addScaledVector( point.velocity, dt );
-					if ( frame.power > 0 ) {
+					if ( fl > 0.01 ) {
 
 						due -= dt;
 						if ( due <= 0 ) {
 
-							due = STEP;
+							due = life / ( TAIL - 4 );
 							head = ( head + 1 ) % TAIL;
-							tail[ head ].born = clock;
-							tail[ head ].velocity.copy( frame.velocity ).multiplyScalar( 0.62 ).addScaledVector( frame.back, 5 );
-							tail[ head ].width = 0.32 * frame.scale * ( 0.5 + 0.5 * frame.power );
+							const point = tail[ head ];
+							point.born = clock;
+							// Curving away behind it as the solar wind would have it.
+							point.velocity.copy( frame.velocity ).multiplyScalar( 0.62 ).addScaledVector( frame.back, 5 )
+								.addScaledVector( frame.right, 0.8 * Math.sin( clock * 1.3 ) ).addScaledVector( frame.up, 0.6 );
+							point.width = 0.32 * scale * ( 0.5 + 0.5 * fl ) * ( 1 + 0.25 * hot );
 
 						}
 
 						// Kept at the exhaust until the next is laid, so the tail stays on it.
 						tail[ head ].at.copy( frame.nozzle );
-						// The head: a glow that throbs.
-						const throb = 0.6 * frame.scale * ( 0.9 + 0.15 * Math.sin( clock * 31 ) );
-						batch.put( frame.nozzle, frame.up, FACING, throb, throb, 0, SHAPES.glow, white, 0.9 * frame.power );
+						// The head: a faint coma, a glow that throbs (steady for a visitor asking for less
+						// motion) and a white nucleus.
+						const throb = frame.calm ? 1 : 0.9 + 0.15 * Math.sin( clock * 31 );
+						batch.put( frame.nozzle, frame.up, FACING, 0.55 * scale, 0.55 * scale, 0, SHAPES.soft, coma, 0.25 * fl );
+						batch.put( frame.nozzle, frame.up, FACING, 0.34 * scale * throb, 0.34 * scale * throb, 0, SHAPES.glow, pale, 0.75 * fl );
+						batch.put( frame.nozzle, frame.up, FACING, 0.12 * scale, 0.12 * scale, 0, SHAPES.glow, white, fl );
+						// Overdrive: a flare across the head.
+						if ( hot > 0 && ! frame.calm ) batch.put( frame.nozzle, frame.up, FACING, 0.7 * scale, 0.7 * scale * 0.25, 0, SHAPES.flare, white, 0.45 * hot * fl );
+						// The ion tail: straight back, blue, deeper down it (paler and longer in overdrive).
+						const length = ( 1.2 + 1.6 * fl + 1.5 * hot ) * scale / ION;
+						for ( let i = 0; i < ION; i ++ ) {
+
+							middle.copy( frame.nozzle ).addScaledVector( frame.back, length * ( i + 0.5 ) );
+							axis.copy( frame.back ).multiplyScalar( length / 2 );
+							colour.lerpColors( ionNear, ionFar, i / ( ION - 1 ) ).lerp( ionHot, hot * 0.7 );
+							const shimmer = frame.calm ? 1 : 0.85 + 0.15 * Math.sin( clock * 40 + i );
+							batch.put( middle, axis, ALONG, 0.07 * scale * ( 1 + 0.5 * hot ) * ( 1 - 0.5 * i / ION ), 1, 0, SHAPES.streak, colour, 0.55 * fl * shimmer * ( 1 - 0.6 * i / ION ) );
+
+						}
 
 					} else due = 0;
 
-					// The tail, newest to oldest: a strip from each point to the next, narrowing and
-					// going from white to blue as it ages.
+					// The dust tail, newest to oldest: a strip from each point to the next, narrowing and
+					// going from white to blue as it ages (blue soon; sooner and fainter in overdrive, where
+					// the ion tail is the white of it, so the two don't pile up to a white-out).
 					for ( let i = 0; i < TAIL - 1; i ++ ) {
 
 						const a = tail[ ( head - i + TAIL ) % TAIL ];
 						const b = tail[ ( head - i - 1 + TAIL ) % TAIL ];
-						const t = ( clock - b.born ) / LIFE;
+						const t = ( clock - b.born ) / life;
 						if ( t > 1 ) break;
 						middle.addVectors( a.at, b.at ).multiplyScalar( 0.5 );
 						axis.subVectors( a.at, b.at ).multiplyScalar( 0.5 );
-						colour.lerpColors( white, blue, t );
-						batch.put( middle, axis, ALONG, b.width * ( 1 - t ) ** 0.7, 1, 0, SHAPES.streak, colour, ( 1 - t ) * 0.95 );
+						colour.lerpColors( white, blue, Math.min( 1, Math.sqrt( t ) * ( 1.8 + hot ) ) );
+						batch.put( middle, axis, ALONG, b.width * ( 1 - t ) ** 0.7, 1, 0, SHAPES.streak, colour, ( 1 - t ) * ( 0.95 - 0.3 * hot ) );
 
 					}
 
-					dust( frame.power, dt, 55, speck );
-					batch.update( dt );
+					dust( fl, dt, ( 55 + 60 * hot ) * frame.detail, speck );
+					batch.update( dt, hooks );
 
 				},
 				// Lit: its head flares up (not for a visitor asking for less motion), and a shower of
@@ -1919,8 +3144,8 @@ const STYLES = {
 						flare.position.copy( frame.nozzle );
 						flare.carry.copy( frame.velocity );
 						flare.frame = SHAPES.glow;
-						flare.size = 0.7 * frame.scale;
-						flare.grow = 0.4 * frame.scale;
+						flare.size = 0.45 * frame.scale;
+						flare.grow = 0.3 * frame.scale;
 						flare.colour.copy( white );
 
 					}
@@ -1937,58 +3162,225 @@ const STYLES = {
 					}
 
 				},
+				// Let go: it breaks up, twinkling fragments flung off its head as its tail drifts away.
+				cool( frame, dry, detail ) {
+
+					f = frame;
+					for ( let i = Math.round( 5 + 3 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.6 );
+						p.position.copy( frame.nozzle );
+						flung( frame, p, 0.85, 1.6, 1.5 );
+						p.frame = SHAPES.star;
+						p.size = ( 0.05 + Math.random() * 0.04 ) * frame.scale;
+						p.colour.set( 0xdff4ff );
+						p.kind = 1;
+
+					}
+
+				},
 			};
 
 		},
 	},
 
-	// Music notes: eighth notes and beamed pairs in bright colours, rising and swaying away and all
-	// bobbing together to one beat.
+	// Music notes: eighth notes and beamed pairs in bright colours rising and swaying away off a staff
+	// that ripples out behind it, all bobbing together to one beat. In overdrive, double time and
+	// chords, with a speaker's thump; let go, a fermata (run dry, a sour note). With no air there's
+	// no sound: the notes are faint and hang still.
 	notes: {
 		flame: { halo: 0xfff0b0, length: 0.5, flicker: 0.6 },
 		tint: 0xfff0b0,
+		ember: 0xfff0b0,
+		ash: 0x6a6050,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 70 } );
+			// The staff's points, round a ring: one every STEP s, laid over the exhaust and drifting
+			// after the vehicle for LIFE s; LINES lines along them.
+			const STAFF = 12;
+			const LIFE = 0.7;
+			const STEP = LIFE / ( STAFF - 1 );
+			const LINES = 5;
+			const batch = new Batch( root, { particles: 90, quads: ( STAFF - 1 ) * LINES } );
 			const notes = emitter();
 			const colours = [ 0xff4d8d, 0x3dbdff, 0xffc21a, 0x4ddc6b, 0xa86bff, 0xff8a3d ];
+			const staff = Array.from( { length: STAFF }, () => ( { at: new Vector3(), velocity: new Vector3(), born: - Infinity } ) );
+			// The staff's points are in the scene too (as the comet's tail's).
+			batch.onTransform = ( matrix, turn ) => {
+
+				for ( const point of staff ) {
+
+					point.at.applyMatrix4( matrix );
+					point.velocity.applyQuaternion( turn );
+
+				}
+
+			};
+			// Inked dark, so it reads on a light road or a pale sky alike.
+			const ink = new Color( 0x2a2440 );
+			const axis = new Vector3();
+			const middle = new Vector3();
+			const a = new Vector3();
+			const b = new Vector3();
 			let f = null;
 			let n = 0;
 			let beat = 0;
+			let phase = 0;
+			let beats = 0;
+			let head = 0;
+			let due = 0;
 			const note = k => {
 
 				const p = batch.spawn( 1.2 + Math.random() * 0.4 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.88, 1.6 + Math.random(), 1.1, 0.5 );
+				// On a line or in a space of the staff.
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( 0.15 + ( Math.round( Math.random() * 8 ) - 4 ) * 0.0225 ) * f.scale, p.position );
+				thrown( f, p, 0.88, 1.6 + Math.random(), f.air ? 1.1 : 0.3, 0.5 );
 				p.frame = Math.random() < 0.6 ? SHAPES.note : SHAPES.notes;
 				p.size = ( 0.12 + Math.random() * 0.06 ) * f.scale;
 				p.colour.set( colours[ n ++ % colours.length ] );
-				p.fall = - 0.06;
-				p.drag = 1.1;
+				// Silent with no air: faint, and hanging where it's left.
+				p.fall = f.air ? - 0.06 : 0;
+				p.drag = f.air ? 1.1 : 0;
+				p.alpha = f.air ? 1 : 0.35;
 				return p;
 
 			};
 			const hooks = {
-				step: ( p, dt ) => p.velocity.addScaledVector( f.right, Math.sin( p.age * 3.5 + p.phase ) * 1.4 * dt ),
-				look( p, t, view ) {
+				step( p, dt ) {
 
-					view.sx *= 1 + beat * 0.25;
-					view.sy = view.sx;
-					view.turn = 0.3 * Math.sin( p.age * 3 + p.phase );
-					view.alpha = t < 0.7 ? 1 : ( 1 - t ) / 0.3;
+					if ( p.kind === 0 && f.air ) p.velocity.addScaledVector( f.right, Math.sin( p.age * 3.5 + p.phase ) * 1.4 * dt );
 
 				},
+				look( p, t, view ) {
+
+					if ( p.kind === 2 ) return;
+					if ( p.kind === 4 ) {
+
+						view.alpha = p.alpha * ( 1 - t ) ** 1.5;
+						return;
+
+					}
+
+					if ( f.air && p.kind !== 3 ) view.sx *= 1 + beat * 0.25;
+					view.sy = view.sx;
+					// A sour note swings, sagging (not for a visitor asking for less motion).
+					if ( p.kind === 3 ) view.turn = f.calm ? 0.3 : 0.6 * Math.sin( p.age * 5 + p.phase );
+					else if ( p.kind === 0 && f.air ) view.turn = 0.3 * Math.sin( p.age * 3 + p.phase );
+					view.alpha = p.alpha * ( t < 0.7 ? 1 : ( 1 - t ) / 0.3 );
+
+				},
+			};
+			// Notes stacked as a chord, `count` of them.
+			const chord = count => {
+
+				for ( let i = 0; i < count; i ++ ) {
+
+					const p = note( 1 );
+					// Stacked a little behind it and drifting back, not piled on the driver.
+					p.position.copy( f.nozzle ).addScaledVector( f.back, 0.4 * f.scale ).addScaledVector( f.up, ( 0.1 + i * 0.12 ) * f.scale );
+					p.carry.copy( f.velocity ).multiplyScalar( 0.85 );
+					p.velocity.copy( f.back ).multiplyScalar( 1.5 ).addScaledVector( f.up, f.air ? 0.3 : 0 );
+					p.frame = SHAPES.note;
+					p.size *= 1.25;
+					p.colour.set( colours[ ( beats + i * 2 ) % colours.length ] );
+
+				}
+
 			};
 			return {
 				batches: [ batch ],
 				update( frame ) {
 
 					f = frame;
-					// Two beats a second, a quick swell on each.
-					beat = Math.max( 0, Math.sin( frame.clock * Math.PI * 4 ) ) ** 6;
+					const { clock, dt, scale, hot } = frame;
+					const fl = flow( frame );
+					// Two beats a second, a quick swell on each; double time in overdrive.
+					const was = Math.floor( phase / ( Math.PI * 2 ) );
+					phase += dt * Math.PI * ( 4 + 4 * hot );
+					beat = Math.max( 0, Math.sin( phase ) ) ** 6;
+					if ( Math.floor( phase / ( Math.PI * 2 ) ) !== was ) {
+
+						beats ++;
+						if ( hot > 0.5 && fl > 0.01 && frame.air ) {
+
+							chord( frame.detail < 1 ? 2 : 3 );
+							if ( ! frame.calm ) {
+
+								const thump = batch.spawn( 0.3 );
+								thump.position.copy( frame.nozzle );
+								thump.carry.copy( frame.velocity ).multiplyScalar( 0.95 );
+								thump.axis.copy( frame.back );
+								thump.mode = FLAT;
+								thump.frame = SHAPES.ring;
+								thump.size = 0.2 * scale;
+								thump.grow = 0.9 * scale;
+								thump.colour.set( 0xfff0b0 );
+								thump.alpha = 0.5;
+								thump.kind = 4;
+
+							}
+
+						}
+
+					}
+
 					batch.begin();
-					notes( frame.power, frame.dt, 24, note );
-					batch.update( frame.dt, hooks );
+					// The staff, laid just behind the exhaust and rippling out behind it (never carried on
+					// faster than it's going now, so it can't overtake it as it slows).
+					const ahead = _r.copy( frame.back ).negate();
+					const most = Math.max( 0, frame.velocity.dot( ahead ) );
+					for ( const point of staff ) {
+
+						const over = point.velocity.dot( ahead ) - most;
+						if ( over > 0 ) point.velocity.addScaledVector( ahead, - over );
+						point.at.addScaledVector( point.velocity, dt );
+
+					}
+					if ( fl > 0.01 ) {
+
+						due -= dt;
+						if ( due <= 0 ) {
+
+							due = STEP;
+							head = ( head + 1 ) % STAFF;
+							staff[ head ].born = clock;
+							staff[ head ].velocity.copy( frame.velocity ).multiplyScalar( 0.97 ).addScaledVector( frame.back, 2 );
+
+						}
+
+						staff[ head ].at.copy( frame.nozzle ).addScaledVector( frame.back, 0.3 * scale ).addScaledVector( frame.up, 0.15 * scale );
+
+					} else due = 0;
+					const lines = frame.detail < 1 ? 3 : LINES;
+					const width = ( 0.038 + 0.007 * hot ) * scale;
+					const bright = 0.7 + 0.15 * hot;
+					const wave = 0.12 * scale * ( frame.calm ? 0.5 : 1 );
+					for ( let i = 0; i < STAFF - 1; i ++ ) {
+
+						const p = staff[ ( head - i + STAFF ) % STAFF ];
+						const q = staff[ ( head - i - 1 + STAFF ) % STAFF ];
+						const t = ( clock - q.born ) / LIFE;
+						if ( t > 1 ) break;
+						// A ripple running back along it.
+						const sp = wave * Math.sin( clock * 6 - ( clock - p.born ) * 10 );
+						const sq = wave * Math.sin( clock * 6 - ( clock - q.born ) * 10 );
+						for ( let j = 0; j < lines; j ++ ) {
+
+							// Its lines side by side, lying back along the road like lanes, so the chase
+							// camera, looking down on them, sees all five (stacked up, they'd be end on).
+							const off = ( lines === LINES ? j - 2 : ( j - 1 ) * 2 ) * 0.08 * scale;
+							a.copy( p.at ).addScaledVector( frame.right, off ).addScaledVector( frame.up, sp );
+							b.copy( q.at ).addScaledVector( frame.right, off ).addScaledVector( frame.up, sq );
+							middle.addVectors( a, b ).multiplyScalar( 0.5 );
+							axis.subVectors( a, b ).multiplyScalar( 0.5 );
+							batch.put( middle, axis, ALONG, width, 1, 0, SHAPES.streak, ink, bright * ( 1 - t ) * fl );
+
+						}
+
+					}
+
+					notes( fl, dt, 24 * frame.detail, note );
+					batch.update( dt, hooks );
 
 				},
 				// Lit: a chord, a ring of notes thrown out round the exhaust, then rising and swaying away.
@@ -2009,48 +3401,157 @@ const STYLES = {
 					}
 
 				},
+				// Let go: a fermata, a double bar line at the end of the staff, and the notes hold, rising
+				// still. Run dry instead: a sour note, three grey notes drooping out of it.
+				cool( frame, dry ) {
+
+					f = frame;
+					if ( dry ) {
+
+						for ( let i = 0; i < 3; i ++ ) {
+
+							const p = note( 1 );
+							p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( i - 1 ) * 0.12 * frame.scale );
+							p.velocity.copy( frame.back ).multiplyScalar( 0.8 );
+							p.colour.set( 0x8a8f99 );
+							p.fall = 0.5;
+							p.kind = 3;
+
+						}
+
+						return;
+
+					}
+
+					for ( const p of batch.items ) if ( p.age < p.life && p.kind === 0 ) {
+
+						p.kind = 1;
+						p.fall = frame.air ? - 0.15 : 0;
+
+					}
+
+					const end = staff[ head ];
+					for ( let i = 0; i < 2; i ++ ) {
+
+						const p = batch.spawn( 0.6 );
+						p.position.copy( end.at ).addScaledVector( frame.back, ( 0.1 + i * 0.05 ) * frame.scale );
+						p.carry.copy( frame.velocity ).multiplyScalar( 0.9 );
+						p.mode = ALONG;
+						p.frame = SHAPES.streak;
+						p.axis.copy( frame.up ).multiplyScalar( 0.11 * frame.scale );
+						p.size = ( i ? 0.025 : 0.01 ) * frame.scale;
+						p.colour.copy( ink );
+						p.kind = 2;
+
+					}
+
+				},
 			};
 
 		},
 	},
 
-	// Cherry blossom: pink petals fluttering out behind, tumbling over and over as they drift down,
-	// and now and then a whole flower.
+	// Cherry blossom: pink petals whirling out behind in a soft pink haze, tumbling over and over as
+	// they drift down, and now and then a whole flower; a glow at the exhaust they blow out of. In
+	// overdrive, a storm of blossom (hanafubuki) off the cone of the shock as well; let go, petals
+	// settle round it and on the road.
 	petals: {
 		flame: null,
 		tint: 0xffc4dc,
+		ember: 0xffb3cf,
+		ash: 0x7a4a5a,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 170 } );
+			const batch = new Batch( root, { particles: 210, quads: 1 } );
 			const petals = emitter();
+			const storm = emitter();
+			const hazes = emitter();
 			const colours = [ 0xffc2da, 0xffadcc, 0xffe2ee, 0xfff4f8, 0xff97bf ];
+			const glow = new Color( 0xffc4dc );
+			const wilted = new Color( 0xc79aa8 );
 			const out = new Vector3();
 			const turn = new Vector3();
+			const r = new Vector3();
 			let f = null;
 			const petal = k => {
 
 				const p = batch.spawn( 1.3 + Math.random() * 0.6 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.7, ( Math.random() - 0.2 ) * 0.4 * f.scale, p.position );
-				thrown( f, p, 0.86, 1.5 + Math.random() * 1.5, 1.2, 1.4 );
+				thrown( f, p, 0.92, 1.5 + Math.random() * 1.5, 1.2, 1.4 );
 				const flower = Math.random() < 0.12;
 				p.frame = flower ? SHAPES.blossom : SHAPES.petal;
 				p.size = ( flower ? 0.09 + Math.random() * 0.04 : 0.05 + Math.random() * 0.035 ) * f.scale;
 				p.colour.set( pick( colours ) );
 				p.fall = 0.1;
-				p.drag = 1.4;
+				p.drag = f.air ? 1.4 : 0;
 				p.spin = ( Math.random() - 0.5 ) * ( flower ? 2 : 5 );
 				p.turn = Math.random() * Math.PI * 2;
 				p.kind = flower ? 1 : 0;
+				// A storm of them in overdrive doesn't last as long.
+				if ( f.hot > 0.3 ) p.life = Math.min( p.life, 1.1 );
 				return p;
 
 			};
+			// Overdrive: petals peeling off the cone of the shock round its body.
+			const gust = () => {
+
+				const p = petal( 1 );
+				const angle = Math.random() * Math.PI;
+				p.position.copy( f.middle ).addScaledVector( f.right, Math.cos( angle ) * f.size.width * 0.7 ).addScaledVector( f.up, Math.sin( angle ) * f.size.height * 0.7 );
+				thrown( f, p, 0.9, 1, 0.3, 0.8 );
+				p.aspect = 0.5;
+
+			};
+			const haze = k => {
+
+				const p = batch.spawn( 0.9 + Math.random() * 0.3 );
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.3 * f.scale, ( Math.random() - 0.3 ) * 0.2 * f.scale, p.position );
+				thrown( f, p, 0.92, 1.5, 0.3, 0.4 );
+				p.frame = SHAPES.puff;
+				p.size = 0.18 * f.scale;
+				p.grow = 0.5 * f.scale;
+				p.colour.set( f.hot > 0.3 ? 0xff97bf : 0xffd6e6 );
+				p.alpha = 0.22;
+				p.drag = 1.2;
+				p.turn = Math.random() * Math.PI * 2;
+				p.kind = 2;
+
+			};
 			const hooks = {
-				step: ( p, dt ) => p.velocity.addScaledVector( f.right, Math.sin( p.age * 5 + p.phase ) * 2 * dt ),
+				// Whirling round the exhaust's path as they drift back (with no air, they only fly).
+				step( p, dt ) {
+
+					if ( ! f.air || p.kind > 1 ) return;
+					p.velocity.addScaledVector( f.right, Math.sin( p.age * 5 + p.phase ) * 2 * dt );
+					r.subVectors( p.position, f.nozzle );
+					r.addScaledVector( f.back, - r.dot( f.back ) );
+					_a.crossVectors( f.back, r );
+					if ( _a.lengthSq() > 1e-6 ) p.velocity.addScaledVector( _a.normalize(), 3.5 * dt );
+					p.velocity.addScaledVector( r, - 0.6 * dt );
+
+				},
 				look( p, t, view ) {
 
-					// A petal tumbles over and over as it falls; a flower only turns.
-					if ( p.kind === 0 ) view.sy *= 0.3 + 0.7 * Math.abs( Math.cos( p.age * 6 + p.phase ) );
-					view.alpha = t < 0.75 ? 1 : ( 1 - t ) * 4;
+					if ( p.kind === 2 ) {
+
+						view.alpha = p.alpha * swell( t );
+						return;
+
+					}
+
+					if ( p.kind === 3 ) {
+
+						// Lying on the road, fading at the end.
+						view.alpha = p.alpha * Math.min( 1, ( p.life - p.age ) / 0.6 );
+						return;
+
+					}
+
+					// A petal tumbles over and over as it falls (twice as fast in a storm); a flower only
+					// turns.
+					const tumble = f.hot > 0.3 && ! f.calm ? 12 : 6;
+					if ( p.kind === 0 ) view.sy *= 0.3 + 0.7 * Math.abs( Math.cos( p.age * tumble + p.phase ) );
+					view.alpha = p.alpha * ( t < 0.75 ? 1 : ( 1 - t ) * 4 );
 
 				},
 			};
@@ -2059,8 +3560,14 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
+					const h = overdrive( frame );
 					batch.begin();
-					petals( frame.power, frame.dt, 75, petal );
+					// A glow at the exhaust, so a boost with no flame reads at the vehicle.
+					if ( fl > 0.01 ) batch.put( frame.nozzle, frame.up, FACING, 0.22 * frame.scale, 0.22 * frame.scale, 0, SHAPES.glow, glow, 0.6 * fl );
+					petals( fl, frame.dt, ( 75 + 70 * h ) * frame.detail, petal );
+					storm( h > 0 ? fl : 0, frame.dt, 25 * h, gust );
+					hazes( frame.air ? fl : 0, frame.dt, 10 * frame.detail, haze );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -2082,54 +3589,105 @@ const STYLES = {
 					}
 
 				},
+				// Let go: petals settle in a ring round the exhaust, and on the road a few lie where they
+				// fell. Run dry, one wilting flower drops out of it.
+				cool( frame, dry, detail ) {
+
+					f = frame;
+					const count = Math.round( 8 + 4 * detail );
+					for ( let i = 0; i < count; i ++ ) {
+
+						around( frame, i / count * Math.PI * 2, out );
+						const p = petal( 1 );
+						p.position.copy( frame.nozzle ).addScaledVector( out, 0.25 * frame.scale );
+						p.carry.copy( frame.velocity ).multiplyScalar( 0.92 );
+						p.velocity.copy( out ).multiplyScalar( 0.8 );
+						p.fall = 0.04;
+						p.drag = 3;
+
+					}
+
+					if ( frame.grounded ) for ( let i = 0; i < 6; i ++ ) {
+
+						const p = onRoad( batch, frame, 0.06, 2.2 );
+						p.frame = i ? SHAPES.petal : SHAPES.blossom;
+						p.size = ( i ? 0.06 : 0.1 ) * frame.scale;
+						p.aspect = 1;
+						p.colour.set( pick( colours ) );
+						p.alpha = 0.8;
+						p.kind = 3;
+
+					}
+
+					if ( ! dry ) return;
+					const p = petal( 1 );
+					p.position.copy( frame.nozzle );
+					p.velocity.copy( frame.back ).multiplyScalar( 0.5 );
+					p.frame = SHAPES.blossom;
+					p.size = 0.12 * frame.scale;
+					p.colour.lerp( wilted, 0.7 );
+					p.fall = 0.2;
+					p.spin = 1;
+					p.kind = 1;
+
+				},
 			};
 
 		},
 	},
 
-	// An afterburner: a jet's long blue-white cone with a row of shock diamonds burning in it, a rosy
-	// glow at its tail and a haze of blue sparks streaming off it.
+	// An afterburner: a jet's long blue-white cone with a row of shock diamonds burning in it, each
+	// with its Mach disk, a rosy glow at its tail and a haze of blue sparks streaming off it. In
+	// overdrive, reheat: more diamonds, further apart, a violet tail and a flare across the nozzle; let
+	// go, they collapse tail first, and run dry it stalls with a bang or two. With no air, a rocket's
+	// plume in a vacuum: no diamonds, a wide fading glow.
 	afterburner: {
-		flame: { outer: 0x2a46e0, inner: 0x4a6cf0, halo: 0x8fb0ff, length: 1.6, flicker: 0.35 },
+		flame: { outer: 0x2a46e0, inner: 0x4a6cf0, halo: 0x8fb0ff, length: 1.6, flicker: 0.35, diamonds: false },
 		tint: 0xa8c4ff,
 		make( root ) {
 
-			// The diamonds, put down each frame along the cone where it is now: DIAMONDS of them, each a
-			// lozenge along it and a glow.
-			const DIAMONDS = 5;
-			const batch = new Batch( root, { particles: 110, quads: DIAMONDS * 2, blending: AdditiveBlending } );
+			// The diamonds, put down each frame along the cone where it is now: up to DIAMONDS of them,
+			// each a lozenge along it, a glow and a ring across it (the Mach disk); and a flare.
+			const DIAMONDS = 7;
+			const batch = new Batch( root, { particles: 110, quads: DIAMONDS * 3 + 1, blending: AdditiveBlending } );
 			const sparks = emitter();
 			const tails = emitter();
 			const white = new Color( 0xf6f9ff );
 			const blue = new Color( 0x5f7dff );
+			const violet = new Color( 0x8a6cff );
+			const far = new Color();
 			const colour = new Color();
 			const at = new Vector3();
 			const axis = new Vector3();
 			let f = null;
+			let bangs = 0;
+			let bangDue = 0;
 			// A spark, its head first the way it flies.
 			const spark = k => {
 
 				const p = batch.spawn( 0.22 + Math.random() * 0.18 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.35 * f.scale, ( Math.random() - 0.5 ) * 0.35 * f.scale, p.position );
-				thrown( f, p, 0.9, 5 + Math.random() * 4, 0, 1.4 );
+				thrown( f, p, 0.9, 5 + 3 * f.hot + Math.random() * 4, 0, 1.4 );
 				p.mode = ALONG;
 				p.frame = SHAPES.spark;
 				p.axis.copy( f.back ).multiplyScalar( ( 0.08 + Math.random() * 0.08 ) * f.scale );
 				p.size = 0.025 * f.scale;
 				p.colour.set( Math.random() < 0.5 ? 0xa8c8ff : 0xffffff );
-				p.drag = 1.5;
+				p.drag = f.air ? 1.5 : 0;
 
 			};
-			// The cone's far end, glowing rose and violet as it cools.
+			// The cone's far end, glowing rose and violet as it cools (violet in overdrive).
 			const tail = k => {
 
 				const p = batch.spawn( 0.2 + Math.random() * 0.1 );
-				nozzleAt( f, k, 0, 0, p.position ).addScaledVector( f.back, 1.7 * f.scale * f.power );
+				// Where the flame's tip is (drive-fx.js draws its cone 0.45 of the vehicle's scale wide and
+				// 0.6 to 3.2 of that long as it burns, the afterburner's 1.6 times longer, 1.3 in overdrive).
+				nozzleAt( f, k, 0, 0, p.position ).addScaledVector( f.back, 0.45 * f.scale * ( 0.6 + ( f.lit ?? f.power ) * 2.6 ) * 1.6 * 0.95 * ( 1 + 0.3 * f.hot ) );
 				thrown( f, p, 0.95, 2, 0.2, 0.4 );
 				p.frame = SHAPES.glow;
-				p.size = 0.2 * f.scale;
+				p.size = ( 0.2 + 0.1 * f.hot ) * f.scale;
 				p.grow = 0.25 * f.scale;
-				p.colour.set( Math.random() < 0.5 ? 0xff7a8a : 0xb07cff );
+				p.colour.set( Math.random() < 0.5 - 0.4 * f.hot ? 0xff7a8a : 0xb07cff );
 				p.alpha = 0.45;
 
 			};
@@ -2138,24 +3696,85 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const { scale, hot, clock } = frame;
+					const fl = flow( frame );
 					batch.begin();
-					if ( frame.power > 0 ) for ( let i = 0; i < DIAMONDS; i ++ ) {
+					if ( fl > 0.01 && frame.air ) {
 
 						// Spaced down the cone, each a little smaller, bluer and fainter than the one before,
-						// and all throbbing a little.
-						const k = i / ( DIAMONDS - 1 );
-						at.copy( frame.nozzle ).addScaledVector( frame.back, ( 0.3 + i * 0.36 ) * frame.scale * ( 0.55 + 0.45 * frame.power ) );
-						axis.copy( frame.back ).multiplyScalar( 0.13 * frame.scale * ( 1 - 0.3 * k ) );
-						colour.lerpColors( white, blue, k * 0.8 );
-						const alpha = frame.power * ( 1 - 0.45 * k ) * ( 0.8 + 0.2 * Math.sin( frame.clock * 70 + i * 1.7 ) );
-						batch.put( at, axis, ALONG, 0.3 * frame.scale * ( 1 - 0.3 * k ), 1, 0, SHAPES.diamond, colour, alpha );
-						const glow = 0.11 * frame.scale * ( 1 - 0.3 * k );
-						batch.put( at, frame.up, FACING, glow, glow, 0, SHAPES.glow, colour, alpha * 0.7 );
+						// all throbbing a little (steady for a visitor asking for less motion), each with its
+						// Mach disk; more of them in overdrive, further apart, the first pure white and the
+						// last violet. Let go, they collapse tail first.
+						const count = Math.min( frame.detail < 1 ? 6 : DIAMONDS, 5 + Math.round( 2 * hot ) );
+						const spacing = 0.36 + 0.14 * hot;
+						far.lerpColors( blue, violet, hot );
+						for ( let i = 0; i < count && i < count * fl; i ++ ) {
+
+							const k = i / ( count - 1 );
+							at.copy( frame.nozzle ).addScaledVector( frame.back, ( 0.3 + i * spacing ) * scale * ( 0.55 + 0.45 * fl ) );
+							axis.copy( frame.back ).multiplyScalar( 0.13 * scale * ( 1 - 0.3 * k ) );
+							if ( i === 0 && hot > 0.3 ) colour.setHex( 0xffffff );
+							else colour.lerpColors( white, far, k * 0.8 );
+							const throb = frame.calm ? 1 : 0.8 + 0.2 * Math.sin( clock * 70 + i * 1.7 );
+							const alpha = fl * ( 1 - 0.45 * k ) * throb;
+							batch.put( at, axis, ALONG, 0.3 * scale * ( 1 - 0.3 * k ), 1, 0, SHAPES.diamond, colour, alpha );
+							const glow = 0.11 * scale * ( 1 - 0.3 * k );
+							batch.put( at, frame.up, FACING, glow, glow, 0, SHAPES.glow, colour, alpha * 0.7 );
+							if ( frame.detail >= 1 || i % 2 === 0 ) batch.put( at, frame.back, FLAT, glow, glow, 0, SHAPES.ring, colour, alpha * 0.35 );
+
+						}
+
+						// Overdrive: a flare across the nozzle.
+						if ( hot > 0 && ! frame.calm ) batch.put( frame.nozzle, frame.up, FACING, 0.8 * scale, 0.8 * scale * 0.2, 0, SHAPES.flare, white, 0.4 * hot * fl );
+
+					} else if ( fl > 0.01 ) {
+
+						// With no air: a plume in a vacuum, glows widening and fading out behind it.
+						for ( let i = 0; i < 3; i ++ ) {
+
+							at.copy( frame.nozzle ).addScaledVector( frame.back, ( 0.4 + 0.5 * i ) * scale );
+							const glow = VACUUM_SIZE[ i ] * scale;
+							batch.put( at, frame.up, FACING, glow, glow, 0, SHAPES.glow, far.lerpColors( white, blue, i / 2 ), VACUUM_ALPHA[ i ] * fl );
+
+						}
 
 					}
 
-					sparks( frame.power, frame.dt, 70, spark );
-					tails( frame.power, frame.dt, 30, tail );
+					sparks( fl, frame.dt, ( 70 + 50 * hot ) * frame.detail, spark );
+					tails( frame.air ? fl : 0, frame.dt, 30 * frame.detail, tail );
+					// Run dry: a compressor stall, a bang and another.
+					if ( bangs > 0 ) {
+
+						bangDue -= frame.dt;
+						if ( bangDue <= 0 ) {
+
+							bangs --;
+							bangDue = 0.12;
+							const bang = batch.spawn( 0.12 );
+							bang.position.copy( frame.nozzle );
+							bang.carry.copy( frame.velocity ).multiplyScalar( 0.95 );
+							bang.frame = SHAPES.glow;
+							bang.size = 0.5 * scale;
+							bang.colour.set( 0xffb070 );
+							if ( frame.air ) for ( let i = 0; i < 2; i ++ ) {
+
+								const puff = batch.spawn( 0.6 + Math.random() * 0.3 );
+								puff.position.copy( frame.nozzle );
+								flung( frame, puff, 0.9, 0.8, 1 );
+								puff.frame = SHAPES.puff;
+								puff.size = 0.15 * scale;
+								puff.grow = 0.6 * scale;
+								puff.colour.set( 0x3a3f4a );
+								puff.alpha = 0.35;
+								puff.drag = 1.5;
+								puff.turn = Math.random() * Math.PI * 2;
+
+							}
+
+						}
+
+					}
+
 					batch.update( frame.dt );
 
 				},
@@ -2204,35 +3823,66 @@ const STYLES = {
 					}
 
 				},
+				// Run dry: a compressor stall, two bangs a little apart with a puff of smoke (not for a
+				// visitor asking for less motion).
+				cool( frame, dry, detail, calm ) {
+
+					f = frame;
+					if ( ! dry || calm ) return;
+					bangs = 2;
+					bangDue = 0;
+
+				},
 			};
 
 		},
 	},
 
-	// Frost: snowflakes and glints of ice streaming out of a cold mist, as if the booster breathed out
-	// winter.
+	// Frost: snowflakes and glints of ice streaming out of a cold mist under a spinning crown of ice,
+	// frosting the road behind it, as if the booster breathed out winter. In overdrive, a blizzard;
+	// let go, the flakes freeze where they are and shatter. With no air, no mist: flash-frozen.
 	frost: {
 		flame: { halo: 0xc4f0ff, length: 0.5, flicker: 0.5 },
 		tint: 0xc4f0ff,
+		ember: 0x9fdcff,
+		ash: 0x5a6470,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 210 } );
+			const batch = new Batch( root, { particles: 240, quads: 1 } );
 			const flakes = emitter();
 			const mists = emitter();
 			const glints = emitter();
+			const rime = emitter();
 			const colours = [ 0xffffff, 0xe6f8ff, 0xcdeeff ];
+			const crown = new Color( 0xcdeeff );
 			const way = new Vector3();
 			let f = null;
+			let spin = 0;
+			let breaths = 0;
+			let breathDue = 0;
 			const flake = k => {
 
 				const p = batch.spawn( 1 + Math.random() * 0.6 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.3 ) * 0.4 * f.scale, p.position );
 				thrown( f, p, 0.88, 1.5 + Math.random() * 2, 0.5, 1 );
+				p.colour.set( pick( colours ) );
+				p.drag = f.air ? 1.1 : 0;
+				if ( Math.random() < f.hot * 0.6 ) {
+
+					// Driven snow: a streak of ice flying back.
+					thrown( f, p, 0.85, 4 + Math.random() * 2, 0.2, 0.6 );
+					p.life = 0.4;
+					p.mode = ALONG;
+					p.frame = SHAPES.shard;
+					p.axis.copy( f.back ).multiplyScalar( 0.18 * f.scale );
+					p.size = 0.05 * f.scale;
+					return p;
+
+				}
+
 				p.frame = SHAPES.snowflake;
 				p.size = ( 0.07 + Math.random() * 0.07 ) * f.scale;
-				p.colour.set( pick( colours ) );
 				p.fall = 0.06;
-				p.drag = 1.1;
 				p.spin = ( Math.random() - 0.5 ) * 3;
 				p.turn = Math.random() * Math.PI;
 				return p;
@@ -2245,9 +3895,9 @@ const STYLES = {
 				thrown( f, p, 0.9, 2 + Math.random(), 0.3, 0.5 );
 				p.frame = SHAPES.puff;
 				p.size = 0.16 * f.scale;
-				p.grow = 0.5 * f.scale;
-				p.colour.set( 0xdcf4ff );
-				p.alpha = 0.45;
+				p.grow = 0.7 * f.scale;
+				p.colour.set( 0xeaf8ff );
+				p.alpha = 0.6;
 				p.drag = 1.5;
 				p.spin = ( Math.random() - 0.5 ) * 1.2;
 				p.turn = Math.random() * Math.PI * 2;
@@ -2262,9 +3912,21 @@ const STYLES = {
 				thrown( f, p, 0.9, 2 + Math.random() * 2, 0.2, 1.4 );
 				p.frame = SHAPES.star;
 				p.size = ( 0.05 + Math.random() * 0.04 ) * f.scale;
-				p.colour.set( 0xffffff );
+				p.colour.set( Math.random() < f.hot * 0.5 ? 0x9fe8ff : 0xffffff );
 				p.drag = 1;
 				p.kind = 2;
+
+			};
+			// Frost left on the road behind it.
+			const hoar = () => {
+
+				const p = onRoad( batch, f, 0.1, 1.4 );
+				p.frame = Math.random() < 0.5 ? SHAPES.snowflake : SHAPES.shard;
+				p.size = ( 0.08 + Math.random() * 0.06 ) * f.scale;
+				p.aspect = 1;
+				p.colour.set( 0xe6f8ff );
+				p.alpha = 0.55;
+				p.kind = 3;
 
 			};
 			const hooks = {
@@ -2272,8 +3934,27 @@ const STYLES = {
 
 					if ( p.kind === 1 ) view.alpha = p.alpha * swell( t );
 					else if ( p.kind === 2 ) TWINKLE.look( p, t, view );
+					else if ( p.kind === 3 ) view.alpha = p.alpha * Math.min( 1, t * 8, ( 1 - t ) * 3 );
+					else if ( p.kind === 4 ) {
+
+						// Frozen where it was, then shattering into glints (fading, for a visitor asking for
+						// less motion).
+						const left = p.life - p.age;
+						if ( left < 0.35 ) {
+
+							if ( ! f.calm ) {
+
+								view.frame = SHAPES.star;
+								TWINKLE.look( p, t, view );
+
+							}
+
+							view.alpha = p.alpha * left / 0.35;
+
+						} else view.alpha = p.alpha;
+
 					// Flakes and shards stay white until they're nearly gone.
-					else view.alpha = p.alpha * ( t < 0.75 ? 1 : ( 1 - t ) * 4 );
+					} else view.alpha = p.alpha * ( t < 0.75 ? 1 : ( 1 - t ) * 4 );
 
 				},
 			};
@@ -2282,10 +3963,39 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
+					const { hot } = frame;
 					batch.begin();
-					mists( frame.power, frame.dt, 28, mist );
-					flakes( frame.power, frame.dt, 45, flake );
-					glints( frame.power, frame.dt, 50, glint );
+					// A crown of ice spinning across the exhaust, faster and bigger in overdrive (slower for a
+					// visitor asking for less motion).
+					spin += frame.dt * ( frame.calm ? 0.3 + 0.5 * hot : 0.8 + 2.2 * hot );
+					if ( fl > 0.01 ) {
+
+						const size = ( 0.16 + 0.1 * hot ) * frame.scale;
+						batch.put( frame.nozzle, frame.back, FLAT, size, size, spin, SHAPES.snowflake, crown, 0.5 * fl );
+
+					}
+
+					mists( frame.air ? fl : 0, frame.dt, ( 28 + 20 * hot ) * frame.detail, mist );
+					flakes( fl, frame.dt, ( 45 + 45 * hot ) * frame.detail, flake );
+					glints( fl, frame.dt, 50 * ( frame.air ? 1 : 1.5 ) * frame.detail, glint );
+					rime( frame.grounded ? fl : 0, frame.dt, 14 * frame.detail, hoar );
+					// Run dry: a last cold breath, three little puffs and a big one.
+					if ( breaths > 0 ) {
+
+						breathDue -= frame.dt;
+						if ( breathDue <= 0 ) {
+
+							breathDue = 0.1;
+							const p = mist( 1 );
+							p.size = ( breaths === 1 ? 0.3 : 0.1 ) * frame.scale;
+							p.grow = p.size * 2;
+							breaths --;
+
+						}
+
+					}
+
 					batch.update( frame.dt, hooks );
 
 				},
@@ -2310,7 +4020,7 @@ const STYLES = {
 
 					}
 
-					for ( let i = Math.round( 8 * detail ); i > 0; i -- ) flung( frame, mist( 1 ), 0.9, 1.6, 1 );
+					if ( frame.air ) for ( let i = Math.round( 8 * detail ); i > 0; i -- ) flung( frame, mist( 1 ), 0.9, 1.6, 1 );
 					for ( let i = Math.round( 26 * detail ); i > 0; i -- ) {
 
 						const p = flake( 1 );
@@ -2320,49 +4030,121 @@ const STYLES = {
 					}
 
 				},
+				// Let go: every flake freezes where it is, hangs a moment and shatters, and shards fly off
+				// the exhaust. Run dry, a last cold breath.
+				cool( frame, dry, detail ) {
+
+					f = frame;
+					for ( const p of batch.items ) if ( p.age < p.life && p.kind === 0 ) {
+
+						p.kind = 4;
+						p.drag = 6;
+						p.fall = 0;
+						p.spin = 0;
+						p.life = p.age + 0.6;
+
+					}
+
+					for ( let i = Math.round( 6 + 4 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.4 + Math.random() * 0.15 );
+						around( frame, Math.random() * Math.PI * 2, way ).addScaledVector( frame.back, 0.6 ).normalize();
+						p.position.copy( frame.nozzle ).addScaledVector( way, 0.15 * frame.scale );
+						p.carry.copy( frame.velocity ).multiplyScalar( 0.88 );
+						p.velocity.copy( way ).multiplyScalar( 2 );
+						p.mode = ALONG;
+						p.frame = SHAPES.shard;
+						p.axis.copy( way ).multiplyScalar( 0.12 * frame.scale );
+						p.size = 0.1 * frame.scale;
+						p.colour.set( 0xd8f4ff );
+						p.drag = 2.5;
+
+					}
+
+					if ( dry && frame.air ) {
+
+						breaths = 4;
+						breathDue = 0;
+
+					}
+
+				},
 			};
 
 		},
 	},
 
-	// Galaxy: a violet flame streaming twinkling stars through drifting clouds of nebula. The flame is
-	// deep, and violet to its core: a paler core added to it, or the cone added to a bright sky or
-	// road, read as a white flame with a violet edge.
+	// Galaxy: a violet flame streaming a two-armed spiral of twinkling stars through drifting clouds of
+	// nebula, over a strip of night sky so they show on a bright road. The flame is deep, and violet to
+	// its core: a paler core added to it, or the cone added to a bright sky or road, read as a white
+	// flame with a violet edge. In overdrive, warp: the stars stretch into hyperspace lines round an
+	// accretion disk; let go, the galaxy drifts on, and run dry, a star dies.
 	galaxy: {
-		flame: { outer: 0x6a2dff, inner: 0x8a4cff, halo: 0xa070ff, length: 0.85, flicker: 0.7, deep: true },
+		// (A short cone: drawn over the scene, any longer it's a solid purple stick down the view.)
+		flame: { outer: 0x6a2dff, inner: 0x8a4cff, halo: 0xa070ff, length: 0.5, flicker: 1.2, deep: true, diamonds: false },
 		tint: 0xc08cff,
+		ember: 0xb48cff,
+		ash: 0x2a1050,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 240, blending: AdditiveBlending } );
+			// The night sky first, drawn under the stars.
+			const voids = new Batch( root, { particles: 50 } );
+			voids.mesh.renderOrder = - 1;
+			const batch = new Batch( root, { particles: 240, quads: 2, blending: AdditiveBlending } );
 			const stars = emitter();
 			const clouds = emitter();
+			const nights = emitter();
 			const starColours = [ 0xffffff, 0xfff0c4, 0xc8dcff, 0xffd0f4 ];
-			const cloudColours = [ 0x5a2dff, 0xc42dff, 0x2d5aff, 0xff3dbd ];
+			const cloudColours = [ 0x8a5cff, 0xff5ce0, 0x5c8aff ];
+			const warpCloud = new Color( 0x9fb8ff );
+			const disk = new Color();
+			const violet = new Color( 0xa070ff );
+			const white = new Color( 0xffffff );
 			const out = new Vector3();
 			const turn = new Vector3();
 			let f = null;
+			let n = 0;
+			let spin = 0;
+			// Two arms of a spiral, round the exhaust, swirling as they spread.
 			const star = k => {
 
-				const p = batch.spawn( 0.6 + Math.random() * 0.5 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.4 ) * 0.4 * f.scale, p.position );
-				thrown( f, p, 0.92, 2 + Math.random() * 2, 0.3, 1.4 );
-				p.frame = SHAPES.star;
-				p.size = ( 0.045 + Math.random() * 0.05 ) * f.scale;
+				const arm = n ++ & 1;
+				const angle = spin + arm * Math.PI + k * 0.4;
+				const glint = n % 5 === 0 && ! f.calm;
+				const p = batch.spawn( glint ? 0.25 : 0.6 + Math.random() * 0.5 );
+				nozzleAt( f, k, 0, 0, p.position ).addScaledVector( around( f, angle, out ), 0.12 * f.scale );
+				thrown( f, p, 0.93, 2.2, 0.2, 0.4 );
+				p.velocity.addScaledVector( around( f, angle + Math.PI / 2, turn ), 1.6 );
 				p.colour.set( pick( starColours ) );
 				p.drag = 1;
-				p.spin = ( Math.random() - 0.5 ) * 3;
+				if ( glint ) {
+
+					p.frame = SHAPES.flare;
+					p.size = 0.16 * f.scale;
+					p.aspect = 0.3;
+					p.kind = 3;
+
+				} else {
+
+					p.frame = SHAPES.star;
+					p.size = ( 0.07 + Math.random() * 0.06 ) * f.scale;
+					p.spin = ( Math.random() - 0.5 ) * 3;
+
+				}
 
 			};
 			const cloud = k => {
 
 				const p = batch.spawn( 0.9 + Math.random() * 0.4 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.3 * f.scale, ( Math.random() - 0.5 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.92, 1.5 + Math.random(), 0.2, 0.6 );
+				// (Kept up with it, and faint: added up, a pile of them blooms to white over its rear and
+				// hazes the view down to the lens.)
+				thrown( f, p, 0.95, 1.2 + Math.random(), 0.2, 0.6 );
 				p.frame = SHAPES.puff;
-				p.size = 0.2 * f.scale;
-				p.grow = 0.7 * f.scale;
-				p.colour.set( pick( cloudColours ) );
-				p.alpha = 0.3;
+				p.size = 0.18 * f.scale;
+				p.grow = 0.5 * f.scale;
+				p.colour.set( pick( cloudColours ) ).lerp( warpCloud, f.hot * 0.5 );
+				p.alpha = 0.32;
 				p.drag = 1.2;
 				p.spin = ( Math.random() - 0.5 ) * 0.8;
 				p.turn = Math.random() * Math.PI * 2;
@@ -2370,23 +4152,83 @@ const STYLES = {
 				return p;
 
 			};
+			const night = k => {
+
+				const p = voids.spawn( 0.8 + Math.random() * 0.4 );
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.3 * f.scale, ( Math.random() - 0.5 ) * 0.3 * f.scale, p.position );
+				thrown( f, p, 0.95, 1.2 + Math.random(), 0.1, 0.4 );
+				p.frame = SHAPES.puff;
+				p.size = 0.16 * f.scale;
+				p.grow = 0.5 * f.scale;
+				p.colour.set( 0x140a33 );
+				p.alpha = 0.28;
+				p.drag = 1.2;
+				p.turn = Math.random() * Math.PI * 2;
+
+			};
 			const hooks = {
 				look( p, t, view ) {
 
-					// Nebulae drift in and thin away; stars twinkle; the core's flash only fades.
+					// Nebulae drift in and thin away; stars twinkle, and in overdrive stretch into lines of
+					// hyperspace; a glint goes fast; the core's flash only fades.
 					if ( p.kind === 1 ) view.alpha = p.alpha * swell( t );
-					else if ( p.kind === 0 ) TWINKLE.look( p, t, view );
+					else if ( p.kind === 0 ) {
+
+						if ( f.hot > 0.05 && p.velocity.lengthSq() > 1e-4 && p.phase < 4 ) {
+
+							// All along the way it goes, so they stream past to a point ahead, as at warp: thin
+							// lines, two in three of the stars (the rest still twinkle), and dimmer the longer
+							// they draw out, so piled up over a bright sky they don't wash out to white.
+							p.mode = ALONG;
+							p.axis.copy( f.back ).multiplyScalar( ( 0.1 + 0.4 * f.hot ) * f.scale );
+							view.frame = SHAPES.streak;
+							view.sx *= 0.22;
+							view.alpha *= 0.8 - 0.35 * f.hot;
+
+						} else {
+
+							p.mode = FACING;
+							TWINKLE.look( p, t, view );
+
+						}
+
+					} else if ( p.kind === 3 ) view.alpha = p.alpha * ( 1 - t ) ** 2;
+					else if ( p.kind === 5 ) view.alpha = p.alpha * ( 1 - t ) ** 1.5;
+
+				},
+			};
+			const nightly = {
+				look( p, t, view ) {
+
+					view.alpha = p.alpha * swell( t );
 
 				},
 			};
 			return {
-				batches: [ batch ],
+				batches: [ voids, batch ],
 				update( frame ) {
 
 					f = frame;
+					const { hot, scale } = frame;
+					const fl = flow( frame );
+					spin += frame.dt * 7;
+					voids.begin();
 					batch.begin();
-					stars( frame.power, frame.dt, 150, star );
-					clouds( frame.power, frame.dt, 24, cloud );
+					// Overdrive: an accretion disk turning across the exhaust round a white core (dimmer for a
+					// visitor asking for less motion).
+					if ( hot > 0.01 && fl > 0.01 ) {
+
+						const size = ( 0.18 + 0.12 * hot ) * scale;
+						disk.lerpColors( violet, white, hot );
+						batch.put( frame.nozzle, frame.back, FLAT, size, size, frame.clock * 5, SHAPES.ring, disk, 0.8 * hot * fl );
+						batch.put( frame.nozzle, frame.up, FACING, 0.3 * scale, 0.3 * scale, 0, SHAPES.glow, white, Math.min( frame.calm ? 0.35 : 1, 0.6 * hot ) * fl );
+
+					}
+
+					nights( fl, frame.dt, 14 * frame.detail, night );
+					stars( fl, frame.dt, 150 * frame.detail, star );
+					clouds( fl, frame.dt, 24 * frame.detail, cloud );
+					voids.update( frame.dt, nightly );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -2396,8 +4238,8 @@ const STYLES = {
 				ignite( frame, detail, calm ) {
 
 					f = frame;
-					const n = Math.max( 6, Math.round( 14 * detail ) );
-					for ( let arm = 0; arm < 2; arm ++ ) for ( let i = 0; i < n; i ++ ) {
+					const count = Math.max( 6, Math.round( 14 * detail ) );
+					for ( let arm = 0; arm < 2; arm ++ ) for ( let i = 0; i < count; i ++ ) {
 
 						const angle = arm * Math.PI + i * 0.45;
 						around( frame, angle, out );
@@ -2407,7 +4249,7 @@ const STYLES = {
 						p.carry.copy( frame.velocity ).multiplyScalar( 0.9 );
 						p.velocity.copy( turn ).multiplyScalar( 2.4 ).addScaledVector( out, 1.2 + i * 0.12 ).addScaledVector( frame.back, 1 );
 						p.frame = SHAPES.star;
-						p.size = ( 0.05 + 0.05 * ( 1 - i / n ) ) * frame.scale;
+						p.size = ( 0.05 + 0.05 * ( 1 - i / count ) ) * frame.scale;
 						p.colour.set( pick( starColours ) );
 						p.drag = 1.4;
 
@@ -2429,41 +4271,90 @@ const STYLES = {
 					for ( let i = 0; i < 5; i ++ ) flung( frame, cloud( 1 ), 0.9, 1.5, 1 );
 
 				},
+				// Let go: the galaxy drifts on as it fades, a few slow clouds round it. Run dry: a dying star,
+				// a red giant at the exhaust shrinking away, in a nova's shell (not for a visitor asking for
+				// less motion).
+				cool( frame, dry, detail, calm ) {
+
+					f = frame;
+					for ( const p of batch.items ) if ( p.age < p.life && p.kind === 0 ) p.drag = 0.4;
+					for ( let i = 0; i < 4; i ++ ) {
+
+						const p = cloud( 1 );
+						flung( frame, p, 0.95, 0.6 );
+						p.colour.set( cloudColours[ i % cloudColours.length ] );
+						p.alpha = 0.25;
+
+					}
+					if ( ! dry ) return;
+					const giant = batch.spawn( 0.5 );
+					giant.position.copy( frame.nozzle );
+					giant.carry.copy( frame.velocity );
+					giant.frame = SHAPES.glow;
+					giant.size = 0.35 * frame.scale;
+					giant.grow = - 0.3 * frame.scale;
+					giant.colour.set( 0xff5a8a );
+					giant.kind = 4;
+					if ( calm ) return;
+					const shell = batch.spawn( 0.45 );
+					shell.position.copy( frame.nozzle );
+					shell.carry.copy( frame.velocity );
+					shell.axis.copy( frame.back );
+					shell.mode = FLAT;
+					shell.frame = SHAPES.ring;
+					shell.size = 0.2 * frame.scale;
+					shell.grow = 1.2 * frame.scale;
+					shell.colour.set( 0xff8ab0 );
+					shell.alpha = 0.6;
+					shell.kind = 5;
+
+				},
 			};
 
 		},
 	},
 
-	// Dragon fire: a deep red flame roaring out tongues of fire that cool from orange to a deep red,
-	// throwing glowing embers that float up and curls of dark smoke. The tongues and the smoke are
-	// drawn as they are, not added (glowing), so the fire stays red against a bright sky rather than
-	// washing out to yellow; the embers glow.
+	// Dragon fire: a deep red flame roaring out ragged tongues of fire that cool from orange to a deep
+	// red, in breaths, throwing glowing embers that float up and curls of dark smoke. The flame, the
+	// tongues and the smoke are drawn as they are, not added (glowing), so the fire stays red against a
+	// bright sky rather than washing out to yellow; the embers glow. In overdrive, blue-hot breath and
+	// volleys of fireballs; let go, a snort of smoke, and run dry, a choke.
 	dragon: {
-		flame: { outer: 0xc8160a, inner: 0xff6a14, halo: 0xff4a1a, length: 1.35, flicker: 1.8 },
+		// (A short, ragged cone: drawn over the scene, any longer it reads from the chase camera as a
+		// flat red stick down the view; its tongues of fire carry the length.)
+		flame: { outer: 0xc8160a, inner: 0xff6a14, halo: 0xff4a1a, length: 0.7, flicker: 2.2, deep: true, diamonds: false },
 		tint: 0xff5a2a,
 		make( root ) {
 
 			const fire = new Batch( root, { particles: 150 } );
-			const sparks = new Batch( root, { particles: 100, blending: AdditiveBlending } );
+			const sparks = new Batch( root, { particles: 120, quads: 1, blending: AdditiveBlending } );
 			const tongues = emitter();
 			const embers = emitter();
 			const puffs = emitter();
 			const hot = new Color( 0xffbe3a );
+			const whiteHot = new Color( 0xfff2c8 );
+			const hottest = new Color();
 			const warm = new Color( 0xff4210 );
 			const dark = new Color( 0x7a1006 );
+			const base = new Color( 0x7ab8ff );
 			let f = null;
+			let roar = 1;
+			let fireballDue = 0;
+			let chokes = 0;
+			let chokeDue = 0;
 			// A tongue of fire, drawn along the way it's swept, back and a little up: its round foot
 			// first, its tip trailing. Under it, glowing, its heat.
 			const tongue = k => {
 
-				const p = fire.spawn( 0.22 + Math.random() * 0.12 );
+				const p = fire.spawn( 0.3 + Math.random() * 0.15 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.25 * f.scale, ( Math.random() - 0.5 ) * 0.2 * f.scale, p.position );
-				thrown( f, p, 0.9, 4.5 + Math.random() * 2, 0.8, 1 );
+				// (Kept up with it, a couple of metres of fire behind it, never thrown back at the lens.)
+				thrown( f, p, 0.96, 3 + Math.random() * 1.5, 0.8, 1 );
 				p.mode = ALONG;
 				p.frame = SHAPES.wisp;
 				p.axis.copy( f.back ).addScaledVector( f.up, 0.2 + Math.random() * 0.3 ).addScaledVector( f.right, ( Math.random() - 0.5 ) * 0.6 ).normalize();
-				p.size = 0.1 * f.scale;
-				p.grow = 0.06 * f.scale;
+				p.size = 0.16 * f.scale * roar;
+				p.grow = 0.12 * f.scale;
 				p.alpha = 0.85;
 				p.kind = 1;
 				const heat = sparks.spawn( p.life * 0.8 );
@@ -2479,29 +4370,31 @@ const STYLES = {
 				return p;
 
 			};
+			// An ember, a spark streaking the way it floats (falling with no air to hold it up).
 			const ember = k => {
 
 				const p = sparks.spawn( 0.6 + Math.random() * 0.5 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.4 * f.scale, ( Math.random() - 0.5 ) * 0.3 * f.scale, p.position );
 				thrown( f, p, 0.86, 2 + Math.random() * 2, 1.6, 1.8 );
-				p.frame = SHAPES.glow;
-				p.size = ( 0.035 + Math.random() * 0.035 ) * f.scale;
-				p.colour.set( pick( [ 0xffa040, 0xffd070, 0xff6020 ] ) );
-				p.fall = - 0.12;
+				p.mode = ALONG;
+				p.frame = SHAPES.spark;
+				p.size = 0.025 * f.scale;
+				p.colour.set( pick( DRAGON_EMBERS ) );
+				p.fall = f.air ? - 0.12 : 1;
 				p.drag = 1.2;
 				return p;
 
 			};
-			const puff = k => {
+			const puff = ( k, colour = pick( DRAGON_SMOKE ) ) => {
 
 				const p = fire.spawn( 1.1 + Math.random() * 0.4 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.3 * f.scale, 0.15 * f.scale, p.position );
-				thrown( f, p, 0.9, 1.5 + Math.random(), 0.9, 0.5 );
+				thrown( f, p, 0.95, 1.5 + Math.random(), 0.9, 0.5 );
 				p.frame = SHAPES.puff;
 				p.size = 0.15 * f.scale;
-				p.grow = 0.5 * f.scale;
-				p.colour.set( pick( [ 0x3c3330, 0x544640, 0x2e2826 ] ) );
-				p.alpha = 0.38;
+				p.grow = 0.4 * f.scale;
+				p.colour.set( colour );
+				p.alpha = 0.3;
 				p.fall = - 0.06;
 				p.drag = 1;
 				p.spin = ( Math.random() < 0.5 ? - 1 : 1 ) * ( 0.8 + Math.random() );
@@ -2509,21 +4402,53 @@ const STYLES = {
 				return p;
 
 			};
+			// A fireball thrown back out of it, in a glow, embers flying off it.
+			const fireball = () => {
+
+				// (Kept up with it, a couple of metres back, not flung back into the chase camera.)
+				const p = fire.spawn( 0.4 );
+				p.position.copy( f.nozzle );
+				thrown( f, p, 0.97, 3, 0.4, 0.5 );
+				p.mode = ALONG;
+				p.frame = SHAPES.wisp;
+				p.axis.copy( f.back ).multiplyScalar( 0.45 * f.scale );
+				p.size = 0.26 * f.scale;
+				p.alpha = 0.95;
+				p.kind = 2;
+				const glow = sparks.spawn( 0.4 );
+				glow.position.copy( p.position );
+				glow.carry.copy( p.carry );
+				glow.velocity.copy( p.velocity );
+				glow.frame = SHAPES.glow;
+				glow.size = 0.3 * f.scale;
+				glow.colour.set( 0xff7a2a );
+				glow.alpha = 0.45;
+				glow.kind = 1;
+				for ( let i = 0; i < 4; i ++ ) {
+
+					const spark = ember( 1 );
+					spark.position.copy( p.position );
+					flung( f, spark, 0.85, 3, 6 );
+
+				}
+
+			};
 			const burning = {
-				// Smoke curls as it rises.
+				// Smoke curls as it rises (with no air, there's no smoke to).
 				step( p, dt ) {
 
-					if ( p.kind === 0 ) p.velocity.addScaledVector( f.right, Math.sin( p.age * 4 + p.phase ) * 1.4 * dt );
+					if ( p.kind === 0 && f.air ) p.velocity.addScaledVector( f.right, Math.sin( p.age * 4 + p.phase ) * 1.4 * dt );
 
 				},
 				look( p, t, view ) {
 
-					// A tongue of fire draws out longer as it goes, cooling from orange through red to a
-					// deep red; smoke only shows once the fire's done with it.
-					if ( p.kind === 1 ) {
+					// A tongue of fire draws out longer as it goes, cooling from orange (near white in
+					// overdrive) through red to a deep red; a fireball does too, holding its length; smoke
+					// only shows once the fire's done with it.
+					if ( p.kind >= 1 ) {
 
-						p.axis.setLength( ( 0.16 + 0.3 * t ) * f.scale );
-						if ( t < 0.5 ) p.colour.lerpColors( hot, warm, t / 0.5 );
+						if ( p.kind === 1 ) p.axis.setLength( ( 0.25 + 0.45 * t ) * f.scale );
+						if ( t < 0.5 ) p.colour.lerpColors( hottest, warm, t / 0.5 );
 						else p.colour.lerpColors( warm, dark, ( t - 0.5 ) / 0.5 );
 						view.alpha = p.alpha * ( 1 - t );
 
@@ -2531,11 +4456,14 @@ const STYLES = {
 
 				},
 			};
-			// An ember flickers; the heat under a tongue only fades.
+			// An ember flickers, drawn along the way it flies; the heat under a tongue only fades.
 			const flickering = {
 				look( p, t, view ) {
 
-					if ( p.kind === 0 ) view.alpha *= 0.6 + 0.4 * Math.sin( p.age * 30 + p.phase );
+					if ( p.kind !== 0 ) return;
+					if ( p.mode === ALONG ) p.axis.copy( p.velocity ).add( p.carry ).sub( f.velocity ).setLength( 0.09 * f.scale );
+					// (Only a gentle shimmer for a visitor asking for less motion.)
+					view.alpha *= f.calm ? 0.9 + 0.1 * Math.sin( p.age * 6 + p.phase ) : 0.6 + 0.4 * Math.sin( p.age * 30 + p.phase );
 
 				},
 			};
@@ -2544,21 +4472,69 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
+					// Breathing: the roar swelling and easing a few times a second (gently, for a visitor
+					// asking for less motion).
+					roar = frame.calm ? 0.9 + 0.1 * Math.sin( frame.clock * 9 ) : 0.75 + 0.25 * Math.sin( frame.clock * 9 );
+					hottest.lerpColors( hot, whiteHot, frame.hot );
 					fire.begin();
 					sparks.begin();
-					puffs( frame.power, frame.dt, 16, puff );
-					tongues( frame.power, frame.dt, 55, tongue );
-					embers( frame.power, frame.dt, 45, ember );
+					// Overdrive: a blue-hot base to the flame, and volleys of fireballs.
+					if ( frame.hot > 0.01 && fl > 0.01 ) {
+
+						_v.copy( frame.nozzle ).addScaledVector( frame.back, 0.15 * frame.scale );
+						const size = 0.22 * frame.scale * frame.hot;
+						sparks.put( _v, frame.up, FACING, size, size, 0, SHAPES.glow, base, 0.7 * frame.hot * fl );
+
+					}
+
+					fireballDue -= frame.dt;
+					if ( frame.hot > 0.5 && fl > 0.01 ) {
+
+						if ( fireballDue <= 0 ) {
+
+							fireballDue = frame.calm ? 0.25 : 0.12;
+							fireball();
+
+						}
+
+					} else fireballDue = Math.max( fireballDue, 0 );
+					puffs( frame.air ? fl : 0, frame.dt, 16 * frame.detail, puff );
+					tongues( fl * roar, frame.dt, 55 * frame.detail, tongue );
+					embers( fl, frame.dt, 60 * frame.detail, ember );
+					// Run dry: it chokes, three black puffs a little apart, each with a few embers.
+					if ( chokes > 0 ) {
+
+						chokeDue -= frame.dt;
+						if ( chokeDue <= 0 ) {
+
+							chokes --;
+							chokeDue = 0.12;
+							if ( frame.air ) {
+
+								const p = puff( 1, 0x2a1a14 );
+								p.alpha = 0.4;
+								p.grow = 0.25 * frame.scale;
+								p.life = 0.55;
+
+							}
+
+							for ( let i = 0; i < 3; i ++ ) flung( frame, ember( 1 ), 0.85, 2, 1, 1 );
+
+						}
+
+					}
+
 					fire.update( frame.dt, burning );
 					sparks.update( frame.dt, flickering );
 
 				},
 				// Lit: a roar, a fireball of tongues thrown back and out, a shower of embers and a ring of
-				// smoke.
+				// smoke (none with no air).
 				ignite( frame, detail ) {
 
 					f = frame;
-					for ( let i = 0; i < 6; i ++ ) {
+					if ( frame.air ) for ( let i = 0; i < 6; i ++ ) {
 
 						const p = puff( 1 );
 						p.velocity.addScaledVector( around( frame, i / 6 * Math.PI * 2, _v ), 2 );
@@ -2581,44 +4557,156 @@ const STYLES = {
 					for ( let i = Math.round( 30 * detail ); i > 0; i -- ) flung( frame, ember( 1 ), 0.85, 4, 1.5, 1.5 );
 
 				},
+				// Let go: a snort, smoke out of both nostrils and a few embers. Run dry: a choke (see
+				// update).
+				cool( frame, dry ) {
+
+					f = frame;
+					if ( dry ) {
+
+						chokes = 3;
+						chokeDue = 0;
+						return;
+
+					}
+
+					if ( frame.air ) for ( let side = - 1; side <= 1; side += 2 ) {
+
+						// (Small and quick: any bigger, dark smoke over a grey road is only a dull smudge.)
+						const p = puff( 1 );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.right, side * 0.18 * frame.scale );
+						p.velocity.copy( frame.right ).multiplyScalar( side * 2.5 ).addScaledVector( frame.up, 0.8 );
+						p.size = 0.14 * frame.scale;
+						p.grow = 0.3 * frame.scale;
+						p.life = 0.6;
+
+					}
+
+					for ( let i = 0; i < 6; i ++ ) flung( frame, ember( 1 ), 0.85, 2.5, 1, 1 );
+
+				},
 			};
 
 		},
 	},
 
-	// Butterflies: bright wings fluttering up and away behind it, each wandering its own way.
+	// Butterflies: clutches of bright wings fluttering up and away behind it, keeping up with it, each
+	// wandering its own way with a little gold sparkle. In overdrive a migration of monarchs in V
+	// formation; let go, they scatter. With no air they can't fly, and fall in long arcs.
 	butterflies: {
 		flame: { halo: 0xffe7a0, length: 0.45, flicker: 0.5 },
 		tint: 0xffd27a,
+		ember: 0xffe7a0,
+		ash: 0x6a5a30,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 60 } );
-			const flutter = emitter();
+			const batch = new Batch( root, { particles: 110 } );
 			const colours = [ 0xff9a2e, 0x3dbdff, 0xffd21a, 0xff5ca8, 0x9b6bff, 0x4ddc6b ];
+			const monarchs = [ 0xff8a1a, 0xffb02e, 0xff6a00 ];
 			let f = null;
 			let n = 0;
+			let clutchDue = 0;
+			let flockDue = 0;
 			const butterfly = k => {
 
-				const p = batch.spawn( 1.5 + Math.random() * 0.6 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.86, 1.2 + Math.random() * 0.8, 1.3, 0.8 );
+				// Kept up with it, and gone before they drift back to the camera.
+				const p = batch.spawn( 1.1 + Math.random() * 0.3 );
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position ).addScaledVector( f.back, 0.25 * f.scale );
+				thrown( f, p, 0.96, 0.8 + Math.random() * 0.6, 1.3, 0.8 );
 				p.frame = SHAPES.butterfly;
-				p.size = ( 0.11 + Math.random() * 0.05 ) * f.scale;
+				p.size = ( 0.12 + Math.random() * 0.04 ) * f.scale;
 				p.colour.set( colours[ n ++ % colours.length ] );
-				p.fall = - 0.05;
-				p.drag = 1.3;
+				p.fall = f.air ? - 0.05 : 1;
+				p.drag = f.air ? 1.3 : 0;
 				return p;
 
 			};
+			// A little gold sparkle keeping it company.
+			const sparkle = from => {
+
+				const p = batch.spawn( 0.6 );
+				p.position.copy( from.position );
+				p.carry.copy( from.carry );
+				p.velocity.copy( from.velocity ).multiplyScalar( 0.5 );
+				p.frame = SHAPES.star;
+				p.size = 0.035 * f.scale;
+				p.colour.set( 0xfff1a8 );
+				p.kind = 1;
+
+			};
+			// A clutch of them, in neighbouring colours, side by side.
+			const clutch = () => {
+
+				const count = f.detail < 1 ? 2 : 3;
+				const first = n;
+				for ( let i = 0; i < count; i ++ ) {
+
+					const p = butterfly( 1 );
+					p.position.addScaledVector( f.right, ( i - ( count - 1 ) / 2 ) * 0.15 * f.scale ).addScaledVector( f.up, 0.1 * f.scale );
+					p.colour.set( colours[ ( first + i ) % colours.length ] );
+					sparkle( p );
+
+				}
+
+				n = first + 1;
+
+			};
+			// Overdrive: a V of monarchs flying together.
+			const flock = () => {
+
+				for ( let i = 0; i < 5; i ++ ) {
+
+					const p = batch.spawn( 1.2 + Math.random() * 0.2 );
+					// (Its leader well behind the exhaust, and flying back and up away from it: started
+					// on it, a swarm sat on the vehicle, over the driver.)
+					p.position.copy( f.nozzle ).addScaledVector( f.right, ( i - 2 ) * 0.22 * f.scale ).addScaledVector( f.back, ( 0.7 + Math.abs( i - 2 ) * 0.15 ) * f.scale );
+					thrown( f, p, 0.96, 1.4, 0.8, 0 );
+					p.frame = SHAPES.butterfly;
+					p.size = 0.13 * f.scale;
+					p.colour.set( monarchs[ i % monarchs.length ] );
+					p.turn = 0.5 * Math.sign( i - 2 );
+					p.fall = f.air ? - 0.05 : 1;
+					p.kind = 3;
+
+				}
+
+			};
 			const hooks = {
-				// Wandering, up and down and side to side, each its own way.
-				step: ( p, dt ) => p.velocity.addScaledVector( f.right, Math.sin( p.age * 2.3 + p.phase ) * 2.2 * dt ).addScaledVector( f.up, Math.cos( p.age * 3.1 + p.phase ) * 1.5 * dt ),
+				// Wandering, up and down and side to side, each its own way (not with no air to fly in, nor
+				// in formation).
+				step( p, dt ) {
+
+					if ( p.kind !== 0 || ! f.air ) return;
+					p.velocity.addScaledVector( f.right, Math.sin( p.age * 2.3 + p.phase ) * 2.2 * dt ).addScaledVector( f.up, Math.cos( p.age * 3.1 + p.phase ) * 1.5 * dt );
+
+				},
 				look( p, t, view ) {
 
-					// Its wings beating: squashed across and open again, a few times a second.
-					view.sx *= 0.2 + 0.8 * Math.abs( Math.cos( p.age * 16 + p.phase ) );
-					view.turn = 0.35 * Math.sin( p.age * 2 + p.phase );
+					if ( p.kind === 1 ) {
+
+						// A sparkle twinkles (slowly for a visitor asking for less motion).
+						view.sx *= 0.4 + 0.6 * Math.abs( Math.sin( p.age * ( f.calm ? 10 : 28 ) + p.phase ) );
+						view.sy = view.sx;
+						return;
+
+					}
+
+					// Its wings beating: squashed across and open again, a few times a second; a tired one's
+					// shut; in formation, quicker and banked.
+					const rate = ! f.air ? 5 : p.kind === 3 ? ( f.calm ? 14 : 26 ) : 16;
+					if ( p.kind === 2 ) view.sx *= 0.25;
+					else view.sx *= ( p.kind === 3 ? 0.75 : 1 ) * ( 0.2 + 0.8 * Math.abs( Math.cos( p.age * rate + p.phase ) ) );
+					if ( p.kind === 0 ) view.turn = 0.35 * Math.sin( p.age * 2 + p.phase );
 					view.alpha = Math.min( 1, t * 10, ( 1 - t ) * 4 );
+					// Folded away over the vehicle itself, so they never sit on the driver.
+					const near = view.position.distanceTo( f.middle ) / f.scale;
+					if ( near < 1.1 ) {
+
+						const shrink = Math.max( 0, ( near - 0.5 ) / 0.6 );
+						view.sx *= shrink;
+						view.sy *= shrink;
+
+					}
 
 				},
 			};
@@ -2627,8 +4715,28 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
 					batch.begin();
-					flutter( frame.power, frame.dt, 15, butterfly );
+					clutchDue -= frame.dt * fl;
+					if ( fl <= 0.01 ) clutchDue = Math.max( clutchDue, 0 );
+					else while ( clutchDue <= 0 ) {
+
+						clutchDue += 0.24;
+						clutch();
+
+					}
+
+					flockDue -= frame.dt;
+					if ( overdrive( frame ) > 0 && fl > 0.01 ) {
+
+						if ( flockDue <= 0 ) {
+
+							flockDue = 0.3;
+							flock();
+
+						}
+
+					} else flockDue = Math.max( flockDue, 0 );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -2646,35 +4754,67 @@ const STYLES = {
 					}
 
 				},
+				// Let go: they scatter, up and out every way. Run dry: three tired ones, wings shut,
+				// spiralling down.
+				cool( frame, dry ) {
+
+					f = frame;
+					for ( const p of batch.items ) if ( p.age < p.life && p.kind !== 1 ) {
+
+						// Up and out to the sides, not back over the camera.
+						_a.copy( f.right ).multiplyScalar( ( Math.random() - 0.5 ) * 2 ).addScaledVector( f.up, 0.3 + Math.random() ).normalize();
+						p.velocity.addScaledVector( _a, 2 );
+						p.drag = 0.6;
+
+					}
+
+					if ( ! dry ) return;
+					for ( let i = 0; i < 3; i ++ ) {
+
+						const p = butterfly( 1 );
+						p.velocity.copy( frame.back ).multiplyScalar( 0.6 );
+						p.fall = 0.25;
+						p.spin = 3;
+						p.kind = 2;
+
+					}
+
+				},
 			};
 
 		},
 	},
 
-	// Spooky: glowing wisps curling up out of a ghostly green flame, and now and then a little ghost
-	// floating off behind, bobbing as it goes.
+	// Spooky: glowing wisps streaming and curling out of a ghostly green flame, and little ghosts
+	// floating off behind, creeping after it, bobbing as they go. In overdrive a vortex of spirits
+	// circles the exhaust and the shock diamonds burn green; let go, the ghosts vanish with a poof.
 	spooky: {
-		flame: { outer: 0x3dffa8, inner: 0xe8fff4, halo: 0x7dffc8, length: 0.6, flicker: 1.5 },
+		flame: { outer: 0x3dffa8, inner: 0xe8fff4, halo: 0x7dffc8, length: 0.6, flicker: 1.5, diamondTint: 0x7dffc8 },
 		tint: 0x9dffd0,
+		ember: 0x7dffc8,
+		ash: 0x1e4a3a,
 		make( root ) {
 
+			const SPIRITS = 4;
 			const glow = new Batch( root, { particles: 110, blending: AdditiveBlending } );
-			const ghosts = new Batch( root, { particles: 30 } );
+			const ghosts = new Batch( root, { particles: 36, quads: SPIRITS } );
 			const wisps = emitter();
 			const floats = emitter();
 			const shades = [ 0xffffff, 0xe6fff4, 0xf0e8ff ];
+			const pale = new Color( 0xe6fff4 );
 			let f = null;
+			let orbit = 0;
 			const wisp = k => {
 
 				const p = glow.spawn( 0.6 + Math.random() * 0.3 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.4 * f.scale, ( Math.random() - 0.3 ) * 0.3 * f.scale, p.position );
 				thrown( f, p, 0.9, 2 + Math.random(), 1.2, 0.8 );
+				p.mode = ALONG;
 				p.frame = SHAPES.wisp;
 				p.size = ( 0.09 + Math.random() * 0.05 ) * f.scale;
-				p.aspect = 1.3;
-				p.colour.set( pick( [ 0x5dffb4, 0xa98bff, 0x5dd8ff ] ) );
+				p.colour.set( pick( SPOOKY_WISPS ) );
 				p.alpha = 0.85;
-				p.fall = - 0.2;
+				p.fall = f.air ? - 0.2 : 0;
 				p.drag = 1.2;
 				return p;
 
@@ -2682,33 +4822,64 @@ const STYLES = {
 			const ghost = k => {
 
 				const p = ghosts.spawn( 1.4 + Math.random() * 0.4 );
-				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, 0.1 * f.scale, p.position );
-				thrown( f, p, 0.88, 1.3, 1.2, 0.4 );
+				// Out a little behind the exhaust, not over the driver.
+				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, 0.1 * f.scale, p.position ).addScaledVector( f.back, 0.3 * f.scale );
+				thrown( f, p, 0.93, 1.6, 1, 0.3 );
 				p.frame = SHAPES.ghost;
-				p.size = ( 0.15 + Math.random() * 0.05 ) * f.scale;
+				p.size = ( 0.17 + Math.random() * 0.05 ) * f.scale;
 				p.colour.set( pick( shades ) );
 				p.alpha = 0.92;
-				p.fall = - 0.08;
+				p.fall = f.air ? - 0.08 : 0;
 				p.drag = 1.4;
 				return p;
 
 			};
 			const curling = {
+				// Corkscrewing as it streams back (less for a visitor asking for less motion).
+				step( p, dt ) {
+
+					const curl = f.calm ? 0.5 : 1;
+					p.velocity.addScaledVector( f.right, Math.sin( p.age * 7 + p.phase ) * 3 * curl * dt ).addScaledVector( f.up, Math.cos( p.age * 7 + p.phase ) * 1.5 * curl * dt );
+
+				},
 				look( p, t, view ) {
 
 					view.alpha = p.alpha * swell( t );
-					view.turn = 0.4 * Math.sin( p.age * 6 + p.phase );
+					// Drawn trailing back from its round head, the way it flies.
+					if ( p.mode === ALONG && p.velocity.lengthSq() > 1e-4 ) p.axis.copy( p.velocity ).normalize().multiplyScalar( - ( 0.14 + 0.1 * t ) * f.scale );
+					else view.turn = 0.4 * Math.sin( p.age * 6 + p.phase );
 
 				},
 			};
 			const floating = {
-				step: ( p, dt ) => p.velocity.addScaledVector( f.right, Math.sin( p.age * 2 + p.phase ) * 1.2 * dt ),
+				// Drifting side to side, and creeping after it.
+				step( p, dt ) {
+
+					p.velocity.addScaledVector( f.right, Math.sin( p.age * 2 + p.phase ) * 1.2 * dt ).addScaledVector( f.back, - 0.8 * dt );
+
+				},
 				look( p, t, view ) {
 
-					// Bobbing and rocking a little, fading in and away.
+					// Bobbing and rocking a little, fading in and away; vanishing with a poof (only fading
+					// for a visitor asking for less motion).
 					view.position.addScaledVector( f.up, Math.sin( p.age * 5 + p.phase ) * 0.06 * f.scale );
 					view.turn = 0.25 * Math.sin( p.age * 3 + p.phase );
-					view.alpha = p.alpha * Math.min( 1, t / 0.15, ( 1 - t ) / 0.3 );
+					if ( p.kind === 1 ) {
+
+						const u = 1 - ( p.life - p.age ) / 0.35;
+						if ( ! f.calm ) {
+
+							view.sx *= 1 + u;
+							view.sy *= 1 - 0.5 * u;
+
+						}
+
+						view.alpha = p.alpha * ( 1 - u ) ** 2;
+
+					} else view.alpha = p.alpha * Math.min( 1, t / 0.15, ( 1 - t ) / 0.3 );
+					// One that's crept up over the vehicle fades out there, so it never hides the driver.
+					const near = view.position.distanceTo( f.middle ) / f.scale;
+					if ( near < 1.1 ) view.alpha *= Math.max( 0, ( near - 0.5 ) / 0.6 );
 
 				},
 			};
@@ -2717,10 +4888,23 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
 					glow.begin();
 					ghosts.begin();
-					wisps( frame.power, frame.dt, 45, wisp );
-					floats( frame.power, frame.dt, 5, ghost );
+					// Overdrive: a vortex of spirits circling the exhaust (slower and fainter for a visitor
+					// asking for less motion).
+					orbit += frame.dt * ( frame.calm ? 2.5 : 5 );
+					if ( frame.hot > 0.01 && fl > 0.01 ) for ( let i = 0; i < SPIRITS; i ++ ) {
+
+						const angle = orbit + i * Math.PI / 2;
+						_v.copy( frame.nozzle ).addScaledVector( around( frame, angle, _a ), 0.4 * frame.scale ).addScaledVector( frame.back, 0.3 * frame.scale );
+						const size = 0.14 * frame.scale;
+						ghosts.put( _v, frame.up, FACING, size, size, angle, SHAPES.ghost, pale, ( frame.calm ? 0.4 : 0.6 ) * frame.hot * fl );
+
+					}
+
+					wisps( fl, frame.dt, ( 45 + 25 * frame.hot ) * frame.detail, wisp );
+					floats( fl, frame.dt, 7 * frame.detail, ghost );
 					glow.update( frame.dt, curling );
 					ghosts.update( frame.dt, floating );
 
@@ -2742,7 +4926,44 @@ const STYLES = {
 
 					}
 
-					for ( let i = Math.round( 20 * detail ); i > 0; i -- ) flung( frame, wisp( 1 ), 0.88, 2.5, 1, 1 );
+					for ( let i = Math.round( 20 * detail ); i > 0; i -- ) {
+
+						const p = wisp( 1 );
+						flung( frame, p, 0.88, 2.5, 1, 1 );
+						p.mode = FACING;
+
+					}
+
+				},
+				// Let go: every ghost vanishes with a poof, leaving a wisp or two. Run dry: it gives up the
+				// ghost, one big one rising out of it.
+				cool( frame, dry ) {
+
+					f = frame;
+					for ( const p of ghosts.items ) if ( p.age < p.life && p.kind === 0 ) {
+
+						p.life = p.age + 0.35;
+						p.kind = 1;
+						for ( let i = 0; i < 2; i ++ ) {
+
+							const w = wisp( 1 );
+							w.position.copy( p.position );
+							w.carry.copy( p.carry );
+							w.velocity.set( Math.random() - 0.5, Math.random(), Math.random() - 0.5 );
+
+						}
+
+					}
+
+					if ( ! dry ) return;
+					const p = ghost( 1 );
+					// Rising up out of it fast, so it's seen over the driver's head rather than in front.
+					p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.4 * frame.scale ).addScaledVector( frame.up, 1.1 * frame.scale );
+					p.velocity.copy( frame.up ).multiplyScalar( 2.2 ).addScaledVector( frame.back, 0.8 );
+					p.size = 0.3 * frame.scale;
+					p.life = 1.2;
+					p.fall = 0;
+					p.drag = 0.5;
 
 				},
 			};
@@ -2751,43 +4972,72 @@ const STYLES = {
 	},
 
 	// Neon laser: a laser show out of the exhaust, beams in cyan, pink, lime and blue sweeping side to
-	// side and up and down, with bolts of light shot out along them.
+	// side and up and down, a flare at each one's end, bolts of light shot out along them and a scan
+	// line swept across the road behind. In overdrive the beams close into a turning tunnel shot
+	// through with hoops; let go, they retract, and run dry they drop out one by one.
 	laser: {
 		flame: { halo: 0xff6bf0, length: 0.5, flicker: 0.4 },
 		tint: 0xff7cf4,
 		make( root ) {
 
 			const BEAMS = 4;
-			const batch = new Batch( root, { particles: 120, quads: BEAMS * 2 + 1, blending: AdditiveBlending } );
+			const batch = new Batch( root, { particles: 120, quads: BEAMS * 3 + 2, blending: AdditiveBlending } );
 			const bolts = emitter();
 			const colours = [ 0x2df4ff, 0xff2df0, 0x8cff2d, 0x3d7dff ];
 			const colour = new Color();
 			const white = new Color( 0xffffff );
 			const way = new Vector3();
+			const cage = new Vector3();
 			const half = new Vector3();
 			const middle = new Vector3();
+			const end = new Vector3();
 			let f = null;
-			// Where beam `b` points now: back, up and out, sweeping like a stage's lasers into the sky.
+			let turn = 0;
+			let hoopDue = 0;
+			let hoops = 0;
+			let pops = 0;
+			let popDue = 0;
+			let dropped = 0;
+			// Where beam `b` points now: back, up and out, sweeping like a stage's lasers into the sky;
+			// in overdrive closing into a cage turning round the way back.
 			const aim = ( b, target ) => {
 
 				const sweep = Math.sin( f.clock * 2.6 + b * 1.7 ) * 0.6 + ( b - ( BEAMS - 1 ) / 2 ) * 0.4;
-				return target.copy( f.back ).multiplyScalar( 0.75 ).addScaledVector( f.right, Math.sin( sweep ) * 0.9 ).addScaledVector( f.up, 0.6 + 0.3 * Math.sin( f.clock * 1.9 + b * 2.3 ) ).normalize();
+				target.copy( f.back ).multiplyScalar( 0.75 ).addScaledVector( f.right, Math.sin( sweep ) * 0.9 ).addScaledVector( f.up, 0.6 + 0.3 * Math.sin( f.clock * 1.9 + b * 2.3 ) ).normalize();
+				if ( f.hot > 0 ) target.lerp( cage.copy( f.back ).addScaledVector( around( f, turn + b * Math.PI / 2, _a ), 0.45 ).normalize(), f.hot ).normalize();
+				return target;
 
 			};
 			// A bolt of light shot out along one of the beams, its head first.
 			const bolt = k => {
 
 				const b = Math.floor( Math.random() * BEAMS );
+				if ( b < dropped ) return;
 				aim( b, way );
 				const p = batch.spawn( 0.2 );
 				nozzleAt( f, k, 0, 0, p.position );
 				p.carry.copy( f.velocity ).multiplyScalar( 0.97 );
-				p.velocity.copy( way ).multiplyScalar( 13 );
+				p.velocity.copy( way ).multiplyScalar( 18 );
 				p.mode = ALONG;
 				p.frame = SHAPES.spark;
-				p.axis.copy( way ).multiplyScalar( 0.2 * f.scale );
+				p.axis.copy( way ).multiplyScalar( 0.45 * f.scale );
 				p.size = 0.06 * f.scale;
 				p.colour.set( colours[ b ] );
+
+			};
+			// A hoop of light round the beams, in one of their colours.
+			const hoop = ( b, size, grow, back, life, alpha ) => {
+
+				const p = batch.spawn( life );
+				p.position.copy( f.nozzle );
+				thrown( f, p, 0.9, back, 0, 0 );
+				p.axis.copy( f.back );
+				p.mode = FLAT;
+				p.frame = SHAPES.ring;
+				p.size = size * f.scale;
+				p.grow = grow * f.scale;
+				p.colour.set( colours[ b % BEAMS ] );
+				p.alpha = alpha;
 
 			};
 			return {
@@ -2795,31 +5045,74 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const { scale, hot, clock } = frame;
+					const fl = flow( frame );
+					if ( frame.power > 0 && pops === 0 ) dropped = 0;
+					turn += frame.dt * ( frame.calm ? 1 : 3 );
 					batch.begin();
-					if ( frame.power > 0 ) {
+					if ( fl > 0.01 ) {
 
-						const length = 2.4 * frame.scale * ( 0.5 + 0.5 * frame.power );
-						for ( let b = 0; b < BEAMS; b ++ ) {
+						// Retracting into the exhaust as it's let go, and sputtering as it coughs.
+						const length = ( 2.4 + 1.8 * hot ) * scale * ( 0.5 + 0.5 * frame.power ) * fl;
+						for ( let b = dropped; b < BEAMS; b ++ ) {
 
-							// Each a throbbing glow in its colour round a white-hot core.
+							// Each a throbbing glow in its colour round a white-hot core (steady for a visitor
+							// asking for less motion), a flare where it ends (none for them).
 							aim( b, way );
 							half.copy( way ).multiplyScalar( length / 2 );
 							middle.copy( frame.nozzle ).add( half );
 							colour.set( colours[ b ] );
-							const throb = 0.75 + 0.25 * Math.sin( frame.clock * 40 + b * 2 );
-							batch.put( middle, half, ALONG, 0.1 * frame.scale, 1, 0, SHAPES.beam, colour, 0.7 * throb * frame.power );
-							batch.put( middle, half, ALONG, 0.03 * frame.scale, 1, 0, SHAPES.beam, white, 0.85 * frame.power );
+							const throb = frame.calm ? 1 : 0.75 + 0.25 * Math.sin( clock * 40 + b * 2 );
+							batch.put( middle, half, ALONG, 0.1 * scale, 1, 0, SHAPES.beam, colour, 0.7 * throb * fl );
+							batch.put( middle, half, ALONG, ( 0.03 + 0.02 * hot ) * scale, 1, 0, SHAPES.beam, white, 0.85 * fl );
+							if ( ! frame.calm ) batch.put( end.copy( middle ).add( half ), frame.up, FACING, 0.14 * scale, 0.14 * scale * 0.3, 0, SHAPES.flare, colour, 0.8 * fl );
 
 						}
 
 						// Where they come from: a glow in each of their colours in turn.
-						colour.set( colours[ Math.floor( frame.clock * 4 ) % BEAMS ] );
-						const glow = 0.28 * frame.scale;
-						batch.put( frame.nozzle, frame.up, FACING, glow, glow, 0, SHAPES.glow, colour, 0.8 * frame.power );
+						colour.set( colours[ Math.floor( clock * 4 ) % BEAMS ] );
+						const glow = 0.28 * scale;
+						batch.put( frame.nozzle, frame.up, FACING, glow, glow, 0, SHAPES.glow, colour, 0.8 * fl );
+						// A scan line swept across the road behind it, on the ground.
+						if ( frame.grounded ) {
+
+							_v.copy( frame.ground ).addScaledVector( frame.back, 1.2 * scale ).addScaledVector( frame.up, INK_LIFT );
+							const heading = Math.atan2( - frame.back.x, - frame.back.z );
+							batch.put( _v, frame.up, FLAT, 0.04 * scale, 1 * scale, heading + Math.sin( clock * 3 ) * 0.8, SHAPES.streak, colour, 0.8 * fl );
+
+						}
 
 					}
 
-					bolts( frame.power, frame.dt, 36, bolt );
+					// Overdrive: hoops of light shot back through the tunnel.
+					hoopDue -= frame.dt;
+					if ( hot > 0.3 && fl > 0.01 ) {
+
+						if ( hoopDue <= 0 ) {
+
+							hoopDue = frame.calm ? 0.3 : 0.14;
+							hoop( hoops ++, 0.3, 0.4, 6, 0.5, 1 );
+
+						}
+
+					} else hoopDue = Math.max( hoopDue, 0 );
+					// (As many on a phone: they're all its beams have to stream.)
+					bolts( fl, frame.dt, 36, bolt );
+					// Run dry: the beams drop out one by one, each with a ring popping in its colour.
+					if ( pops > 0 ) {
+
+						popDue -= frame.dt;
+						if ( popDue <= 0 ) {
+
+							popDue = 0.08;
+							hoop( dropped, 0.2, 0.9, 1, 0.3, 0.9 );
+							dropped ++;
+							pops --;
+
+						}
+
+					}
+
 					batch.update( frame.dt );
 
 				},
@@ -2828,6 +5121,7 @@ const STYLES = {
 				ignite( frame, detail, calm ) {
 
 					f = frame;
+					pops = dropped = 0;
 					const count = calm ? Math.max( 4, Math.round( 6 * detail ) ) : Math.max( 8, Math.round( 12 * detail ) );
 					for ( let i = 0; i < count; i ++ ) {
 
@@ -2856,24 +5150,43 @@ const STYLES = {
 					hoop.alpha = calm ? 0.6 : 1;
 
 				},
+				// Run dry: the beams drop out one by one (see update; not for a visitor asking for less
+				// motion, whose beams only retract).
+				cool( frame, dry, detail, calm ) {
+
+					f = frame;
+					if ( ! dry || calm ) return;
+					pops = BEAMS;
+					popDue = 0;
+
+				},
 			};
 
 		},
 	},
 
-	// Slime: blobs of green goo flung out behind, wobbling as they fly, bubbles that swell and pop,
-	// and puddles of it on the road for a couple of seconds.
+	// Slime: blobs of green goo flung out behind, wobbling as they fly and splatting where they land,
+	// out of a gooey jet, bubbles that swell and pop, and puddles of it on the road for a couple of
+	// seconds. In overdrive the rear wheels throw up rooster tails of it; let go, it drips, and run dry,
+	// a last sploot.
 	slime: {
 		flame: null,
 		tint: 0x9dff4d,
+		ember: 0x9dff4a,
+		ash: 0x2f4a10,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 190 } );
+			const batch = new Batch( root, { particles: 210, quads: 1 } );
 			const blobs = emitter();
+			const wakes = emitter();
 			const bubbles = emitter();
 			const puddles = emitter();
 			const greens = [ 0x7dff2e, 0x52e01a, 0xb8ff4d, 0x3dd65a ];
+			const jet = new Color( 0x7dff2e );
 			let f = null;
+			let side = 1;
+			let drip = 0;
+			let dripDue = 0;
 			const blob = k => {
 
 				const p = batch.spawn( 0.35 + Math.random() * 0.2 );
@@ -2886,17 +5199,27 @@ const STYLES = {
 				return p;
 
 			};
+			// Overdrive: a rooster tail of it off each rear wheel.
+			const wake = () => {
+
+				side = - side;
+				const p = blob( 1 );
+				p.position.copy( f.ground ).addScaledVector( f.right, side * f.size.width * 0.45 ).addScaledVector( f.up, 0.1 * f.scale );
+				p.velocity.copy( f.right ).multiplyScalar( side * ( 2.5 + Math.random() * 1.5 ) ).addScaledVector( f.up, 2.5 ).addScaledVector( f.back, 2 );
+				p.life = 0.7;
+
+			};
 			const bubble = k => {
 
 				const p = batch.spawn( 0.5 + Math.random() * 0.4 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.4, Math.random() * 0.2 * f.scale, p.position );
-				thrown( f, p, 0.88, 1.5 + Math.random(), 0.7, 0.6 );
+				thrown( f, p, 0.88, 1.5 + Math.random(), f.air ? 0.7 : 0, 0.6 );
 				p.frame = SHAPES.bubble;
-				p.size = ( 0.05 + Math.random() * 0.05 ) * f.scale;
+				p.size = ( 0.07 + Math.random() * 0.05 ) * f.scale;
 				p.grow = p.size * 0.4;
-				p.colour.set( 0xb8ff6a );
-				p.alpha = 0.95;
-				p.fall = - 0.05;
+				p.colour.set( 0xd6ff9a );
+				p.alpha = 1;
+				p.fall = f.air ? - 0.05 : 1;
 				p.drag = 1;
 				p.kind = 1;
 				return p;
@@ -2904,17 +5227,45 @@ const STYLES = {
 			};
 			const puddle = () => {
 
-				const p = onRoad( batch, f, 0.3 + Math.random() * 0.25, 2.5 );
+				const p = onRoad( batch, f, 0.3 + Math.random() * 0.25, 2.5, 3.5 );
 				p.colour.set( pick( greens ) );
 				p.kind = 2;
 
 			};
 			const hooks = {
+				// A blob coming down on the road it's on splats there, a puddle where it landed.
+				step( p ) {
+
+					if ( p.kind !== 0 || ! f.grounded || p.velocity.dot( f.up ) >= 0 ) return;
+					const high = _a.subVectors( p.position, f.ground ).dot( f.up );
+					if ( high > 0.03 * f.scale ) return;
+					p.kind = 2;
+					p.mode = FLAT;
+					p.axis.copy( f.up );
+					p.frame = SHAPES.splat + Math.floor( Math.random() * 3 );
+					p.size *= 2.2;
+					p.aspect = 0.7;
+					_a.copy( p.velocity ).add( p.carry );
+					p.turn = Math.atan2( - _a.x, - _a.z );
+					p.velocity.set( 0, 0, 0 );
+					p.carry.set( 0, 0, 0 );
+					p.fall = 0;
+					p.life = p.age + 1.5;
+					p.position.addScaledVector( f.up, INK_LIFT - high );
+
+				},
 				look( p, t, view ) {
 
 					if ( p.kind === 0 ) {
 
-						// A blob wobbles, squashing one way and then the other, and doesn't fade.
+						// A blob wobbles, squashing one way and then the other, and doesn't fade; just thrown,
+						// it's drawn out along the way it flies.
+						if ( p.age < 0.08 && p.velocity.lengthSq() > 1e-4 ) {
+
+							p.mode = ALONG;
+							p.axis.copy( p.velocity ).normalize().multiplyScalar( 0.12 * f.scale );
+
+						} else p.mode = FACING;
 						const wobble = 0.22 * Math.sin( p.age * 30 + p.phase );
 						view.sx *= 1 + wobble;
 						view.sy *= 1 - wobble;
@@ -2942,10 +5293,38 @@ const STYLES = {
 				update( frame ) {
 
 					f = frame;
+					const fl = flow( frame );
 					batch.begin();
-					blobs( frame.power, frame.dt, 36, blob );
-					bubbles( frame.power, frame.dt, 30, bubble );
-					puddles( frame.grounded ? frame.power : 0, frame.dt, 10, puddle );
+					// A gooey jet out of the exhaust, pulsing (barely, for a visitor asking for less motion).
+					if ( fl > 0.01 ) {
+
+						const reach = 0.25 * frame.scale * ( 1 + ( frame.calm ? 0.05 : 0.15 ) * Math.sin( frame.clock * 20 ) );
+						_v.copy( frame.nozzle ).addScaledVector( frame.back, reach );
+						batch.put( _v, _b.copy( frame.back ).multiplyScalar( reach ), ALONG, 0.07 * frame.scale, 1, 0, SHAPES.streak, jet, 0.9 * fl );
+
+					}
+
+					blobs( fl, frame.dt, 36 * frame.detail, blob );
+					wakes( frame.grounded && overdrive( frame ) > 0 ? fl : 0, frame.dt, 40 * frame.hot * frame.detail, wake );
+					bubbles( fl, frame.dt, 30 * frame.detail, bubble );
+					puddles( frame.grounded ? fl : 0, frame.dt, ( 10 + 15 * frame.hot ) * frame.detail, puddle );
+					// Let go: it drips for a moment.
+					if ( drip > 0 ) {
+
+						drip -= frame.dt;
+						dripDue -= frame.dt;
+						while ( dripDue <= 0 ) {
+
+							dripDue += 0.1;
+							const p = blob( 1 );
+							thrown( frame, p, 0.95, 0.3, 0, 0.2 );
+							p.size = 0.06 * frame.scale;
+							p.life = 0.6;
+
+						}
+
+					}
+
 					batch.update( frame.dt, hooks );
 
 				},
@@ -2961,8 +5340,36 @@ const STYLES = {
 
 					}
 
-					for ( let i = Math.round( 10 * detail ); i > 0; i -- ) flung( frame, bubble( 1 ), 0.88, 1.5, 0.5, 0.5 );
+					for ( let i = Math.round( 10 * detail ); i > 0; i -- ) flung( frame, bubble( 1 ), 0.88, 1.5, 0.5, frame.air ? 0.5 : 0 );
 					if ( frame.grounded ) for ( let i = 0; i < 2; i ++ ) puddle();
+
+				},
+				// Let go: a drip. Run dry: a sploot, one big blob, a froth of bubbles popping at once and a
+				// puddle.
+				cool( frame, dry ) {
+
+					f = frame;
+					if ( ! dry ) {
+
+						drip = 0.6;
+						dripDue = 0;
+						return;
+
+					}
+
+					const p = blob( 1 );
+					thrown( frame, p, 0.7, 3, 1.5, 0 );
+					p.size = 0.2 * frame.scale;
+					p.life = 0.8;
+					for ( let i = 0; i < 6; i ++ ) {
+
+						const b = bubble( 1 );
+						b.position.copy( frame.nozzle );
+						b.life = 0.25;
+
+					}
+
+					if ( frame.grounded ) puddle();
 
 				},
 			};
@@ -2983,6 +5390,15 @@ export function styleFlame( id ) {
 
 }
 
+// The colours a style's exhaust cools through once it's let go, { ember, ash } (hex, see
+// drive-bursts.js), or undefined for the classic ember and ash.
+export function styleEmber( id ) {
+
+	const style = STYLES[ id ];
+	return style?.ember ? { ember: style.ember, ash: style.ash } : undefined;
+
+}
+
 // The colour a style's ignition flashes in (see drive-bursts.js), or undefined for the classic
 // flame, whose flash is its flame's.
 export function styleTint( id ) {
@@ -2991,19 +5407,50 @@ export function styleTint( id ) {
 
 }
 
-// The style `id`'s particles, in `root`: { update( frame ), ignite( frame, detail, calm ), alive,
-// budget }, or null for the classic flame (or a name it doesn't know). Disposing of `root` disposes
-// of them.
+// Nothing a style's thrown out is carried on faster than the vehicle is going now: carried at
+// nearly its speed, a trail would otherwise catch it up as it slows (out of overdrive, or braking)
+// and fly on past it, through the chase camera. Only what's carried ahead of it is held back; what
+// it's thrown out with besides (back, up, out) is as it was.
+function keepBehind( batches, frame ) {
+
+	const ahead = _r.copy( frame.back ).negate();
+	const most = Math.max( 0, frame.velocity.dot( ahead ) );
+	for ( const batch of batches ) for ( const p of batch.items ) {
+
+		if ( p.age >= p.life ) continue;
+		const over = p.carry.dot( ahead ) - most;
+		if ( over > 0 ) p.carry.addScaledVector( ahead, - over );
+
+	}
+
+}
+
+// The style `id`'s particles, in `root`: { update( frame ), ignite( frame, detail, calm ), cool(
+// frame, dry, detail, calm ), gravity, alive, budget }, or null for the classic flame (or a name it
+// doesn't know). Disposing of `root` disposes of them.
 export function createBoostStyle( root, id ) {
 
 	const style = STYLES[ id ];
 	if ( ! style ) return null;
 	const made = style.make( root );
 	return {
-		update: frame => made.update( frame ),
+		update( frame ) {
+
+			made.update( frame );
+			keepBehind( made.batches, frame );
+
+		},
 		// Its own burst as the booster lights, `detail` (0 to 1) of its usual count; `calm`, without
 		// a flash (the visitor asked for less motion).
 		ignite: ( frame, detail = 1, calm = false ) => made.ignite?.( frame, detail, calm ),
+		// Let go (or run `dry`): a moment of its own as its stream dies down, or sputters out.
+		cool: ( frame, dry = false, detail = 1, calm = false ) => made.cool?.( frame, dry, detail, calm ),
+		// The world's gravity, a share of the Earth's (the Moon's 0.165): what its particles fall by.
+		set gravity( g ) {
+
+			for ( const batch of made.batches ) batch.gravity = 9.81 * g;
+
+		},
 		// How many particles are alive, and the most there can be.
 		get alive() {
 
@@ -3022,67 +5469,146 @@ export function createBoostStyle( root, id ) {
 // --- supersonic --------------------------------------------------------------------------------
 
 // Going supersonic (see drive.js): a sonic boom once, shock rings blown out round the vehicle with
-// a flash, the widest of them lingering as it spreads so it's seen from the chase camera; and while
-// it lasts, streaks of air streaming back past its body. Any style gets these.
-export function createSupersonic( root ) {
+// a flash, the widest of them lingering as it spreads so it's seen from the chase camera, and a
+// collar of condensation snapping out round its body; and while it lasts, streaks of air streaming
+// back past it on the cone of the shock it drags behind it, and shock diamonds burning down its
+// flame. Any style gets these. `tint`: the ride's colour (its flame's glow, or its style's), which
+// the boom's rings and the streaks take on, or null for the default ice blue; `rainbow`: they run
+// through the hues instead; `deep`: a deep flame (see drive-fx.js's DEEP), whose rings take less of
+// its colour, so they still read as light; `diamonds`: the ride has a flame for them to burn in,
+// `diamondTint` the colour they burn in instead of white (spooky's will-o'-wisps), or null;
+// `effects`: drive-fx.js's, read as they're needed: `detail` and `calm` as the bursts have them, and
+// `air` false where there's none (World Drive's Moon), with no vapour, no white shock and no
+// diamonds, which all need air round the vehicle.
+export function createSupersonic( root, { tint = null, rainbow = false, deep = false, diamonds = false, diamondTint = null, effects = {} } = {} ) {
 
-	const batch = new Batch( root, { particles: 120, blending: AdditiveBlending } );
+	// (Room for the boom's longest ring to live out its life with the collar and the streaks after
+	// it, on something big.)
+	const batch = new Batch( root, { particles: 136, quads: DIAMONDS_OVER * 2, blending: AdditiveBlending } );
 	const streaks = emitter();
 	const travel = new Vector3();
+	// The boom's colours, made once: white-hot, a pale wash of the ride's colour and a richer one.
+	const white = new Color( 0xffffff );
+	const pale = new Color( 0xbfe4ff );
+	const rich = new Color( 0x9fd4ff );
+	if ( tint ) {
+
+		pale.copy( white ).lerp( tint, 0.4 );
+		rich.copy( white ).lerp( tint, deep ? 0.45 : 0.65 );
+
+	}
+
+	const roles = { white, pale, rich };
+	// The diamonds, white at the nozzle and fading down the flame towards its colour.
+	const at = new Vector3();
+	const axis = new Vector3();
+	const diamond = new Color();
+	const far = tint ?? pale;
+	// Their hottest colour: white, or a style's own with a little white in it, so it still burns.
+	const hottest = diamondTint === null ? white : new Color( diamondTint ).lerp( white, 0.3 );
 	let f = null;
 	let speed = 0;
+	let clock = 0;
+	const air = () => effects.air !== false;
 	const streak = () => {
 
 		const p = batch.spawn( 0.2 + Math.random() * 0.15 );
 		const { width, height, length } = f.size;
-		// Round its body, a little out from it: up its sides and over its top.
+		// On the cone of the shock it drags: peeling off just ahead of its nose (k 0) and back past
+		// its tail (k 1), just clear of its body at the front (never drawn over its roof) and splaying
+		// wider towards the rear, up its sides and over its top (never into the ground).
+		const k = Math.random();
 		const angle = Math.random() * Math.PI;
-		p.position.copy( f.middle ).addScaledVector( f.right, Math.cos( angle ) * ( width * 0.55 + Math.random() * 0.5 ) )
-			.addScaledVector( f.up, Math.sin( angle ) * ( height * 0.55 + Math.random() * 0.4 ) - height * 0.1 )
-			.addScaledVector( travel, ( Math.random() - 0.3 ) * length );
-		// Slipping back past it, a little slower than it goes (not so slow they reach the camera).
+		const spread = 1 + 0.8 * k;
+		const out = 0.15 * height + Math.random() * 0.3;
+		_r.copy( f.right ).multiplyScalar( Math.cos( angle ) ).addScaledVector( f.up, Math.sin( angle ) );
+		p.position.copy( f.middle ).addScaledVector( f.right, Math.cos( angle ) * ( width * 0.55 * spread + out ) )
+			.addScaledVector( f.up, Math.sin( angle ) * ( height * 0.6 * spread + out ) - height * 0.1 )
+			.addScaledVector( travel, ( 0.6 - 1.4 * k ) * length );
+		// Slipping back past it, a little slower than it goes (not so slow they reach the camera),
+		// leaning out as the cone does: hardly at the nose (any more, and those far ahead, seen end on
+		// from the chase camera, stick out sideways like whiskers), more towards the tail.
 		p.carry.copy( f.velocity ).multiplyScalar( 0.88 );
 		p.mode = ALONG;
 		p.frame = SHAPES.streak;
-		p.axis.copy( travel ).multiplyScalar( Math.min( 2.2, 0.4 + speed * 0.025 ) * Math.sqrt( f.scale ) );
-		p.size = ( 0.035 + Math.random() * 0.02 ) * f.scale;
-		p.colour.set( Math.random() < 0.6 ? 0xffffff : 0xbfe4ff );
-		p.alpha = 0.6;
+		p.axis.copy( travel ).addScaledVector( _r, - 0.08 - 0.22 * k ).normalize().multiplyScalar( Math.min( 2.2, 0.4 + speed * 0.025 ) * Math.sqrt( f.scale ) );
+		// Those at the nose's shoulder, where the shock is strongest, brighter and fatter; thinner and
+		// fainter towards the tail, where they're nearer the chase camera.
+		const shoulder = k < 0.15;
+		p.size = ( 0.035 + Math.random() * 0.02 ) * f.scale * ( shoulder ? 1.5 : 1 ) * ( 1 - 0.3 * k );
+		// With no air, only faint streaks of its colour; otherwise white and a pale wash of it, or
+		// shimmering through the hues.
+		if ( ! air() ) p.colour.copy( pale );
+		else if ( rainbow ) p.colour.copy( _hue.setHSL( ( clock / RAINBOW_TURN + Math.random() * 0.15 ) % 1, 1, 0.75 ) );
+		else p.colour.copy( Math.random() >= 0.55 ? pale : white );
+		p.alpha = ( shoulder ? 0.75 : 0.6 ) * ( 1 - 0.35 * k ) * ( effects.calm ? 0.65 : 1 ) * ( air() ? 1 : 0.75 );
+		p.kind = 0;
 
 	};
 	const hooks = {
 		look( p, t, view ) {
 
-			// Streaks come and go; the boom's rings thin out as they spread.
+			// Streaks come and go; the boom's rings thin out as they spread, and its flashes go fast
+			// and linger as they fade; the collar snaps out and thins away.
 			if ( p.kind === 0 ) view.alpha = p.alpha * Math.sin( t * Math.PI );
 			else if ( p.kind === 1 ) view.alpha = p.alpha * ( 1 - t ) ** 1.5;
+			else if ( p.kind === 2 ) view.alpha = p.alpha * ( 1 - t ) ** 2;
+			else if ( p.kind === 3 ) view.alpha = p.alpha * Math.sin( Math.min( 1, t * 4 ) * Math.PI / 2 ) * ( 1 - t ) ** 2;
 
 		},
 	};
 	return {
 
-		// Each frame, with the frame a style has (see above) and whether it's supersonic now.
+		// Each frame, with the frame a style has (see above, and its `hot`: how far into overdrive
+		// the flame is, 0 to 1) and whether it's supersonic now.
 		update( frame, on ) {
 
 			f = frame;
+			clock += frame.dt;
 			speed = frame.velocity.length();
 			if ( speed > 1 ) travel.copy( frame.velocity ).divideScalar( speed );
 			else travel.copy( frame.back ).negate();
 			batch.begin();
-			// More round something bigger: about as thick on it as on a kart.
-			streaks( on ? 1 : 0, frame.dt, 80 * Math.sqrt( frame.scale ), streak );
+			// Shock diamonds down the flame, put down each frame where it is now (as the afterburner's
+			// are): fewer on a phone, and steady for a visitor asking for less motion.
+			if ( diamonds && air() && frame.hot > 0.02 && frame.power > 0.5 ) {
+
+				const n = ( effects.detail ?? 1 ) < 1 ? DIAMONDS_OVER - 1 : DIAMONDS_OVER;
+				for ( let i = 0; i < n; i ++ ) {
+
+					const k = i / ( DIAMONDS_OVER - 1 );
+					at.copy( frame.nozzle ).addScaledVector( frame.back, ( 0.35 + i * 0.42 ) * frame.scale );
+					axis.copy( frame.back ).multiplyScalar( 0.12 * frame.scale * ( 1 - 0.25 * k ) );
+					diamond.lerpColors( hottest, far, k * 0.85 );
+					const throb = effects.calm ? 1 : 0.85 + 0.15 * Math.sin( frame.clock * 70 + i * 1.7 );
+					const alpha = frame.hot * frame.power * 0.8 * ( 1 - 0.45 * k ) * throb;
+					batch.put( at, axis, ALONG, 0.26 * frame.scale * ( 1 - 0.25 * k ), 1, 0, SHAPES.diamond, diamond, alpha );
+					const glow = 0.1 * frame.scale * ( 1 - 0.25 * k );
+					batch.put( at, frame.up, FACING, glow, glow, 0, SHAPES.glow, diamond, alpha * 0.6 );
+
+				}
+
+			}
+
+			// More round something bigger: about as thick on it as on a kart; fewer on a phone, and
+			// fewer and fainter for a visitor asking for less motion.
+			streaks( on ? 1 : 0, frame.dt, 80 * Math.sqrt( frame.scale ) * ( effects.detail ?? 1 ) * ( effects.calm ? 0.6 : 1 ), streak );
 			batch.update( frame.dt, hooks );
 
 		},
 
 		// The boom, round the middle of its box, for a vehicle about `size` m across. `calm` (the
-		// visitor asked for less motion): no flare, and the rings fainter.
+		// visitor asked for less motion): no flare, the rings fainter and the collar thinner.
 		boom( frame, size, calm = false ) {
 
 			const way = speed > 1 ? travel : frame.back;
-			for ( const [ picture, life, inherit, start, spread, colour, alpha = 1, aspect = 1 ] of BOOM ) {
+			const airy = air();
+			for ( let row = 0; row < BOOM.length; row ++ ) {
 
+				const [ picture, life, inherit, start, spread, colour, alpha = 1, aspect = 1 ] = BOOM[ row ];
 				if ( calm && picture === SHAPES.flare ) continue;
+				// With no air there's no pressure wave to see: no white shock.
+				if ( ! airy && row === 0 ) continue;
 				const p = batch.spawn( life );
 				p.position.copy( frame.middle );
 				p.carry.copy( frame.velocity ).multiplyScalar( inherit );
@@ -3094,9 +5620,35 @@ export function createSupersonic( root ) {
 				p.size = size * start;
 				p.grow = size * spread;
 				p.aspect = aspect;
-				p.colour.set( colour );
+				if ( rainbow && colour !== 'white' ) p.colour.copy( _hue.setHSL( ( clock / RAINBOW_TURN + row * 0.17 ) % 1, 1, 0.7 ) );
+				else p.colour.copy( roles[ colour ] );
 				p.alpha = alpha * ( calm && ! facing ? CALM_RINGS : 1 );
 				p.kind = facing ? 2 : 1;
+
+			}
+
+			if ( ! airy ) return;
+			// The collar: puffs of condensation round its body, out from it all the way round (those
+			// below it fade out down to the ground, see Batch.floor), a little ahead of its middle.
+			const n = Math.max( 4, Math.round( ( calm ? 8 : 14 ) * ( effects.detail ?? 1 ) ) );
+			for ( let i = 0; i < n; i ++ ) {
+
+				const a = ( i + Math.random() * 0.4 ) / n * Math.PI * 2;
+				_r.copy( frame.right ).multiplyScalar( Math.cos( a ) ).addScaledVector( frame.up, Math.sin( a ) );
+				const p = batch.spawn( 0.4 + Math.random() * 0.1 );
+				p.position.copy( frame.middle ).addScaledVector( way, 0.15 * size ).addScaledVector( _r, 0.62 * size );
+				// Kept up with it, as the rings are, so it never sweeps back through the camera.
+				p.carry.copy( frame.velocity ).multiplyScalar( 0.97 );
+				p.velocity.copy( _r ).multiplyScalar( 1.2 );
+				p.drag = 2;
+				p.mode = FACING;
+				p.frame = SHAPES.puff;
+				p.size = 0.22 * size;
+				p.grow = 0.3 * size;
+				p.turn = Math.random() * Math.PI * 2;
+				p.colour.setHex( 0xf2f8ff );
+				p.alpha = calm ? 0.22 : 0.35;
+				p.kind = 3;
 
 			}
 
@@ -3119,20 +5671,29 @@ export function createSupersonic( root ) {
 }
 
 // The boom: a shock ring, a thinner ring inside it and a flash, kept small enough not to white out
-// a phone's narrow view (World Drive flashes the edges of the view white instead, screen-fx.js); a
-// wide ring lingering as it spreads to seven times the vehicle's size, a second, bluer one inside
-// that, and a flare side to side. Each [ picture, life (s), share of the vehicle's speed it keeps,
-// size and growth (times the vehicle's size), colour, alpha, height for its width ]. The rings keep
-// up with the vehicle (0.97 of its speed, drifting back a metre or few over their life): any
-// slower and at overdrive's speed they fall back through the chase camera while still growing, and
-// with the camera inside a ring's bright band the whole view goes white, twice.
+// a phone's narrow view (World Drive flashes the edges of the view instead, screen-fx.js); a wide
+// ring lingering as it spreads to three times the vehicle's size, a second, richer one inside that,
+// and a flare side to side. The leading shock and the flashes are white-hot, so it still reads as a
+// pressure wave; the rings behind it take the ride's colour ('pale' or 'rich', see
+// createSupersonic). Each [ picture, life (s), share of the vehicle's speed it keeps, size and
+// growth (times the vehicle's size), colour, alpha, height for its width ]. The rings keep up with
+// the vehicle (0.97 of its speed, drifting back a metre or few over their life): any slower and at
+// overdrive's speed they fall back through the chase camera while still growing, and with the
+// camera inside a ring's bright band the whole view goes white, twice. And none of them grows much
+// past three times the vehicle's size: any wider, from the chase camera a few metres behind it, the
+// rings stack into a pale tunnel over the whole of the view, sky and road washed out.
 const BOOM = [
-	[ SHAPES.shock, 0.5, 0.97, 0.6, 4.5, 0xffffff ],
-	[ SHAPES.ring, 0.4, 0.97, 0.4, 3, 0xcfeaff ],
-	[ SHAPES.glow, 0.18, 1, 1.1, 1, 0xffffff, 0.75 ],
-	[ SHAPES.shock, 0.95, 0.97, 1, 6, 0xeaf6ff, 0.6 ],
-	[ SHAPES.ring, 0.75, 0.97, 0.8, 4, 0x9fd4ff, 0.6 ],
-	[ SHAPES.flare, 0.22, 1, 1.4, 1.2, 0xffffff, 0.5, 0.25 ],
+	[ SHAPES.shock, 0.42, 0.98, 0.6, 2, 'white', 0.45 ],
+	[ SHAPES.ring, 0.34, 0.98, 0.4, 1.5, 'pale', 0.7 ],
+	[ SHAPES.glow, 0.15, 1, 0.6, 0.4, 'white', 0.3 ],
+	[ SHAPES.shock, 0.7, 0.98, 0.9, 2.4, 'rich', 0.32 ],
+	[ SHAPES.ring, 0.6, 0.98, 0.7, 1.9, 'rich', 0.45 ],
+	[ SHAPES.flare, 0.2, 1, 1.1, 0.8, 'white', 0.4, 0.25 ],
 ];
 // How bright the boom's rings are for a visitor asking for less motion.
 const CALM_RINGS = 0.6;
+// Shock diamonds down the flame in overdrive (a phone's one fewer), each a lozenge and a glow.
+const DIAMONDS_OVER = 4;
+// A rainbow flame's turn through the hues (s), as drive-fx.js has it (which imports this file, so
+// it can't be imported from there).
+const RAINBOW_TURN = 1.6;

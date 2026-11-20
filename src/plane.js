@@ -227,6 +227,12 @@ export class PlaneMode {
 		if ( d.drifting ) d.endDrift( false );
 		d.cutBooster();
 		d.boost = null;
+		// Out of overdrive too: a plane never checks for it (updatePlane), so it would stay on, its
+		// flame, streaks, warp and badge with it, for the whole flight.
+		if ( d.supersonic ) d.hud.setSupersonic?.( false );
+		d.supersonic = false;
+		d.nearTop = 0;
+		d.warp = 0;
 		d.air = null;
 		d.flying = false;
 		d.grounded = false;

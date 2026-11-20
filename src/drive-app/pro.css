@@ -259,11 +259,11 @@ dialog#pass {
 	color: var( --muted );
 }
 
-/* Seventeen rides: two rows of them, so the sheet stays short and each picture is still big
+/* Twenty rides: two rows of them, so the sheet stays short and each picture is still big
    enough to make out. */
 #pass .ride-icons {
 	display: grid;
-	grid-template-columns: repeat( 9, minmax( 0, 1fr ) );
+	grid-template-columns: repeat( 10, minmax( 0, 1fr ) );
 	gap: 3px;
 	margin-top: 6px;
 }

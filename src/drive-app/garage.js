@@ -758,6 +758,20 @@ function createPreview( canvas, models, getVehicle, onPaintable, effects ) {
 	const still = new Vector3();
 	const size = { width: 1, height: 1, length: 1, rear: 1, scale: 1 };
 	const wheels = [ new Vector3(), new Vector3() ];
+	// The driving's detail and calm alone: the turntable is always in the Earth's air and gravity,
+	// wherever the last drive was (driving's effects have the Moon's while there, see main.js).
+	const earthly = effects && {
+		get detail() {
+
+			return effects.detail;
+
+		},
+		get calm() {
+
+			return effects.calm;
+
+		},
+	};
 	let model = null;
 	let fx = null;
 	let fxKey = '';
@@ -795,7 +809,7 @@ function createPreview( canvas, models, getVehicle, onPaintable, effects ) {
 		if ( model && fx ) {
 
 			model.updateMatrixWorld( true );
-			// Run dry at the end of the show, as the booster does.
+			// Let go at the end of the show: the flame dies down and the exhaust cools.
 			if ( lit && demo <= 0 ) fx.cool();
 			lit = demo > 0;
 			fx.update( { pivot: model, size, wheels, velocity: still, flame: demo > 0 ? 1 : 0, trail: demo > 0 ? 1 : 0, drifting: false, level: 0, grounded: true, preview: true, dt } );
@@ -904,7 +918,7 @@ function createPreview( canvas, models, getVehicle, onPaintable, effects ) {
 		const key = JSON.stringify( want );
 		if ( key === fxKey ) return;
 		fx?.dispose();
-		fx = createDriveFx( scene, want, { effects } );
+		fx = createDriveFx( scene, want, { effects: earthly } );
 		fxKey = key;
 
 	}

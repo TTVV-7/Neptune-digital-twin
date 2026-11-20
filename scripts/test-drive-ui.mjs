@@ -5,7 +5,9 @@
 // page counts, seen in its posts (the funnel, the device, searches by kind and never what was typed,
 // play time, a drop-in's time and its place, as its cell about a kilometre each way, and one left
 // for the globe); stunts (a wall
-// throwing the kart into the air, a backflip landed for points, the DRIFT button); the vehicle
+// throwing the kart into the air, a backflip landed for points, the DRIFT button); crashes (a
+// hit's layers, words and bits by how hard, a wipeout's slam, a landing's dust and a scrape's
+// sparks, calmer, thinner and airless as asked, changing nothing of the drive); the vehicle
 // picker and changing ride from the pause menu; M back to the globe and teleporting again with no
 // reload; recent places and the picked ride kept across a reload; a phone with touch buttons;
 // boosting flat out going supersonic in each free ride (the boom, the streaks, the tag and the
@@ -250,7 +252,7 @@ describe( 'World Drive, desktop', () => {
 			'Go-kart', 'Pickup', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
 			'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser', 'Hypercar', 'Cyber muscle',
 			'Skid steer', 'Telehandler', 'Concrete mixer', 'Road roller', 'Wheel loader', 'Dump truck', 'Bulldozer', 'Vac truck',
-			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
+			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft', 'Lunar rover', 'Flying saucer', 'Rocket dragster',
 		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
@@ -879,11 +881,13 @@ describe( 'World Drive on a phone', () => {
 // Boosting flat out with the gauge kept full, from a standstill on the test pad, at a fixed step:
 // when it goes supersonic (and how fast it's going), the boom and streaks (the supersonic effects'
 // particles: the free rides' classic flame has none of its own), the tag and the wider view a
-// second on; then out of fuel and braking, when it ends.
+// second on, with the flame's shock diamonds and white-hot core and the tag glowing in its colour;
+// then out of fuel and braking, when it ends.
 function supersonic() {
 
-	const { driver: d } = window.drive;
+	const { driver: d, scene } = window.drive;
 	const tag = document.querySelector( '#hud .dhud-sonic' );
+	const hud = tag.closest( '.dhud' );
 	const step = () => {
 
 		d.update( 1 / 60 );
@@ -918,6 +922,13 @@ function supersonic() {
 	out.streaks = d.fx.particles.alive;
 	out.warp = Math.round( d.warp * 100 ) / 100;
 	out.still = d.supersonic;
+	// The supersonic effects' batch (the classic flame has no other) draws more quads than it has
+	// particles alive: the diamonds; the flame's core is solid; the tag sweeps its sheen.
+	const fx = scene.getObjectByName( 'drive-fx' );
+	const sonic = fx.children.filter( o => o.name === 'boost-batch' ).at( - 1 ).userData.batch;
+	out.diamonds = sonic.mesh.geometry.instanceCount - sonic.alive;
+	out.core = Math.round( fx.children[ 0 ].children[ 1 ].material.opacity * 100 ) / 100;
+	out.hud = { sonic: hud.classList.contains( 'sonic' ), tint: hud.style.getPropertyValue( '--sonic' ), animation: getComputedStyle( tag ).animationName };
 	// Out of boost (B let go: the booster's out), and braking.
 	d.gauge = 0;
 	d.release( 'KeyB' );
@@ -936,6 +947,8 @@ function supersonic() {
 	out.tagAfter = ! tag.hidden;
 	out.warpAfter = Math.round( d.warp * 100 ) / 100;
 	out.particlesAfter = d.fx.particles.alive;
+	out.drawnAfter = sonic.mesh.geometry.instanceCount;
+	out.hudAfter = hud.classList.contains( 'sonic' );
 	return out;
 
 }
@@ -987,6 +1000,10 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 			// Out of boost and braking, it ends once under three quarters of that top speed.
 			assert.ok( ride.endedAt !== null && ride.endedAt < ride.boostedTop * 0.75 + 1 && ride.endedAt > ride.boostedTop * 0.6, JSON.stringify( ride ) );
 			assert.ok( ! ride.tagAfter && ride.warpAfter < 0.15 && ride.particlesAfter === 0, JSON.stringify( ride ) );
+			// In overdrive the flame burns with shock diamonds and a solid white-hot core, and the tag
+			// glows in the ride's colour with its sheen sweeping; after, nothing's drawn and it's gone.
+			assert.ok( ride.diamonds > 0 && ride.core > 0.95 && ride.drawnAfter === 0, JSON.stringify( ride ) );
+			assert.ok( ride.hud.sonic && /^#[0-9a-f]{6}$/.test( ride.hud.tint ) && /dhud-sonic-sheen/.test( ride.hud.animation ) && ! ride.hudAfter, JSON.stringify( ride ) );
 
 		}
 
@@ -1426,15 +1443,34 @@ function effects( style ) {
 
 	} );
 	Object.assign( out.lit, { punch: Math.round( punch * 10 ) / 10, nod: Math.round( nod * 1000 ) / 1000, squat: Math.round( squat * 1000 ) / 1000 } );
-	// Run dry: the exhaust glows on and cools; then, a while later, nothing's left.
+	// Run dry: the exhaust glows on and cools; then, a while later, nothing's left. (The flame,
+	// shown or not each frame, coughs out as it runs dry.)
+	const flame = () => root().children[ 0 ];
+	let coughed = '';
+	const seen = () => coughed += flame().visible ? 1 : 0;
 	d.gauge = 0.01;
-	step( 2 );
+	step( 2, seen );
 	out.dry = { firing: d.firing, alive: d.fx.particles.alive };
 	d.release( 'KeyB' );
 	d.release( 'KeyW' );
-	step( 150 );
+	step( 30, seen );
+	out.coughed = coughed;
+	step( 120 );
 	out.dry.after = d.fx.particles.alive;
 	out.dry.punch = Math.round( d.punch * 1000 ) / 1000;
+
+	// Let go: the flame dies down into the nozzle rather than going out at once.
+	reset( 15 );
+	d.press( 'KeyW' );
+	d.press( 'KeyB' );
+	step( 20 );
+	const burning = flame().scale.x;
+	d.release( 'KeyB' );
+	step( 1 );
+	out.letGo = { shown: flame().visible, shrunk: flame().scale.x < burning };
+	d.release( 'KeyW' );
+	step( 60 );
+	out.letGo.after = flame().visible;
 
 	// A boost pad driven over: its burst, carried along with the vehicle (its chevrons at its
 	// speed), and the vehicle lit up.
@@ -1589,6 +1625,13 @@ describe( 'World Drive boost and driving effects', () => {
 			assert.ok( r.lit.alive >= 10 && r.lit.punch >= 3 && r.lit.nod > 0.1 && r.lit.squat > 0.03, JSON.stringify( r.lit ) );
 			// Run dry: it glows on, then everything's gone, the punch rung out.
 			assert.ok( ! r.dry.firing && r.dry.alive > 0 && r.dry.after === 0 && r.dry.punch === 0, JSON.stringify( r.dry ) );
+			// The classic flame coughs out as it runs dry (cut out and back), and dies down let go.
+			if ( r.style === 'classic' ) {
+
+				assert.ok( /10+1/.test( r.coughed ) && r.coughed.endsWith( '0' ), r.coughed );
+				assert.deepEqual( r.letGo, { shown: true, shrunk: true, after: false } );
+
+			}
 			assert.ok( r.pad.lit && r.pad.gauge > 0.6 && r.pad.carried > 0.95, JSON.stringify( r.pad ) );
 			// The plane under it: level, a few centimetres over the pad (through its rear tyres).
 			assert.ok( r.floor.wheels > 0.99 && r.floor.at < 0 && r.floor.at > - 0.2 && r.floor.air, JSON.stringify( r.floor ) );
@@ -1825,7 +1868,8 @@ describe( 'World Drive boost and driving effects', () => {
 
 						if ( p.age >= p.life ) continue;
 						if ( p.frame === SHAPES.burst ) flashes.add( p );
-						if ( p.frame === SHAPES.star ) sparks.add( p );
+						// (A burst's stars are streaks of colour: a burst's kind 2, or a willow's 4.)
+						if ( p.frame === SHAPES.spark && ( p.kind === 2 || p.kind === 4 ) ) sparks.add( p );
 
 					}
 
@@ -2019,6 +2063,9 @@ describe( 'World Drive boost and driving effects', () => {
 			const lines = scene.getObjectByName( 'speed-lines' );
 			const bar = document.querySelector( '#hud .dhud-boost' );
 			const whiteout = document.getElementById( 'whiteout' );
+			// The lines' colour, as a hex number, and their near white.
+			const { uColour } = lines.material.uniforms;
+			const lineWhite = new uColour.value.constructor( 0xf4faff ).getHex();
 			const top = d.spec.topSpeed / 3.6 * 2;
 			for ( const code of [ ...d.keys ] ) d.release( code );
 			const out = {};
@@ -2044,16 +2091,24 @@ describe( 'World Drive boost and driving effects', () => {
 
 			}, 30 );
 			out.boosting = { lines: Math.round( screenFx.lines * 100 ) / 100, shown: lines.visible };
+			out.boostingWhite = uColour.value.getHex() === lineWhite;
 			let white = false;
+			let shock = null;
 			await window.untilFrame( () => {
 
 				hold( top )();
 				d.gauge = 0.9;
 				white ||= whiteout.classList.contains( 'on' );
+				// The shock front sweeping out, in the ride's colour.
+				if ( white && ! shock ) shock = { animation: getComputedStyle( whiteout, '::after' ).animationName, sonic: whiteout.style.getPropertyValue( '--sonic' ) };
 				return d.supersonic && white;
 
 			} );
 			out.overdrive = { lines: Math.round( screenFx.lines * 100 ) / 100, white, supersonic: d.supersonic };
+			out.shock = shock;
+			// A moment into overdrive the lines have a wash of the ride's colour.
+			await window.untilFrame( () => ( hold( top )(), d.gauge = 0.9, false ), 20 );
+			out.overdriveTinted = uColour.value.getHex() !== lineWhite;
 			// Run dry: the gauge flashes.
 			d.gauge = 0.004;
 			let empty = false;
@@ -2087,11 +2142,343 @@ describe( 'World Drive boost and driving effects', () => {
 		assert.deepEqual( run.cruising, { lines: 0, shown: false, ready: true, pulse: 'dhud-ready' } );
 		assert.ok( run.boosting.lines > 0.2 && run.boosting.shown, JSON.stringify( run.boosting ) );
 		assert.ok( run.overdrive.supersonic && run.overdrive.white && run.overdrive.lines > run.boosting.lines, JSON.stringify( run.overdrive ) );
+		// Near white boosting; tinted in overdrive, whose edges sweep a shock front in the ride's colour.
+		assert.ok( run.boostingWhite && run.overdriveTinted, JSON.stringify( run ) );
+		assert.ok( run.shock?.animation === 'shockfront' && /^#[0-9a-f]{6}$/.test( run.shock.sonic ), JSON.stringify( run.shock ) );
 		assert.deepEqual( run.dry, { empty: true, firing: false } );
 		assert.match( run.refill ?? '', /width/ );
 		assert.deepEqual( run.slow, { lines: 0, shown: false } );
 		assert.deepEqual( run.full, { ready: true, pulse: 'dhud-ready' } );
 		await shot( page, 'effects-gauge' );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a wall hit: a layered burst in its tier, bits landing on the ground, a kick of the view, and nothing new made', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { SHAPES, FLAT } = await import( '/src/drive-boosts.js' );
+			const { driver: d, scene, renderer } = window.drive;
+			const world = d.models.group.parent;
+			const saved = { calm: d.effects.calm, motion: d.motion };
+			const root = () => scene.getObjectByName( 'drive-fx' );
+			const batch = name => root().getObjectByName( name ).userData.batch;
+			const make = ( effects = {} ) => {
+
+				d.fx.dispose();
+				d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: { detail: 1, calm: false, ...effects } } );
+
+			};
+			const reset = () => {
+
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 0, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftLevel: 0, boost: null, firing: false, gauge: 1, supersonic: false } );
+				d.jolts.fov.value = d.jolts.fov.speed = d.jolts.nod.value = d.jolts.nod.speed = 0;
+				d.update( 1 / 60 );
+
+			};
+			// The pictures and ways the crash's quads are drawn this frame.
+			const cells = name => {
+
+				const { shapes, axes, mesh } = batch( name );
+				return Array.from( { length: mesh.geometry.instanceCount }, ( _, i ) => ( { frame: shapes.array[ i * 4 + 3 ], mode: axes.array[ i * 4 + 3 ] } ) );
+
+			};
+			// A hit `into` m/s into a wall to the north, in front of the kart's nose.
+			const hit = into => {
+
+				reset();
+				const point = d.entry.pivot.position.clone();
+				point.z += 1.1;
+				point.y += 0.35;
+				d.impact( into, point, { east: 0, north: - 1 } );
+				const kick = Math.round( d.jolts.fov.speed * 10 ) / 10;
+				d.update( 1 / 60 );
+				return { alive: d.fx.particles.alive, kick, cells: [ ...cells( 'drive-crash' ), ...cells( 'drive-crash-dust' ) ] };
+
+			};
+			const memory = () => {
+
+				const materials = new Set();
+				let objects = 0;
+				root().traverse( o => {
+
+					objects ++;
+					if ( o.material ) materials.add( o.material );
+
+				} );
+				return { geometries: renderer.info.memory.geometries, objects, materials: materials.size };
+
+			};
+			const out = {};
+			out.tiers = [ 5, 12, 25 ].map( into => {
+
+				make();
+				return hit( into ).alive;
+
+			} );
+			make();
+			const wham = hit( 25 );
+			out.wham = {
+				ring: wham.cells.some( c => c.frame === SHAPES.shock && c.mode === FLAT ),
+				flare: wham.cells.some( c => c.frame === SHAPES.flare ),
+				kick: wham.kick,
+			};
+			// The bits fly, bounce and lie on the ground under its wheels (the test pad's, at 0): where
+			// each live one was last seen.
+			const items = root().getObjectByName( 'drive-debris' ).userData.items;
+			const last = new Map();
+			for ( let i = 0; i < 96; i ++ ) {
+
+				d.update( 1 / 60 );
+				items.forEach( ( item, n ) => item.age < item.life && last.set( n, item.position.y ) );
+
+			}
+
+			out.bits = { count: last.size, ys: [ ...last.values() ].map( y => Math.round( y * 100 ) / 100 ) };
+			// Calm: no flash or flare, and the view isn't kicked (nor with the camera's effects off).
+			d.effects.calm = true;
+			d.motion = false;
+			make( { calm: true } );
+			const calm = hit( 25 );
+			out.calm = { flash: calm.cells.some( c => c.frame === SHAPES.flare || c.frame === SHAPES.glow || c.frame === SHAPES.burst ), kick: calm.kick };
+			Object.assign( d.effects, { calm: saved.calm } );
+			d.motion = saved.motion;
+			// On a phone, fewer; with no air (the Moon), no dust or smoke.
+			make( { detail: 0.6 } );
+			out.phone = hit( 25 ).alive;
+			make( { air: false, gravity: 0.165 } );
+			const moon = hit( 25 );
+			out.moon = { puffs: moon.cells.filter( c => c.frame === SHAPES.puff ).length, gravity: batch( 'drive-crash' ).gravity };
+			// Fifty hits in a row: nothing new made, never more than its budget.
+			make();
+			reset();
+			const before = memory();
+			let most = 0;
+			for ( let i = 0; i < 50; i ++ ) {
+
+				most = Math.max( most, hit( 5 + i % 25 ).alive );
+				for ( let j = 0; j < 3; j ++ ) d.update( 1 / 60 );
+
+			}
+
+			const after = memory();
+			out.grew = Object.fromEntries( Object.entries( after ).filter( ( [ key, value ] ) => value !== before[ key ] ).map( ( [ key, value ] ) => [ key, `${ before[ key ] } → ${ value }` ] ) );
+			out.most = most;
+			out.budget = d.fx.particles.budget;
+			let capacities = 0;
+			root().traverse( o => capacities += o.userData.batch?.capacity ?? 0 );
+			out.capacities = capacities;
+			for ( let i = 0; i < 180; i ++ ) d.update( 1 / 60 );
+			out.after = d.fx.particles.alive;
+			d.fx.dispose();
+			d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: d.effects } );
+			reset();
+			return out;
+
+		} );
+		console.log( 'a wall hit:', JSON.stringify( result ) );
+		const [ bonk, boing, wham ] = result.tiers;
+		assert.ok( wham > boing && boing > bonk && bonk > 10, JSON.stringify( result.tiers ) );
+		assert.ok( result.wham.ring && result.wham.flare && result.wham.kick < 0, JSON.stringify( result.wham ) );
+		assert.ok( result.bits.count >= 8 && result.bits.ys.every( y => y >= - 0.05 && y <= 0.6 ), JSON.stringify( result.bits ) );
+		assert.deepEqual( result.calm, { flash: false, kick: 0 } );
+		assert.ok( result.phone < wham * 0.8, `${ result.phone } on a phone, ${ wham } on a computer` );
+		assert.deepEqual( result.moon, { puffs: 0, gravity: 9.81 * 0.165 } );
+		assert.deepEqual( result.grew, {} );
+		assert.ok( result.most <= result.budget && result.budget === result.capacities, JSON.stringify( result ) );
+		assert.equal( result.after, 0 );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a wall hit\'s effects change nothing of the drive: the same hit with and without them goes the same way, hitch and all', async () => {
+
+		const result = await page.evaluate( () => {
+
+			const { driver: d, ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const land = pad.children.find( child => child.isMesh );
+			const wall = land.clone();
+			wall.material = land.material.clone();
+			wall.material.side = 2;
+			wall.rotation.set( 0, 0, 0 );
+			wall.scale.set( 60 / 4000, 6 / 2000, 1 );
+			wall.position.set( 0, 3, 30 );
+			pad.add( wall );
+			wall.updateMatrixWorld();
+			const fx = d.fx;
+			const hitches = [];
+			const hitch = fx.hitch.bind( fx );
+			fx.hitch = seconds => {
+
+				hitches.push( seconds );
+				hitch( seconds );
+
+			};
+			const run = withFx => {
+
+				d.fx = withFx ? fx : null;
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 100 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftHop: false, boost: null, firing: false, mult: 1, score: 0 } );
+				d.update( 1 / 60 );
+				for ( let i = 0; i < 90; i ++ ) d.update( 1 / 60 );
+				const round = v => Math.round( v * 1e6 ) / 1e6;
+				return { east: round( d.east ), north: round( d.north ), y: round( d.y ), speed: round( d.speed ), vy: round( d.vy ), spin: d.air ? d.air.spin.toArray().map( round ) : null, hits: d.air?.hits ?? null, score: d.score };
+
+			};
+			const without = run( false );
+			const withFx = run( true );
+			d.fx = fx;
+			pad.remove( wall );
+			return { without, withFx, hitches };
+
+		} );
+		// It hit hard enough for WHAM! and its hitch.
+		assert.ok( result.hitches.length > 0, JSON.stringify( result ) );
+		assert.deepEqual( result.withFx, result.without );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a hit\'s word by how hard it was: BONK!, BOING! and WHAM!, each its own way, over the kart; a run of hits counts up; asking for less motion they only fade', async () => {
+
+		const pop = into => page.evaluate( into => {
+
+			const { driver: d } = window.drive;
+			d.impact( into, d.entry.pivot.position.clone(), { east: 0, north: - 1 } );
+			const element = document.querySelector( '#hud .dhud-pop' );
+			const style = getComputedStyle( element );
+			return { kind: element.className, text: element.textContent, top: Math.round( parseFloat( style.top ) / innerHeight * 100 ) / 100, animation: style.animationName };
+
+		}, into );
+		// Long enough after the last test's hits not to count up from them.
+		await page.waitForTimeout( 1300 );
+		const tiers = [];
+		for ( const into of [ 5, 12, 25 ] ) {
+
+			tiers.push( await pop( into ) );
+			// Long enough apart not to count up.
+			await page.waitForTimeout( 1300 );
+
+		}
+
+		console.log( 'pops:', JSON.stringify( tiers ) );
+		assert.deepEqual( tiers.map( ( { kind, text } ) => [ kind, text ] ), [ [ 'dhud-pop bonk', 'BONK!' ], [ 'dhud-pop boing', 'BOING!' ], [ 'dhud-pop wham', 'WHAM!' ] ] );
+		assert.deepEqual( tiers.map( ( { animation } ) => animation ), [ 'dhud-bonk', 'dhud-boing', 'dhud-wham-hit' ] );
+		// Over the kart, not on its roof (it's about two thirds of the way down the view).
+		for ( const { top } of tiers ) assert.ok( top > 0.38 && top < 0.52, `at ${ top } of the view` );
+		await page.waitForTimeout( 1300 );
+		await pop( 12 );
+		const twice = await pop( 12 );
+		assert.equal( twice.text, 'BOING! ×2' );
+		await page.waitForTimeout( 1300 );
+		await page.emulateMedia( { reducedMotion: 'reduce' } );
+		const calm = await pop( 25 );
+		await page.emulateMedia( { reducedMotion: 'no-preference' } );
+		assert.equal( calm.animation, 'dhud-pop-calm' );
+		// "Crash!" (crash: 'stop') in red, knocked side to side.
+		const flash = await page.evaluate( () => {
+
+			window.drive.driver.hud.flash( 'Crash!', 'crash' );
+			const element = document.querySelector( '#hud .dhud-flash' );
+			const crash = { kind: element.className, animation: getComputedStyle( element ).animationName };
+			window.drive.driver.hud.flash( 'Back on the road' );
+			return { crash, then: element.className };
+
+		} );
+		assert.deepEqual( flash, { crash: { kind: 'dhud-flash crash', animation: 'dhud-pop, dhud-knock' }, then: 'dhud-flash' } );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a wipeout slams down flat, a landing throws a ring of dust by how hard it was (regolith on the Moon), and a scrape throws more sparks the faster it grinds', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { SHAPES, FLAT, ALONG } = await import( '/src/drive-boosts.js' );
+			const { driver: d, scene } = window.drive;
+			const world = d.models.group.parent;
+			const root = () => scene.getObjectByName( 'drive-fx' );
+			const items = name => root().getObjectByName( name ).userData.batch.items.filter( p => p.age < p.life );
+			const make = ( effects = {} ) => {
+
+				d.fx.dispose();
+				d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: { detail: 1, calm: false, ...effects } } );
+
+			};
+			const reset = ( speed = 0 ) => {
+
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftLevel: 0, boost: null, firing: false } );
+				d.update( 1 / 60 );
+
+			};
+			const out = {};
+			// Down on its roof at 10 m/s, sliding at 12: a flat ring on the ground, sparks skidding off
+			// along it (never thrown up as a fountain).
+			make();
+			reset( 12 );
+			d.enterAir();
+			Object.assign( d, { y: 0.4, vy: - 10 } );
+			d.air.q.set( 0, 0, 1, 0 );
+			d.wipeOut( 0 );
+			const sparks = items( 'drive-crash' ).filter( p => p.mode === ALONG );
+			out.wipeout = {
+				ring: items( 'drive-crash-dust' ).some( p => p.mode === FLAT && p.frame === SHAPES.ring ),
+				sparks: sparks.length,
+				up: sparks.filter( p => p.velocity.y > 0.7 * Math.hypot( p.velocity.x, p.velocity.z ) ).length,
+			};
+			// Coming down on its wheels at 10 m/s and at 3 m/s.
+			const land = ( vy, effects ) => {
+
+				make( effects );
+				reset( 10 );
+				d.enterAir();
+				d.vy = vy;
+				d.touchDown( 0 );
+				const dust = items( 'drive-crash-dust' );
+				return { ring: dust.some( p => p.mode === FLAT ), puffs: dust.filter( p => p.frame === SHAPES.puff ).length, grains: dust.filter( p => p.frame === SHAPES.soft ).length };
+
+			};
+			out.hard = land( - 10 );
+			out.soft = land( - 3 );
+			out.moon = land( - 10, { air: false, gravity: 0.165 } );
+			// Scraping along a wall for half a second, at 30 m/s and at 5.
+			const scrape = speed => {
+
+				make();
+				reset();
+				for ( let i = 0; i < 30; i ++ ) {
+
+					d.scraping = 0.15;
+					d.scrapeAt.at.copy( d.entry.pivot.position ).add( { x: 0.7, y: 0.3, z: 0 } );
+					d.scrapeAt.normal.set( - 1, 0, 0 );
+					d.scrapeAt.speed = speed;
+					d.update( 1 / 60 );
+
+				}
+
+				return items( 'drive-crash' ).filter( p => p.mode === ALONG ).length;
+
+			};
+			out.scrape = { fast: scrape( 30 ), slow: scrape( 5 ) };
+			d.scraping = 0;
+			d.fx.dispose();
+			d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: d.effects } );
+			reset();
+			return out;
+
+		} );
+		console.log( 'wipeout, landing and scraping:', JSON.stringify( result ) );
+		assert.ok( result.wipeout.ring && result.wipeout.sparks > 5 && result.wipeout.up === 0, JSON.stringify( result.wipeout ) );
+		assert.ok( result.hard.ring && result.hard.puffs > 4, JSON.stringify( result.hard ) );
+		assert.ok( ! result.soft.ring && result.soft.puffs <= 2, JSON.stringify( result.soft ) );
+		assert.ok( result.moon.puffs === 0 && result.moon.grains > 4, JSON.stringify( result.moon ) );
+		assert.ok( result.scrape.fast > 2 * result.scrape.slow && result.scrape.slow > 0, JSON.stringify( result.scrape ) );
 		assert.deepEqual( page.errors, [] );
 
 	} );
@@ -2244,6 +2631,8 @@ describe( 'World Drive boost and driving effects', () => {
 			assert.deepEqual( run, { motion: false, calm: true, switch: true, shaken: 0, lit: false, burst: run.burst, pulse: 'none' } );
 			assert.ok( run.burst > 10, JSON.stringify( run ) );
 			assert.deepEqual( off, { punch: 0, lines: 0, white: false, supersonic: true } );
+			// OVERDRIVE just shows, still.
+			assert.equal( await calm.evaluate( () => getComputedStyle( document.querySelector( '#hud .dhud-sonic' ) ).animationName ), 'none' );
 			assert.deepEqual( calm.errors, [] );
 
 		} finally {
@@ -2294,7 +2683,7 @@ describe( 'World Drive boost and driving effects', () => {
 			await driveHere( calm );
 			const boom = await calm.evaluate( async () => {
 
-				const { SHAPES, FLAT } = await import( '/src/drive-boosts.js' );
+				const { SHAPES, FLAT, FACING } = await import( '/src/drive-boosts.js' );
 				const { driver: d, renderer, scene, camera, screenFx } = window.drive;
 				// Frame by frame by hand, each read back off the canvas.
 				renderer.setAnimationLoop( null );
@@ -2328,6 +2717,8 @@ describe( 'World Drive boost and driving effects', () => {
 				const fresh = batches.flatMap( batch => batch.items.filter( p => p.age < p.life && p.age < 0.05 ) );
 				const rings = fresh.filter( p => p.mode === FLAT && ( p.frame === SHAPES.shock || p.frame === SHAPES.ring ) );
 				const out = { supersonic: d.supersonic, rings: rings.length, kept: Math.round( Math.min( ...rings.map( p => p.carry.length() ) ) / top * 100 ) / 100, flares: fresh.filter( p => p.frame === SHAPES.flare ).length, frames: [] };
+				// The collar of vapour round it, facing the camera (so never one of the rings).
+				out.puffs = fresh.filter( p => p.frame === SHAPES.puff && p.mode === FACING ).length;
 				for ( let k = 0; k < 24; k ++ ) {
 
 					tick();
@@ -2346,6 +2737,7 @@ describe( 'World Drive boost and driving effects', () => {
 			console.log( 'sonic boom:', JSON.stringify( boom ) );
 			// Its four rings carried at 0.97 of the speed, so the camera is never inside one.
 			assert.ok( boom.supersonic && boom.rings === 4 && boom.kept > 0.95 && boom.flares === 0, JSON.stringify( boom ) );
+			assert.ok( boom.puffs > 0, JSON.stringify( boom ) );
 			// With them falling back through the camera the view went near white (over 50 % of it) for 6 frames, twice.
 			assert.ok( Math.max( ...boom.frames ) < 50, `the view went white: ${ boom.frames.join( ' ' ) }` );
 			assert.deepEqual( calm.errors, [] );
@@ -6193,9 +6585,9 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 
 // (Not the construction rides: only achievements unlock those, never the pass.)
 const locked = page => page.locator( '#globe-ui .vehicle.locked:not( :has( .feat-chip ) )' ).count();
-// What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and four
+// What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and seven
 // rides.
-const LOCKED = 17;
+const LOCKED = 20;
 const sheet = page => page.locator( '#pass .buy-area' );
 
 async function openPass( page ) {
