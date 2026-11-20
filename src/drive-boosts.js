@@ -4014,7 +4014,8 @@ const STYLES = {
 	// flame with a violet edge. In overdrive, warp: the stars stretch into hyperspace lines round an
 	// accretion disk; let go, the galaxy drifts on, and run dry, a star dies.
 	galaxy: {
-		flame: { outer: 0x6a2dff, inner: 0x8a4cff, halo: 0xa070ff, length: 0.85, flicker: 0.7, deep: true, diamonds: false },
+		// (A short cone: drawn over the scene, any longer it's a solid purple stick down the view.)
+		flame: { outer: 0x6a2dff, inner: 0x8a4cff, halo: 0xa070ff, length: 0.5, flicker: 1.2, deep: true, diamonds: false },
 		tint: 0xc08cff,
 		ember: 0xb48cff,
 		ash: 0x2a1050,
@@ -4070,12 +4071,14 @@ const STYLES = {
 
 				const p = batch.spawn( 0.9 + Math.random() * 0.4 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.3 * f.scale, ( Math.random() - 0.5 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.92, 1.5 + Math.random(), 0.2, 0.6 );
+				// (Kept up with it, and faint: added up, a pile of them blooms to white over its rear and
+				// hazes the view down to the lens.)
+				thrown( f, p, 0.95, 1.2 + Math.random(), 0.2, 0.6 );
 				p.frame = SHAPES.puff;
-				p.size = 0.2 * f.scale;
-				p.grow = 0.75 * f.scale;
-				p.colour.set( pick( cloudColours ) ).lerp( warpCloud, f.hot * 0.7 );
-				p.alpha = 0.5;
+				p.size = 0.18 * f.scale;
+				p.grow = 0.5 * f.scale;
+				p.colour.set( pick( cloudColours ) ).lerp( warpCloud, f.hot * 0.5 );
+				p.alpha = 0.32;
 				p.drag = 1.2;
 				p.spin = ( Math.random() - 0.5 ) * 0.8;
 				p.turn = Math.random() * Math.PI * 2;
@@ -4087,12 +4090,12 @@ const STYLES = {
 
 				const p = voids.spawn( 0.8 + Math.random() * 0.4 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.3 * f.scale, ( Math.random() - 0.5 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.92, 1.5 + Math.random(), 0.1, 0.4 );
+				thrown( f, p, 0.95, 1.2 + Math.random(), 0.1, 0.4 );
 				p.frame = SHAPES.puff;
 				p.size = 0.16 * f.scale;
 				p.grow = 0.5 * f.scale;
 				p.colour.set( 0x140a33 );
-				p.alpha = 0.4;
+				p.alpha = 0.28;
 				p.drag = 1.2;
 				p.turn = Math.random() * Math.PI * 2;
 
@@ -4209,7 +4212,14 @@ const STYLES = {
 
 					f = frame;
 					for ( const p of batch.items ) if ( p.age < p.life && p.kind === 0 ) p.drag = 0.4;
-					for ( let i = 0; i < 6; i ++ ) flung( frame, cloud( 1 ), 0.9, 0.6 );
+					for ( let i = 0; i < 4; i ++ ) {
+
+						const p = cloud( 1 );
+						flung( frame, p, 0.95, 0.6 );
+						p.colour.set( cloudColours[ i % cloudColours.length ] );
+						p.alpha = 0.25;
+
+					}
 					if ( ! dry ) return;
 					const giant = batch.spawn( 0.5 );
 					giant.position.copy( frame.nozzle );
