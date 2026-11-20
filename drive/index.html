@@ -246,6 +246,9 @@
 			<div class="card">
 				<p class="title"></p>
 				<div class="bar" hidden><i></i></div>
+				<!-- The robot check again as the page first drives on the Earth (boot.js's earthVisit):
+				     out of sight unless Turnstile wants a click. -->
+				<div class="robot-check"></div>
 				<button type="button" class="link cancel">Back to the globe</button>
 			</div>
 		</section>
@@ -316,6 +319,7 @@
 		</div>
 		<!-- On the worlds made in the page (body.js), whose pictures and heights are NASA's (worlds.js's
 		     credits, the same words): one a world, #<id>-credit (main.js shows the one it's on). -->
+		<div id="earth-credit" class="world-credit" hidden>Earth: NASA Blue Marble</div>
 		<div id="moon-credit" class="world-credit" hidden>Moon: NASA LRO (LROC, LOLA)</div>
 		<div id="mars-credit" class="world-credit" hidden>Mars: NASA MGS MOLA, Viking (USGS)</div>
 		<div id="vesta-credit" class="world-credit" hidden>Vesta: NASA Dawn (DLR, USGS)</div>
@@ -325,7 +329,7 @@
 			<h2 id="about-title">World Drive</h2>
 			<p>Pick a spot anywhere on Earth, drop in and drive the real world in 3D: city streets, mountain passes, bridges, wherever you like. Or switch to the Moon, Mars, Vesta or Ceres and drive that.</p>
 			<p>Made by Thomas in Vancouver, Canada. Follow along on Instagram: <a href="https://www.instagram.com/printyours.ca/" target="_blank" rel="noopener">@printyours.ca</a>.</p>
-			<p>The 3D world is Google's photorealistic map, streamed as you go. Every visit costs a little, so everyone gets one free Earth drive a day, with a limit for everyone together; past either, the page opens on the Moon; the Moon, Mars, Vesta and Ceres are free and unlimited. A visit lasts as long as you keep the page open: fly off and drop in somewhere else as often as you like.</p>
+			<p>The 3D world is Google's photorealistic map, streamed as you go. Every drive on it costs a little, so everyone gets one free Earth drive a day, with a limit for everyone together; the globe you pick a place on is our own picture of the Earth (NASA's Blue Marble), and the 3D map is only opened when you press Drive here on the Earth. Past either limit, the Moon, Mars, Vesta and Ceres are still free and unlimited. An Earth drive lasts as long as you keep the page open: fly off and drop in somewhere else as often as you like.</p>
 			<p>The leaderboard keeps the nickname you pick and your best scores, with where you set them and in what, your best time on each challenge you finish (with when you passed each gate and in what), and your XP and level, with the areas and start spots you've driven (until you pick a nickname, that's kept in this browser); nothing else about you.</p>
 			<p>While <b>Show me to drivers nearby</b> is on (it is unless you switch it off in the pause menu), or while you're in a party, the others driving there see your leaderboard nickname (or a guest name) with your level and title, your ride and where your car is in the game, including the spot you dropped in and its name. Nothing else about you, and never where you really are.</p>
 			<p>With it on, you're also counted on the globe's map of who's driving now, which everyone sees: a dot, to about a kilometre, where your car is in the game (or, while nobody else is driving in your area, where you dropped in, which can be a place you searched for), with how many are driving there. No name, no place name and nothing else about you. In a party, on the globe, or with it off, you're not counted.</p>

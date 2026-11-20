@@ -105,19 +105,36 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 
 	}
 
-	if ( ! off ) {
+	let listening = false;
+	function listen() {
 
+		if ( off || listening ) return;
+		listening = true;
 		setInterval( post, POST_MS );
 		document.addEventListener( 'visibilitychange', () => document.visibilityState === 'hidden' && post() );
 		addEventListener( 'pagehide', post );
 
 	}
 
+	listen();
+
 	return {
 
 		add,
 		once,
 		post,
+
+		// Another visit's token for this page's posts from now on (main.js: the Earth visit's, once the
+		// page has its Earth drive, in place of the globe's). What's counted and not posted yet goes with
+		// it; the once-a-visit steps stay counted (it's the same page).
+		setVisit( next ) {
+
+			if ( typeof next !== 'string' || ! next ) return;
+			visit = next;
+			off = false;
+			listen();
+
+		},
 
 		// The page opened `ms` after it was asked for (the globe showing: the funnel's first step),
 		// from `referrer`, on this device (deviceOf: the main pointer and the screen's size).

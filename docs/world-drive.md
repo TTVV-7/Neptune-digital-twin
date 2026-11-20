@@ -1,7 +1,9 @@
 # World Drive (worlddrive.app)
 
-World Drive is the second app in this repository: pick anywhere on Earth from a globe of Google's
-photorealistic 3D tiles, drop in and drive the real world, arcade style; or switch the globe to
+World Drive is the second app in this repository: pick anywhere on Earth from a globe, drop in and
+drive the real world in Google's photorealistic 3D tiles, arcade style (the globe is our own picture
+of the Earth, and Google's tiles, a billed session, come with the first drive on the Earth: [what a
+visit costs](#what-a-visit-costs-and-how-its-capped)); or switch the globe to
 [the Moon](#the-moon), [Mars](#mars) or the asteroids [Vesta and Ceres](#vesta-and-ceres) and drive
 that ([worlds](#worlds)). It shares `src/` with the
 construction app (the tiles, the models, the driving) but has its own page, build, Worker and
@@ -186,7 +188,8 @@ in `live.js`), so a plane at 2,700 km/h is seen flying between updates, not jump
 - **No levels.** Its distance, air and the areas it flies over don't count for XP (`driven` in
   `main.js`).
 
-**Google's tiles.** Google bills by the session (one a page load: see the top of `main.js`), not
+**Google's tiles.** Google bills by the session (one a page at most, from its first drive on the
+Earth: see the top of `main.js`), not
 by the tile, so flying high or far costs no more there. What a fast plane costs is your device's
 download and drawing, so flying fast it makes do with coarser tiles: their screen-space error
 target goes up to 2.5 times the usual from 30 m/s to 250 m/s (`PLANE_TILE_ERROR` in `main.js`).
@@ -1529,9 +1532,9 @@ always had.
   in `panel.js`); and NASA's credit where Google's would be (`#moon-credit`, `#mars-credit`,
   `#vesta-credit`, `#ceres-credit`, each `.world-credit`).
 - **Links**: `/?spot=<id>-<name>` (one of its spots) or `/?at=<lat>,<lon>&world=<id>` turns the globe
-  to it and pins the place, and a page opened on one asks for that world's free visit and opens there
-  with the Earth closed (main.js's `earthClosed`, which was `moonOnly`); a `world=` that isn't a
-  world is the Earth's. Each start spot has a page of its own at `/<id>/<slug>/` ([the Moon's
+  to it and pins the place, and a page opened on one asks for that world's free visit in place of
+  the globe's and opens there (main.js's `opensOn`; the Earth is our own globe there too, its drive
+  asked for at the first drive on it); a `world=` that isn't a world is the Earth's. Each start spot has a page of its own at `/<id>/<slug>/` ([the Moon's
   pages](#the-moons-pages), [Mars's](#marss-pages), [Vesta's and Ceres's](#vestas-and-ceress-pages)).
 - **The drop-in** has no tiles to wait for: the ground's height at the pin is worked out, so the
   scene is centred on it at once, and the ground round it is built on the way down (main.js's
@@ -4823,50 +4826,106 @@ accounts by kind. Pictures: `account-1-create-desktop` to `account-11-sign-out-f
 ## What a visit costs, and how it's capped
 
 Google bills the Map Tiles API by the **3D tiles session**: each page that loads the root tileset
-starts one. World Drive is built so that one page load is one session, however much you fly about:
+starts one. World Drive is built so that a page starts one only when it drives on the Earth, and
+never more than one, however much you fly about:
 
-- The root tileset is requested once per page load. **Drive here** doesn't load a new world: it moves
+- **The globe is our own Earth.** The globe a place is picked on is an ellipsoid the Earth's size with
+  NASA's Blue Marble on it (`createTestGlobe` in `src/drive-app/test-globe.js`, its picture
+  `drive/public/earth/colour.webp`, 4096 × 2048, 527 KB, public domain: `npm run make-earth` makes it,
+  `scripts/make-earth.mjs`, from the copy in the three-globe package on npm, the one the orrery's small
+  Earth comes from), which costs nothing to show. Its credit, "Earth: NASA Blue Marble", is where
+  Google's would be (`#earth-credit`) while it's shown. Everything the globe does is done on it: a tap
+  pins, search, the start spots and recent places, **Driving now** and its dots, a party's **Go to**
+  and **Join**, the orrery. A place picked is flown to from 1,200 km up (`PICTURE_PIN_DISTANCE` in
+  main.js; over Google's tiles it's 2.2 km), as a texel of the picture is about 10 km. (The globe
+  was Google's tiles before, the same ones driven on, so every page load was a billed session: about
+  28% of the globe's views never dropped in, and every page that went to the Moon or Mars was one
+  more.)
+- **Google's tiles come with the first drive on the Earth.** **Drive here** on the Earth (a pin, a
+  spot, a search, a link's place), **Join** or **Go to** a friend there, an Earth challenge's start
+  (from its card or a friend's link): each is a drop-in on the Earth (main.js's `dropIn`), and the
+  first in the page asks for the Earth's drive (`openEarth`, boot.js's `earthVisit`) with the loading
+  card up (**Opening the 3D Earth...**, its **Back to the globe** to give up on it): the robot check
+  again (Turnstile's tokens are good for one ask each; its widget, if it wants a click, in the loading
+  card), then `POST /api/visit` with `fromGlobe: true` (below). With the key, Google's tiles are made
+  (`useTiles`) and the drop-in goes on as ever. Two asked for at once share the one ask, and once the
+  page has a key it never asks again: the globe from then on (**M**) is Google's tiles as it always
+  was, and every drop-in on the Earth is on the same session.
+- The root tileset is requested once per page. **Drive here** doesn't load a new world: it moves
   the one already loaded so the new place is at the scene's centre (`recentreTiles` in `src/world.js`,
   the same transform `ReorientationPlugin` makes when the tiles arrive), and keeps the camera where it
-  was on the Earth (`GlobeView.capture` / `restore`). Tiles already loaded stay loaded.
+  was on the Earth (`GlobeView.capture` / `restore`). Tiles already loaded stay loaded. The Earth's
+  frame is our own globe's group from start to end (its world matrix is what the globe, the rooms and
+  the dots go by), placed on each new place as the tiles are (`placeEarth`, main.js's `frameOn`), so
+  the tiles arriving don't move anything under the camera. Our own Earth is sunk 3 km under them
+  (`PICTURE_SINK`) once they're made, so the two don't fight where both are drawn, and goes once
+  their first loads are all in (`tilesUp`).
 - The tiles' session isn't renewed by itself (`autoRefreshToken: false`): renewing would be a new
   billed session. After a few hours on one page, Google ends the session; World Drive then says to
   reload, which counts as a new visit.
-- The built site never contains the Maps key. The page asks the Worker for it once as it starts
-  (`POST /api/visit`), after an invisible Cloudflare Turnstile check and once the game's code has
-  arrived (so a download that fails spends no drive: [the load](#the-load)), and only while the
-  day's visits are under two caps: **DAILY_VISITS** for everyone together (300) and
-  **PER_VISITOR_DAILY** for each visitor (1: one free Earth drive a day; a supporter signed in has
-  **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account, and never turned away by the cap for everyone). Both start again at midnight UTC.
-  The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all.
+- The built site never contains the Maps key. The page asks the Worker for a visit once as it starts
+  (`POST /api/visit` with `globe: true`), after an invisible Cloudflare Turnstile check and once the
+  game's code has arrived ([the load](#the-load)): the globe's visit, `{ free: true, globe: true,
+  world: 'earth', visit }`, a free world's kind of token (visits.js), no key, never limited and
+  counted against no cap, so the leaderboard, levels, the play stats and driving with others have a
+  visit from the start. The Earth's drive, asked for at the first drive on the Earth, is the Maps key,
+  only while the day's Earth drives are under two caps: **DAILY_VISITS** for everyone together (300)
+  and **PER_VISITOR_DAILY** for each visitor (1: one free Earth drive a day; a supporter signed in
+  has **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account, and never turned away by the
+  cap for everyone). Both start again at midnight
+  UTC. The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all. With the key comes an
+  Earth visit's token, which the page posts with from then on (main.js's `setVisit`: scores, levels,
+  challenge times, as an Earth challenge's needs one, the play stats and their Earth drop-in places,
+  which only an Earth visit posts, and the rooms connected to from then on).
+- **Links ask for nothing more as they load.** A link to a place on the Earth (`?spot=`, `?at=`), an
+  Earth challenge's link or a party's (`?party=`) only flies the globe there and pins it, opens the
+  challenge's card, or joins the party's room from the globe, as ever: the Earth's drive is asked
+  for at its **Drive here**, **Start** or **Join**, so someone who opens a link and leaves costs
+  nothing. (A page asked for the key as it loaded with any of them before; it would ask straight away
+  just as well, but has no need to.)
 - **Every world but the Earth is never limited** (the Moon, Mars, Vesta and Ceres: worlds.js's `free`). Their
   ground is our own (body.js), so it costs nothing to stream. A page opened on a link to one
   (`?spot=moon-...`, `?spot=mars-...` and the like, or `?at=` with `world=moon`, `world=mars` and so on, or a challenge's
-  link on one) asks for a visit with that `world`: after the robot check it gets `{ moon: true,
-  free: true, world, visit }` (`moon: true` as the answer always was, for a page from before Mars
-  still in a browser's cache), no key, and nothing is counted against the caps. It opens on that
-  world with the Earth closed (main.js's `earthClosed`, which was `moonOnly`): picking the Earth
-  reloads the page without the link, which asks for one of the day's Earth drives as usual. A
-  `world` that isn't a free world (one that isn't a world at all, or `earth`) asks for an Earth
-  visit.
-- **Over a cap the page opens on the Moon by itself** (worlds.js's `FALLBACK`; the other free worlds
-  are picked in the orrery, from **Worlds**): the 429 carries a visit (for scores and stats), the game starts on the Moon's globe
-  without a key, loading nothing from Google, and a toast says why (*You've had today's free Earth
-  drive, so you're on the Moon: free and unlimited, as Mars, Vesta and Ceres are...*, the others
-  listed by worlds.js's `listOf`, or *Today's free Earth drives
-  are all taken...* when it's the cap for everyone). Picking the Earth there shows **You've had
-  today's free Earth drive** (or **Today's free Earth drives are used up**), with how long until
-  fresh ones and **Drive on the Moon** to go back; over the visitor's own cap it also has a sign-in,
-  so a supporter on a new browser, or back from paying before Stripe's webhook, signs in and the
-  page reloads once to ask for an Earth drive as theirs.
-- **Every visit is counted for the admin page**, those over a cap too: `visit` for all of them, and
-  `visit_kind` by where it went (`earth`, `earth_supporter`, `owner`, `moon_link`, `mars_link`,
-  `vesta_link` and `ceres_link` for a page opened on a link to one, and `moon_daily_cap` or `moon_visitor_cap` for one sent to the
-  Moon). The admin page shows **Earth drives** and **Over a cap, sent to the Moon** beside
+  link on one) asks for a visit with that `world` in place of the globe's: after the robot check it
+  gets `{ moon: true, free: true, world, visit }` (`moon: true` as the answer always was, for a page
+  from before Mars still in a browser's cache), no key, and nothing is counted against the caps. It
+  opens on that world (main.js's `opensOn`); the Earth is our own globe there as anywhere, its drive
+  asked for at the first drive on it. A `world` that isn't a free world (one that isn't a world at
+  all, or `earth`) is the globe's or the Earth's, as `globe` says.
+- **Over a cap at Drive here** (a 429 to the Earth's drive) the page shows **You've had today's free
+  Earth drive** (or **Today's free Earth drives are used up**), with how long until fresh ones and
+  **Drive on the Moon**, which turns the globe to the Moon (worlds.js's `FALLBACK`; the other free
+  worlds are picked in the orrery, from **Worlds**): boot.js's `usedUpNotice` (screens.js's
+  `notice( 'used-up' )`), the same notice a page turned away as it loaded shows, called from
+  `earthVisit`. The drop-in ends, back on the globe of the Earth with the pin still there and nothing
+  loaded from Google. A **Drive here** on the Earth again before the caps start afresh shows the
+  notice again without asking (the Worker would only say the same). With signing in set up, the
+  notice has **Get more Earth drives** (main.js's `pitchPass`, the pass's sheet, as usedUp's notice
+  has) and a sign-in, so a supporter on a new browser, or back from paying before Stripe's webhook,
+  signs in, and once the account here has the pass the notice goes and the next **Drive here** asks
+  again, counted by their account.
+- **A Worker from before the globe's visit** takes `globe: true` for an Earth visit: the page then
+  has the key as it loads and starts on Google's tiles, as it did, or over a cap **opens on the Moon
+  by itself**: the 429 carries a visit (for scores and stats), the game starts on the Moon's globe
+  without a key with the Earth closed (main.js's `earthClosed`), and a toast says why (*You've had
+  today's free Earth drive, so you're on the Moon: free and unlimited, as Mars, Vesta and Ceres
+  are...*, or *Today's free Earth drives are all taken...* when it's the cap for everyone); picking
+  the Earth there shows the used-up notice (boot.js's `usedUp`), with a sign-in that reloads the page
+  once to ask again as a supporter's.
+- **Every visit is counted for the admin page**, those over a cap too: `visit` once a page (its
+  globe's visit, or its link's), and `visit_kind` by where it went (`globe` for a page opened on the
+  globe; `earth`, `earth_supporter` or `owner` for its Earth drive when it's asked for, and a page
+  given the key as it loads; `moon_link`, `mars_link`, `vesta_link` and `ceres_link` for a page
+  opened on a link to one; and `moon_daily_cap` or `moon_visitor_cap` for an Earth drive turned away
+  by a cap, from the globe or, from a Worker from before, a page sent to the Moon). An Earth drive
+  asked for by a page that has its visit (`fromGlobe: true`) is counted only by where it went
+  (`countVisit`'s `again`), not as a visit again, so **Visits** stay one a page. The admin page
+  shows **Earth drives**, **Opened on the globe** and **Over a cap, no Earth drive** beside
   **Visits**, and each world's link visits in its card **The worlds**. (Before this, a visit turned away
-  wasn't counted at all, so the visits seemed to stop at `DAILY_VISITS`.) A failed robot check shows **We couldn't check you're a person**
-  with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
-  to drive, which costs nothing).
+  wasn't counted at all, so the visits seemed to stop at `DAILY_VISITS`.) A failed robot check as the
+  page loads shows **We couldn't check you're a person** with **Try again**; at **Drive here**, a
+  toast, to press it again. With no key set, it shows **World Drive is getting ready** (with a flat
+  test pad to drive, which costs nothing).
 
 A visitor is a hash of their IP address with a random salt made each day (for IPv6, the address's
 first half, its /64: the block a home or a phone is given, so the billions of addresses in it are one
@@ -4931,7 +4990,8 @@ see. There's no sign-up: a nickname is all it takes.
 The game runs in your browser, so the Worker never sees a score being made. What it can do is make
 cheating cost something and keep the boards believable (`worker/drive/scores.js`):
 
-- **A visit token.** A score is only taken with the token `/api/visit` hands out with the Maps key:
+- **A visit token.** A score is only taken with the token `/api/visit` hands out (with the globe's
+  visit, a link's to another world, or the Earth's drive with the Maps key):
   "v1.<visit id>.<expiry>.<signature>", an HMAC-SHA256 of the id and the expiry whose key is derived
   (HKDF) from `TURNSTILE_SECRET`, so there's no new secret to set, and good for 6 hours. The id is
   21 random letters and one saying the kind of visit: `e` for a visit the Earth's caps let through,
@@ -5060,7 +5120,7 @@ share), a day, as `metric:key`:
 
 | Metric | Keys | What it's for |
 | --- | --- | --- |
-| `visit`, `visit_hour` | `all`; the UTC hour | Visits (each Maps key handed out, counted by the Worker as `/api/visit` answers), and when |
+| `visit`, `visit_hour` | `all`; the UTC hour | Visits (one a page: its globe's visit or its link's, counted by the Worker as `/api/visit` answers; an Earth drive asked for later is a `visit_kind` alone), and when |
 | `load` | the referring site's host name, or `direct` | Where people come from (once a visit) |
 | `load_time`, `load_ms` | a bucket (under 2 s to over 20 s); `total` | From asking for the page to the globe showing, and the milliseconds together for the mean |
 | `funnel` | `globe`, `pin`, `dropin`, `driving`, `drove_1m`, `drove_10m`, `drove_30m` | How far a visit gets, each step once a visit as it's reached: the globe shown, a place first pinned (a spot, a search result, a recent place, a link, a tap, an area of people driving), a drop-in first started, the first drive, and the visit's driving (not paused) passing 1, 10 and 30 minutes. A party's Join drops in without a pin, so a step can be more than the one before |
@@ -5604,10 +5664,12 @@ and a route the same for everyone in its period, with its own board of each play
   recent places (`recent: false`: picking it there later would drop you kilometres from the
   landmark). Pressed as its period ends (the list a moment behind), a challenge that's over doesn't
   start: the list says why ("That challenge has ended, so a run of it wouldn't count. Here are the
-  new ones."). With today's Earth drives used up (or a page opened on a link to another world:
-  main.js's `earthClosed`), the Earth's cards say **Needs an Earth drive**, which shows why (the
-  used-up screen, or for a page opened on another world, the reload to the Earth); the other
-  worlds' start there as anywhere, from the used-up screen's **Drive on the Moon** too.
+  new ones."). An Earth challenge's **Start** on a page with no Earth drive yet asks for it, as any
+  drop-in on the Earth does ([what a visit costs](#what-a-visit-costs-and-how-its-capped)), and over
+  a cap shows the used-up screen. With the Earth closed (a page turned away as it loaded by a Worker
+  from before the globe's visit: main.js's `earthClosed`), the Earth's cards say **Needs an Earth
+  drive**, which shows why (the used-up screen); the other worlds' start there as anywhere, from the
+  used-up screen's **Drive on the Moon** too.
 - **The run.** The car comes down at the start and a countdown, **3, 2, 1, GO!**, holds it there:
   the gas can be held down, ready, and nothing moves till GO. The visit's first time on a computer,
   the keys card is shown over the countdown, which is longer then (6 s, "Get ready" till the 3), and
@@ -6114,12 +6176,12 @@ page's first load but the few lines `boot.js` needs to ask what a link is (below
   beside the robot check, so it costs no wait: the visit waits for its answer at most `LINK_WAIT` (4
   s) after the check, to know its world, and one slower than that opens its card when it comes (over
   whatever's going on, a drive paused as Challenges does), the visit's world the Earth for want of
-  knowing. The challenge's world is the visit's: **an Earth challenge spends an Earth drive** as any
-  page load on the Earth does, **one on another world none**, the game opening on its world with
-  the Earth closed (`earthClosed`, as a [link to another world](#what-every-world-but-the-earth-has)
-  does: a free visit, `{ world: 'mars' }` for a Mars challenge's). With today's Earth drives used up
-  an Earth challenge's link shows the used-up screen, and **Drive on the Moon** opens the Moon with
-  the link's card, its Start saying **Needs an Earth drive**. The globe comes up as for a link to a
+  knowing. The challenge's world is the visit's: **an Earth challenge's link spends no Earth drive as
+  it opens** (the globe's visit; its **Start** asks for one, as any drop-in on the Earth does), **one
+  on another world none**, the game opening on its world (`opensOn`, as a [link to another
+  world](#what-every-world-but-the-earth-has) does: a free visit, `{ world: 'mars' }` for a Mars
+  challenge's). With today's Earth drives used up an Earth challenge's **Start** shows the used-up
+  screen, and **Drive on the Moon** turns the globe to the Moon. The globe comes up as for a link to a
   place, then the challenges' list with the link's card over it: "Ann Racer's time to beat: 0:21.40
   on the daily checkpoint sprint at Furka Pass, 5 h 12 m left." and **Start: race their ghost** (a
   drop-in at its start, racing their ghost). The link leaves the address once it's opened, the
@@ -8030,9 +8092,10 @@ beside it, then asks for the visit; the splash's line about World Drive is on th
 first paint and is its largest paint, so the page counts as loaded then; and on worlddrive.app the
 head opens the connections to Turnstile and to Google's tiles at once.
 
-The visit (`POST /api/visit`) is one of the day's drives, the visitor's and everyone's, so it waits
-for both the robot check and the game's code: a download that fails (a phone losing its connection)
-spends none, nor does each **Try again** after it, which reloads the page. Whichever of the two fails
+The visit (`POST /api/visit`) waits for both the robot check and the game's code: a download that
+fails (a phone losing its connection) asks for nothing, nor does each **Try again** after it, which
+reloads the page. (It's the globe's visit, which spends none of the day's Earth drives: the Earth's
+drive is asked for at the first drive on the Earth, [what a visit costs](#what-a-visit-costs-and-how-its-capped).) Whichever of the two fails
 first says so: the robot check's screen, or "World Drive didn't finish loading. Check your
 connection" (a script that arrives but breaks as it runs, as on an older browser, says "World Drive
 couldn't start in this browser" instead, and both are logged to the console). The check's 45 s
