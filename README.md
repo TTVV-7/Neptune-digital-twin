@@ -825,8 +825,8 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 
 ## World Drive (worlddrive.app)
 
-A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), start in the pickup
+A second app in this repository, on its own address: pick anywhere on Earth from a globe (our own,
+NASA's Blue Marble: search, a dozen start spots, recent places, or a tap on the globe), start in the pickup
 or pick the go-kart or the muscle car (more as your level climbs), press **Drive here** and drive the real world
 arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce off it into the
 air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
@@ -847,13 +847,18 @@ somewhere else without reloading. Phones get a bottom sheet and touch buttons.
 
 It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
 (`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
-(`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Each page load is one billed Google
-Maps session, so the built site holds no key: the Worker hands it out once per visit, after a
-Cloudflare Turnstile check, and only while the day's visits are under a cap for everyone (300) and
-for each visitor (1); over a cap the page says today's free Earth drives are used up and opens on the
-Moon, and the other worlds are never limited (their ground is our own, so it costs nothing to
-stream). Teleporting moves the
-loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
+(`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Google's tiles are a billed Google
+Maps session a page, so the globe a place is picked on is our own Earth (NASA's Blue Marble,
+`drive/public/earth/colour.webp`, `npm run make-earth`), which costs nothing, and a page asks for the
+session only when it first drives on the Earth (**Drive here**, **Join** or **Go to** a friend there,
+an Earth challenge's start), then keeps it for the rest of the page: about a quarter of pages never
+drop in, and those on the other worlds needn't pay either. The built site holds no key: the page
+gets a free visit as it loads (after a Cloudflare Turnstile check: the leaderboard, stats and
+driving with others go by it), and at that first Earth drive the Worker hands the key out after
+another check, only while the day's Earth drives are under a cap for everyone (300) and for each
+visitor (1); over a cap the page says today's free Earth drives are used up and offers the Moon, and
+the other worlds are never limited (their ground is our own, so it costs nothing to stream).
+Teleporting moves the loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
 Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderboard keeps each
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
 posted with the visit's signed token and checked against what the game can score.
@@ -1169,6 +1174,7 @@ scripts/step-to-glb.py  turns a STEP file into a GLB for add-own-asset
 public/library/     downloaded models and our own, library.json catalog, thumbs/ and CREDITS.md
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
+scripts/make-earth.mjs  World Drive's own globe of the Earth (drive/public/earth/): NASA's Blue Marble
 scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it
 scripts/make-mars.mjs   World Drive's Mars (drive/public/mars/): MOLA's heights and the Viking mosaic
 scripts/make-asteroids.mjs   World Drive's Vesta and Ceres (drive/public/vesta/, ceres/): Dawn's maps
