@@ -2274,7 +2274,7 @@ const STYLES = {
 
 					// (Out of the exhaust a little way back, so the white-hot ones aren't stuck on its rear,
 					// and kept up with it, a trail behind it rather than big cubes flying past the lens.)
-					nozzleAt( f, k, ( Math.floor( Math.random() * 3 ) - 1 ) * grid, ( Math.random() - 0.5 ) * 0.25 * f.scale, p.position ).addScaledVector( f.back, 0.15 * f.scale );
+					nozzleAt( f, k, ( Math.floor( Math.random() * 3 ) - 1 ) * grid, ( Math.random() - 0.5 ) * 0.25 * f.scale, p.position ).addScaledVector( f.back, 0.3 * f.scale );
 					thrown( f, p, 0.97, 1.6 + Math.random() * 0.8, 0.3, 0.3 );
 					p.drag = 0.6;
 					p.size = grid * 0.75;
@@ -2865,11 +2865,24 @@ const STYLES = {
 				// up with it (any further back and at overdrive's speed they'd pile up over the chase
 				// camera and white out the view), fainter the more there are.
 				shock = ! shock && ! f.calm;
-				const p = hoop( k, 0.45, 0.1, 0.995, 1.5, 0.9, 0.4 );
+				// (Faint: added up, a second's worth of them round it is a bright aura over the driver.)
+				// (And from a little behind its exhaust, so they ring the trail rather than the driver.)
+				const p = hoop( k, 0.45, 0.1, 0.995, 1.5, 0.9, 0.24 );
+				p.position.addScaledVector( f.back, 0.5 * f.scale );
 				p.colour.setHSL( n ++ * 0.04 % 1, 1, 0.6 );
 				if ( shock ) p.frame = SHAPES.shock;
 				p.kind = 2;
 
+			};
+			// Any hoop well behind it fades before the chase camera is inside it: a ring flat across
+			// the view, that near the lens, is a band of colour over the bottom of it.
+			const hooks = {
+				look( p, t, view ) {
+
+					const behind = _a.subVectors( view.position, f.middle ).dot( f.back ) / f.scale;
+					if ( behind > 2 ) view.alpha *= Math.max( 0, 3 - behind );
+
+				},
 			};
 			return {
 				batches: [ batch ],
@@ -2909,7 +2922,7 @@ const STYLES = {
 
 					// Overdrive: a tunnel of them, walking through the hues.
 					tunnel( h > 0 ? fl : 0, frame.dt, ( frame.calm ? 16 : 26 ) * frame.detail, warp );
-					batch.update( frame.dt );
+					batch.update( frame.dt, hooks );
 
 				},
 				// Lit: three hoops at once, one inside the next, thrown out wider and faster than the rest.
@@ -4451,8 +4464,9 @@ const STYLES = {
 							if ( frame.air ) {
 
 								const p = puff( 1, 0x2a1a14 );
-								p.alpha = 0.45;
-								p.life = 0.8;
+								p.alpha = 0.4;
+								p.grow = 0.25 * frame.scale;
+								p.life = 0.55;
 
 							}
 
@@ -4509,11 +4523,13 @@ const STYLES = {
 
 					if ( frame.air ) for ( let side = - 1; side <= 1; side += 2 ) {
 
+						// (Small and quick: any bigger, dark smoke over a grey road is only a dull smudge.)
 						const p = puff( 1 );
 						p.position.copy( frame.nozzle ).addScaledVector( frame.right, side * 0.18 * frame.scale );
 						p.velocity.copy( frame.right ).multiplyScalar( side * 2.5 ).addScaledVector( frame.up, 0.8 );
-						p.size = 0.2 * frame.scale;
-						p.grow = 0.6 * frame.scale;
+						p.size = 0.14 * frame.scale;
+						p.grow = 0.3 * frame.scale;
+						p.life = 0.6;
 
 					}
 
@@ -5607,7 +5623,7 @@ export function createSupersonic( root, { tint = null, rainbow = false, deep = f
 
 // The boom: a shock ring, a thinner ring inside it and a flash, kept small enough not to white out
 // a phone's narrow view (World Drive flashes the edges of the view instead, screen-fx.js); a wide
-// ring lingering as it spreads to seven times the vehicle's size, a second, richer one inside that,
+// ring lingering as it spreads to three times the vehicle's size, a second, richer one inside that,
 // and a flare side to side. The leading shock and the flashes are white-hot, so it still reads as a
 // pressure wave; the rings behind it take the ride's colour ('pale' or 'rich', see
 // createSupersonic). Each [ picture, life (s), share of the vehicle's speed it keeps, size and
@@ -5618,9 +5634,9 @@ export function createSupersonic( root, { tint = null, rainbow = false, deep = f
 // past three times the vehicle's size: any wider, from the chase camera a few metres behind it, the
 // rings stack into a pale tunnel over the whole of the view, sky and road washed out.
 const BOOM = [
-	[ SHAPES.shock, 0.42, 0.98, 0.6, 2, 'white', 0.6 ],
-	[ SHAPES.ring, 0.34, 0.98, 0.4, 1.5, 'pale', 0.8 ],
-	[ SHAPES.glow, 0.15, 1, 0.8, 0.5, 'white', 0.45 ],
+	[ SHAPES.shock, 0.42, 0.98, 0.6, 2, 'white', 0.45 ],
+	[ SHAPES.ring, 0.34, 0.98, 0.4, 1.5, 'pale', 0.7 ],
+	[ SHAPES.glow, 0.15, 1, 0.6, 0.4, 'white', 0.3 ],
 	[ SHAPES.shock, 0.7, 0.98, 0.9, 2.4, 'rich', 0.32 ],
 	[ SHAPES.ring, 0.6, 0.98, 0.7, 1.9, 'rich', 0.45 ],
 	[ SHAPES.flare, 0.2, 1, 1.1, 0.8, 'white', 0.4, 0.25 ],
