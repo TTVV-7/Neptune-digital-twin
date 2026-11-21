@@ -205,11 +205,11 @@ function builtFile( path ) {
 
 describe( 'what search engines read', () => {
 
-	test( 'the pages: the home page, the list of places, one page for each place, and the other worlds\', each at a clean address', () => {
+	test( 'the pages: the home page, the list of places, one page for each place, the other worlds\', and driving in space and with friends, each at a clean address', () => {
 
 		assert.deepEqual( OFF_EARTH, [ 'moon', 'mars', 'vesta', 'ceres' ] );
 		const paths = pages.map( page => page.path ).sort();
-		const expected = [ '/', '/drive/', ...PLACES.map( place => `/drive/${ place.slug }/` ), ...OFF_EARTH.flatMap( id => [ `/${ id }/`, ...WORLD_SITES[ id ].pages.map( place => `/${ id }/${ place.slug }/` ) ] ) ].sort();
+		const expected = [ '/', '/drive/', '/space/', '/multiplayer/', ...PLACES.map( place => `/drive/${ place.slug }/` ), ...OFF_EARTH.flatMap( id => [ `/${ id }/`, ...WORLD_SITES[ id ].pages.map( place => `/${ id }/${ place.slug }/` ) ] ) ].sort();
 		assert.deepEqual( paths, expected );
 		assert.ok( paths.includes( '/mars/olympus-mons/' ) && paths.includes( '/moon/tycho/' ) && paths.includes( '/vesta/' ) && paths.includes( '/ceres/' ) );
 		for ( const place of [ ...PLACES, ...OFF_EARTH.flatMap( id => WORLD_SITES[ id ].pages ) ] ) assert.match( place.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${ place.slug } isn't a clean address` );
@@ -639,11 +639,13 @@ describe( 'what search engines read', () => {
 		for ( const id of [ 'mars', 'vesta', 'ceres' ] ) for ( const place of WORLD_SITES[ id ].pages ) assert.ok( html.includes( `<li><a href="/${ id }/${ place.slug }/" data-play="/?spot=${ place.spot }">${ place.name }</a></li>` ), `the home page's ${ TheWorld( id ) } list has no ${ place.slug }` );
 		assert.doesNotMatch( html, /<!-- (moon|mars|vesta|ceres) places -->/ );
 
-		// In the page: the words are on the panel, not tucked away, and the pitch is on the splash.
+		// In the page: the words are on the panel, not tucked away, and the pitch is on the splash. (At
+		// ?worlds=0, the Earth's address, where the panel shows at once: a plain load opens on the orrery
+		// over it, the next test's.)
 		const page = await browser.newPage( { viewport: { width: 1280, height: 800 } } );
 		await page.route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
 		// (Looked for as the page arrives: served from this machine, the globe can be up by its load event.)
-		await page.goto( server.base, { waitUntil: 'commit' } );
+		await page.goto( `${ server.base }/?worlds=0`, { waitUntil: 'commit' } );
 		await page.locator( '#splash .pitch' ).waitFor( { state: 'visible', timeout: 10000 } );
 		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 60000 } );
 		const info = page.locator( '#globe-ui .site-info' );
@@ -707,6 +709,31 @@ describe( 'what search engines read', () => {
 		assert.equal( await page.locator( '#globe-ui .site-info a[href="/drive/"]' ).getAttribute( 'target' ), '_blank' );
 		assert.equal( await page.locator( '#globe-ui .site-info a[href="/moon/"]' ).getAttribute( 'target' ), '_blank' );
 		assert.equal( await page.locator( '#globe-ui .site-info a[href="/mars/"]' ).getAttribute( 'target' ), '_blank' );
+		await page.close();
+
+	} );
+
+	test( 'a plain load opens on the orrery to pick a world (orrery-first.js): its heading and intro shown, the panel\'s words still in the page under it, and nothing of any world fetched before one\'s picked', async () => {
+
+		const page = await browser.newPage( { viewport: { width: 1280, height: 800 } } );
+		const asked = [];
+		const errors = [];
+		page.on( 'pageerror', err => errors.push( err.message ) );
+		page.on( 'request', request => asked.push( new URL( request.url() ).pathname ) );
+		await page.route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
+		await page.goto( server.base );
+		await page.locator( '#orrery[open] .orrery-worlds [role=radio]' ).first().waitFor( { timeout: 60000 } );
+		assert.equal( await page.locator( '#orrery-title' ).textContent(), 'Pick a world' );
+		assert.ok( await page.locator( '#orrery-title' ).isVisible() );
+		assert.ok( await page.locator( '#orrery .orrery-intro' ).isVisible() );
+		assert.match( await page.locator( '#orrery .orrery-intro' ).textContent(), /real spacecraft maps/ );
+		// What World Drive is, still in the page (for a crawler, and behind the orrery once it's closed).
+		assert.equal( await page.locator( '#globe-ui .site-info' ).count(), 1 );
+		assert.ok( ( await page.locator( '#globe-ui .site-info' ).textContent() ).includes( 'Drive anywhere on Earth' ) );
+		await page.waitForTimeout( 1500 );
+		assert.deepEqual( asked.filter( path => /^\/(moon|mars|vesta|ceres)\//.test( path ) ), [], 'a world\'s files fetched before a pick' );
+		assert.deepEqual( errors, [] );
+		if ( SHOTS ) await page.screenshot( { path: join( SHOTS, 'seo-home-orrery.png' ) } );
 		await page.close();
 
 	} );

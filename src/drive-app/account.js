@@ -17,7 +17,7 @@ import { toast } from './screens.js';
 // only ever sent to the Worker's account routes.
 
 const UNREACHABLE = 'Couldn\'t reach World Drive. Check your connection and try again.';
-const NO_RECOVERY = 'There\'s no email here, so a forgotten password can\'t be recovered, unless you also link Google. Keep it in a password manager.';
+const NO_RECOVERY = 'The email is only for receipts: nothing is sent to it, so a forgotten password can\'t be recovered, unless you also link Google. Keep it in a password manager.';
 
 let hooks = null;
 let dialog = null;
@@ -71,7 +71,7 @@ export function openAccount( from ) {
 
 function stateOf( me ) {
 
-	return me?.signedIn ? `in:${ me.username ?? '' }:${ me.google ? 1 : 0 }:${ me.email }` : `out:${ mode }`;
+	return me?.signedIn ? `in:${ me.username ?? '' }:${ me.google ? 1 : 0 }:${ me.email }:${ me.contactEmail ?? '' }` : `out:${ mode }`;
 
 }
 
@@ -174,6 +174,7 @@ function signUpForm() {
 	const { form, status, submit } = makeForm( 'account-sign-up', 'Create account' );
 	const username = field( form, 'Username', { name: 'username', autocomplete: 'username', minLength: 3, maxLength: 20, hint: '3 to 20 letters, digits, _ or -. Only you see it: the boards show your nickname.' } );
 	const password = field( form, 'Password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: `At least ${ PASSWORD_MIN } characters. A few words together make a good one.` } );
+	const email = field( form, 'Email (optional)', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'For your receipts if you buy the pass. Never shown, never used for anything else.' } );
 	form.append( Object.assign( paragraph( NO_RECOVERY ), { className: 'account-note' } ), robotSlot(), submit, status );
 	form.addEventListener( 'submit', async event => {
 
@@ -187,7 +188,7 @@ function signUpForm() {
 		const token = await robot( form, status );
 		if ( token === null ) return busy( form, false );
 		say( status, 'Creating your account...' );
-		const answer = await send( 'POST', '/api/account/sign-up', { username: name, password: password.value, token } );
+		const answer = await send( 'POST', '/api/account/sign-up', { username: name, password: password.value, token, ...( email.value.trim() ? { email: email.value.trim() } : {} ) } );
 		busy( form, false );
 		if ( ! answer.ok ) return say( status, problem( answer ) );
 		signedInNow( answer.body );
@@ -242,10 +243,34 @@ function signedIn( me ) {
 	};
 	out.append( button( 'Sign out', signOut( false ) ), button( 'Sign out everywhere', signOut( true ) ) );
 	parts.push( out, outStatus );
+	if ( ! me.google ) parts.push( emailForm( me ) );
 	parts.push( me.username ? changeForm( me ) : addForm() );
 	parts.push( googlePart( me ) );
 	if ( me.username && me.google ) parts.push( removeForm( me ) );
 	return parts;
+
+}
+
+// A username's account (no Google, whose email it would use): an email for its receipts, or none.
+function emailForm( me ) {
+
+	const { form, status, submit } = makeForm( 'account-email', 'Save' );
+	const email = field( form, 'Email for receipts', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'Put on the checkout if you buy the pass, so the receipt comes to you. Leave it empty for none.' } );
+	email.value = me.contactEmail ?? '';
+	form.append( submit, status );
+	form.addEventListener( 'submit', async event => {
+
+		event.preventDefault();
+		busy( form, true );
+		say( status, 'Saving...' );
+		const answer = await send( 'POST', '/api/account/email', { email: email.value.trim() } );
+		busy( form, false );
+		if ( ! answer.ok ) return say( status, problem( answer ) );
+		say( status, answer.body.contactEmail ? 'Saved.' : 'Taken off.' );
+		hooks.update( answer.body );
+
+	} );
+	return section( me.contactEmail ? 'Email for receipts' : 'Add an email for receipts', form );
 
 }
 
@@ -507,11 +532,11 @@ function makeForm( className, words ) {
 }
 
 // A labelled input added to `form` (its hint, if any, under it): the input.
-function field( form, words, { name, type = 'text', autocomplete, minLength, maxLength, hint } ) {
+function field( form, words, { name, type = 'text', autocomplete, minLength, maxLength, hint, required = true } ) {
 
 	const id = `account-field-${ ++ ids }`;
 	const label = Object.assign( document.createElement( 'label' ), { htmlFor: id, textContent: words } );
-	const input = Object.assign( document.createElement( 'input' ), { id, name, type, autocomplete, required: true } );
+	const input = Object.assign( document.createElement( 'input' ), { id, name, type, autocomplete, required } );
 	if ( type === 'text' ) {
 
 		input.autocapitalize = 'none';

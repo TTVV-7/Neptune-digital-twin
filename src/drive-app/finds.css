@@ -1,0 +1,423 @@
+/* Discoveries (finds.js): the card as one is collected, the collection book, the pointer to the
+   nearest one not yet found while driving, and the pins on the globe. */
+
+/* --- the card: beside the drive, never over its controls, and it never takes the keys --- */
+
+.finds-card {
+	position: fixed;
+	left: 16px;
+	bottom: 96px;
+	z-index: 30;
+	width: min( 420px, calc( 100vw - 32px ) );
+	max-height: min( 60vh, 520px );
+	overflow-y: auto;
+	padding: 12px 14px 12px;
+	border: 1px solid rgba( 255, 201, 77, 0.55 );
+	border-radius: var( --radius, 14px );
+	background: var( --panel, rgba( 9, 15, 27, 0.84 ) );
+	color: var( --ink, #f3f6fb );
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.55 ), 0 0 24px rgba( 255, 201, 77, 0.18 );
+	animation: finds-card-in 0.35s ease-out;
+}
+
+.finds-card[hidden] {
+	display: none;
+}
+
+@keyframes finds-card-in {
+	from { opacity: 0; transform: translateY( 12px ); }
+	to { opacity: 1; transform: none; }
+}
+
+.finds-card-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font: 700 11px/1.4 var( --font );
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: #ffc94d;
+}
+
+.finds-card-icon {
+	font-size: 18px;
+}
+
+.finds-card-kind {
+	flex: 1;
+	min-width: 0;
+}
+
+.finds-card-count {
+	color: var( --muted, #9fb0c8 );
+	font-variant-numeric: tabular-nums;
+}
+
+.finds-card-close {
+	width: 26px;
+	height: 26px;
+	border: 0;
+	border-radius: 8px;
+	background: var( --chip, rgba( 255, 255, 255, 0.08 ) );
+	color: var( --ink, #f3f6fb );
+	font-size: 18px;
+	line-height: 1;
+}
+
+.finds-card-name {
+	margin: 4px 0 6px;
+	font-size: 20px;
+	font-style: italic;
+	font-weight: 900;
+}
+
+.finds-card-body p {
+	margin: 0 0 6px;
+}
+
+.finds-card .finds-height {
+	color: #ffe6a6;
+}
+
+.finds-card .finds-note,
+.finds-card .finds-data {
+	color: var( --muted, #9fb0c8 );
+}
+
+.finds-card-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.finds-card-actions button,
+.finds-book .actions button {
+	padding: 7px 12px;
+	border: 1px solid var( --line, rgba( 255, 255, 255, 0.14 ) );
+	border-radius: 10px;
+	background: var( --chip, rgba( 255, 255, 255, 0.08 ) );
+	color: var( --ink, #f3f6fb );
+	font: 700 13px/1.2 var( --font );
+}
+
+.finds-card-actions .finds-lens {
+	border-color: transparent;
+	background: var( --accent, #ffd23f );
+	color: var( --accent-ink, #1d1500 );
+}
+
+/* In a challenge run: the name and the first fact only, so the run's own read-outs stay clear. */
+.finds-card.compact {
+	width: min( 320px, calc( 100vw - 32px ) );
+}
+
+.finds-card.compact .finds-card-body > :not( :first-child ),
+.finds-card.compact .finds-card-actions {
+	display: none;
+}
+
+/* A phone held upright: a sheet across the screen. */
+@media ( max-width: 600px ) {
+
+	.finds-card {
+		left: 8px;
+		right: 8px;
+		bottom: 8px;
+		width: auto;
+		max-height: 46vh;
+	}
+
+}
+
+/* On a touch screen the driving buttons (drive-hud.js, drawn over everything at z-index 1003) take
+   the bottom corners: the steering 76 px high on the left, and on the right the pedals, BOOST and
+   FLY up to 212 px over the HUD's bottom inset. The card stays above all of them, so its buttons and
+   its "You're driving on" line are never under a pedal. A phone on its side: left of the middle,
+   just above the steering (the right-hand buttons are clear of it at 420 px wide or less). */
+body.touch .finds-card {
+	bottom: calc( 28px + var( --safe-bottom, 0px ) + 88px );
+	max-height: calc( 100vh - 28px - var( --safe-bottom, 0px ) - 88px - 70px );
+}
+
+@media ( max-width: 600px ) {
+
+	body.touch .finds-card {
+		bottom: calc( 28px + var( --safe-bottom, 0px ) + 220px );
+		max-height: calc( 100vh - 28px - var( --safe-bottom, 0px ) - 220px - 70px );
+	}
+
+}
+
+/* --- the book --- */
+
+dialog.finds-book {
+	width: min( 820px, calc( 100vw - 24px ) );
+	max-height: min( 88vh, 940px );
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid var( --line, rgba( 255, 255, 255, 0.14 ) );
+	border-radius: var( --radius, 14px );
+	background: var( --panel-solid, #0b1322 );
+	color: var( --ink, #f3f6fb );
+	box-shadow: 0 20px 60px rgba( 0, 0, 0, 0.6 );
+}
+
+dialog.finds-book::backdrop {
+	background: rgba( 3, 6, 12, 0.6 );
+}
+
+dialog.finds-book[open] {
+	display: flex;
+	flex-direction: column;
+}
+
+dialog.finds-book header {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 18px 8px;
+}
+
+dialog.finds-book h2 {
+	margin: 0;
+	font-size: 20px;
+	font-style: italic;
+	font-weight: 900;
+	text-transform: uppercase;
+}
+
+dialog.finds-book .close {
+	width: 34px;
+	height: 34px;
+	border: 0;
+	border-radius: 10px;
+	background: var( --chip, rgba( 255, 255, 255, 0.08 ) );
+	color: var( --ink, #f3f6fb );
+	font-size: 22px;
+	line-height: 1;
+}
+
+.finds-tabs {
+	flex: none;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 0 18px 8px;
+}
+
+.finds-tab {
+	padding: 6px 12px;
+	border: 1px solid var( --line, rgba( 255, 255, 255, 0.14 ) );
+	border-radius: 999px;
+	background: transparent;
+	color: var( --muted, #9fb0c8 );
+	font: 700 13px/1.2 var( --font );
+	font-variant-numeric: tabular-nums;
+}
+
+.finds-tab[aria-pressed="true"] {
+	border-color: #ffc94d;
+	color: #ffc94d;
+}
+
+.finds-progress {
+	flex: none;
+	height: 6px;
+	margin: 0 18px 10px;
+	border-radius: 3px;
+	background: rgba( 255, 255, 255, 0.08 );
+	overflow: hidden;
+}
+
+.finds-progress i {
+	display: block;
+	height: 100%;
+	background: linear-gradient( 90deg, #ffc94d, #9ff2ff );
+}
+
+.finds-empty,
+.finds-footer {
+	flex: none;
+	margin: 0 18px 10px;
+	color: var( --muted, #9fb0c8 );
+}
+
+.finds-footer {
+	margin-top: 10px;
+}
+
+.finds-tiles {
+	display: grid;
+	grid-template-columns: repeat( auto-fill, minmax( 240px, 1fr ) );
+	gap: 8px;
+	min-height: 0;
+	margin: 0;
+	padding: 0 18px;
+	overflow-y: auto;
+	list-style: none;
+}
+
+.finds-tile {
+	display: flex;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid var( --line, rgba( 255, 255, 255, 0.14 ) );
+	border-radius: 12px;
+	background: rgba( 255, 255, 255, 0.03 );
+}
+
+.finds-tile.found {
+	border-color: rgba( 159, 242, 255, 0.4 );
+}
+
+.finds-tile .icon {
+	flex: none;
+	font-size: 22px;
+}
+
+.finds-tile.missing .icon {
+	filter: grayscale( 1 );
+	opacity: 0.45;
+}
+
+.finds-tile .body {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+.finds-tile .kind,
+.finds-tile .region,
+.finds-tile .when {
+	color: var( --muted, #9fb0c8 );
+}
+
+.finds-tile p {
+	margin: 0;
+}
+
+.finds-tile .finds-height {
+	color: #ffe6a6;
+}
+
+.finds-book .actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 4px;
+}
+
+/* --- the pointer to the nearest one not yet found --- */
+
+.finds-pointer {
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 13;
+	pointer-events: none;
+	color: #ffc94d;
+	will-change: transform;
+}
+
+.finds-pointer[hidden] {
+	display: none;
+}
+
+.finds-pointer-dot {
+	position: absolute;
+	left: -6px;
+	top: -6px;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: #ffc94d;
+	box-shadow: 0 0 12px #ffc94d, 0 1px 4px rgba( 0, 0, 0, 0.7 );
+}
+
+.finds-pointer-label {
+	position: absolute;
+	left: 0;
+	top: 12px;
+	transform: translateX( -50% );
+	font: 800 13px/1 var( --font );
+	white-space: nowrap;
+	text-shadow: 0 1px 3px rgba( 0, 0, 0, 0.9 ), 0 0 2px rgba( 0, 0, 0, 0.9 );
+}
+
+.finds-pointer-arrow {
+	display: none;
+	position: absolute;
+	left: -9px;
+	top: -9px;
+	width: 18px;
+	height: 18px;
+	filter: drop-shadow( 0 1px 3px rgba( 0, 0, 0, 0.7 ) );
+}
+
+.finds-pointer-arrow svg {
+	display: block;
+	transform: translateY( -20px );
+}
+
+.finds-pointer.off .finds-pointer-arrow {
+	display: block;
+}
+
+/* --- the globe's pins --- */
+
+.finds-pins {
+	position: fixed;
+	inset: 0;
+	z-index: 5;
+	pointer-events: none;
+}
+
+.finds-pins[hidden] {
+	display: none;
+}
+
+.finds-pin {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 14px;
+	height: 14px;
+	margin: -7px 0 0 -7px;
+	padding: 0;
+	border: 2px solid rgba( 9, 15, 27, 0.85 );
+	border-radius: 50%;
+	background: #ffc94d;
+	box-shadow: 0 0 10px rgba( 255, 201, 77, 0.8 );
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+.finds-pin.found {
+	background: #9ff2ff;
+	box-shadow: 0 0 8px rgba( 159, 242, 255, 0.6 );
+}
+
+.finds-pin[hidden] {
+	display: none;
+}
+
+/* A larger target for a finger. */
+@media ( pointer: coarse ) {
+
+	.finds-pin {
+		width: 20px;
+		height: 20px;
+		margin: -10px 0 0 -10px;
+	}
+
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.finds-card {
+		animation: none;
+	}
+
+}

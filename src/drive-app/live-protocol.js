@@ -231,7 +231,7 @@ export const TELEPORT = 60;
 
 // Whether a car went from snapshot `a` to `b` ({ p, v, at } in ms) all at once rather than by
 // driving or flying there: further than TELEPORT, and further than half again what it was going
-// (a plane at 750 m/s covers more than TELEPORT between two words).
+// (a plane at 972 m/s covers more than TELEPORT between two words).
 export function teleported( a, b ) {
 
 	const flown = Math.max( a.v.length(), b.v.length() ) * Math.abs( b.at - a.at ) / 1000 * 1.5;
@@ -395,9 +395,10 @@ export const PLACE_HEIGHTS = Object.freeze( {
 	vesta: Object.freeze( [ - 52000, 32000 ] ),
 	ceres: Object.freeze( [ - 29000, 18500 ] ),
 } );
-// Faster than any ride goes, booster and all, and a plane at its ceiling (2,700 km/h: src/plane.js)
-// (m/s).
-const TOP_SPEED = 800;
+// Faster than any ride goes, booster and all, and a plane at its ceiling (3,500 km/h, 972 m/s:
+// src/plane.js) with a loop's hump on top (up to half its speed again, straight up, at the top
+// of a loop: src/plane-tricks.js's LOOP.lift, 1,087 m/s in all) and the rounding (m/s).
+const TOP_SPEED = 1100;
 
 const round = ( value, places ) => Math.round( value * 10 ** places ) / 10 ** places;
 

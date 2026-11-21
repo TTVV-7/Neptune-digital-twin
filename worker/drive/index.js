@@ -7,7 +7,7 @@ import { postProgress, setTitle } from './progress.js';
 import { addressOf, adsense, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
 import { accountPlayer, currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
-import { linkGoogle, passwordSignIn, passwordsOn, removePassword, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
+import { linkGoogle, passwordSignIn, passwordsOn, removePassword, setContactEmail, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
@@ -51,7 +51,8 @@ export { DriveRoom } from './live.js';
 //   PER_VISITOR_DAILY     Earth visits a day per visitor (1 if unset); past it, the page opens on the Moon
 //   NAMES_PER_VISITOR_DAILY, SCORES_PER_VISITOR_DAILY   the leaderboard's new names and renames
 //                         (20 if unset) and scores (1500) a day per visitor
-//   PER_VISITOR_DAILY_SUPPORTER   a supporter's visits a day (30 if unset), counted by account
+//   PER_VISITOR_DAILY_SUPPORTER   a supporter's visits a day (30 if unset), counted by account,
+//                                 and never turned away by DAILY_VISITS
 //   GOOGLE_CLIENT_ID, SUPPORTER_*, STRIPE_WEBHOOK_SECRET   the Supporter Pass (see supporter.js)
 //   PASSWORD_ACCOUNTS     'off' switches usernames and passwords off (logins.js); PASSWORD_ITERATIONS
 //                         tests only (or to lower PBKDF2's count, see logins.js)
@@ -140,6 +141,7 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/account/google', handler: linkGoogle },
 	{ method: 'DELETE', path: '/api/account/google', handler: unlinkGoogle },
 	{ method: 'POST', path: '/api/account/sign-out-everywhere', handler: signOutEverywhere },
+	{ method: 'POST', path: '/api/account/email', handler: setContactEmail },
 	{ method: 'GET', path: '/api/live', handler: live },
 	{ method: 'GET', path: '/api/online', handler: online },
 	{ method: 'POST', path: '/api/stats', handler: postStats },
@@ -276,17 +278,29 @@ async function getConfig( { env, limits, now } ) {
 
 }
 
-// POST /api/visit { token, world }: the page asks for the Maps key once as it starts. Turnstile
-// first, then the caps (both counted at once), and only then the key, with the visit's token for
-// posting scores (visits.js). The caps are the Earth's: Google's tiles cost a little each visit, and
-// the worlds made in the page (worlds.js's free ones, every one but the Earth: body.js, our own
-// ground) cost nothing to stream, so they're never limited:
+// POST /api/visit { token, world, globe, fromGlobe }: the page asks for a visit as it starts, and for
+// the Maps key when it first drives on the Earth. Turnstile first, then the caps (both counted at
+// once), and only then the key, with the visit's token for posting scores (visits.js). The caps are
+// the Earth's: Google's tiles cost a little each visit, and the worlds made in the page (worlds.js's
+// free ones, every one but the Earth: body.js, our own ground) cost nothing to stream, so they're
+// never limited:
+// - globe: true (and no free world): the page's own globe, our picture of the Earth, which costs
+//   nothing either. The page asks for this as it starts, so the leaderboard, the stats and driving
+//   with others have a visit, and asks for the Earth's drive (fromGlobe) only once someone drives on
+//   the Earth: { free: true, globe: true, world: 'earth', visit }, no key and nothing counted against
+//   the caps, counted for the admin page as 'globe'.
+// - fromGlobe: true: an Earth visit (the caps, the key) for a page already counted as a visit (its
+//   globe's, the orrery's, or a link's to another world): counted by where it went (visit_kind) but not again as
+//   a visit, so the admin page's Visits stay one a page.
 // - world: one of those, 'moon', 'mars', 'vesta' or 'ceres' (the page opened on a link to it): no
 //   key and nothing counted against the caps, { moon: true, free: true, world, visit } (moon: true
 //   as the answer always was for the Moon, which a page from before Mars, still in a browser's
 //   cache, goes by).
-//   Going to the Earth from there reloads the page, which asks again without it. Any other world
-//   (one that isn't one, or 'earth') is the Earth's visit.
+//   The Earth from there is the page's own globe, its drive asked for with fromGlobe. Any other
+//   world (one that isn't one, or 'earth') is the globe's (globe: true) or the Earth's visit.
+//   With start: 'orrery' (a plain load, which opens on the orrery to pick a world before any of the
+//   day's Earth drives is spent: boot.js) it's counted as 'orrery' rather than as a link to that
+//   world; any other start is ignored. A page from before sends none, and is counted as before.
 // - Over a cap: 429 with retryAfter (the seconds until midnight UTC, when the counts start again)
 //   and a visit all the same, so the page can still open on the Moon.
 // Those two visits' tokens say so (visits.js: a free world's), so they post no Earth drop-in places
@@ -311,11 +325,25 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	// Counted for the admin page's stats (stats.js), without holding up the answer.
 	if ( world !== EARTH ) {
 
-		ctx?.waitUntil?.( countVisit( env, now, `${ world }_link` ) );
+		const kind = body.start === 'orrery' ? 'orrery' : `${ world }_link`;
+		ctx?.waitUntil?.( countVisit( env, now, kind ) );
 		const { admin } = await whoIsVisiting( { request, env, url, now }, { supporter: false } );
 		return json( { moon: true, free: true, world, visit: await makeVisit( env, now, admin ? 'owner' : 'free' ) } );
 
 	}
+
+	// The globe's visit: a free one, as a free world's is (no `moon: true`: only a page that knows
+	// the globe's visit asks for it).
+	if ( body.globe === true ) {
+
+		ctx?.waitUntil?.( countVisit( env, now, 'globe' ) );
+		const { admin } = await whoIsVisiting( { request, env, url, now }, { supporter: false } );
+		return json( { free: true, globe: true, world: EARTH, visit: await makeVisit( env, now, admin ? 'owner' : 'free' ) } );
+
+	}
+
+	// (An Earth drive for a page counted already as a visit: by where it went, not as a visit again.)
+	const again = { again: body.fromGlobe === true };
 
 	// Before counting: with no key there's nothing to count.
 	const key = mapsKey( env );
@@ -324,28 +352,30 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	const { supporter, admin } = await whoIsVisiting( { request, env, url, now } );
 	if ( admin ) {
 
-		ctx?.waitUntil?.( countVisit( env, now, 'owner' ) );
+		ctx?.waitUntil?.( countVisit( env, now, 'owner', again ) );
 		return json( { mapsKey: key, left: null, visit: await makeVisit( env, now, 'owner' ) } );
 
 	}
 
+	// A supporter (a lifetime pass or a day pass) has paid for their drives, so the day's cap for
+	// everyone doesn't turn them away (their drives still count towards it, for everyone else).
 	const outcome = await limits.visit( supporter ? `account:${ supporter.id }` : addressOf( request ), {
 		now,
-		daily: setting( env.DAILY_VISITS, 300 ),
+		daily: supporter ? Number.MAX_SAFE_INTEGER : setting( env.DAILY_VISITS, 300 ),
 		perVisitor: supporter ? setting( env.PER_VISITOR_DAILY_SUPPORTER, 30 ) : setting( env.PER_VISITOR_DAILY, 1 ),
 	} );
 	if ( ! outcome.ok ) {
 
 		const { reason, retryAfter } = outcome;
-		// Counted all the same (the page opens on the Moon instead), so the admin page shows every
-		// visit, not only the ones under the caps.
-		ctx?.waitUntil?.( countVisit( env, now, reason === 'daily' ? 'moon_daily_cap' : 'moon_visitor_cap' ) );
+		// Counted all the same (the page opens on the Moon instead, or from its globe stays there), so
+		// the admin page shows every visit, not only the ones under the caps.
+		ctx?.waitUntil?.( countVisit( env, now, reason === 'daily' ? 'moon_daily_cap' : 'moon_visitor_cap', again ) );
 		const message = reason === 'daily' ? 'Today\'s free drives are used up' : 'You\'ve had today\'s free drives';
 		throw new HttpError( 429, message, { reason, retryAfter, visit: await makeVisit( env, now, 'free' ) }, { 'Retry-After': String( retryAfter ) } );
 
 	}
 
-	ctx?.waitUntil?.( countVisit( env, now, supporter ? 'earth_supporter' : 'earth' ) );
+	ctx?.waitUntil?.( countVisit( env, now, supporter ? 'earth_supporter' : 'earth', again ) );
 	return json( { mapsKey: key, left: outcome.left, visit: await makeVisit( env, now ) } );
 
 }
@@ -361,7 +391,7 @@ async function whoIsVisiting( context, { supporter = true } = {} ) {
 		const account = await currentAccount( context );
 		if ( ! account ) return { supporter: null, admin: false };
 		if ( isAdmin( context.env, account ) ) return { supporter: null, admin: true };
-		return { supporter: supporter && await isSupporter( context.env, account ) ? account : null, admin: false };
+		return { supporter: supporter && await isSupporter( context.env, account, context.now ) ? account : null, admin: false };
 
 	} catch ( err ) {
 

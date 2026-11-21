@@ -15,9 +15,10 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
   hosted on Cloudflare or Vercel.
 - **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
-The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: pick
-anywhere on Earth from a globe and drive it, or the Moon, Mars or the asteroids Vesta and Ceres,
-with others on every one.
+The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: it
+opens on the Solar System, where you pick the Moon, Mars, the asteroids Vesta and Ceres (built from
+real spacecraft maps, with real named places to discover) or the Earth, anywhere on it from a globe,
+and drive it, with others on every one.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -825,13 +826,20 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 
 ## World Drive (worlddrive.app)
 
-A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), start in the pickup
+A second app in this repository, on its own address. A plain load opens on the Solar System (the
+orrery, below) to pick a world, so nobody is sent to the Earth first: closed without a pick, it's the
+Moon, and picking the Earth turns the page to its globe, in place. On the Earth, pick anywhere from a
+globe (our own, NASA's Blue Marble: search, a dozen start spots, recent places, or a tap on the
+globe), start in the pickup
 or pick the go-kart or the muscle car (more as your level climbs), press **Drive here** and drive the real world
-arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce off it into the
+arcade-style: drift (Space), boost (Shift), fly (F: a plane up to 3,500 km/h, which rolls with
+**Q**/**E** and loops with **Z**/**X** for tricks that score like the car's; F again bails out into a
+fast free fall, **W** to dive, then a slow parachute), and hit something to bounce off it into the
 air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
 combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
-them. Boosting flat out hits **overdrive** (a sonic boom, streaks of air, a wider view), and glowing
+them. Boosting flat out hits **overdrive** (a sonic boom in your flame's colour with a collar of
+vapour, the flame burning long and white-hot with shock diamonds, streaks of air, a wider view;
+on the Moon, with no air, no vapour), and glowing
 **boost pads** can turn up on open ground as you drive to top the booster up (they're off until a
 switch in the pause menu turns them on). Lighting the booster, running it dry, a pad, each drift
 charge level and its mini-turbo have bursts of their own, the view jolts and streams with speed
@@ -847,13 +855,18 @@ somewhere else without reloading. Phones get a bottom sheet and touch buttons.
 
 It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
 (`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
-(`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Each page load is one billed Google
-Maps session, so the built site holds no key: the Worker hands it out once per visit, after a
-Cloudflare Turnstile check, and only while the day's visits are under a cap for everyone (300) and
-for each visitor (1); over a cap the page says today's free Earth drives are used up and opens on the
-Moon, and the other worlds are never limited (their ground is our own, so it costs nothing to
-stream). Teleporting moves the
-loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
+(`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Google's tiles are a billed Google
+Maps session a page, so the globe a place is picked on is our own Earth (NASA's Blue Marble,
+`drive/public/earth/colour.webp`, `npm run make-earth`), which costs nothing, and a page asks for the
+session only when it first drives on the Earth (**Drive here**, **Join** or **Go to** a friend there,
+an Earth challenge's start), then keeps it for the rest of the page: about a quarter of pages never
+drop in, and those on the other worlds needn't pay either. The built site holds no key: the page
+gets a free visit as it loads (after a Cloudflare Turnstile check: the leaderboard, stats and
+driving with others go by it), and at that first Earth drive the Worker hands the key out after
+another check, only while the day's Earth drives are under a cap for everyone (300) and for each
+visitor (1); over a cap the page says today's free Earth drives are used up and offers the Moon, and
+the other worlds are never limited (their ground is our own, so it costs nothing to stream).
+Teleporting moves the loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
 Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderboard keeps each
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
 posted with the visit's signed token and checked against what the game can score.
@@ -950,9 +963,9 @@ spending no Earth drive), and the Worker gives the link a preview card of its ow
 (`src/drive-app/ghost-rules.js`, `challenge-ghost.js`, migration `0007_challenge_ghosts.sql`; see
 [Ghosts and challenge a friend](docs/world-drive.md#ghosts-and-challenge-a-friend)).
 
-**Achievements and construction rides**: 34 badges (first drive; 10, 100 and 1,000 km; drives on the
+**Achievements and construction rides**: 45 badges (first drive; 10, 100 and 1,000 km; drives on the
 Moon, Mars, Vesta and Ceres; challenges finished and placed in, top 10, top 3 and first, on any
-board and on a daily, weekly or monthly one; parties with others; Garage looks changed and rides tried; 3, 7 and 30
+board and on a daily, weekly or monthly one; parties with others; Garage looks changed and rides tried; Discoveries collected, half and all of a world's and all 68; 3, 7 and 30
 days in a row), in a grid from the profile card with how far toward each ("34 / 100 km") and when it
 was earned, a toast as one comes ("Achievement: 100 km driven"), never during a challenge's run.
 Eight construction rides from the library come with them, driven at their real size and slow and
@@ -969,8 +982,10 @@ counts how many players have each (`src/drive-app/achievement-rules.js`,
 `worker/drive/achievements.js`, migration `0009_achievements.sql`; see [Achievements and
 rewards](docs/world-drive.md#achievements-and-rewards)).
 
-**The Moon, Mars, Vesta and Ceres**: **Worlds**, at the top of the globe's panel (or **M** on the
-globe, or a link with `?worlds=1`), opens an orrery: the Solar System, its planets going round (still
+**The Moon, Mars, Vesta and Ceres**: a plain load opens on an orrery first (a free visit, none of the
+day's Earth drives spent until someone drives on the Earth, `src/drive-app/orrery-first.js`), and
+**Worlds**, at the top of the globe's panel (or **M** on the globe, or a link with `?worlds=1`),
+opens it again: the Solar System, its planets going round (still
 for those who ask for less motion), where the Earth, the Moon, Mars, Vesta and Ceres are picked, each
 with a sheet of its spots, your party's friends there and how many are driving there now (Mercury,
 Venus and the giants are there too, "not in the game yet" or with "no ground to drive on"). It's a
@@ -983,6 +998,19 @@ made in the page rather than streamed, the same way (`src/drive-app/body.js`, it
 list, `src/drive-app/worlds.js`, which the page, the Worker, the site and the tests share; each is
 free and never limited. Driving with others is on every world, each in rooms of its own (see
 [Worlds](docs/world-drive.md#worlds), with how to add one).
+
+**Discoveries and the data lens** show that those four are real data. 68 real named places (21 on
+the Moon, 20 on Mars, 13 on Vesta, 14 on Ceres: the Apollo, Chang'e and Chandrayaan sites, the
+rovers' landing sites, Olympus Mons, Hellas, Rheasilvia's central peak, Occator's bright spots...)
+each have a glowing beacon; drive or fly to one and it's collected, with a card of facts each traced
+to a source (the hand-checked site pages, the places' own lines, the IAU's gazetteer, NASA's NSSDCA)
+and its height measured in the game's own height grid by `scripts/make-finds.mjs`, never typed, with
+the dataset named. Each world has a collection book (**Discoveries** on the profile card), worth
+100 XP a find and eleven achievements (`src/drive-app/finds*.js`; see
+[Discoveries](docs/world-drive.md#discoveries)). **L** (or **Heights**) colours the ground by its
+real measured height over the world's datum, with a scale bar naming the dataset (LOLA, MOLA,
+Dawn's HAMO) and the height under the car (`src/drive-app/lens.js`; see
+[Data lens](docs/world-drive.md#data-lens)).
 
 The Moon's shapes are NASA's (LRO's laser altimeter, every quarter degree,
 `drive/public/moon/height.bin`), its colours LRO's camera's mosaic (`drive/public/moon/colour.webp`;
@@ -1028,20 +1056,23 @@ finding its wheels so they spin and steer (a three-wheeler's too, and standing u
 lying down, or painting over a real place's number plate), and `npm run drive-car-thumbs` draws its
 picture for the picker (see [World Drive's cars](docs/world-drive.md#world-drives-cars)).
 
-A **Supporter Pass** (a subscription, CA$1.99/month, towards the running costs; passes bought before
-it was one are kept for good) unlocks seventeen more rides: the six cars levels bring, at once;
+A **Supporter Pass** (CA$1.99/month, CA$19.99 once and kept for good, or CA$0.99 for 24 hours,
+towards the running costs) unlocks twenty more rides: the six cars levels bring, at once;
 seven cars of its own (a neon racer, a night cruiser, a dune buggy, a farm truck, a police cruiser
-and two showpieces, a hypercar and a cyber muscle car); and four built in code (a sports coupe, a
-monster truck, a city bus and a hovercraft), each handling its own way; every look in the Garage at
+and two showpieces, a hypercar and a cyber muscle car); and seven built in code (a sports coupe, a
+monster truck, a city bus, a hovercraft, a lunar rover, a flying saucer and a rocket dragster), each
+handling its own way and each with moving parts of its own; every look in the Garage at
 once (paint, finishes from satin to chrome and colour-shift, decals, rims, a neon underglow in eight
 colours and a rainbow, horns, seventeen more boost styles, flame colours and trails, some of which
-levels unlock over time), +50% XP, a ⭐ on the leaderboard and 30 Earth drives a day (everyone else
-gets one, then the Moon, Mars, Vesta and Ceres, which are free). It's bought with a Stripe Payment Link after
-signing in, so it's yours in any browser; Stripe's signed webhook records it. Signing in is with
+levels unlock over time), +50% XP, a ⭐ on the leaderboard and 30 Earth drives a day, even past the
+day's cap for everyone (everyone else gets one, then the Moon, Mars, Vesta and Ceres, which are
+free). It's offered where it matters most, as a visit runs out of Earth drives ("Get more Earth
+drives"), and bought with a Stripe Payment Link (from any country) after signing in, so it's yours
+in any browser; Stripe's signed webhook records it. Signing in is with
 Google or with a **username and password** (PBKDF2-SHA-256 at the Workers runtime's most, 100,000
 iterations, with a salt of its own; guessing slowed per address and per username without letting a
-stranger elsewhere lock the owner out (Google's sign-in always works); no email, so a password can't
-be recovered unless Google is linked too), and either can be linked to the other, with fresh proof
+stranger elsewhere lock the owner out (Google's sign-in always works); an email only for receipts, if given, so a password can't be recovered unless Google is linked
+too), and either can be linked to the other, with fresh proof
 of each, never the session alone: one account, with its pass, level, times and Garage, whichever way
 you signed in (see [Username and password
 accounts](docs/world-drive.md#username-and-password-accounts)). Buying stays off ("Coming soon")
@@ -1080,7 +1111,10 @@ Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/wo
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
 `npm run test:drive-seo`, `npm run test:drive-live`, `npm run test:drive-live-ui`,
 `npm run test:drive-levels`, `npm run test:drive-levels-ui`, `npm run test:drive-moon-ui`,
-`npm run test:drive-mars-ui`, `npm run test:drive-asteroids-ui` and `npm run test:drive-orrery-ui`.
+`npm run test:drive-mars-ui`, `npm run test:drive-asteroids-ui`, `npm run test:drive-orrery-ui`,
+`npm run test:drive-orrery-first`, `npm run test:drive-plane`, `npm run test:drive-finds`,
+`npm run test:drive-finds-ui`, `npm run test:drive-lens` and `npm run test:drive-lens-ui` (the
+browser ones one at a time).
 
 ## About the Sketchfab model
 
@@ -1139,8 +1173,8 @@ src/drive-hud.js    a self-contained driving HUD with touch buttons, the DRIFT b
                     trick pop-ups and the score, for other apps (World Drive)
 src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust;
                     a hovercraft's spray, and a splash's spray and foam (others' cars from older pages)
-src/drive-boosts.js boost styles (plasma, lightning, bubbles, a galaxy...) and the supersonic boom and
-                    streaks, each a fixed batch of quads drawn in one go (two for dragon fire and
+src/drive-boosts.js boost styles (plasma, lightning, bubbles, a galaxy...) and the supersonic boom,
+                    streaks and shock diamonds, each a fixed batch of quads drawn in one go (two for dragon fire and
                     spooky), for drive-fx.js
 src/kart.js         the go-kart model and its library item
 src/layout.js       saves placed items in the browser; export/import
@@ -1169,6 +1203,7 @@ scripts/step-to-glb.py  turns a STEP file into a GLB for add-own-asset
 public/library/     downloaded models and our own, library.json catalog, thumbs/ and CREDITS.md
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
+scripts/make-earth.mjs  World Drive's own globe of the Earth (drive/public/earth/): NASA's Blue Marble
 scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it
 scripts/make-mars.mjs   World Drive's Mars (drive/public/mars/): MOLA's heights and the Viking mosaic
 scripts/make-asteroids.mjs   World Drive's Vesta and Ceres (drive/public/vesta/, ceres/): Dawn's maps

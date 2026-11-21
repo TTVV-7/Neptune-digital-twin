@@ -5,7 +5,9 @@ import { storage } from './places.js';
 // (drive.js: a hit's shake, and the jolts as the booster lights, a mini-turbo goes and the sonic
 // boom, which punch the field of view wider and nod the view; main.js adds `driver.punch` to the
 // field of view): speed lines streaming out past the edges of the view while boosting, thicker the
-// faster it goes, and the edges of the view flashing white going into overdrive.
+// faster it goes and in overdrive taking on a pale wash of the ride's colour, and going into
+// overdrive a shock front sweeping out past the edges of the view, white-edged with the ride's
+// colour behind it (on the Moon, with no air, a glow of its colour alone).
 //
 // All of it is the pause menu's "Camera effects" switch (kept in this browser, on unless it's been
 // turned off), and none of it is there for a visitor whose system asks for less motion
@@ -26,8 +28,13 @@ const SPEED_LINES = { from: 0.3, full: 0.9, rise: 6, fall: 3 };
 const BOOSTED = 2;
 // On a touch screen, this share of a burst's particles (drive-fx.js) and of the lines.
 const TOUCH_DETAIL = 0.6;
-// How long (ms) the white edges of overdrive flash.
+// How long (ms) overdrive's edges flash; their CSS animation (style.css) is given a little less.
 const WHITEOUT_TIME = 600;
+// The speed lines' colour, and how far from it towards the ride's colour they go in overdrive.
+const LINE_WHITE = new Color( 0xf4faff );
+const LINE_TINT = 0.55;
+// The edges' colour for a ride with none of its own (a rainbow flame's).
+const SONIC_DEFAULT = '#bfe4ff';
 
 const VERTEX = /* glsl */`
 attribute vec4 aLine;
@@ -84,6 +91,9 @@ export function createScreenFx( { scene, driver, toggle = null, touch = () => fa
 	const lines = makeLines();
 	scene.add( lines );
 	const whiteout = document.getElementById( 'whiteout' );
+	// One number for how long the edges flash, here and in the CSS.
+	whiteout?.style.setProperty( '--whiteout-time', `${ WHITEOUT_TIME - 50 }ms` );
+	const lineTint = new Color();
 	let whiteoutTimer;
 	let amount = 0;
 	let clock = 0;
@@ -123,6 +133,10 @@ export function createScreenFx( { scene, driver, toggle = null, touch = () => fa
 		clearTimeout( whiteoutTimer );
 		whiteout.classList.remove( 'on' );
 		if ( ! on ) return;
+		// In the ride's colour; with no air (the Moon), no white rim.
+		const tint = driver.fx?.tint;
+		whiteout.style.setProperty( '--sonic', tint ? `#${ tint.getHexString() }` : SONIC_DEFAULT );
+		whiteout.classList.toggle( 'airless', driver.effects.air === false );
 		void whiteout.offsetWidth;
 		whiteout.classList.add( 'on' );
 		whiteoutTimer = setTimeout( () => whiteout.classList.remove( 'on' ), WHITEOUT_TIME );
@@ -156,8 +170,18 @@ export function createScreenFx( { scene, driver, toggle = null, touch = () => fa
 			lines.material.uniforms.uTime.value = clock;
 			lines.material.uniforms.uAmount.value = amount;
 			lines.geometry.instanceCount = small ? LINES / 2 : LINES;
+			// Near white; in overdrive, as its view widens, a pale wash of the ride's colour (a
+			// rainbow flame's running through the hues).
+			const colour = lines.material.uniforms.uColour.value.copy( LINE_WHITE );
+			const tint = driver.fx?.tint;
+			if ( driver.warp > 0 ) {
 
-			// Into overdrive: the edges of the view flash white.
+				if ( tint ) colour.lerp( lineTint.copy( LINE_WHITE ).lerp( tint, LINE_TINT ), driver.warp );
+				else if ( driver.fx ) colour.lerp( lineTint.setHSL( clock / 1.6 % 1, 0.8, 0.8 ), driver.warp );
+
+			}
+
+			// Into overdrive: the shock front sweeps out past the edges of the view.
 			const sonic = on && driver.supersonic;
 			if ( sonic && ! wasSonic ) flash( true );
 			wasSonic = sonic;

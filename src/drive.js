@@ -24,9 +24,11 @@ import { PARACHUTE, PlaneMode } from './plane.js';
 // whose tuning says it `floats` (a hovercraft) throws up spray behind it there.
 //
 // And `plane`, off unless an app asks: T turns the vehicle into a little plane (plane.js) that
-// goes faster the higher it flies, and T again lands it. It's kept apart from everything scored:
-// no tricks or boost while it's a plane, and a new stunt run once it's down. canPlane() may say why
-// it can't be one just now (a challenge's run going), and onPlane( on ) hears it change.
+// goes faster the higher it flies, and T again lands it. As one it does the car's rolls and loops
+// on top of how it flies (with stunts on), scored by plane-tricks.js's bounded rules and paid
+// through payTricks as a jump's are; nothing else of the car's goes with it (no drifts, hops or
+// boost), and the run carries on once it's down. canPlane() may say why it can't be one just now
+// (a challenge's run going), and onPlane( on ) hears it change.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
@@ -45,8 +47,12 @@ const FALL_RESET = 200;
 const FALL_MOST = 1500;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
 const LEAVE_GROUND = 0.35;
-// Hitting a wall faster than this (m/s) into it says "Crash!".
+// Hitting a wall faster than this (m/s) into it says "Crash!" (and squashes and shakes it).
 const CRASH_FLASH = 3;
+// Coming down faster than this (m/s) throws up dust as it lands, a puff off each rear tyre; faster
+// than LAND_HARD, a ring of it.
+const LAND_SOFT = 2.5;
+const LAND_HARD = 5;
 // The cameras keep this far (m) in front of anything between them and the vehicle.
 const CAMERA_CLEARANCE = 0.4;
 // ...and the chase camera this far outside the vehicle's own box, boom and all. With less room
@@ -104,9 +110,16 @@ const SPIN = { time: 0.9, until: 9, extra: 12 };
 // The camera jolted (see jolt), each on a spring that rings out in about a third of a second: the
 // field of view punched wider (degrees, `punch`, which an app adds to its own as it does `warp`)
 // and the view nodded up (shares of the vehicle's height). JOLTS: how much, for the booster
-// lighting, a mini-turbo (for each level) and the sonic boom.
+// lighting, a mini-turbo (for each level) and the sonic boom. A hit kicks it the other way, pulled
+// in and dipped, by HIT_JOLT's first share and its second for each share of the hardest hit; coming
+// down hard nods it down by LAND_NOD.
 const JOLT = { stiffness: 120, damping: 16, gain: 25 };
 const JOLTS = { ignite: [ 5, 0.35 ], turbo: [ 1.2, 0.12 ], boom: [ 7, 0.45 ] };
+const HIT_JOLT = [ [ - 1.5, - 0.1 ], [ - 4, - 0.25 ] ];
+const LAND_NOD = - 0.15;
+// A hit hard enough for WHAM! holds its sparks and bits still for this long (s): drive-fx.js's own
+// time, never the drive's.
+const HIT_HITCH = 0.06;
 // Kart handling: the most it turns (°/s) at full lock, from walking pace to top speed.
 const KART_YAW = [ 150, 55 ];
 // Drifts start above DRIFT_MIN m/s, with a hop of DRIFT_HOP m/s. They turn at DRIFT_YAW °/s
@@ -236,13 +249,17 @@ const SHAKE_DECAY = 6;
 const VIEW_TURN = 180;
 const AIR_CAMERA = 3;
 const AIR_LAG = 3;
-// What a hit says, by how hard it was (m/s into it).
-const WORDS = [ [ 18, 'WHAM!' ], [ 9, 'BOING!' ], [ 0, 'BONK!' ] ];
+// What a hit says, by how hard it was (m/s into it), and how the HUD shows it (drive-hud.js).
+const WORDS = [ [ 18, 'WHAM!', 'wham' ], [ 9, 'BOING!', 'boing' ], [ 0, 'BONK!', 'bonk' ] ];
 // Water (the `water` option): under a vehicle that floats, on the ground, it's looked for every
 // WATER_EVERY s, for its spray.
 const WATER_EVERY = 0.2;
 // Told once, the first time it's thrown into the air.
 const AIR_HINT = 'In the air: A/D spin · W/S flip · Q/E roll';
+// A plane's trick keys besides Q/E (plane.js's trickInput): Z and X loop it, and , . and / roll and
+// loop it from by the arrow keys. Driving keys only with a plane and stunts on (World Drive): /
+// is otherwise the globe's (drive-app/main.js), which isn't up while driving.
+const PLANE_TRICK_KEYS = [ 'KeyZ', 'KeyX', 'Comma', 'Period', 'Slash' ];
 
 // How a vehicle handles, which its tuning can change as "handling" (see specFor): whatever it
 // leaves out is as the constants above have it, so a vehicle without any handles as it always
@@ -288,6 +305,7 @@ const _axis = new Vector3();
 const _q = new Quaternion();
 const _euler = new Euler();
 const _attitude = new Quaternion();
+const _contact = new Vector3();
 const _nose = new Vector3();
 const DOWN = new Vector3( 0, - 1, 0 );
 const UP = new Vector3( 0, 1, 0 );
@@ -359,7 +377,7 @@ export class Driver {
 		this.canPlane = canPlane;
 		this.onPlane = onPlane;
 
-		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly || plane ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [], ...plane ? [ 'KeyT' ] : [] ];
+		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly || plane ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [], ...plane ? [ 'KeyT' ] : [], ...plane && this.launch ? PLANE_TRICK_KEYS : [] ];
 		window.addEventListener( 'keydown', e => {
 
 			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
@@ -410,7 +428,7 @@ export class Driver {
 
 		// T: into a plane and back; F too, unless F flies (the `fly` option, off in World Drive: the
 		// plane is its way into the air). As one, the car's own keys (hop, booster, reset) do nothing:
-		// plane.js reads the held keys itself.
+		// plane.js reads the held keys itself, and hears them go down (R is its TRICK, for touch).
 		if ( this.aircraft && ( code === 'KeyT' || code === 'KeyF' && ! this.fly ) ) {
 
 			this.togglePlane();
@@ -418,7 +436,12 @@ export class Driver {
 
 		}
 
-		if ( this.aircraft?.on ) return;
+		if ( this.aircraft?.on ) {
+
+			if ( this.launch ) this.aircraft.press( code );
+			return;
+
+		}
 
 		// With kart handling, Space without steering is a drift waiting for the steering, or a hop
 		// if it's let go at once (see release).
@@ -613,7 +636,7 @@ export class Driver {
 		this.landedAt = - Infinity;
 		this.lastTrick = - Infinity;
 		this.scraping = 0;
-		this.scrapeAt = { at: new Vector3(), normal: new Vector3() };
+		this.scrapeAt = { at: new Vector3(), normal: new Vector3(), speed: 0 };
 		this.spaceTap = null;
 		// Water (see lookForWater): whether it floats (a hovercraft), whether it's on water, and when
 		// to look next.
@@ -1037,7 +1060,8 @@ export class Driver {
 		const { pivot } = this.entry;
 		if ( this.body ) this.lean( dt, throttle );
 		this.pose();
-		if ( this.launch ) this.springSquash( dt );
+		// (Without stunts it's only squashed by a crash: see crash.)
+		if ( this.launch || this.squash.speed || this.squash.value ) this.springSquash( dt );
 		pivot.updateMatrixWorld( true );
 		// Front wheels turned against a drift, as a kart's are. A model can also follow the vehicle
 		// leaving the ground and coming down (its suspension), and the gas. Floored from a standstill,
@@ -1098,6 +1122,15 @@ export class Driver {
 		} );
 		if ( this.booster ) this.hud.setBoost?.( this.gauge );
 		this.ringJolts( dt );
+		// A combo lasts while tricks keep coming, flying as driving: CHAIN_TIME s without a paid pass
+		// (and none being flown) and it's back to 1.
+		if ( this.mult > 1 && ! this.air && this.clock - this.lastTrick > CHAIN_TIME ) {
+
+			this.mult = 1;
+			this.showScore();
+
+		}
+
 		if ( this.launch ) this.turnView( dt );
 		this.placeChute();
 		this.placeCamera( dt );
@@ -1309,7 +1342,8 @@ export class Driver {
 				this.jolt( ...JOLTS.boom );
 				// (The shake dies away with stunts on, which is where it's used: see turnView.)
 				if ( this.launch ) this.shake = Math.max( this.shake, SUPERSONIC.shake );
-				this.hud.setSupersonic?.( true );
+				// The HUD's tag glows in the ride's colour (its flame's, or its boost style's).
+				this.hud.setSupersonic?.( true, this.fx?.tint );
 
 			}
 
@@ -1339,10 +1373,10 @@ export class Driver {
 			this.gauge = Math.max( 0, this.gauge - dt / BOOST_TIME );
 			if ( this.gauge === 0 ) {
 
-				// Run dry: the exhaust glows on and cools.
+				// Run dry: the flame coughs out, and the exhaust glows on and cools.
 				this.firing = false;
 				this.ranDry = true;
-				this.fx?.cool();
+				this.fx?.cool( true );
 
 			}
 			if ( ! this.grounded ) this.pushAlongNose( BOOST_ACCEL * dt, base * BOOST_SPEED );
@@ -1776,7 +1810,8 @@ export class Driver {
 			size: { width: this.width, height: this.height, length: this.length, rear: this.rear, scale },
 			wheels: [ _a.set( - track, 0.05, wheel ), _b.set( track, 0.05, wheel ) ],
 			velocity: _target.set( - Math.sin( this.course * Math.PI / 180 ) * this.speed, this.vy, Math.cos( this.course * Math.PI / 180 ) * this.speed ),
-			flame: this.firing ? 1 : this.boost ? 0.55 : 0,
+			// As a plane, no exhaust: a trick boost paid in the air waits for the wheels (plane.js).
+			flame: this.aircraft?.on ? 0 : this.firing ? 1 : this.boost ? 0.55 : 0,
 			// A trail (World Drive's Garage) shows behind it boosting or flying.
 			trail: this.firing || this.boost || this.flying || this.aircraft?.on ? 1 : 0,
 			drifting: !! this.drifting && this.grounded,
@@ -1900,7 +1935,15 @@ export class Driver {
 		this.course = this.heading;
 		this.boost = null;
 		if ( this.drifting ) this.endDrift( false );
-		if ( into > CRASH_FLASH ) this.hud.flash( 'Crash!' );
+		if ( into > CRASH_FLASH ) {
+
+			// Felt as well as said: squashed against it and the view shaken (for the view, only with
+			// the camera's effects on), a little less than a stunt's hit.
+			this.squashBy( into * SQUASH.hit * 0.6, 'hit' );
+			this.shake = Math.max( this.shake, Math.min( 0.3, into * SHAKE * 0.5 ) * this.handling.shake );
+			this.hud.flash( 'Crash!', 'crash' );
+
+		}
 
 	}
 
@@ -1930,6 +1973,9 @@ export class Driver {
 			this.scraping = 0.15;
 			this.scrapeAt.at.copy( contact.point );
 			this.scrapeAt.normal.set( - wall.east, 0, wall.north );
+			// How fast it grinds along it, for its sparks (drive-fx.js), and a rumble in the view.
+			this.scrapeAt.speed = along;
+			if ( this.motion ) this.shake = Math.max( this.shake, ( 0.02 + 0.002 * along ) * this.handling.shake );
 			return;
 
 		}
@@ -2061,16 +2107,28 @@ export class Driver {
 	}
 
 	// How a hit looks and feels: the model squashed, sparks and bits flying off where it hit, the
-	// camera shaken, and a word for it.
+	// camera shaken and kicked (pulled in and dipped, as a blow does), and a word for it, bigger in
+	// its own way the harder it was. The hardest (WHAM!) hold their sparks still for a moment (not
+	// for a visitor asking for less motion, nor with the camera's effects off): drive-fx.js's time,
+	// never the drive's.
 	impact( into, point, wall ) {
 
 		const power = MathUtils.clamp( into / 30, 0, 1 );
 		this.squashBy( into * SQUASH.hit, 'hit' );
 		this.shake = Math.max( this.shake, Math.min( SHAKE_MAX * this.handling.shake, into * SHAKE * this.handling.shake ) );
-		// From the top of where it hit, so the chase camera sees the burst over the vehicle.
+		// Where it met the wall, for the ring round it and the bits knocked off; the flash from the
+		// top of where it hit, so the chase camera sees it over the vehicle.
+		_contact.copy( point );
 		point.y = Math.max( point.y, this.middle( _c ).y + this.half.y * 0.6 );
-		this.fx?.burst( point, _n.set( - wall.east, 0, wall.north ), power );
-		this.hud.pop?.( WORDS.find( ( [ least ] ) => into >= least )[ 1 ], power );
+		// The ground under where it hit, for the bits and sparks to land on: looked for down from just
+		// over where it met the wall, so a hit in the air finds the ground under it, not a roof it left.
+		const ground = this.fx ? this.groundAt( this.east, this.north, localToEnu( _contact ).up + 0.3 ) : null;
+		this.fx?.burst( point, _n.set( - wall.east, 0, wall.north ), power, _contact, ground );
+		const [ [ fov, nod ], [ fovMore, nodMore ] ] = HIT_JOLT;
+		this.jolt( fov + fovMore * power, nod + nodMore * power );
+		const tier = WORDS.findIndex( ( [ least ] ) => into >= least );
+		if ( tier === 0 && this.motion && ! this.effects?.calm ) this.fx?.hitch( HIT_HITCH );
+		this.hud.pop?.( WORDS[ tier ][ 1 ], power, WORDS[ tier ][ 2 ] );
 
 	}
 
@@ -2202,6 +2260,24 @@ export class Driver {
 
 	}
 
+	// A plane's trick (plane.js's trick: `input` from its own keys), on top of how it flies, as
+	// flightSpin turns one: turned at the car's rates, and with no roll or loop asked for, righted at
+	// FLIGHT_RIGHTING times `righting`.
+	planeSpin( dt, input, righting = 1 ) {
+
+		this.turn( dt, input, FLIGHT_DAMP );
+		if ( ! input.pitch && ! input.roll ) this.air.q.slerp( LEVEL, 1 - Math.exp( - FLIGHT_RIGHTING * righting * dt ) );
+
+	}
+
+	// How fast (rad/s) a plane's loop turns its nose at most: the car's flip rate, slower for a big
+	// vehicle (trickRate). A loop's size is its speed over this (plane.js).
+	get loopRate() {
+
+		return AIR_RATE.pitch * this.trickRate;
+
+	}
+
 	// Tricks while flying: Space with W/S flips and Q/E (or Space with A/D) rolls; let go and it
 	// rights itself.
 	flightSpin( dt ) {
@@ -2230,6 +2306,8 @@ export class Driver {
 		const climb = Math.abs( this.speed ) * dt * 1.5;
 		let ground = this.groundAt( this.east, this.north, middle + 0.3 + climb );
 		if ( ground === null ) ground = this.groundAt( this.east, this.north, middle + this.extent( UP, air.q ) + 1 + climb );
+		// In a wipeout, sliding along on its roof or side close over the ground: dust and sparks off it.
+		if ( air.wipeout && this.fx && ground !== null && Math.abs( this.speed ) > 2 && middle - this.extent( UP, air.q ) - ground < 0.4 ) this.fx.wipe( enuToLocal( this.east, this.north, ground, _c ) );
 		if ( air.righting ) {
 
 			this.rightStep( dt, ground );
@@ -2319,7 +2397,22 @@ export class Driver {
 
 		if ( impact < - 12 * this.leap ) this.speed *= 0.8;
 		this.squashBy( - impact * SQUASH.land, 'land' );
-		if ( impact < - 5 ) this.fx?.dust( enuToLocal( this.east, this.north, ground, _c ), MathUtils.clamp( - impact / 15, 0, 1 ), this.width );
+		// Dust thrown up as it comes down, and coming down hard, a nod of the view (by the speed into
+		// the slope it lands on).
+		if ( impact < - LAND_HARD ) {
+
+			const power = MathUtils.clamp( - impact / 15, 0, 1 );
+			this.fx?.dust( enuToLocal( this.east, this.north, ground, _c ), power, this.width );
+			this.jolt( 0, LAND_NOD * power );
+
+		} else if ( impact < - LAND_SOFT && this.fx ) {
+
+			// A puff off each rear tyre: back from its middle to its rear axle.
+			const rad = this.heading * Math.PI / 180;
+			const rear = _n.set( Math.sin( rad ), 0, - Math.cos( rad ) ).multiplyScalar( this.half.z * 0.7 );
+			this.fx.dust( enuToLocal( this.east, this.north, ground, _c ), 0.15, this.width, true, rear );
+
+		}
 		if ( ! air.flew ) this.bestAir = Math.max( this.bestAir, air.time );
 		const tricks = this.tricksOf( air );
 		const fall = - impact;
@@ -2360,9 +2453,10 @@ export class Driver {
 		this.squashBy( Math.max( 2, hard * SQUASH.land ), 'land' );
 		this.shake = Math.max( this.shake, Math.min( SHAKE_MAX * this.handling.shake, hard * SHAKE * this.handling.shake ) );
 		const power = MathUtils.clamp( hard / 15, 0.3, 1 );
-		enuToLocal( this.east, this.north, ground, _c );
-		this.fx?.burst( _c, UP, power );
-		this.fx?.dust( _c, power, this.width );
+		// Slammed down on the ground: dust and sparks skidding off the way it slides.
+		const rad = this.course * Math.PI / 180;
+		const slide = _n.set( - Math.sin( rad ), 0, Math.cos( rad ) ).multiplyScalar( Math.sign( this.speed ) || 1 );
+		this.fx?.slam( enuToLocal( this.east, this.north, ground, _c ), power, this.width, slide );
 		this.hud.pop?.( 'WIPEOUT!', power, 'wipeout' );
 		if ( lost.length || this.mult > 1 ) this.hud.tricks?.( { lines: lost.map( trick => trick.name ), mult: this.mult, lost: true } );
 		this.mult = 1;
@@ -2412,6 +2506,8 @@ export class Driver {
 		this.air = null;
 		this.landedAt = this.clock;
 		this.squashBy( 1.2, 'land' );
+		// Back on its wheels: a puff of dust round them.
+		this.fx?.settle( enuToLocal( this.east, this.north, this.y, _c ), this.width );
 
 	}
 

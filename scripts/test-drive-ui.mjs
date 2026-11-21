@@ -5,7 +5,9 @@
 // page counts, seen in its posts (the funnel, the device, searches by kind and never what was typed,
 // play time, a drop-in's time and its place, as its cell about a kilometre each way, and one left
 // for the globe); stunts (a wall
-// throwing the kart into the air, a backflip landed for points, the DRIFT button); the vehicle
+// throwing the kart into the air, a backflip landed for points, the DRIFT button); crashes (a
+// hit's layers, words and bits by how hard, a wipeout's slam, a landing's dust and a scrape's
+// sparks, calmer, thinner and airless as asked, changing nothing of the drive); the vehicle
 // picker and changing ride from the pause menu; M back to the globe and teleporting again with no
 // reload; recent places and the picked ride kept across a reload; a phone with touch buttons;
 // boosting flat out going supersonic in each free ride (the boom, the streaks, the tag and the
@@ -250,7 +252,7 @@ describe( 'World Drive, desktop', () => {
 			'Go-kart', 'Pickup', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
 			'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser', 'Hypercar', 'Cyber muscle',
 			'Skid steer', 'Telehandler', 'Concrete mixer', 'Road roller', 'Wheel loader', 'Dump truck', 'Bulldozer', 'Vac truck',
-			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
+			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft', 'Lunar rover', 'Flying saucer', 'Rocket dragster',
 		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
@@ -879,11 +881,13 @@ describe( 'World Drive on a phone', () => {
 // Boosting flat out with the gauge kept full, from a standstill on the test pad, at a fixed step:
 // when it goes supersonic (and how fast it's going), the boom and streaks (the supersonic effects'
 // particles: the free rides' classic flame has none of its own), the tag and the wider view a
-// second on; then out of fuel and braking, when it ends.
+// second on, with the flame's shock diamonds and white-hot core and the tag glowing in its colour;
+// then out of fuel and braking, when it ends.
 function supersonic() {
 
-	const { driver: d } = window.drive;
+	const { driver: d, scene } = window.drive;
 	const tag = document.querySelector( '#hud .dhud-sonic' );
+	const hud = tag.closest( '.dhud' );
 	const step = () => {
 
 		d.update( 1 / 60 );
@@ -918,6 +922,13 @@ function supersonic() {
 	out.streaks = d.fx.particles.alive;
 	out.warp = Math.round( d.warp * 100 ) / 100;
 	out.still = d.supersonic;
+	// The supersonic effects' batch (the classic flame has no other) draws more quads than it has
+	// particles alive: the diamonds; the flame's core is solid; the tag sweeps its sheen.
+	const fx = scene.getObjectByName( 'drive-fx' );
+	const sonic = fx.children.filter( o => o.name === 'boost-batch' ).at( - 1 ).userData.batch;
+	out.diamonds = sonic.mesh.geometry.instanceCount - sonic.alive;
+	out.core = Math.round( fx.children[ 0 ].children[ 1 ].material.opacity * 100 ) / 100;
+	out.hud = { sonic: hud.classList.contains( 'sonic' ), tint: hud.style.getPropertyValue( '--sonic' ), animation: getComputedStyle( tag ).animationName };
 	// Out of boost (B let go: the booster's out), and braking.
 	d.gauge = 0;
 	d.release( 'KeyB' );
@@ -936,6 +947,8 @@ function supersonic() {
 	out.tagAfter = ! tag.hidden;
 	out.warpAfter = Math.round( d.warp * 100 ) / 100;
 	out.particlesAfter = d.fx.particles.alive;
+	out.drawnAfter = sonic.mesh.geometry.instanceCount;
+	out.hudAfter = hud.classList.contains( 'sonic' );
 	return out;
 
 }
@@ -987,6 +1000,10 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 			// Out of boost and braking, it ends once under three quarters of that top speed.
 			assert.ok( ride.endedAt !== null && ride.endedAt < ride.boostedTop * 0.75 + 1 && ride.endedAt > ride.boostedTop * 0.6, JSON.stringify( ride ) );
 			assert.ok( ! ride.tagAfter && ride.warpAfter < 0.15 && ride.particlesAfter === 0, JSON.stringify( ride ) );
+			// In overdrive the flame burns with shock diamonds and a solid white-hot core, and the tag
+			// glows in the ride's colour with its sheen sweeping; after, nothing's drawn and it's gone.
+			assert.ok( ride.diamonds > 0 && ride.core > 0.95 && ride.drawnAfter === 0, JSON.stringify( ride ) );
+			assert.ok( ride.hud.sonic && /^#[0-9a-f]{6}$/.test( ride.hud.tint ) && /dhud-sonic-sheen/.test( ride.hud.animation ) && ! ride.hudAfter, JSON.stringify( ride ) );
 
 		}
 
@@ -1426,15 +1443,34 @@ function effects( style ) {
 
 	} );
 	Object.assign( out.lit, { punch: Math.round( punch * 10 ) / 10, nod: Math.round( nod * 1000 ) / 1000, squat: Math.round( squat * 1000 ) / 1000 } );
-	// Run dry: the exhaust glows on and cools; then, a while later, nothing's left.
+	// Run dry: the exhaust glows on and cools; then, a while later, nothing's left. (The flame,
+	// shown or not each frame, coughs out as it runs dry.)
+	const flame = () => root().children[ 0 ];
+	let coughed = '';
+	const seen = () => coughed += flame().visible ? 1 : 0;
 	d.gauge = 0.01;
-	step( 2 );
+	step( 2, seen );
 	out.dry = { firing: d.firing, alive: d.fx.particles.alive };
 	d.release( 'KeyB' );
 	d.release( 'KeyW' );
-	step( 150 );
+	step( 30, seen );
+	out.coughed = coughed;
+	step( 120 );
 	out.dry.after = d.fx.particles.alive;
 	out.dry.punch = Math.round( d.punch * 1000 ) / 1000;
+
+	// Let go: the flame dies down into the nozzle rather than going out at once.
+	reset( 15 );
+	d.press( 'KeyW' );
+	d.press( 'KeyB' );
+	step( 20 );
+	const burning = flame().scale.x;
+	d.release( 'KeyB' );
+	step( 1 );
+	out.letGo = { shown: flame().visible, shrunk: flame().scale.x < burning };
+	d.release( 'KeyW' );
+	step( 60 );
+	out.letGo.after = flame().visible;
 
 	// A boost pad driven over: its burst, carried along with the vehicle (its chevrons at its
 	// speed), and the vehicle lit up.
@@ -1589,6 +1625,13 @@ describe( 'World Drive boost and driving effects', () => {
 			assert.ok( r.lit.alive >= 10 && r.lit.punch >= 3 && r.lit.nod > 0.1 && r.lit.squat > 0.03, JSON.stringify( r.lit ) );
 			// Run dry: it glows on, then everything's gone, the punch rung out.
 			assert.ok( ! r.dry.firing && r.dry.alive > 0 && r.dry.after === 0 && r.dry.punch === 0, JSON.stringify( r.dry ) );
+			// The classic flame coughs out as it runs dry (cut out and back), and dies down let go.
+			if ( r.style === 'classic' ) {
+
+				assert.ok( /10+1/.test( r.coughed ) && r.coughed.endsWith( '0' ), r.coughed );
+				assert.deepEqual( r.letGo, { shown: true, shrunk: true, after: false } );
+
+			}
 			assert.ok( r.pad.lit && r.pad.gauge > 0.6 && r.pad.carried > 0.95, JSON.stringify( r.pad ) );
 			// The plane under it: level, a few centimetres over the pad (through its rear tyres).
 			assert.ok( r.floor.wheels > 0.99 && r.floor.at < 0 && r.floor.at > - 0.2 && r.floor.air, JSON.stringify( r.floor ) );
@@ -1825,7 +1868,8 @@ describe( 'World Drive boost and driving effects', () => {
 
 						if ( p.age >= p.life ) continue;
 						if ( p.frame === SHAPES.burst ) flashes.add( p );
-						if ( p.frame === SHAPES.star ) sparks.add( p );
+						// (A burst's stars are streaks of colour: a burst's kind 2, or a willow's 4.)
+						if ( p.frame === SHAPES.spark && ( p.kind === 2 || p.kind === 4 ) ) sparks.add( p );
 
 					}
 
@@ -2019,6 +2063,9 @@ describe( 'World Drive boost and driving effects', () => {
 			const lines = scene.getObjectByName( 'speed-lines' );
 			const bar = document.querySelector( '#hud .dhud-boost' );
 			const whiteout = document.getElementById( 'whiteout' );
+			// The lines' colour, as a hex number, and their near white.
+			const { uColour } = lines.material.uniforms;
+			const lineWhite = new uColour.value.constructor( 0xf4faff ).getHex();
 			const top = d.spec.topSpeed / 3.6 * 2;
 			for ( const code of [ ...d.keys ] ) d.release( code );
 			const out = {};
@@ -2044,16 +2091,24 @@ describe( 'World Drive boost and driving effects', () => {
 
 			}, 30 );
 			out.boosting = { lines: Math.round( screenFx.lines * 100 ) / 100, shown: lines.visible };
+			out.boostingWhite = uColour.value.getHex() === lineWhite;
 			let white = false;
+			let shock = null;
 			await window.untilFrame( () => {
 
 				hold( top )();
 				d.gauge = 0.9;
 				white ||= whiteout.classList.contains( 'on' );
+				// The shock front sweeping out, in the ride's colour.
+				if ( white && ! shock ) shock = { animation: getComputedStyle( whiteout, '::after' ).animationName, sonic: whiteout.style.getPropertyValue( '--sonic' ) };
 				return d.supersonic && white;
 
 			} );
 			out.overdrive = { lines: Math.round( screenFx.lines * 100 ) / 100, white, supersonic: d.supersonic };
+			out.shock = shock;
+			// A moment into overdrive the lines have a wash of the ride's colour.
+			await window.untilFrame( () => ( hold( top )(), d.gauge = 0.9, false ), 20 );
+			out.overdriveTinted = uColour.value.getHex() !== lineWhite;
 			// Run dry: the gauge flashes.
 			d.gauge = 0.004;
 			let empty = false;
@@ -2087,11 +2142,343 @@ describe( 'World Drive boost and driving effects', () => {
 		assert.deepEqual( run.cruising, { lines: 0, shown: false, ready: true, pulse: 'dhud-ready' } );
 		assert.ok( run.boosting.lines > 0.2 && run.boosting.shown, JSON.stringify( run.boosting ) );
 		assert.ok( run.overdrive.supersonic && run.overdrive.white && run.overdrive.lines > run.boosting.lines, JSON.stringify( run.overdrive ) );
+		// Near white boosting; tinted in overdrive, whose edges sweep a shock front in the ride's colour.
+		assert.ok( run.boostingWhite && run.overdriveTinted, JSON.stringify( run ) );
+		assert.ok( run.shock?.animation === 'shockfront' && /^#[0-9a-f]{6}$/.test( run.shock.sonic ), JSON.stringify( run.shock ) );
 		assert.deepEqual( run.dry, { empty: true, firing: false } );
 		assert.match( run.refill ?? '', /width/ );
 		assert.deepEqual( run.slow, { lines: 0, shown: false } );
 		assert.deepEqual( run.full, { ready: true, pulse: 'dhud-ready' } );
 		await shot( page, 'effects-gauge' );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a wall hit: a layered burst in its tier, bits landing on the ground, a kick of the view, and nothing new made', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { SHAPES, FLAT } = await import( '/src/drive-boosts.js' );
+			const { driver: d, scene, renderer } = window.drive;
+			const world = d.models.group.parent;
+			const saved = { calm: d.effects.calm, motion: d.motion };
+			const root = () => scene.getObjectByName( 'drive-fx' );
+			const batch = name => root().getObjectByName( name ).userData.batch;
+			const make = ( effects = {} ) => {
+
+				d.fx.dispose();
+				d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: { detail: 1, calm: false, ...effects } } );
+
+			};
+			const reset = () => {
+
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 0, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftLevel: 0, boost: null, firing: false, gauge: 1, supersonic: false } );
+				d.jolts.fov.value = d.jolts.fov.speed = d.jolts.nod.value = d.jolts.nod.speed = 0;
+				d.update( 1 / 60 );
+
+			};
+			// The pictures and ways the crash's quads are drawn this frame.
+			const cells = name => {
+
+				const { shapes, axes, mesh } = batch( name );
+				return Array.from( { length: mesh.geometry.instanceCount }, ( _, i ) => ( { frame: shapes.array[ i * 4 + 3 ], mode: axes.array[ i * 4 + 3 ] } ) );
+
+			};
+			// A hit `into` m/s into a wall to the north, in front of the kart's nose.
+			const hit = into => {
+
+				reset();
+				const point = d.entry.pivot.position.clone();
+				point.z += 1.1;
+				point.y += 0.35;
+				d.impact( into, point, { east: 0, north: - 1 } );
+				const kick = Math.round( d.jolts.fov.speed * 10 ) / 10;
+				d.update( 1 / 60 );
+				return { alive: d.fx.particles.alive, kick, cells: [ ...cells( 'drive-crash' ), ...cells( 'drive-crash-dust' ) ] };
+
+			};
+			const memory = () => {
+
+				const materials = new Set();
+				let objects = 0;
+				root().traverse( o => {
+
+					objects ++;
+					if ( o.material ) materials.add( o.material );
+
+				} );
+				return { geometries: renderer.info.memory.geometries, objects, materials: materials.size };
+
+			};
+			const out = {};
+			out.tiers = [ 5, 12, 25 ].map( into => {
+
+				make();
+				return hit( into ).alive;
+
+			} );
+			make();
+			const wham = hit( 25 );
+			out.wham = {
+				ring: wham.cells.some( c => c.frame === SHAPES.shock && c.mode === FLAT ),
+				flare: wham.cells.some( c => c.frame === SHAPES.flare ),
+				kick: wham.kick,
+			};
+			// The bits fly, bounce and lie on the ground under its wheels (the test pad's, at 0): where
+			// each live one was last seen.
+			const items = root().getObjectByName( 'drive-debris' ).userData.items;
+			const last = new Map();
+			for ( let i = 0; i < 96; i ++ ) {
+
+				d.update( 1 / 60 );
+				items.forEach( ( item, n ) => item.age < item.life && last.set( n, item.position.y ) );
+
+			}
+
+			out.bits = { count: last.size, ys: [ ...last.values() ].map( y => Math.round( y * 100 ) / 100 ) };
+			// Calm: no flash or flare, and the view isn't kicked (nor with the camera's effects off).
+			d.effects.calm = true;
+			d.motion = false;
+			make( { calm: true } );
+			const calm = hit( 25 );
+			out.calm = { flash: calm.cells.some( c => c.frame === SHAPES.flare || c.frame === SHAPES.glow || c.frame === SHAPES.burst ), kick: calm.kick };
+			Object.assign( d.effects, { calm: saved.calm } );
+			d.motion = saved.motion;
+			// On a phone, fewer; with no air (the Moon), no dust or smoke.
+			make( { detail: 0.6 } );
+			out.phone = hit( 25 ).alive;
+			make( { air: false, gravity: 0.165 } );
+			const moon = hit( 25 );
+			out.moon = { puffs: moon.cells.filter( c => c.frame === SHAPES.puff ).length, gravity: batch( 'drive-crash' ).gravity };
+			// Fifty hits in a row: nothing new made, never more than its budget.
+			make();
+			reset();
+			const before = memory();
+			let most = 0;
+			for ( let i = 0; i < 50; i ++ ) {
+
+				most = Math.max( most, hit( 5 + i % 25 ).alive );
+				for ( let j = 0; j < 3; j ++ ) d.update( 1 / 60 );
+
+			}
+
+			const after = memory();
+			out.grew = Object.fromEntries( Object.entries( after ).filter( ( [ key, value ] ) => value !== before[ key ] ).map( ( [ key, value ] ) => [ key, `${ before[ key ] } → ${ value }` ] ) );
+			out.most = most;
+			out.budget = d.fx.particles.budget;
+			let capacities = 0;
+			root().traverse( o => capacities += o.userData.batch?.capacity ?? 0 );
+			out.capacities = capacities;
+			for ( let i = 0; i < 180; i ++ ) d.update( 1 / 60 );
+			out.after = d.fx.particles.alive;
+			d.fx.dispose();
+			d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: d.effects } );
+			reset();
+			return out;
+
+		} );
+		console.log( 'a wall hit:', JSON.stringify( result ) );
+		const [ bonk, boing, wham ] = result.tiers;
+		assert.ok( wham > boing && boing > bonk && bonk > 10, JSON.stringify( result.tiers ) );
+		assert.ok( result.wham.ring && result.wham.flare && result.wham.kick < 0, JSON.stringify( result.wham ) );
+		assert.ok( result.bits.count >= 8 && result.bits.ys.every( y => y >= - 0.05 && y <= 0.6 ), JSON.stringify( result.bits ) );
+		assert.deepEqual( result.calm, { flash: false, kick: 0 } );
+		assert.ok( result.phone < wham * 0.8, `${ result.phone } on a phone, ${ wham } on a computer` );
+		assert.deepEqual( result.moon, { puffs: 0, gravity: 9.81 * 0.165 } );
+		assert.deepEqual( result.grew, {} );
+		assert.ok( result.most <= result.budget && result.budget === result.capacities, JSON.stringify( result ) );
+		assert.equal( result.after, 0 );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a wall hit\'s effects change nothing of the drive: the same hit with and without them goes the same way, hitch and all', async () => {
+
+		const result = await page.evaluate( () => {
+
+			const { driver: d, ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const land = pad.children.find( child => child.isMesh );
+			const wall = land.clone();
+			wall.material = land.material.clone();
+			wall.material.side = 2;
+			wall.rotation.set( 0, 0, 0 );
+			wall.scale.set( 60 / 4000, 6 / 2000, 1 );
+			wall.position.set( 0, 3, 30 );
+			pad.add( wall );
+			wall.updateMatrixWorld();
+			const fx = d.fx;
+			const hitches = [];
+			const hitch = fx.hitch.bind( fx );
+			fx.hitch = seconds => {
+
+				hitches.push( seconds );
+				hitch( seconds );
+
+			};
+			const run = withFx => {
+
+				d.fx = withFx ? fx : null;
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 100 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftHop: false, boost: null, firing: false, mult: 1, score: 0 } );
+				d.update( 1 / 60 );
+				for ( let i = 0; i < 90; i ++ ) d.update( 1 / 60 );
+				const round = v => Math.round( v * 1e6 ) / 1e6;
+				return { east: round( d.east ), north: round( d.north ), y: round( d.y ), speed: round( d.speed ), vy: round( d.vy ), spin: d.air ? d.air.spin.toArray().map( round ) : null, hits: d.air?.hits ?? null, score: d.score };
+
+			};
+			const without = run( false );
+			const withFx = run( true );
+			d.fx = fx;
+			pad.remove( wall );
+			return { without, withFx, hitches };
+
+		} );
+		// It hit hard enough for WHAM! and its hitch.
+		assert.ok( result.hitches.length > 0, JSON.stringify( result ) );
+		assert.deepEqual( result.withFx, result.without );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a hit\'s word by how hard it was: BONK!, BOING! and WHAM!, each its own way, over the kart; a run of hits counts up; asking for less motion they only fade', async () => {
+
+		const pop = into => page.evaluate( into => {
+
+			const { driver: d } = window.drive;
+			d.impact( into, d.entry.pivot.position.clone(), { east: 0, north: - 1 } );
+			const element = document.querySelector( '#hud .dhud-pop' );
+			const style = getComputedStyle( element );
+			return { kind: element.className, text: element.textContent, top: Math.round( parseFloat( style.top ) / innerHeight * 100 ) / 100, animation: style.animationName };
+
+		}, into );
+		// Long enough after the last test's hits not to count up from them.
+		await page.waitForTimeout( 1300 );
+		const tiers = [];
+		for ( const into of [ 5, 12, 25 ] ) {
+
+			tiers.push( await pop( into ) );
+			// Long enough apart not to count up.
+			await page.waitForTimeout( 1300 );
+
+		}
+
+		console.log( 'pops:', JSON.stringify( tiers ) );
+		assert.deepEqual( tiers.map( ( { kind, text } ) => [ kind, text ] ), [ [ 'dhud-pop bonk', 'BONK!' ], [ 'dhud-pop boing', 'BOING!' ], [ 'dhud-pop wham', 'WHAM!' ] ] );
+		assert.deepEqual( tiers.map( ( { animation } ) => animation ), [ 'dhud-bonk', 'dhud-boing', 'dhud-wham-hit' ] );
+		// Over the kart, not on its roof (it's about two thirds of the way down the view).
+		for ( const { top } of tiers ) assert.ok( top > 0.38 && top < 0.52, `at ${ top } of the view` );
+		await page.waitForTimeout( 1300 );
+		await pop( 12 );
+		const twice = await pop( 12 );
+		assert.equal( twice.text, 'BOING! ×2' );
+		await page.waitForTimeout( 1300 );
+		await page.emulateMedia( { reducedMotion: 'reduce' } );
+		const calm = await pop( 25 );
+		await page.emulateMedia( { reducedMotion: 'no-preference' } );
+		assert.equal( calm.animation, 'dhud-pop-calm' );
+		// "Crash!" (crash: 'stop') in red, knocked side to side.
+		const flash = await page.evaluate( () => {
+
+			window.drive.driver.hud.flash( 'Crash!', 'crash' );
+			const element = document.querySelector( '#hud .dhud-flash' );
+			const crash = { kind: element.className, animation: getComputedStyle( element ).animationName };
+			window.drive.driver.hud.flash( 'Back on the road' );
+			return { crash, then: element.className };
+
+		} );
+		assert.deepEqual( flash, { crash: { kind: 'dhud-flash crash', animation: 'dhud-pop, dhud-knock' }, then: 'dhud-flash' } );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a wipeout slams down flat, a landing throws a ring of dust by how hard it was (regolith on the Moon), and a scrape throws more sparks the faster it grinds', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { SHAPES, FLAT, ALONG } = await import( '/src/drive-boosts.js' );
+			const { driver: d, scene } = window.drive;
+			const world = d.models.group.parent;
+			const root = () => scene.getObjectByName( 'drive-fx' );
+			const items = name => root().getObjectByName( name ).userData.batch.items.filter( p => p.age < p.life );
+			const make = ( effects = {} ) => {
+
+				d.fx.dispose();
+				d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: { detail: 1, calm: false, ...effects } } );
+
+			};
+			const reset = ( speed = 0 ) => {
+
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftLevel: 0, boost: null, firing: false } );
+				d.update( 1 / 60 );
+
+			};
+			const out = {};
+			// Down on its roof at 10 m/s, sliding at 12: a flat ring on the ground, sparks skidding off
+			// along it (never thrown up as a fountain).
+			make();
+			reset( 12 );
+			d.enterAir();
+			Object.assign( d, { y: 0.4, vy: - 10 } );
+			d.air.q.set( 0, 0, 1, 0 );
+			d.wipeOut( 0 );
+			const sparks = items( 'drive-crash' ).filter( p => p.mode === ALONG );
+			out.wipeout = {
+				ring: items( 'drive-crash-dust' ).some( p => p.mode === FLAT && p.frame === SHAPES.ring ),
+				sparks: sparks.length,
+				up: sparks.filter( p => p.velocity.y > 0.7 * Math.hypot( p.velocity.x, p.velocity.z ) ).length,
+			};
+			// Coming down on its wheels at 10 m/s and at 3 m/s.
+			const land = ( vy, effects ) => {
+
+				make( effects );
+				reset( 10 );
+				d.enterAir();
+				d.vy = vy;
+				d.touchDown( 0 );
+				const dust = items( 'drive-crash-dust' );
+				return { ring: dust.some( p => p.mode === FLAT ), puffs: dust.filter( p => p.frame === SHAPES.puff ).length, grains: dust.filter( p => p.frame === SHAPES.soft ).length };
+
+			};
+			out.hard = land( - 10 );
+			out.soft = land( - 3 );
+			out.moon = land( - 10, { air: false, gravity: 0.165 } );
+			// Scraping along a wall for half a second, at 30 m/s and at 5.
+			const scrape = speed => {
+
+				make();
+				reset();
+				for ( let i = 0; i < 30; i ++ ) {
+
+					d.scraping = 0.15;
+					d.scrapeAt.at.copy( d.entry.pivot.position ).add( { x: 0.7, y: 0.3, z: 0 } );
+					d.scrapeAt.normal.set( - 1, 0, 0 );
+					d.scrapeAt.speed = speed;
+					d.update( 1 / 60 );
+
+				}
+
+				return items( 'drive-crash' ).filter( p => p.mode === ALONG ).length;
+
+			};
+			out.scrape = { fast: scrape( 30 ), slow: scrape( 5 ) };
+			d.scraping = 0;
+			d.fx.dispose();
+			d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: d.effects } );
+			reset();
+			return out;
+
+		} );
+		console.log( 'wipeout, landing and scraping:', JSON.stringify( result ) );
+		assert.ok( result.wipeout.ring && result.wipeout.sparks > 5 && result.wipeout.up === 0, JSON.stringify( result.wipeout ) );
+		assert.ok( result.hard.ring && result.hard.puffs > 4, JSON.stringify( result.hard ) );
+		assert.ok( ! result.soft.ring && result.soft.puffs <= 2, JSON.stringify( result.soft ) );
+		assert.ok( result.moon.puffs === 0 && result.moon.grains > 4, JSON.stringify( result.moon ) );
+		assert.ok( result.scrape.fast > 2 * result.scrape.slow && result.scrape.slow > 0, JSON.stringify( result.scrape ) );
 		assert.deepEqual( page.errors, [] );
 
 	} );
@@ -2244,6 +2631,8 @@ describe( 'World Drive boost and driving effects', () => {
 			assert.deepEqual( run, { motion: false, calm: true, switch: true, shaken: 0, lit: false, burst: run.burst, pulse: 'none' } );
 			assert.ok( run.burst > 10, JSON.stringify( run ) );
 			assert.deepEqual( off, { punch: 0, lines: 0, white: false, supersonic: true } );
+			// OVERDRIVE just shows, still.
+			assert.equal( await calm.evaluate( () => getComputedStyle( document.querySelector( '#hud .dhud-sonic' ) ).animationName ), 'none' );
 			assert.deepEqual( calm.errors, [] );
 
 		} finally {
@@ -2294,7 +2683,7 @@ describe( 'World Drive boost and driving effects', () => {
 			await driveHere( calm );
 			const boom = await calm.evaluate( async () => {
 
-				const { SHAPES, FLAT } = await import( '/src/drive-boosts.js' );
+				const { SHAPES, FLAT, FACING } = await import( '/src/drive-boosts.js' );
 				const { driver: d, renderer, scene, camera, screenFx } = window.drive;
 				// Frame by frame by hand, each read back off the canvas.
 				renderer.setAnimationLoop( null );
@@ -2328,6 +2717,8 @@ describe( 'World Drive boost and driving effects', () => {
 				const fresh = batches.flatMap( batch => batch.items.filter( p => p.age < p.life && p.age < 0.05 ) );
 				const rings = fresh.filter( p => p.mode === FLAT && ( p.frame === SHAPES.shock || p.frame === SHAPES.ring ) );
 				const out = { supersonic: d.supersonic, rings: rings.length, kept: Math.round( Math.min( ...rings.map( p => p.carry.length() ) ) / top * 100 ) / 100, flares: fresh.filter( p => p.frame === SHAPES.flare ).length, frames: [] };
+				// The collar of vapour round it, facing the camera (so never one of the rings).
+				out.puffs = fresh.filter( p => p.frame === SHAPES.puff && p.mode === FACING ).length;
 				for ( let k = 0; k < 24; k ++ ) {
 
 					tick();
@@ -2346,6 +2737,7 @@ describe( 'World Drive boost and driving effects', () => {
 			console.log( 'sonic boom:', JSON.stringify( boom ) );
 			// Its four rings carried at 0.97 of the speed, so the camera is never inside one.
 			assert.ok( boom.supersonic && boom.rings === 4 && boom.kept > 0.95 && boom.flares === 0, JSON.stringify( boom ) );
+			assert.ok( boom.puffs > 0, JSON.stringify( boom ) );
 			// With them falling back through the camera the view went near white (over 50 % of it) for 6 frames, twice.
 			assert.ok( Math.max( ...boom.frames ) < 50, `the view went white: ${ boom.frames.join( ' ' ) }` );
 			assert.deepEqual( calm.errors, [] );
@@ -5428,7 +5820,146 @@ describe( 'World Drive, the open sea', () => {
 
 describe( 'World Drive with its Worker', () => {
 
-	test( 'over the daily cap: straight onto the Moon\'s globe (never limited), with a word on why; the Earth shows the used-up screen and stays shut', async () => {
+	// The Worker's /api/visit as it is now: the globe's visit (globe: true) free, a free world's link's
+	// the same, and the Earth's drive (fromGlobe: true) answered by `earth` (route => ...: the key
+	// unless it says otherwise). `asked` has each body.
+	const visits = ( asked, earth = route => route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: 0, visit: 'v1.earth-visit' } ) } ) ) => route => {
+
+		const body = route.request().postDataJSON();
+		asked.push( body );
+		if ( body.globe === true ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { free: true, globe: true, world: 'earth', visit: 'v1.globe-visit' } ) } );
+		if ( body.world ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { moon: true, free: true, world: body.world, visit: `v1.${ body.world }-visit` } ) } );
+		earth( route );
+
+	};
+	const WORKER = { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true };
+	// A start spot pinned, and its Drive here pressed.
+	const driveAt = async ( page, spot ) => {
+
+		await page.locator( '.spots button', { hasText: spot } ).click();
+		await page.locator( '.pin-card .go' ).waitFor();
+		await page.locator( '.pin-card .go' ).click();
+
+	};
+
+	test( 'the page opens on our own globe of the Earth with the globe\'s visit: no Earth drive spent, nothing asked of Google, however it\'s looked round', async () => {
+
+		const asked = [];
+		const page = await newPage( { api: { config: WORKER, turnstile: true, visit: visits( asked ) } } );
+		const turnstiles = [];
+		page.on( 'request', request => request.url().startsWith( 'https://challenges.cloudflare.com/turnstile/' ) && turnstiles.push( request.url() ) );
+		await page.goto( BASE );
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 90000 } );
+		assert.deepEqual( asked, [ { token: TOKEN, globe: true } ] );
+		assert.equal( await page.evaluate( () => window.drive.world ), 'earth' );
+		assert.equal( await page.evaluate( () => window.drive.tiles ), null );
+		assert.equal( await page.evaluate( () => window.drive.earthAsked ), 0 );
+		// Our own Earth, with NASA's picture on it, and its credit.
+		await page.waitForFunction( () => window.drive.scene.getObjectByName( 'test-earth' )?.userData.picture === '/earth/colour.webp', null, { timeout: 30000 } );
+		await page.locator( '#earth-credit' ).waitFor();
+		assert.equal( await page.locator( '#earth-credit' ).textContent(), 'Earth: NASA Blue Marble' );
+		// No test pad, and no toast saying there are no Google tiles here.
+		assert.equal( await page.evaluate( () => !! window.drive.scene.getObjectByName( 'placeholder-ground' ) ), false );
+		assert.doesNotMatch( await page.locator( '#toast' ).textContent(), /No Google 3D tiles/ );
+		// A spot, a tap, a search: pinned and flown to over the picture, and still nothing asked.
+		await page.locator( '.spots button', { hasText: 'Furka Pass' } ).click();
+		await page.locator( '.pin-card .go' ).waitFor();
+		await flown( page );
+		assert.ok( await page.evaluate( () => window.drive.globe.altitude() ) > 500000, 'flown down to a blur of the picture' );
+		const box = await page.locator( '#app > canvas' ).boundingBox();
+		await page.mouse.click( box.x + box.width * 0.62, box.y + box.height * 0.5 );
+		await page.locator( '.search input' ).fill( 'golden gate' );
+		await page.locator( '.search input' ).press( 'Enter' );
+		await page.waitForTimeout( 1500 );
+		assert.equal( asked.length, 1 );
+		assert.equal( turnstiles.length, 1, turnstiles.join( ' ' ) );
+		assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
+		await shot( page, 'drive-globe-own-earth' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'Drive here on the Earth asks for the Earth\'s drive then: the robot check again, one visit, Google\'s tiles; never a second one in the page', async () => {
+
+		const asked = [];
+		const page = await newPage( { api: { config: WORKER, turnstile: true, visit: visits( asked ) } } );
+		await page.goto( BASE );
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 90000 } );
+		const checks = () => page.evaluate( () => window.turnstileOptions && document.querySelectorAll( '#loading .robot-check, #robot-check' ).length );
+		assert.ok( await checks() );
+		await driveAt( page, 'Golden Gate Bridge' );
+		// The loading card while it's asked for, then the tiles: the Earth's drive asked for once, a
+		// second robot check (its token is good for one ask), its key the tiles'.
+		await page.waitForFunction( () => window.drive.tiles, null, { timeout: 30000 } );
+		assert.deepEqual( asked, [ { token: TOKEN, globe: true }, { token: TOKEN, fromGlobe: true } ] );
+		assert.equal( await page.evaluate( () => window.drive.earthAsked ), 1 );
+		assert.match( await page.locator( '#toast' ).textContent(), /This is today's free Earth drive/ );
+		const roots = () => page.outside.filter( url => url.includes( '/v1/3dtiles/root.json' ) );
+		await page.waitForTimeout( 1500 );
+		assert.equal( roots().length, 1, roots().join( ' ' ) );
+		assert.ok( roots()[ 0 ].includes( 'key=...' ), 'the key isn\'t what the tiles were asked with' );
+		// Google's root is blocked here: its error notice. Then any number of drop-ins on the Earth more,
+		// on the same tiles: never asked again.
+		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 30000 } );
+		const tiles = await page.evaluateHandle( () => window.drive.tiles );
+		await page.evaluate( () => {
+
+			document.querySelector( '#notice' ).hidden = true;
+			window.drive.toGlobe();
+
+		} );
+		await page.evaluate( () => window.drive.dropIn( { name: 'Furka Pass', lat: 46.5725, lon: 8.4153 } ) );
+		await page.evaluate( () => window.drive.toGlobe() );
+		assert.equal( await page.evaluate( t => window.drive.tiles === t, tiles ), true );
+		assert.equal( await page.evaluate( () => window.drive.earthAsked ), 1 );
+		assert.equal( asked.length, 2 );
+		assert.equal( roots().length, 1, roots().join( ' ' ) );
+		await page.context().close();
+
+	} );
+
+	test( 'over a cap at Drive here: the used-up notice, still on the globe with the pin, its button to the Moon; asked again only once the caps start afresh', async () => {
+
+		for ( const reason of [ 'visitor', 'daily' ] ) {
+
+			const asked = [];
+			const page = await newPage( { api: { config: WORKER, turnstile: true, visit: visits( asked, route => route.fulfill( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'Over', reason, retryAfter: 2 * 3600 + 120, visit: 'v1.moon-visit' } ) } ) ) } } );
+			await page.goto( BASE );
+			await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 90000 } );
+			await driveAt( page, 'Golden Gate Bridge' );
+			await page.locator( '#notice[data-kind="used-up"]' ).waitFor( { timeout: 30000 } );
+			assert.equal( await page.locator( '#notice .title' ).textContent(), reason === 'visitor' ? 'You\'ve had today\'s free Earth drive' : 'Today\'s free Earth drives are used up' );
+			assert.match( await page.locator( '#notice .message' ).textContent(), /The Moon, Mars, Vesta and Ceres are free and unlimited/ );
+			assert.equal( await page.locator( '#notice .countdown' ).textContent(), 'Fresh Earth drives in 2 h 2 min' );
+			if ( reason === 'visitor' ) await shot( page, 'drive-notice-used-up-drive-here' );
+			// Back on the globe of the Earth, the pin still there, no tiles and nothing of Google's.
+			await page.waitForFunction( () => window.drive.mode === 'globe' );
+			assert.equal( await page.evaluate( () => window.drive.world ), 'earth' );
+			assert.equal( await page.evaluate( () => window.drive.tiles ), null );
+			assert.equal( await page.locator( '#loading' ).isHidden(), true );
+			assert.equal( await page.evaluate( () => window.drive.panel.pinned?.name ), 'Golden Gate Bridge' );
+			assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
+			assert.deepEqual( asked, [ { token: TOKEN, globe: true }, { token: TOKEN, fromGlobe: true } ] );
+			// Drive here again: the notice again, the Worker not asked (it'd only say the same).
+			await page.locator( '#notice' ).evaluate( notice => notice.hidden = true );
+			await page.locator( '.pin-card .go' ).click();
+			await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
+			assert.equal( asked.length, 2 );
+			// Its button: the Moon's globe, the same game.
+			const canvases = await page.locator( 'canvas' ).count();
+			await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
+			await page.locator( '#notice' ).waitFor( { state: 'hidden' } );
+			await page.waitForFunction( () => window.drive.world === 'moon', null, { timeout: 60000 } );
+			assert.equal( await page.locator( 'canvas' ).count(), canvases, 'a second game started' );
+			assert.deepEqual( page.errors, [] );
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a Worker from before the globe\'s visit, over the daily cap: straight onto the Moon\'s globe (never limited), with a word on why; the Earth shows the used-up screen and stays shut', async () => {
 
 		const page = await newPage( {
 			api: {
@@ -5466,7 +5997,7 @@ describe( 'World Drive with its Worker', () => {
 
 	} );
 
-	test( 'over this visitor\'s own one free Earth drive: on the Moon with a word saying so, and the Earth\'s notice says the same', async () => {
+	test( 'a Worker from before the globe\'s visit, over this visitor\'s own one free Earth drive: on the Moon with a word saying so, and the Earth\'s notice says the same', async () => {
 
 		const page = await newPage( {
 			api: {
@@ -5487,7 +6018,7 @@ describe( 'World Drive with its Worker', () => {
 
 	} );
 
-	test( 'a link to the Moon spends none of the day\'s Earth drives, and the Earth is a reload away that does', async () => {
+	test( 'a link to the Moon spends none of the day\'s Earth drives, and the Earth is our own globe, its drive asked for at Drive here', async () => {
 
 		const asked = [];
 		const page = await newPage( {
@@ -5511,20 +6042,22 @@ describe( 'World Drive with its Worker', () => {
 		assert.equal( await page.evaluate( () => !! window.drive.tiles ), false );
 		assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
 
-		// The Earth: the page again without the link (anything else in the address stays), asking for
-		// an Earth drive.
+		// The Earth: the globe turns to it, the same page (anything else in the address stays), asking
+		// nothing; then Drive here asks for an Earth drive, over the cap here, so the used-up notice.
 		await pickWorld( page, 'earth' );
-		// Over the cap there, so it opens on the Moon again, a word on why.
-		await page.locator( '#toast', { hasText: 'so you\'re on the Moon' } ).waitFor( { timeout: 60000 } );
+		await page.waitForFunction( () => window.drive.world === 'earth', null, { timeout: 60000 } );
+		assert.deepEqual( asked, [ 'moon' ] );
+		assert.equal( new URL( page.url() ).searchParams.get( 'ref' ), 'news' );
+		await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+		await page.locator( '.pin-card .go' ).click();
+		await page.locator( '#notice[data-kind="used-up"]' ).waitFor( { timeout: 30000 } );
 		assert.deepEqual( asked, [ 'moon', 'earth' ] );
-		const url = new URL( page.url() );
-		assert.equal( url.searchParams.get( 'spot' ), null );
-		assert.equal( url.searchParams.get( 'ref' ), 'news' );
+		assert.equal( await page.evaluate( () => window.drive.world ), 'earth' );
 		await page.context().close();
 
 	} );
 
-	test( 'a failed robot check can be tried again; a passing one starts with the key, asking once', async () => {
+	test( 'a failed robot check can be tried again; a passing one starts on the globe, and Drive here asks for the key, once; one turned away there is a word, to try again', async () => {
 
 		const visits = [];
 		const page = await newPage( {
@@ -5535,7 +6068,8 @@ describe( 'World Drive with its Worker', () => {
 
 					const request = route.request();
 					visits.push( { body: request.postDataJSON(), type: request.headers()[ 'content-type' ] } );
-					if ( visits.length === 1 ) return route.fulfill( { status: 403, contentType: 'application/json', body: '{"error":"The robot check didn\'t pass"}' } );
+					if ( visits.length === 1 || visits.length === 3 ) return route.fulfill( { status: 403, contentType: 'application/json', body: '{"error":"The robot check didn\'t pass"}' } );
+					if ( request.postDataJSON().globe ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { free: true, globe: true, world: 'earth', visit: 'v1.globe-visit' } ) } );
 					route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: 1 } ) } );
 
 				},
@@ -5546,10 +6080,20 @@ describe( 'World Drive with its Worker', () => {
 		assert.equal( await page.evaluate( () => window.turnstileOptions.sitekey ), '1x00000000000000000000AA' );
 		await shot( page, 'drive-notice-robot' );
 		await page.locator( '#notice button', { hasText: 'Try again' } ).click();
-		// With the key the page starts on Google's tiles (blocked here, so they fail).
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+		assert.equal( await page.evaluate( () => window.drive.tiles ), null );
+		// Drive here: its robot check turned away, a word, back on the globe; again, and the key.
+		await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+		await page.locator( '.pin-card .go' ).click();
+		await page.locator( '#toast', { hasText: 'The quick robot check didn\'t go through' } ).waitFor( { timeout: 30000 } );
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+		assert.equal( await page.evaluate( () => window.drive.tiles ), null );
+		await page.locator( '.pin-card .go' ).click();
+		// With the key the page goes on to Google's tiles (blocked here, so they fail).
 		await page.waitForFunction( () => window.drive?.tiles, null, { timeout: 30000 } );
-		assert.equal( visits.length, 2 );
-		for ( const visit of visits ) assert.deepEqual( visit, { body: { token: TOKEN }, type: 'application/json' } );
+		assert.equal( visits.length, 4 );
+		assert.deepEqual( visits.map( visit => visit.body ), [ { token: TOKEN, globe: true }, { token: TOKEN, globe: true }, { token: TOKEN, fromGlobe: true }, { token: TOKEN, fromGlobe: true } ] );
+		for ( const visit of visits ) assert.equal( visit.type, 'application/json' );
 		assert.match( await page.locator( '#toast' ).textContent(), /^1 more Earth drive today after this one\.$/ );
 		const roots = () => page.outside.filter( url => url.includes( '/v1/3dtiles/root.json' ) );
 		await page.waitForFunction( () => window.drive.tiles.rootLoadingState !== undefined, null, { timeout: 5000 } ).catch( () => {} );
@@ -6114,7 +6658,9 @@ const CLIENT = 'test-client.apps.googleusercontent.com';
 // Made up, in Stripe's format: never opened (window.open is stood in for, and nothing off this
 // machine is reached).
 const PASS_LINK = 'https://buy.stripe.com/test_madeUpLink000';
-const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99' } };
+const DAY_LINK = 'https://buy.stripe.com/test_madeUpDayLink000';
+const MONTH_LINK = 'https://buy.stripe.com/test_madeUpMonthLink000';
+const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', monthly: { link: MONTH_LINK, price: 'CA$1.79/month' }, day: { link: DAY_LINK, price: 'CA$0.89' } } };
 const ALICE = { signedIn: true, name: 'Alice Example', email: 'alice@example.com', supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '42' } };
 const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' };
 
@@ -6191,9 +6737,9 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 
 // (Not the construction rides: only achievements unlock those, never the pass.)
 const locked = page => page.locator( '#globe-ui .vehicle.locked:not( :has( .feat-chip ) )' ).count();
-// What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and four
+// What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and seven
 // rides.
-const LOCKED = 17;
+const LOCKED = 20;
 const sheet = page => page.locator( '#pass .buy-area' );
 
 async function openPass( page ) {
@@ -6205,7 +6751,7 @@ async function openPass( page ) {
 
 describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
-	test( 'the sheet signs in with Google, then Buy opens the link saying whose it is', async () => {
+	test( 'the sheet shows both passes\' prices; one picked signed out asks to sign in with Google first, then opens its link saying whose it is', async () => {
 
 		const page = await supporterPage();
 		const { asked } = page;
@@ -6216,10 +6762,21 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( page.google, 0, 'Google\'s script loaded before anyone could sign in' );
 		await openPass( page );
 		const area = sheet( page );
+		// Both ways to buy, with their prices, for everyone; the ways to sign in (and Google's script)
+		// only once one's picked.
+		await area.locator( '.buy-life' ).waitFor();
+		assert.equal( await area.locator( '.buy-life' ).textContent(), 'For good: CA$4.99' );
+		assert.equal( await area.locator( '.buy-day' ).textContent(), '24 hours: CA$0.89' );
+		assert.equal( await area.locator( '.buy-month.primary' ).textContent(), 'Monthly: CA$1.79/month' );
+		assert.deepEqual( await area.locator( '.buy-options button' ).allTextContents(), [ '24 hours: CA$0.89', 'Monthly: CA$1.79/month', 'For good: CA$4.99' ] );
+		assert.match( await area.textContent(), /Have the pass already\? Sign in[\s\S]*Monthly is a subscription: cancel any time\./ );
+		assert.equal( await area.locator( '.stub-google' ).count(), 0 );
+		assert.equal( page.google, 0 );
+		await area.locator( '.buy-life' ).click();
+		await area.locator( '.supporter-status', { hasText: 'Sign in or make a free account first, so the pass is yours on any device.' } ).waitFor();
 		await area.locator( '.stub-google' ).waitFor();
 		assert.equal( page.google, 1 );
-		assert.match( await area.textContent(), /Sign in to buy, so the pass is yours in any browser\. Bought it already\? Signing in brings it back\./ );
-		assert.equal( await area.locator( '.buy' ).count(), 0, 'Buy shows to someone signed out' );
+		assert.deepEqual( await page.evaluate( () => window.opened ?? [] ), [] );
 		await shot( page, 'pass-1-signed-out' );
 
 		// A token Google didn't sign, then a good one.
@@ -6228,13 +6785,13 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await area.locator( '.supporter-status', { hasText: 'Signing in didn\'t work. Try again.' } ).waitFor();
 		await page.evaluate( () => window.testCredential = 'good-token' );
 		await area.locator( '.stub-google' ).click();
-		await area.locator( '.buy' ).waitFor();
+		await area.locator( '.supporter-status', { hasText: 'Signed in. Tap For good to pay.' } ).waitFor();
 		assert.deepEqual( asked.sessions, [ { credential: 'forged', type: 'application/json' }, { credential: 'good-token', type: 'application/json' } ] );
-		assert.equal( await area.locator( '.buy' ).textContent(), 'Buy for CA$4.99' );
+		assert.ok( await area.locator( '.buy-life.picked' ).isVisible(), 'the pass picked doesn\'t stand out' );
 		assert.match( await area.textContent(), /Signed in as alice@example\.com · Restore purchases · Sign out/ );
 		await shot( page, 'pass-2-signed-in' );
 
-		await area.locator( '.buy' ).click();
+		await area.locator( '.buy-life' ).click();
 		const opened = await page.evaluate( () => window.opened );
 		assert.equal( opened.length, 1 );
 		const [ href, target, features ] = opened[ 0 ];
@@ -6242,6 +6799,15 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( `${ url.origin }${ url.pathname }`, PASS_LINK );
 		assert.deepEqual( Object.fromEntries( url.searchParams ), { client_reference_id: '42', prefilled_email: 'alice@example.com' } );
 		assert.deepEqual( [ target, features ], [ '_blank', 'noopener' ] );
+		// The day pass's own link, the same way.
+		await area.locator( '.buy-day' ).click();
+		const day = new URL( ( await page.evaluate( () => window.opened ) )[ 1 ][ 0 ] );
+		assert.equal( `${ day.origin }${ day.pathname }`, DAY_LINK );
+		assert.equal( day.searchParams.get( 'client_reference_id' ), '42' );
+		// And monthly's.
+		await area.locator( '.buy-month' ).click();
+		const month = new URL( ( await page.evaluate( () => window.opened ) )[ 2 ][ 0 ] );
+		assert.equal( `${ month.origin }${ month.pathname }`, MONTH_LINK );
 		await area.locator( '.supporter-line', { hasText: 'Finish paying in the new tab' } ).waitFor();
 		assert.equal( await locked( page ), LOCKED );
 		// Asked before Stripe's word has come: it says so, rather than that there's no pass.
@@ -6298,6 +6864,23 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( page.asked.signOuts, 1 );
 		assert.equal( await locked( page ), LOCKED );
 		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'with a day pass running, the sheet says how long it has left and offers the pass for good, not another day', async () => {
+
+		const page = await supporterPage( { me: { ...ALICE, supporter: true, dayPassUntil: Date.now() + 14 * 3600000 - 30000 } } );
+		await testPad( page );
+		await page.waitForFunction( () => document.querySelectorAll( '#globe-ui .vehicle.locked:not( :has( .feat-chip ) )' ).length === 0, null, { timeout: 10000 } );
+		await openPass( page );
+		const area = sheet( page );
+		await area.locator( '.supporter-thanks', { hasText: 'Your 24-hour pass has 14 h left.' } ).waitFor();
+		assert.equal( await area.locator( '.buy-life' ).textContent(), 'Keep it for good: CA$4.99' );
+		assert.equal( await area.locator( '.buy-day' ).count(), 0 );
+		await area.locator( '.buy-life' ).click();
+		assert.equal( new URL( ( await page.evaluate( () => window.opened ) )[ 0 ][ 0 ] ).pathname, new URL( PASS_LINK ).pathname );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
@@ -6441,7 +7024,9 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		page.state.me = { ...ALICE, supporter: true };
 		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 60000 } );
 		assert.equal( page.visits, 2 );
-		assert.equal( new URL( page.url() ).search, '' );
+		// (Asked again at ?worlds=0, the Earth's address: a plain reload would be a plain load, the
+		// orrery's. orrery-first.js's earthUrl; supporter=thanks was already taken off.)
+		assert.equal( new URL( page.url() ).search, '?worlds=0' );
 		await page.context().close();
 
 		// A supporter who has had their 30: asked again once, then on the Moon to stay, the Earth's
@@ -6457,14 +7042,58 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( await page.locator( '#notice' ).getAttribute( 'data-kind' ), 'used-up' );
 		await page.context().close();
 
-		// Everyone's drives used up, not this address's: no sign-in on the Earth's notice.
+		// Everyone's drives used up, not this address's: the pass gets past that too, so the toast on
+		// the Moon and the Earth's notice both offer it ("Get more Earth drives", the pass's sheet), with
+		// a sign-in.
 		page = await usedUpPage( [ usedUp( 'daily' ) ] );
 		await page.goto( BASE );
 		await onMoon( page );
+		await page.locator( '#toast .toast-action', { hasText: 'Get more Earth drives' } ).waitFor();
 		await toEarth( page );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
-		await page.waitForTimeout( 500 );
-		assert.ok( await notice( page ).locator( '.account' ).isHidden() );
+		await notice( page ).locator( '.account .stub-google' ).waitFor();
+		assert.match( await notice( page ).locator( '.message' ).textContent(), /the Supporter Pass: 30 Earth drives a day, for 24 hours, monthly or for good/ );
+		await notice( page ).locator( 'button', { hasText: 'Get more Earth drives' } ).click();
+		await page.locator( '#pass .buy-day', { hasText: '24 hours: CA$0.89' } ).waitFor();
+		await shot( page, 'pass-8-used-up-pitch' );
+		await page.context().close();
+
+	} );
+
+	test( 'over a cap at Drive here, from the globe: the used-up notice offers the pass too ("Get more Earth drives") with a sign-in; signed in with the pass, the next Drive here asks again', async () => {
+
+		const visits = [];
+		const page = await supporterPage( { signedInAs: { ...ALICE, supporter: true }, config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true }, visit: route => {
+
+			const body = route.request().postDataJSON();
+			visits.push( body );
+			if ( body.globe ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { free: true, globe: true, world: 'earth', visit: 'v1.globe-visit' } ) } );
+			if ( visits.length === 2 ) return route.fulfill( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'You\'ve had today\'s free drives', reason: 'visitor', retryAfter: 3600 } ) } );
+			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: null, visit: 'v1.earth-visit' } ) } );
+
+		} } );
+		await page.goto( BASE );
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 90000 } );
+		await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+		await page.locator( '.pin-card .go' ).click();
+		const notice = page.locator( '#notice[data-kind="used-up"]' );
+		await notice.waitFor( { timeout: 30000 } );
+		assert.match( await notice.locator( '.message' ).textContent(), /the Supporter Pass: 30 Earth drives a day, for 24 hours, monthly or for good/ );
+		await notice.locator( '.account .stub-google' ).waitFor();
+		await shot( page, 'pass-9-drive-here-used-up-pitch' );
+		// The pitch: the pass's sheet.
+		await notice.locator( 'button', { hasText: 'Get more Earth drives' } ).click();
+		await page.locator( '#pass .buy-day' ).waitFor();
+		await page.keyboard.press( 'Escape' );
+		// A supporter on a new browser signs in there: the notice goes, and Drive here asks again.
+		await page.evaluate( () => window.testCredential = 'good-token' );
+		await notice.locator( '.stub-google' ).click();
+		await page.locator( '#notice' ).waitFor( { state: 'hidden', timeout: 30000 } );
+		assert.equal( visits.length, 2 );
+		await page.locator( '.pin-card .go' ).click();
+		await page.waitForFunction( () => window.drive.tiles, null, { timeout: 30000 } );
+		assert.deepEqual( visits.map( body => Object.keys( body ).filter( k => k !== 'token' )[ 0 ] ), [ 'globe', 'fromGlobe', 'fromGlobe' ] );
+		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
 	} );
@@ -6893,11 +7522,21 @@ async function unfold( account, heading ) {
 
 }
 
+// Signed out, the pass's sheet shows its prices alone until "Sign in" (or a price) is tapped: its
+// ways to sign in, shown.
+async function showSignIn( page ) {
+
+	const link = sheet( page ).locator( 'button.link', { hasText: /^Sign in$/ } );
+	if ( await link.count() ) await link.click();
+
+}
+
 // The pass's sheet's link to the account panel (the sheet opened first, if it isn't), followed: the
 // panel, open.
 async function openAccountPanel( page, words ) {
 
 	if ( ! await page.locator( '#pass' ).isVisible() ) await openPass( page );
+	await showSignIn( page );
 	await sheet( page ).locator( 'button', { hasText: words } ).click();
 	await panel( page ).waitFor();
 	return panel( page );
@@ -6918,6 +7557,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
 		await openPass( page );
+		await showSignIn( page );
 		await sheet( page ).locator( '.supporter-passwords' ).waitFor();
 		assert.deepEqual( page.chunks, [], 'the account panel loaded before it was opened' );
 		const account = await openAccountPanel( page, 'Or use a username and password' );
@@ -6928,9 +7568,9 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		assert.deepEqual( await fields( account.locator( 'form' ) ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'current-password', 'Password' ] ] );
 		await account.locator( '.account-tabs button', { hasText: 'Create account' } ).click();
 		const form = account.locator( 'form.account-sign-up' );
-		assert.deepEqual( await fields( form ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ] ] );
+		assert.deepEqual( await fields( form ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ], [ 'email', 'email', 'email', 'Email (optional)' ] ] );
 		assert.equal( await form.locator( 'input[name="username"]' ).getAttribute( 'autocapitalize' ), 'none' );
-		assert.match( await form.textContent(), /There's no email here, so a forgotten password can't be recovered, unless you also link Google\./ );
+		assert.match( await form.textContent(), /The email is only for receipts: nothing is sent to it, so a forgotten password can't be recovered, unless you also link Google\./ );
 		await shot( page, 'account-1-create-desktop' );
 		// The rules, before anything is sent.
 		await form.locator( 'input[name="username"]' ).fill( 'Racer 1' );
@@ -9540,7 +10180,7 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'a friend\'s link to an Earth challenge spends an Earth drive, as any drop-in on the Earth does; with today\'s Earth drives used up, the Moon (never limited) opens with the link\'s card, its Start needing an Earth drive', async () => {
+	test( 'a friend\'s link to an Earth challenge spends no Earth drive as it opens (the globe\'s visit), and its Start asks for one, as any drop-in on the Earth does; with today\'s Earth drives used up, the used-up notice', async () => {
 
 		for ( const usedUp of [ false, true ] ) {
 
@@ -9551,7 +10191,9 @@ describe( 'World Drive challenges', () => {
 					turnstile: true,
 					visit: route => {
 
-						asked.push( JSON.parse( route.request().postData() ).world ?? 'earth' );
+						const body = JSON.parse( route.request().postData() );
+						asked.push( body.globe ? 'globe' : body.world ?? 'earth' );
+						if ( body.globe ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { free: true, globe: true, world: 'earth', visit: VISIT } ) } );
 						if ( usedUp ) return route.fulfill( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'Today\'s free drives are used up', reason: 'daily', retryAfter: 3600, visit: 'v1.moon-visit' } ) } );
 						route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: 3, visit: VISIT } ) } );
 
@@ -9562,27 +10204,29 @@ describe( 'World Drive challenges', () => {
 			await page.route( `${ BASE }/api/challenges?*`, route => json( route, { now: Date.now(), challenges: listed() } ) );
 			await page.route( `${ BASE }/api/challenges`, route => json( route, { now: Date.now(), challenges: listed() } ) );
 			await page.route( `${ BASE }/api/challenges/link?*`, route => json( route, { challenge: { ...listed()[ 0 ], replacedAt: null, finalAt: null }, vs: { name: 'Ann Racer', ms: 23900, vehicle: 'go-kart', run: 'friendRun0000001', ghost: true, date: '2026-11-16', level: 4, title: 'rookie' } } ) );
-			// (Over the cap, it opens on the Moon by itself.)
 			await page.goto( `${ BASE }/?challenge=11&vs=FriendHandle0001` );
 
 			const card = page.locator( '#challenges .ch-link' );
 			await card.waitFor( { timeout: 90000 } );
-			assert.deepEqual( asked, [ 'earth' ], String( usedUp ) );
+			assert.deepEqual( asked, [ 'globe' ], String( usedUp ) );
 			assert.match( await card.locator( '.ch-link-head' ).textContent(), /^Ann Racer's time to beat: 0:23\.90 on the daily checkpoint sprint at Furka Pass/ );
+			assert.equal( await card.locator( '.ch-start' ).textContent(), 'Start: race their ghost' );
+			assert.equal( await page.evaluate( () => window.drive.tiles ), null );
+			await card.locator( '.ch-start' ).click();
 			if ( ! usedUp ) {
 
-				assert.equal( await card.locator( '.ch-start' ).textContent(), 'Start: race their ghost' );
-				assert.ok( await page.evaluate( () => !! window.drive.tiles ) );
+				// Its Start: the Earth's drive, and Google's tiles.
+				await page.waitForFunction( () => window.drive.tiles, null, { timeout: 30000 } );
+				assert.deepEqual( asked, [ 'globe', 'earth' ] );
 
 			} else {
 
-				// On the Moon, which is never limited: the Earth's challenge needs an Earth drive.
-				assert.equal( await page.evaluate( () => window.drive.world ), 'moon' );
-				assert.equal( await card.locator( '.ch-start' ).textContent(), 'Needs an Earth drive' );
+				// Over the cap: the used-up notice, still on the Earth's globe.
+				await page.locator( '#notice[data-kind="used-up"]' ).waitFor( { timeout: 30000 } );
 				await shot( page, 'challenges-link-6-used-up' );
-				await card.locator( '.ch-start' ).click();
-				await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
-				assert.deepEqual( asked, [ 'earth' ] );
+				assert.deepEqual( asked, [ 'globe', 'earth' ] );
+				assert.equal( await page.evaluate( () => window.drive.world ), 'earth' );
+				assert.equal( await page.evaluate( () => window.drive.tiles ), null );
 
 			}
 

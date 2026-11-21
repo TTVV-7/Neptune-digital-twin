@@ -51,10 +51,14 @@ const FLAG_GAP = 60;
 // What this page sends a second on average, and at most at once: under the room's RATE and BURST,
 // whatever the flags do.
 const BUDGET = { rate: 14, burst: 24 };
-// Faster than this (m/s) goes as this: the room turns away anything over the protocol's top speed
-// (live-protocol.js's TOP_SPEED, 800), and a plane goes up to 750 (src/plane.js), which has to arrive
-// as it is for others to see it fly between words rather than jump (teleported) and to be carried on
-// past the last word at its speed. A little under 800, for the rounding.
+// Faster than this (m/s) goes as this. The room and this page take up to the protocol's top speed
+// (live-protocol.js's TOP_SPEED, 1,100: a plane goes up to 972, src/plane.js, and 1,087 over the
+// top of a loop, its hump: src/plane-tricks.js). But a page still open from before the plane got
+// faster checks what it's sent against the old top speed, 800, and drops a car going faster, so
+// what's sent stays a little under 800 for now (790, for the rounding). Others still see it fly
+// rather than jump: teleported allows half again the speed sent between two words (790 × 1.5 is
+// more than 1,087), and the next word puts it right. Once those pages have gone (a few weeks), this
+// can go up to 1,090.
 const MAX_SPEED = 790;
 // How often (ms) the car's area is worked out again.
 const FOLLOW_MS = 500;
@@ -177,7 +181,8 @@ export function createLive( {
 	let heardAt = 0;
 	let pingAt = - Infinity;
 	// When the visit's token runs out (its third part, in seconds): the rooms turn it away after.
-	const visitEnds = Number( String( visit ).split( '.' )[ 2 ] ) * 1000 || Infinity;
+	const endsOf = token => Number( String( token ).split( '.' )[ 2 ] ) * 1000 || Infinity;
+	let visitEnds = endsOf( visit );
 
 	// The keepalive, the minute back on the globe and the wait to try again run on a timer of their
 	// own, so they go on while frames don't (a tab in the background).
@@ -1105,6 +1110,15 @@ export function createLive( {
 		get visitEnds() {
 
 			return visitEnds;
+
+		},
+		// Another visit's token for the connections made from now on (main.js: the Earth visit's, once
+		// the page has its Earth drive, in place of the globe's); one open now carries on as it is.
+		setVisit( next ) {
+
+			if ( typeof next !== 'string' || ! next ) return;
+			visit = next;
+			visitEnds = endsOf( next );
 
 		},
 		get party() {

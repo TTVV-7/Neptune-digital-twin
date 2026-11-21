@@ -399,6 +399,13 @@ export function createBody( id ) {
 			rush = on;
 
 		},
+		// The measured heights as they loaded ({ data, columns, rows, step }: body-height.js's
+		// heightsTable), or null before: what the data lens (lens.js) paints.
+		heights() {
+
+			return ground.heightsTable();
+
+		},
 		// Metres over its sphere at latitude and longitude (degrees), all the detail in.
 		heightAt( lat, lon ) {
 
@@ -817,6 +824,16 @@ function makeMaterial( look ) {
 			// how far off (m) it hides half of what's there (0 for none).
 			haze: { value: haze ? new Vector4( ...new Color( haze.colour ).toArray(), 1 ) : new Vector4( 0, 0, 0, 0 ) },
 			hazeHalf: { value: haze ? haze.half : 0 },
+			// The data lens (lens.js): how much of it is on (0 to 1, eased in and out), the measured
+			// heights as a texture (m, over the world's datum, in the picture's columns and rows), the
+			// colour ramp they're painted with, the heights at its two ends (m), and how far apart (m)
+			// its contour lines are. Off, it costs one uniform test.
+			lensAmount: { value: 0 },
+			lensHeights: { value: blank() },
+			lensRamp: { value: blank() },
+			lensLow: { value: 0 },
+			lensHigh: { value: 1 },
+			lensStep: { value: 1000 },
 		},
 		vertexShader: /* glsl */ `
 			attribute vec3 worldDir;
@@ -853,6 +870,12 @@ function makeMaterial( look ) {
 			uniform vec3 gritScale;
 			uniform vec4 haze;
 			uniform float hazeHalf;
+			uniform float lensAmount;
+			uniform sampler2D lensHeights;
+			uniform sampler2D lensRamp;
+			uniform float lensLow;
+			uniform float lensHigh;
+			uniform float lensStep;
 			varying vec3 vDir;
 			varying vec3 vGrit;
 			varying vec3 vNormal;
@@ -881,6 +904,20 @@ function makeMaterial( look ) {
 					dy.x = dFdy( u2 );
 				}
 				vec3 albedo = textureGrad( picture, uv, dx, dy ).rgb * tint * vShade;
+				// The data lens: the ground's colour by its measured height (only the grid NASA's map
+				// has, never the made-up craters, which are in the shape but not in this texture), with
+				// thin contour lines that fade out where they'd crowd closer than a few pixels. The
+				// picture's brightness is kept a little, and the light below still falls on the slopes,
+				// so the relief reads under the colours.
+				if ( lensAmount > 0.0 ) {
+					float h = texture( lensHeights, uv ).r;
+					float t = clamp( ( h - lensLow ) / ( lensHigh - lensLow ), 0.0, 1.0 );
+					vec3 c = texture( lensRamp, vec2( t, 0.5 ) ).rgb;
+					float f = fract( h / lensStep );
+					float fw = fwidth( h / lensStep );
+					float line = ( 1.0 - smoothstep( 0.0, 1.5 * fw, min( f, 1.0 - f ) ) ) * ( 1.0 - smoothstep( 0.2, 0.5, fw ) );
+					albedo = mix( albedo, c * mix( 1.0, 0.6, line ) * ( 0.75 + 0.5 * dot( albedo, vec3( 0.333 ) ) ), lensAmount );
+				}
 
 				vec3 n = normalize( vNormal );
 				vec3 view = normalize( cameraPosition - vWorld );

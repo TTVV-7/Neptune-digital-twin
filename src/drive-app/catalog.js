@@ -21,7 +21,7 @@ export const WORKS_RIDES = [
 
 // The Supporter Pass rides (src/drive-app/rides/), by id. Here too so the Worker can accept their
 // runs on the leaderboard without importing the models.
-export const PASS_RIDES = [ 'sports-coupe', 'monster-truck', 'city-bus', 'hovercraft' ];
+export const PASS_RIDES = [ 'sports-coupe', 'monster-truck', 'city-bus', 'hovercraft', 'lunar-rover', 'flying-saucer', 'rocket-dragster' ];
 
 // World Drive's own cars (cars.js, models in drive/public/cars/), by id: the muscle car is free, six
 // come with levels (levels.js's ride rewards) or the Supporter Pass, and the rest with the pass.

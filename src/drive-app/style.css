@@ -995,13 +995,142 @@ body.touch #pause kbd {
 	to { transform: translateX( 0 ); }
 }
 
-#robot-check {
+/* The loading screens' scene, new each load (drawn by drive/index.html's script): the sky, two
+   layers of scenery rolling by at different speeds, and a car bouncing along the road. On the
+   splash, across the card's top; on the drop-in's card, above its words. */
+.scene {
+	position: relative;
+	overflow: hidden;
+	background: #0b1322;
+}
+
+#splash .scene {
+	height: 150px;
+	margin: -26px -26px 18px;
+	border-radius: 20px 20px 0 0;
+}
+
+#loading .scene {
+	width: min( 320px, 78vw );
+	height: min( 120px, 29vw );
+	margin: 0 auto 12px;
+	border-radius: 12px;
+}
+
+.scene svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.scene .far { animation: scenery 48s linear infinite; }
+.scene .near { animation: scenery 16s linear infinite; }
+.scene .dashes { animation: dashes 0.5s linear infinite; }
+.scene .car { animation: bounce 2.6s ease-in-out infinite; }
+.scene .wheel { animation: spin 0.4s linear infinite; transform-box: fill-box; transform-origin: center; }
+.scene .star { animation: twinkle 3s ease-in-out infinite; }
+.scene .lit { fill: #ffd98a; opacity: 0.85; }
+
+.scene .scene-name {
+	position: absolute;
+	right: 10px;
+	bottom: 8px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: rgba( 0, 0, 0, 0.5 );
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	pointer-events: none;
+}
+
+
+@keyframes scenery {
+	from { transform: translateX( 0 ); }
+	to { transform: translateX( -400px ); }
+}
+
+@keyframes dashes {
+	from { transform: translateX( 0 ); }
+	to { transform: translateX( -44px ); }
+}
+
+/* Bumping along, with a hop now and then. */
+@keyframes bounce {
+	0%, 100% { transform: translateY( 0 ) rotate( 0 ); }
+	10% { transform: translateY( -1px ) rotate( -0.5deg ); }
+	20% { transform: translateY( 0 ) rotate( 0 ); }
+	30% { transform: translateY( -1px ) rotate( 0.5deg ); }
+	40% { transform: translateY( 0 ); }
+	62% { transform: translateY( 0 ) rotate( 0 ); }
+	72% { transform: translateY( -16px ) rotate( -6deg ); }
+	82% { transform: translateY( 0 ) rotate( 2deg ); }
+	88% { transform: translateY( -2px ) rotate( 0 ); }
+}
+
+@keyframes spin {
+	to { transform: rotate( 360deg ); }
+}
+
+@keyframes twinkle {
+	50% { opacity: 0.25; }
+}
+
+/* A tip, changing every few seconds, on the splash and the drop-in's card. */
+#splash .tip,
+#loading .tip {
+	min-height: 2.9em;
+	margin: 12px 0 0;
+	color: var( --muted );
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+#loading .tip {
+	max-width: 320px;
+	margin: 8px auto 0;
+	font-size: 13px;
+}
+
+#splash .tip b,
+#loading .tip b {
+	margin-right: 4px;
+	color: var( --accent );
+	font-size: 11px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+}
+
+#splash .tip.in,
+#loading .tip.in {
+	animation: tip-in 0.45s ease-out;
+}
+
+@keyframes tip-in {
+	from { opacity: 0; transform: translateY( 4px ); }
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.scene *,
+	#splash .tip,
+	#loading .tip {
+		animation: none !important;
+	}
+
+}
+
+#robot-check,
+#loading .robot-check {
 	display: flex;
 	justify-content: center;
 	margin-top: 14px;
 }
 
-#robot-check:empty {
+#robot-check:empty,
+#loading .robot-check:empty {
 	margin: 0;
 }
 
@@ -1581,19 +1710,53 @@ dialog#scoring .scoring-rules li {
 	pointer-events: none;
 }
 
-/* Going into overdrive: the edges of the view flash white for a moment (screen-fx.js). Over the
-   world, under the names and the HUD. */
+/* Going into overdrive: the edges of the view flash for a moment, white at the rim over a band of
+   the ride's colour (--sonic, set by screen-fx.js with how long it lasts, --whiteout-time), and a
+   shock front sweeps out from round the vehicle past the edges, white-edged with the ride's colour behind
+   it, as the shock passing over the camera. With no air (the Moon) the rim is the ride's colour
+   too. Over the world, under the names and the HUD, and screened over it, so the ride's colour can
+   only lighten the view (laid over a grey road and a blue sky, an orange goes a dusty brown). */
 #whiteout {
+	--sonic: #bfe4ff;
+	--whiteout-time: 0.55s;
 	position: fixed;
 	inset: 0;
 	z-index: 2;
+	overflow: hidden;
 	pointer-events: none;
 	opacity: 0;
-	background: radial-gradient( ellipse at center, rgba( 255, 255, 255, 0 ) 42%, rgba( 236, 246, 255, 0.5 ) 74%, rgba( 255, 255, 255, 0.95 ) 100% );
+	mix-blend-mode: screen;
+	/* (Plain white for a browser without color-mix.) */
+	background: radial-gradient( ellipse at center, rgba( 255, 255, 255, 0 ) 50%, rgba( 236, 246, 255, 0.3 ) 78%, rgba( 255, 255, 255, 0.6 ) 100% );
+	background: radial-gradient( ellipse at center, rgba( 255, 255, 255, 0 ) 50%, color-mix( in srgb, var( --sonic ) 28%, transparent ) 78%, rgba( 255, 255, 255, 0.6 ) 100% );
+}
+
+#whiteout.airless {
+	background: radial-gradient( ellipse at center, rgba( 255, 255, 255, 0 ) 50%, color-mix( in srgb, var( --sonic ) 28%, transparent ) 78%, color-mix( in srgb, var( --sonic ) 60%, transparent ) 100% );
+}
+
+/* The shock front, from low in the view where the chase camera has the vehicle (65 % of the way down
+   the view, 61 % of the way down this bigger box). */
+#whiteout::after {
+	content: '';
+	position: absolute;
+	inset: -20%;
+	opacity: 0;
+	transform: scale( 0.35 );
+	transform-origin: 50% 61%;
+	background: radial-gradient( ellipse at 50% 61%, transparent 56%, color-mix( in srgb, var( --sonic ) 40%, transparent ) 61%, rgba( 255, 255, 255, 0.6 ) 64%, transparent 67% );
+}
+
+#whiteout.airless::after {
+	background: radial-gradient( ellipse at 50% 61%, transparent 56%, color-mix( in srgb, var( --sonic ) 35%, transparent ) 61%, color-mix( in srgb, var( --sonic ) 60%, transparent ) 64%, transparent 67% );
 }
 
 #whiteout.on {
-	animation: whiteout 0.55s ease-out;
+	animation: whiteout var( --whiteout-time ) ease-out;
+}
+
+#whiteout.on::after {
+	animation: shockfront var( --whiteout-time ) cubic-bezier( 0.2, 0.7, 0.3, 1 );
 }
 
 @keyframes whiteout {
@@ -1602,6 +1765,17 @@ dialog#scoring .scoring-rules li {
 	}
 	to {
 		opacity: 0;
+	}
+}
+
+@keyframes shockfront {
+	from {
+		opacity: 1;
+		transform: scale( 0.35 );
+	}
+	to {
+		opacity: 0;
+		transform: scale( 1.3 );
 	}
 }
 
@@ -2220,8 +2394,21 @@ body:not( .touch ) #drive-ui .horn {
    It follows the banner's own offset from the bottom, --party-banner-bottom (above). */
 @media ( max-width: 760px ) and ( orientation: landscape ) {
 
-	body[data-mode='globe']:has( #globe-ui .party-banner:not( [hidden] ) ) :is( #moon-credit, #attribution ) {
+	body[data-mode='globe']:has( #globe-ui .party-banner:not( [hidden] ) ) :is( #earth-credit, #moon-credit, #attribution ) {
 		top: calc( 100% - var( --party-banner-bottom ) + 6px );
 	}
 
+}
+
+/* The data lens (lens.js, lens.css) sits at the bottom right over the world's credit; driving with
+   keys, the speedometer has that corner, so the lens goes up over it (its card is about 230 px tall).
+   On a touch screen lens.css moves it to the top left instead. */
+body:not( .touch ):is( [data-mode='driving'], [data-mode='paused'] ) {
+	--lens-bottom: calc( 286px + var( --safe-bottom, 0px ) );
+}
+
+/* On the globe, a pinned place's card (bottom middle, with Drive here) would sit under the lens's
+   scale on a narrower window: the lens goes up over the card while one shows. */
+body[data-mode='globe']:has( #globe-ui .pin-card:not( [hidden] ) ) {
+	--lens-bottom: calc( 112px + var( --safe-bottom, 0px ) );
 }

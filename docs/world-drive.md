@@ -1,9 +1,11 @@
 # World Drive (worlddrive.app)
 
-World Drive is the second app in this repository: pick anywhere on Earth from a globe of Google's
-photorealistic 3D tiles, drop in and drive the real world, arcade style; or switch the globe to
-[the Moon](#the-moon), [Mars](#mars) or the asteroids [Vesta and Ceres](#vesta-and-ceres) and drive
-that ([worlds](#worlds)). It shares `src/` with the
+World Drive is the second app in this repository: pick a world from the Solar System it opens on,
+[the Moon](#the-moon), [Mars](#mars), the asteroids [Vesta and Ceres](#vesta-and-ceres) (each built
+from real spacecraft maps, with [Discoveries](#discoveries) to collect) or the Earth, where you pick
+anywhere from a globe (our own picture of the Earth), drop in and drive the real world in Google's
+photorealistic 3D tiles, arcade style ([worlds](#worlds); Google's tiles, a billed session, come
+with the first drive on the Earth: [what a visit costs](#what-a-visit-costs-and-how-its-capped)). It shares `src/` with the
 construction app (the tiles, the models, the driving) but has its own page, build, Worker and
 address, and the construction app is unchanged by it.
 
@@ -16,7 +18,11 @@ address, and the construction app is unchanged by it.
 
 ## Playing
 
-1. **The globe.** It opens on the whole Earth, slowly turning, facing your part of the world (going by
+1. **Pick a world.** A plain load opens on the Solar System ([the orrery](#picking-a-world-the-orrery)):
+   the Moon, Mars, Vesta, Ceres or the Earth (picking the Earth turns the page to its globe, which
+   spends nothing: one of the day's free Earth drives is used only at the first **Drive here** on the
+   Earth). Closed without a pick, it's the Moon.
+   **The globe**: the Earth's opens on the whole Earth, slowly turning, facing your part of the world (going by
    your clock). Drag to spin it, scroll or pinch to zoom, right-drag or two fingers to tilt.
 2. **Pick a place**, any of these ways:
    - **Search** for a place or an address and press Enter (or **Go**). It only searches when you ask,
@@ -38,7 +44,8 @@ address, and the construction app is unchanged by it.
    lawn tractor at 22, a retro wedge at 30 and a formula racer at 40); or with the
    [Supporter Pass](#supporter-pass-content) those six at once, seven cars of its own (a neon racer, a
    night cruiser, a dune buggy, a farm truck, a police cruiser, a hypercar and a cyber muscle car) and
-   four rides built for it (a sports coupe, a monster truck, a city bus and a hovercraft). They're in
+   seven rides built for it (a sports coupe, a monster truck, a city bus, a hovercraft, a lunar rover,
+   a flying saucer and a rocket dragster). They're in
    three rows that scroll sideways. A locked one says what it needs ("Lv 8 · or Pass", or the pass's
    badge); picked, a level's says which level you're at, and the pass's opens its sheet. The choice
    is remembered; until one is picked (and while the one picked is locked) it's the pickup, or the
@@ -62,6 +69,11 @@ address, and the construction app is unchanged by it.
 6. **Challenges** (under **Worlds** on the panel, and in the pause menu): a daily, a weekly
    and a monthly one on each world, a checkpoint sprint, a hunt for stars or a drive to a landmark
    against the clock, each with its own board ([Challenges](#challenges)).
+7. **Discoveries and the data lens** (on the Moon, Mars, Vesta and Ceres): glowing beacons at real
+   named places, the landing sites and the great craters, volcanoes and peaks, to drive or fly to and
+   collect, each with a card of true facts and its height in the very data the ground is built from,
+   in a collection book a world ([Discoveries](#discoveries)); and **L** (or **Heights**) colours the
+   ground by its real measured height, with a scale bar naming the dataset ([Data lens](#data-lens)).
 
 ### Keys
 
@@ -71,12 +83,14 @@ address, and the construction app is unchanged by it.
 | A / D | Steer |
 | Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to jump (about 5 m, over a car or a barrier) |
 | Shift (or B) | Booster: hold for overdrive while the gauge lasts; let go to save the rest |
-| F or T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); again bails out (a parachute near the ground), or lands it low down |
+| F or T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); again bails out (a free fall, W to dive, then a parachute; S under it drops faster), or lands it low down |
+| Q / E (or , / .), Z / X (or /) | As a plane: roll it left / right (a barrel roll), loop it nose up and over / nose down and under ([Plane tricks](#plane-tricks)) |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
-| R | Stuck? Back on the road a few metres on (on water too) |
+| R | Stuck? Back on the road a few metres on (on water too). As a plane: a whole roll, a loop with Space, an outside loop with Shift ([Plane tricks](#plane-tricks)) |
 | C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
 | M | Back to the globe; on the globe, the [worlds](#picking-a-world-the-orrery) (and M again closes them) |
+| L | On another world, colour the ground by its real measured height ([Data lens](#data-lens)) |
 | H | Horn, for those [driving with you](#driving-with-others) (only while that's on) |
 | Esc | Pause: keep driving, change ride, or back to the globe |
 
@@ -106,10 +120,21 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   sets you spinning: clip a corner and you spin round; hit square on and the nose goes up and back.
   Left alone you come down on your wheels, tipped back 25° to 45° by a hit at up to 160 km/h; a
   harder one (with the booster) takes you over backwards, so finish the backflip with **S** or wipe
-  out. Hits shake the view, squash the vehicle for a moment and throw sparks and bits, with a word
-  for how hard: **BONK!**, **BOING!** or **WHAM!** The chase camera follows you up and down a little
-  behind, so you see yourself thrown.
-- **Not every hit launches.** Meet a wall at under 15° and you scrape along it in sparks. A nudge
+  out. Hits shake the view, kick it (pulled in and dipped for a moment), squash the vehicle and go
+  off in layers by how hard: a white-hot flash and a starburst where you hit, a shock ring round the
+  wall's face, streaks of sparks that fall and bounce once off the ground, a little dust, and bits
+  of bodywork, dark trim and glass knocked off, bouncing twice and lying on the ground before they
+  shrink away (glass glints as it flies). A **WHAM!** holds its sparks and bits still for a moment
+  (60 ms of the effects' own time: the drive, its clock and its physics never stop). The word for
+  how hard shows over the vehicle, each its own way: **BONK!** a small white pop that drops away,
+  **BOING!** a springy squash and stretch, **WHAM!** hot on a starburst, shaken; hits within 1.2 s
+  of each other count up (**BOING! ×2**). The chase camera follows you up and down a little
+  behind, so you see yourself thrown. On the Moon there's no dust, the sparks and bits fly in long
+  slow arcs at its gravity. A visitor asking for less motion gets no flash, starburst or hold, a
+  faint ring, and words that only fade in and out; on a phone there are fewer sparks and bits.
+- **Not every hit launches.** Meet a wall at under 15° and you scrape along it: a fountain of sparks
+  thrown back along the wall, more the faster you grind, a hot glow where you rub, scuff marks left
+  on the wall (grey dust on the Moon) and a rumble in the view. A nudge
   under about 11 km/h stops you against it, so pressing on into a wall doesn't jitter, and up to
   22 km/h it knocks you back along the ground. Kerbs and other low steps are still driven over.
 - **In the air** (after a hit, off a ramp, a crest or a hop): **A**/**D** spin, **W**/**S** flip, **Q**/**E**
@@ -119,8 +144,13 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   and with **A**/**D** (or **Q**/**E**) rolls, and you right yourself when you let go.
 - **Landing.** Within about 40° of upright you land: the suspension takes it, the tricks you did
   pay out, the booster is topped up (a fifth for each trick) and, going forward, you get a burst
-  of speed. On your roof or side it's a **wipeout**: a short tumble, the tricks and the combo are
-  lost, and the vehicle rolls back onto its wheels by itself (or press **R**).
+  of speed, with dust thrown up as you come down: a puff off each rear tyre for a small landing, and
+  coming down hard a ring of it spreading over the ground (wider the harder) and a nod of the view
+  (on the Moon, grains of regolith in a crown, no billow). On your roof or side it's a **wipeout**,
+  **WIPEOUT!** rolling over in red: slammed down in a ring of dust with sparks skidding off along
+  the way you slide, dust and sparks off you as you slide on your roof, a short tumble, the tricks
+  and the combo are lost, and the vehicle rolls back onto its wheels by itself (or press **R**), in
+  a puff of dust and a thin ring.
 - **Tricks and score.** A spin counts by half turns (180, 360, 720...), flips and barrel rolls by
   whole turns, give or take a little. Each scores: 300 a half turn, 1,000 a flip, 800 a roll, 150 a
   wall bounce (a **BOING!** or a **WHAM!**, 32 km/h or more into it) and 300 a second for big air
@@ -142,15 +172,27 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 under each, a fin rises at the back, and on a model car the wheels fold out flat as fans. It lifts
 a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
 of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and
-**Shift** comes down. **T** again **bails out**: the wings fold away and the car falls, no faster
-than a skydiver (55 m/s, its speed across the ground easing off to the ride's own), and a
-**parachute** opens as it nears the ground (30 m over it, or 0.8 s of the fall over it, falling
-faster: `PARACHUTE` in `src/plane.js`), sinking at 5 m/s, steered a little with **A**/**D**, and
-righting it to land on its wheels, driving on at the speed it landed with (never more than the
-booster's). Press **T** while falling to be a plane again. Within 12 m of the ground, **T** flies it
-down by itself instead and folds it back into a car on the ground (**T** on the way down flies on).
-Others driving with you see the plane fold away and the car come down, without the parachute.
-On a touch screen the ✈ button under CAM is T, FLY is up and BOOST is down.
+**Shift** comes down. **T** again **bails out** ("Freefall! W dive · A/D steer"): the wings fold away
+and the car falls as fast as a skydiver, 90 m/s spread out on the Earth and 144 m/s head-down with
+**W** (`DROP` and `dropTerminal` in `src/plane.js`). It speeds up at the world's own gravity, but never
+slower than 5 m/s² (`DROP.pull`): there's no air on the Moon, Vesta or Ceres to set a falling speed
+and a real fall there would crawl for minutes, so their cap is a game's, 60 m/s (96 diving), and
+Mars's about 68. What's left of the plane's speed across the ground over the ride's own is shed in a
+couple of seconds (`DROP.shed`), so a bail-out at 3,500 km/h reads as a fall, not a car skimming the
+ground. A **parachute** opens in good time before the ground: 30 m over it, 60 m on the Earth, or 1.2 s
+out at the speed it's coming at the ground, counting ground rising along the way it's going (a ray 1 s
+ahead finds a slope on Mars or Vesta before the car reaches it: `chuteHeight` and `closingSpeed`), so on
+the Earth it opens about 108 m up, 173 m diving. Under it the car comes down slowly, 2.5 m/s on the
+Earth, 1.5 on Mars and 1 m/s on the Moon, Vesta and Ceres (`chuteSink`: the square root of the gravity,
+never under 1 m/s, or the asteroids would hang for minutes), and **S** (or ↓) spills air from the
+canopy to come down twice as fast. **A**/**D** steer it a little, and it rights the car to land on its
+wheels, driving on at the speed it landed with (never more than the booster's). Press **T** while
+falling to be a plane again. Within 12 m of the ground, **T** flies it down by itself instead and folds
+it back into a car on the ground (**T** on the way down flies on). Others driving with you see the
+plane fold away and the car come down, without the parachute. On a touch screen the ✈ button under CAM
+is T, FLY is up and BOOST is down, GAS dives and BRAKE spills air. (Before, it fell at no more than
+55 m/s and sank at 5 m/s under the canopy: now the fall is quicker and the parachute slower, so a
+bail-out feels like a skydive and then a float.)
 
 **Faster the higher you fly.** Just off the ground it goes up to twice the ride's own top speed
 (`CAR_SHARE`: 320 km/h in the pickup), a plane's speed even low down. Higher up the table below
@@ -160,33 +202,87 @@ takes over where it's faster, and climbing and coming down get quicker too (`SPE
 | Height over the ground | Top speed |
 | --- | --- |
 | 0 m | 60 km/h |
-| 30 m | 100 km/h |
-| 150 m | 250 km/h |
-| 600 m | 500 km/h |
-| 2 km | 900 km/h |
-| 6 km | 1,800 km/h |
-| 12 km (the ceiling) | 2,700 km/h |
+| 30 m | 130 km/h |
+| 150 m | 325 km/h |
+| 600 m | 650 km/h |
+| 2 km | 1,170 km/h |
+| 6 km | 2,340 km/h |
+| 12 km (the ceiling) | 3,500 km/h |
+
+(Each about 30% faster than it was, 2,700 km/h at the ceiling before, but for the crawl near the
+ground. Faster over the Earth means more of Google's 3D tiles fetched a minute while flying: no more
+on Google's bill, which is by the session (below), but more for the player's device to download and
+draw; if phones struggle, `SPEEDS` is the one place to turn it back.)
 
 Coming down, it eases off to the top speed for its height. It
 never goes below 0.8 m over the ground (a slope is flown up), stops short of a wall ("Bonk!") and
 never climbs through a roof or a bridge. Over the ceiling it comes back down to it: where the scene
 stays where you dropped in (the Earth, the Moon, Mars), the world curves away under you, and a long
 level flight would otherwise climb out of reach of the others (on the Moon, after about 250 km at
-the ceiling). Its speed goes to others as it is (up to 790 m/s, under the room's 800: `MAX_SPEED`
-in `live.js`), so a plane at 2,700 km/h is seen flying between updates, not jumping 150 m at a time.
+the ceiling). Its speed goes to others with it, so a plane at 3,500 km/h is seen flying between
+updates, not jumping 150 m at a time. The room takes up to 1,100 m/s (a plane flat out is 972 m/s,
+and up to 1,087 over the top of a loop), but for now what's sent is held to 790 (`MAX_SPEED` in
+`live.js`): a page still open from before the plane got faster drops anything over its old 800.
+That's still seen as flying, not a jump (`teleported` allows half again the speed sent), and can go
+up to 1,090 once those pages have aged out.
 
-**It's for looking round, not for points.** It's kept apart from everything scored:
+**What it scores and what it doesn't.** Its own tricks score (below); everything else is kept apart:
 
 - **No challenges.** T does nothing during a challenge's countdown or run ("No plane during a
   challenge run"), so no board's time is ever flown. Times are still checked against the fastest
   anything drives along the ground (`FASTEST` in `challenge-rules.js`), which the plane isn't.
-- **No stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
-  out. As a plane there's no hop, drift, booster or tricks. Once it's down, a **new stunt run**
-  starts (the last one's place may be far behind).
+- **No car stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
+  out. As a plane there's no hop, drift or booster. Its run carries on once it's down: what its tricks
+  scored is kept, and a trick boost paid in the air is dropped as it lands, or the car would shoot off.
 - **No levels.** Its distance, air and the areas it flies over don't count for XP (`driven` in
   `main.js`).
 
-**Google's tiles.** Google bills by the session (one a page load: see the top of `main.js`), not
+#### Plane tricks
+
+With stunts on (World Drive's `crash: 'launch'`), the plane rolls and loops on top of how it flies:
+**Q** / **E** (or **,** / **.**) roll it left or right, **Z** (or **/**) loops it nose up and over and
+**X** nose down and under; roll keys while looping make a rolling loop, both scoring. Let go and it
+rights itself. On a touch screen, as a plane the ↺ button is **TRICK**: tapped, a whole roll toward the
+way you're steering (right if you aren't); held with UP, a loop; held with DOWN, an outside loop. On
+a keyboard **R** is that button (it has no road to put the plane back on while flying): tapped, a
+whole roll; held with **Space**, a loop; held with **Shift** (or **B**), an outside loop. The plane's
+flash names the first of them ("Plane! Space up · Shift down · Q/E roll · Z loop", then the bail-out key),
+and the keys card lists Q/E and Z/X while it's a plane.
+
+They're the car's own flight-trick layer (`Driver.enterAir( true )` and `planeSpin` in `drive.js`), so
+they're drawn by `pose()` and others see them in the car's quaternion with nothing new in the live
+protocol. A loop also lifts the plane over a hump as high as the loop's radius (its speed over the
+trick's turn rate: about 177 m for a kart flat out, 321 m for the biggest rides, a few metres at the
+crawl), read from where the nose is now rather than from how far it has turned in all, so a loop let go
+of half-way rights and leaves the plane where it went in (`noseAngle`, `followLoop` and `loopOffset` in
+`src/plane-tricks.js`). The hump goes into the climb others are sent, so their copy loops too. An inside
+loop starts only over 40 m above the ground (it climbs first), an outside loop only over its whole dip
+plus 40 m (it dives first); below that the nose input is ignored and it rights twice as fast. Rolls go
+at any height. The floor, the ceiling and roofs still hold it.
+
+A pass is paid once no trick key has been held for 0.4 s and it's back within 15° of level (and,
+whole turns only, on bailing out, coming down to land or getting out), through `payTricks` like a
+jump's: the combo bonus for two or more, the multiplier, the leaderboard's best jump, XP. A whole turn
+give or take 40° counts. A roll is a "Barrel roll" (800, the car's name and points, so the leaderboard
+already takes it), a loop "Loop!" or "Outside loop!" (1,000, a flip's points). Since a plane never has
+to land a trick, it's bounded (`PLANE_TRICKS` and `HEIGHTS` in `src/plane-tricks.js`):
+
+- at most **3 rolls and 2 loops** score in one pass (more still show on the HUD, scoring nothing);
+- the same kind again in the same flight is worth **half** the last (1, 0.5, 0.25...), so variety pays,
+  down to nothing once it rounds below 10 points (it still shows), so each kind's worth over a flight
+  is bounded;
+- flown more than **300 m** over the ground (at its highest in the pass) a pass is worth half, over
+  **2 km** a tenth: the skill is doing it low down, not holding Q at 12 km.
+
+So one pass is worth at most (3 × 800 + 2 × 1,000) × 1.5 = 6,600 before the multiplier, about a good
+car jump. The multiplier ends in the air as it does on the ground: 6 s without a paid pass
+(`CHAIN_TIME`, in `updatePlane`), or a pass of whole turns that pays nothing (`endPass`), puts it
+back to 1, so it can't be held at ×10 for a whole flight. The Worker's `TRICK` pattern (`worker/drive/scores.js`) takes "Loop!", "Loop ×2", "Outside
+loop!" and "Outside loop ×2", never ×3, matching the per-pass cap; the other limits are the page's (a
+plane's barrel roll can't be told from a car's there, the same trust as every car trick).
+
+**Google's tiles.** Google bills by the session (one a page at most, from its first drive on the
+Earth: see the top of `main.js`), not
 by the tile, so flying high or far costs no more there. What a fast plane costs is your device's
 download and drawing, so flying fast it makes do with coarser tiles: their screen-space error
 target goes up to 2.5 times the usual from 30 m/s to 250 m/s (`PLANE_TILE_ERROR` in `main.js`).
@@ -195,14 +291,30 @@ Driving, the tiles are as sharp as ever.
 **Driving with others.** They see you as a plane too: each state you send carries `FLAGS.plane`
 (`live-protocol.js`) while your wings are out, and their copy of your car unfolds the same kit at
 the same pace, flies with you, and folds it away as you fold yours (`planeOf` in `ghosts.js`). A
-plane's states go up to 800 m/s (`TOP_SPEED` there) and, flying fast, more than `TELEPORT` m apart
+plane's states go up to 1,100 m/s (`TOP_SPEED` there: 972 m/s flat out, a loop's hump on top, and the
+rounding) and, flying fast, more than `TELEPORT` m apart
 are still flown between rather than jumped (`teleported`).
 
 **Wheels.** The model cars' wheels (`cars.js`) and the go-kart's (`kart.js`) fold out flat as
-fans. The other code-built rides (coupe, bus, monster truck, hovercraft) get the wings but keep
-their wheels as they are.
+fans. The other code-built rides (coupe, bus, monster truck, hovercraft, lunar rover, flying saucer
+and rocket dragster) get the wings but keep their wheels as they are.
 
 **Not yet:** flying high enough to come out on the globe and pick somewhere else.
+
+**How it's tested**: `npm run test:drive-plane` (`scripts/test-drive-plane.mjs`, node, no browser),
+26 tests: the speeds (3,500 km/h at the ceiling, still 60 km/h off the ground) and the live protocol
+taking a plane flat out with a loop's hump on top while what's sent stays under old pages' 800; the
+drop (90 m/s spread out on the Earth and never faster, 144 diving, 60 m/s on the Moon within 13 s, the
+speed across the ground down to the car's own within 3 s of a bail-out at 3,500 km/h); the parachute
+(2.5 m/s on the Earth, 1 on the Moon and Vesta, twice that spilling air, opening 108 m up on the Earth
+and earlier over rising ground) and both flashes; the tricks' rules (whole turns give or take 40°, the
+per-pass caps, halving, the heights' shares, a repeat rounding to nothing, the nose angle, the points
+still drive.js's, the Worker's `TRICK` pattern); and tricks flown on a stand-in driver (Q a barrel
+roll paid once level, Z and X loops, the second worth half, a TRICK tap, TRICK with UP, a loop let go
+of part-way coming back, the hump sent to others, the floor and the outside loop's height, bailing out
+mid-roll, a roll flown high, and nothing without stunts). `scripts/test-drive-live.mjs` passes a
+1,000 m/s plane state and refuses 1,150; `scripts/test-drive-live-ui.mjs` has one driver roll the
+plane (Q) while the other sees it turn, the roll scoring once level and kept after bailing out.
 
 ### Boosting
 
@@ -211,7 +323,7 @@ their wheels as they are.
   to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
   each), and so do boost pads (once they're switched on). What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles, confetti, music notes or cherry blossom, or
-  with the pass (or, for some, a level) one of seventeen more.
+  with the pass (or, for some, a level) one of twenty more.
 - **In the air it pushes the way the nose points.** On the road it pushes you forward. Off the
   ground (a jump, a launch, flying on **F**) it pushes along the car as it's turned: nose up and it
   climbs (adding up to 20 m/s upward, `BOOST_CLIMB`), nose down and it dives, pointing back mid-spin
@@ -220,8 +332,11 @@ their wheels as they are.
   along the way you're heading counts, since flying follows your heading. (`pushAlongNose` in
   `src/drive.js`.)
 - **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
-  you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you, a flash and a jolt, the edges of the view flashing white), streaks of
-  air streaming back past you, the view 9° wider and **OVERDRIVE** by the speed. It lasts, boosting
+  you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you in
+  your flame's colour, a flash, a collar of vapour and a jolt, a shock front sweeping out past the
+  edges of the view), streaks of air streaming back past you on the cone of its shock, your flame
+  burning longer and white-hot with shock diamonds down it, the view 9° wider and **OVERDRIVE** by
+  the speed, glowing in your flame's colour. It lasts, boosting
   or not, until you drop under three quarters of that speed: a moment after the gauge runs out, or at
   once if you hit something. Every ride can, each against its own top speed (the kart at about
   190 km/h, the pickup at about 290). It's all in `src/drive.js` (`SUPERSONIC`) and `drive-boosts.js`;
@@ -268,14 +383,44 @@ construction app's driving looks and behaves as it always has.
   up, and the view is jolted: about 4.5° wider at most and nodded up for a moment, springing back
   in about a third of a second.
 - **While it burns** the flame flickers harder, and speed lines stream out past the edges of the
-  view, from 30 % of the booster's top speed on, thicker and faster the faster you go. Overdrive's
-  sonic boom adds a wide ring that lingers as it spreads to seven times the vehicle's size, the
-  edges of the view flash white and the view is punched about 6° wider for a moment, on top of its
-  9. The boom's rings keep up with the vehicle (0.97 of its speed): slower, at overdrive's speed
-  they fell back through the chase camera while still growing, and with the camera inside a ring's
-  bright band the whole view went white, twice.
-- **Running dry.** The exhaust glows on and cools, white-hot in the style's colour, through orange
-  to a dull red and out in 0.9 s, with a few embers drifting off it. The car settles: its nose
+  view, from 30 % of the booster's top speed on, thicker and faster the faster you go.
+- **Overdrive.** The sonic boom goes off round the car where it is that frame: a white-hot shock
+  ring and flash, the rings behind them in the ride's colour (the classic flame's glow's, or the
+  boost style's: amber for the orange flame, blue for the blue; a rainbow flame's run through the
+  hues), a wide ring that lingers as it spreads to seven times the vehicle's size, and a collar of
+  white condensation puffs snapping out round the body and thinning away over about 0.45 s, as a jet
+  through the sound barrier has. The flame gives a fat surge with it, the view is punched about 6°
+  wider for a moment, on top of its 9, and the edges of the view flash: a shock front sweeps out
+  from round the vehicle (low in the view) past them in half a second, white-edged with the ride's
+  colour behind it, over a band of its colour, screened over the view so its colour only lightens
+  it (laid over the grey road, an orange went a dusty brown). The boom's rings keep up with the vehicle (0.97 of its speed): slower, at
+  overdrive's speed they fell back through the chase camera while still growing, and with the
+  camera inside a ring's bright band the whole view went white, twice. While it lasts, the flame
+  (the classic one, or a style's cone) burns about 30 % longer and a little narrower, its flicker
+  steadied into a hard roar and its core near white and solid (a red flame's stays red), with four
+  shock diamonds burning down it, white at the nozzle and fading towards its colour, throbbing a
+  little, all easing in and out over about a quarter of a second as the view does; streaks of air
+  stream back past it on the cone of the shock it drags, peeling off just ahead of its nose, just
+  clear of the body at the front (never drawn over its roof) and splaying wider towards its tail,
+  hardly leaning out at the nose and more towards the tail (leaning out evenly, those far ahead,
+  seen end on, stuck out sideways like whiskers), thinner and fainter towards the tail, white and a
+  pale wash of its colour; and the speed lines take on a pale wash of its colour too (boosting short of overdrive,
+  they're near white). The tag (`drive-hud.js`) is heavy and slanted as the hits' words are, white
+  through the ride's colour to the accent's yellow, glowing in its colour, slamming in from big
+  with a little overshoot, a sheen sweeping across it every 1.4 s; the gauge glows the boost's
+  orange while the booster burns, and the ride's colour in overdrive (a rainbow flame's ice blue).
+- **Letting go** the flame dies back into the nozzle over about 0.15 s, rather than going out in one
+  frame, as the exhaust's glow takes over. A boost style's stream thins out with it over about a
+  quarter of a second, and each style has a moment of its own as it's let go: plasma's ball of
+  lightning, the comet breaking up, the rings imploding, the laser's beams retracting (the
+  [Garage's table](#the-garage) has them all).
+- **Running dry.** The flame coughs out first: for about 0.35 s it misfires two or three times, cut
+  out and coming back smaller, before it dies, and a boost style's stream sputters on the same
+  misfires, with a sputter of its own (pixel's game over, a dragon's choke, the laser's beams
+  dropping out one by one). The exhaust glows on and cools, white-hot in the style's colour (a
+  rainbow flame's in the hue it was burning in when it was cut), through orange to a dull red and
+  out in 0.9 s (or through a style's own colours: frost's to ice blue, the galaxy's to violet), with
+  a few embers drifting off it. The car settles: its nose
   dips as it slows back to its top speed, and it bounces back level.
 - **Boost pads.** Driven over one, a ring spreads out from the pad, chevrons rise off it, sparkles
   fly up round it and the vehicle lights up in the pad's colour for a quarter of a second. The burst
@@ -315,7 +460,7 @@ it lights: a sprite that low would be cut off by the ground.
 
 **Camera effects** in the pause menu (kept in this browser, `world-drive.camera-fx`; on until it's
 turned off) turns off everything done to the view: the jolts, the shake of a hit, the speed lines
-and overdrive's white edges (`src/drive-app/screen-fx.js`; main.js adds a jolt's `driver.punch` to
+and overdrive's flashing edges and shock front (`src/drive-app/screen-fx.js`; main.js adds a jolt's `driver.punch` to
 the field of view). The bursts in the world stay. A visitor whose system asks for less motion
 (`prefers-reduced-motion`) has none of those whatever the switch says, and fewer flashes: no flare
 as the booster lights nor in overdrive's boom, whose rings are fainter (0.6 as bright); no flash of
@@ -324,15 +469,23 @@ flare to the comet's, no flashes at the ends of lightning's forks nor in the fir
 and the bursts of the three rockets lit with it (their sparks are all there), the neon laser's
 starburst half as many beams and dim (0.35 as bright), and its hoop and the
 afterburner's shock ring fainter (0.6); the vehicle not lit up on a pad, and the gauge glowing
-steadily when it's full rather than pulsing, and flashing once as it runs dry. Overdrive's 9° wider view is as it was, either way. On a
+steadily when it's full rather than pulsing, and flashing once as it runs dry; no cough as the
+flame runs dry (it dies down as when it's let go: misfiring is flashing); overdrive's collar
+thinner (8 puffs, fainter), its streaks fewer and fainter (0.6 as many, 0.65 as bright), its shock
+diamonds steady, and **OVERDRIVE** simply there rather than slamming in and shining. Overdrive's 9°
+wider view is as it was, either way. On a
 touch screen the bursts have 60 % of their sparks (and most styles' own bursts as they light fewer
-too), and there are 24 speed lines rather than 48. The Garage's
+too), overdrive's streaks and collar 60 % (4 puffs at least) and three shock diamonds rather than
+four, and there are 24 speed lines rather than 48. The Garage's
 **▶ Boost** has the same effects as driving (main.js hands it `driver.effects`): no flare for a
 visitor asking for less motion, and a phone's fewer sparks.
 
 **Others' cars** show what can be told from what they send (`FLAGS` in `live-protocol.js`, which is
 unchanged): the booster lighting and running dry, each drift charge level and the mini-turbo, and
-the lean. A boost pad taken and wheelspin aren't among what's sent, so those don't show on them.
+the lean, and overdrive (its boom in their ride's colour, as it's heard of, its streaks
+and their flame's diamonds), on the Moon as there (their effects are yours, `driver.effects`).
+Their flame dies down as it's let go, but never coughs: what they send can't tell running dry from
+letting go. A boost pad taken and wheelspin aren't among what's sent, so those don't show on them.
 
 **What it costs.** Every burst comes out of pools made with the effects as a drive starts: one more
 batch of quads (160 of them, one draw, the oldest reused when it's full), one sprite for a pad's
@@ -355,7 +508,8 @@ shared with other test runs:
 
 `node --test scripts/test-drive-ui.mjs` ("World Drive boost and driving effects") tries it on the
 test pad with the classic flame, confetti and lightning: lighting the booster (the burst, the jolt,
-the squat), running it dry (the glow, then nothing left), a pad (its burst carried along and the
+the squat), running it dry (the classic flame coughing out, cut out and back; the glow, then
+nothing left), letting it go (the flame still there a frame on, smaller, then gone), a pad (its burst carried along and the
 flash), the ground the bursts fade out down to (and none in the air), a drift's three levels and its
 mini-turbo, a standing start's wheelspin and smoke, braking's dip and a turn's lean, no lurch put
 back at a stop, settling back level, nothing made in a dozen ignitions and the budgets kept; the
@@ -369,10 +523,11 @@ fireworks' first half second, their starburst and three rockets bursting into 56
 flashes, and for a visitor asking for less motion into the same sparks with no flash; the neon
 streak behind the kart pinned against a wall, boosting with W held, laid in one spot rather than
 drawn out as on the Garage's turntable; the speed
-lines thickening with speed and going, overdrive's white edges, the gauge pulsing, flashing and
+lines thickening with speed and going (near white boosting, tinted in overdrive), overdrive's
+flashing edges (the shock front sweeping out, in the ride's colour), the gauge pulsing, flashing and
 refilling; the switch turning it all off,
 kept across a reload, and on again; asking for less motion; the sonic boom's rings keeping up with
-the kart (read back off the canvas frame by frame: under half of the view near white, 28 % at
+the kart, with its collar of vapour (read back off the canvas frame by frame: under half of the view near white, 15 % at
 most, where rings falling back through the camera had 95 % of it), with no flare for a
 visitor asking for less motion, nor in the Garage's **▶ Boost**; and a phone's thinner bursts and
 fewer lines.
@@ -403,12 +558,12 @@ water is told, the open sea, the big lakes) were made while it was a splash, whi
 speak of splashes and of the way back; `water.js` tells water the same way still, for three things
 (all on the Earth: the other worlds have none):
 
-- **The hovercraft** rides on water as every ride does, but throws up spray behind it there. It
+- **The hovercraft** (and the flying saucer) rides on water as every ride does, but throws up spray behind it there. Each
   says `floats: true` in its tuning, and under it the Driver looks for water every 0.2 s while it's
   on the ground: that's the Driver's `water` option (`src/drive.js`; off unless an app gives one, so
   the construction app's driving never looks), which World Drive gives `src/drive-app/water.js`.
   The spray comes out of `drive-fx.js`'s pools (150 droplets and 48 puffs, and 6 rings and 2
-  patches of foam), made with a ride's other effects only when it floats: no other throws any up.
+  patches of foam), made with a ride's other effects only when it floats: no others throw any up.
 - **Boost pads** never go down on water, nor by it: they belong on the streets, and Google's water,
   as flat and open as anything on its mesh, would take most of them by a coast or a river.
 - **The open sea**: a drop-in far out at sea, where Google draws only the sea bed, starts on a
@@ -1529,9 +1684,9 @@ always had.
   in `panel.js`); and NASA's credit where Google's would be (`#moon-credit`, `#mars-credit`,
   `#vesta-credit`, `#ceres-credit`, each `.world-credit`).
 - **Links**: `/?spot=<id>-<name>` (one of its spots) or `/?at=<lat>,<lon>&world=<id>` turns the globe
-  to it and pins the place, and a page opened on one asks for that world's free visit and opens there
-  with the Earth closed (main.js's `earthClosed`, which was `moonOnly`); a `world=` that isn't a
-  world is the Earth's. Each start spot has a page of its own at `/<id>/<slug>/` ([the Moon's
+  to it and pins the place, and a page opened on one asks for that world's free visit in place of
+  the globe's and opens there (main.js's `opensOn`; the Earth is our own globe there too, its drive
+  asked for at the first drive on it); a `world=` that isn't a world is the Earth's. Each start spot has a page of its own at `/<id>/<slug>/` ([the Moon's
   pages](#the-moons-pages), [Mars's](#marss-pages), [Vesta's and Ceres's](#vestas-and-ceress-pages)).
 - **The drop-in** has no tiles to wait for: the ground's height at the pin is worked out, so the
   scene is centred on it at once, and the ground round it is built on the way down (main.js's
@@ -1542,6 +1697,8 @@ always had.
   opened on a link to it (`visit_kind:<id>_link`); its drives, for its
   [achievements](#achievements-and-rewards); and three [challenges](#challenges) of its own, laid out
   on its own heights.
+- The [data lens](#data-lens) (L): its ground coloured by its real measured height, the dataset named;
+  and its [Discoveries](#discoveries), real named places to drive to and collect.
 
 ### Picking a world: the orrery
 
@@ -1553,8 +1710,12 @@ coming it reads "Loading Mars…" ("Loading the Moon…"), busy (`aria-busy`). I
 the Solar System, the Sun with Mercury, Venus, the Earth and the Moon, Mars, the asteroid belt with
 Vesta and Ceres, and Jupiter, Saturn (with its rings), Uranus and Neptune, not to scale, the planets
 going round and turning (none of it with the system asking for less motion), drawn over the page's
-stars. It opens on the whole of it; a world picked (its button, its tag or its body in the scene,
-which a drag turns and a scroll or pinch zooms) is flown to, with a sheet beside it (under it on a
+stars. It opens on the whole of it. **A world you can drive on, tapped or clicked** (its button, its
+tag or its body in the scene, which a drag turns and a scroll or pinch zooms), **is driven to at
+once**: the orrery closes on that world's globe, where you pick a place, with no sheet in between
+(the Earth too, unless this visit's Earth drives are spent: then its sheet opens, saying so). The
+arrow keys along the worlds still pick, the sheet following, and Enter drives. Anything else picked
+(the Sun, a planet with no ground) is flown to, with a sheet beside it (under it on a
 phone): what it is, its radius and gravity, how many are driving there now, up to four of its start
 spots (each flying the globe to it there), your party's friends there (**Join**, or "on its globe"
 for one looking at it from its globe), and **Drive on Mars** (or **Back to the Earth** for the
@@ -1562,20 +1723,43 @@ world you're on, which also stops a switch to another still loading). Mercury an
 the game yet", the giants have "no ground to drive on": their sheets say so, with no Drive. While
 this visit's Earth drives are spent the Earth's sheet says so ("The Earth is used up for today"),
 and its Drive shows the [used-up notice](#what-a-visit-costs-and-how-its-capped) as the Earth
-always does.
+always does. Each far world's sheet carries a line on the data its ground is built from and how many
+of its [Discoveries](#discoveries) are found, with its collection a tap away (`sheetExtra`); the
+Earth's says Discoveries are on the other four.
 
-- **Opening it.** **Worlds**; **M** on the globe; the panel's **On other worlds** row ([who's driving
-  now](#on-the-globe-whos-driving-now), when two or more other worlds have drivers); or a link with
-  `?worlds=1`, which opens it as the page loads and is then taken out of the address (never over a
-  challenge link's card). Never on a plain load, nor off the globe, nor over another open dialog
-  (the Garage, the leaderboard, challenges and the rest). On the dev server
-  `window.worldDriveOrreryTest = { onLoad: true }` does what `?worlds=1` does, for the tests.
+- **Opening it.** **On a plain load**, first: anyone arriving at worlddrive.app sees the Sun's family
+  and picks a world, so the Earth isn't the one everyone drives just because the page used to start
+  there. A plain load spends none of the day's Earth drives: it asks the Worker for a free visit
+  (`/api/visit` with `{ world: 'moon', start: 'orrery' }`, counted `orrery` on the admin page) and
+  nothing is loaded behind the orrery (no world's heights or colours: the Earth's globe is hidden,
+  main.js's `earthHidden`, its picture not yet fetched). Picking any world turns to it with no reload:
+  the Earth too, whose globe is our own picture of it (NASA's Blue Marble), so picking it spends
+  nothing either; the day's Earth drive (Google's 3D tiles) is asked for at the first **Drive here**,
+  **Start** or **Join** on it ([what a visit costs](#what-a-visit-costs-and-how-its-capped)). An Earth
+  spot or challenge picked there flies to it or opens its card on the same page. (`earthUrl`, the
+  Earth's address, `/?worlds=0`, is still what a supporter's pass reloads a page turned away by a
+  Worker from before to.) It opens with the world last picked here
+  (`localStorage['world-drive.last-world']`) already chosen and its Drive focused, so a returning player
+  is one tap or Enter away; the first time, the whole Solar System. Closed without a pick (Esc, ✕, M),
+  the page turns to the Moon with a toast, "You're on the Moon. Worlds (M) to pick another." ("Tap
+  Worlds" on a touch screen). Not on a plain load: a link to a place (`?spot=`, `?at=`), a challenge
+  link, a party link (`?party=`), the way back from paying (`?supporter=thanks`), `?worlds=0`, a page
+  with no WebGL, and the Worker's "resting" notice's test pad. Otherwise: **Worlds**; **M** on the globe;
+  the panel's **On other worlds** row ([who's driving now](#on-the-globe-whos-driving-now), when two or
+  more other worlds have drivers); or a link with `?worlds=1`, which opens it over the globe's visit as
+  the page loads and is then taken out of the address (never over a challenge link's card). Never off
+  the globe, nor over another open dialog (the Garage, the leaderboard, challenges and the rest). On
+  the dev server a test's browser (`navigator.webdriver`, read only there) gets the plain Earth load,
+  so the suites written for it go on as they were, unless `window.worldDriveOrreryTest = { first: true }`;
+  `{ onLoad: true }` does what `?worlds=1` does.
 - **Closing it.** Esc (first back from an other body's sheet to the whole Solar System, then
   closed), **M**, its ✕, a Drive, a spot or a **Join**, and anything that leaves the globe (a
   drop-in: main.js's `setMode` closes it first). The focus goes back to what opened it, or to
   **Worlds** if that's gone. It closes before a Drive, spot or Join acts, so the panel's back first.
 - **For the keyboard and screen readers.** It's a native modal `<dialog id="orrery">`
-  (`showModal()`: the page behind it inert, as every other dialog here), titled "Pick a world". The
+  (`showModal()`: the page behind it inert, as every other dialog here), titled "Pick a world" and
+  described by its intro line, "Every surface here is built from real spacecraft maps."
+  (`aria-describedby="orrery-intro"`), the first thing a screen reader (and a crawler's renderer) meets. The
   five worlds you can drive on are a radio group ("Worlds you can drive on"), the one you're on
   checked and focused as it opens: the arrow keys (round from one end to the other), Home and End
   move along them and show each one's sheet, Space picks, Enter drives there; only the one picked is
@@ -1623,9 +1807,17 @@ always does.
   `window.drive.orrery` (`open()`, `close()`, `isOpen`) is there for the tests.
 
 **How it's tested**: `npm run test:drive-orrery-ui` (`scripts/test-drive-orrery-ui.mjs`, on
-`TEST_VITE_PORT`, 5601 if unset), fourteen tests in Chromium on the test pad: never open on a plain
-load, and nothing of it nor of the other worlds fetched until it opens, then one WebGL context
-still; opened by **Worlds** (the focus back on it as it closes), by **M** (and closed by M, not
+`TEST_VITE_PORT`, 5601 if unset), 22 tests in Chromium on the test pad. **First, on a plain load**
+(each page asking for it with the seam's `{ first: true }`): the free visit asked for (`start:
+'orrery'`), not the Earth's, nothing of any world fetched behind it, and its intro; Esc without a pick
+on the Moon with the toast; Mars picked with no reload, the Earth's sheet saying it reloads, and the
+Discoveries line from `sheetExtra`; the Earth picked going to `/?worlds=0` (which asks for the
+Earth's visit and doesn't open it) and an Earth spot to its link; none for `?worlds=0`, a place's,
+a challenge's or a party's link or `?supporter=thanks`; the used-up word, with Drive still going to
+`?worlds=0`; the world last picked opening with its sheet up and Drive focused; a Mars link's Earth
+going to `/?worlds=0`; and who's driving still pointing to the Earth's drivers. **The rest**, as
+before: a test's browser never opening it on a plain load without the seam, and nothing of it nor of
+the other worlds fetched until it opens, then one WebGL context still; opened by **Worlds** (the focus back on it as it closes), by **M** (and closed by M, not
 opened again), by `?worlds=1` (then out of the address) and the dev server's seam, and closed by a
 drop-in; Esc, with the focus left on the scene too, the pin kept; the eleven bodies, the five a
 radio group in the game's order and the rest named for why not; an other body's sheet with no
@@ -1637,6 +1829,13 @@ it (the focus back on the row), from a stand-in `/api/online`; 360 × 640 and 74
 wider than the screen, every target 44 px or more and Drive in view; nothing drawn while still under
 reduced motion; and the ad not asked for under it and not lost to it. `scripts/worlds-ui.mjs` is
 how every other UI test picks a world (**Worlds**, then the world, then Drive).
+`npm run test:drive-orrery-first` (`scripts/test-drive-orrery-first.mjs`, node, 15 tests) is which
+loads open on it (`orreryFirstFor`: a plain load does, whatever else is in the address; a place's,
+a challenge's or a party's link, the way back from paying, a `/c` path and `?worlds=0` or `=1` don't;
+a test's browser only with its seam), `earthUrl` and `earthTarget` (every address they make for the
+Earth is one that doesn't open the orrery, and keeps what was picked: a spot, a pin, a challenge with
+its friend's handle), and what's kept in the browser (the used-up word today's only; storage that
+throws is no storage, never an error).
 
 (Before, the panel had a button a world, a pill of five radio buttons, `.worlds`.)
 
@@ -1755,9 +1954,19 @@ visit. It needs no Google tiles and no Maps key, so it's the real Moon under `np
   away. Leaving the ground going down a slope (falling more than 35 cm under it in a frame), a vehicle keeps
   its speed down it: only a climb is multiplied by `leap` (until Vesta and Ceres the speed down was
   too, so a car off a steep downslope fell at 0.41 of it and sailed on, on Mars at 0.615). Sparks and
-  bits from a hit fall as slowly, and so, since Vesta and Ceres, does what falls of a boost's flames
-  and bursts (`Batch.gravity` in drive-boosts.js, set by drive-fx.js: smoke and flame that rise rise
-  as on the Earth); before, they fell at the Earth's 9.81 m/s² on every world.
+  bits from a hit fall as slowly, and so do the booster's sparks and embers and what falls of a
+  boost's flames and bursts, in long slow arcs (`driver.effects.gravity`, which the others' cars
+  share, read each frame into every `Batch.gravity` in drive-boosts.js by drive-fx.js: smoke and
+  flame that rise rise as on the Earth; the Garage's turntable takes only `detail` and `calm` from
+  it, so it's always in the Earth's air and gravity, wherever the last drive was).
+- **Overdrive** still happens (the tag, the wider view, the boom's flash and its rings in the
+  ride's colour, the speed lines), but nothing in it implies air (`driver.effects.air` is false):
+  no white shock ahead of the rings and no collar of vapour, the streaks faint ones of the ride's
+  colour alone, the flame a rocket's plume in a vacuum (wider and fainter rather than longer, with
+  no shock diamonds, which need air round it), and the edges of the view glowing in its colour with
+  no white rim. The others' cars there have the same,
+  and so it is on Vesta and Ceres, which have no air either (Mars's thin air still carries its
+  dust, in its own red-brown, as a landing's and a crash's dust there are).
 - **Scores** are fair to the Earth's: big air counts the time the same jump would have taken on the
   Earth (the air time × 0.41), so a plain hop is no more big air than on the Earth, and a spin, a
   flip or a roll is worth 0.41 of its points (to the nearest 10), there being that much longer to
@@ -1830,9 +2039,10 @@ what differs is in [on every world](#on-every-world):
   turns to their world (its files loaded the first time, as picking it in the orrery does),
   then a drop-in beside them, 5 m to their right, facing their way. On the Moon (and Mars), within 10 km, **Go
   to** puts you there straight away, on the ground under them (on Vesta and Ceres only within their
-  recentre's 1 or 1.5 km, where the ground's already fine; farther, a drop-in). From a page opened with no Earth
-  this visit (a link to the Moon, Mars, Vesta or Ceres, or today's Earth drives used up), a friend on the Earth is the way
-  the **Earth** button is: a reload without the link, or the used-up screen. The party's banner
+  recentre's 1 or 1.5 km, where the ground's already fine; farther, a drop-in). A friend on the Earth
+  is a drop-in there like any other, the page's Earth drive asked for first if it hasn't one yet (over
+  a cap, the used-up screen; with the Earth shut as the page loaded, by a Worker from before the
+  globe's visit, the used-up screen too). The party's banner
   shows on the Moon's globe, the pause menu has **Drive with friends**, the horn and tricks' points
   go to the room, and a party counts for its achievements (**Party time**, **Party regular**) there
   the same way.
@@ -1885,7 +2095,7 @@ hibernation), as that world's: either way it's counted against the world it was 
 other's.
 
 **Bounded per address, as the Earth's are.** The Earth's visits are capped at 8 a day for each
-address (30 a day for a supporter, counted by account; the owner's not at all), and so are their
+address (30 a day for a supporter or a day pass, counted by account; the owner's not at all), and so are their
 connections (each visit's 20 a minute and 200 a day, one room at a time).
 The Moon's visits aren't capped (anyone gets one for each robot check they pass), nor are those
 opened from a link to Mars, Vesta or Ceres, so a visit not counted against the Earth's caps (one of
@@ -2088,8 +2298,9 @@ its words, NASA's credit, the Earth hidden), its search (names, other names, acc
 nothing found), a drop-in at Tranquility Base (on its ground to 30 cm, the Moon's gravity, the
 stars and the Earth in the sky, no water and no sea, the Moon's pad rules, its ground the only thing
 driven on and at its finest by the vehicle), a hop as high as on the Earth that stays up about 5 s
-and scores nothing, M back to the Moon's globe with its own recent places, back to the Earth
-(driving there as it was: its gravity, its water), `?spot=moon-tycho`, **Worlds** saying "Loading
+and scores nothing, overdrive with no air (three rings rather than four, no vapour, the bursts
+falling at 1.62 m/s²), M back to the Moon's globe with its own recent places, back to the Earth
+(driving there as it was: its gravity, its water, air for its effects), `?spot=moon-tycho`, **Worlds** saying "Loading
 the Moon…" (busy) while its files come, and a phone's sheet with **Worlds** at its top and the Moon
 tapped in the orrery. The
 tests drive the go-kart: the Moon's ground is heavy drawing without a GPU, about a frame a second
@@ -2513,6 +2724,205 @@ back to the start with the gate where it was, not passed. It takes about 7 minut
 software renderer, Vesta's ground drawing at about a frame and a half a second, so the car is moved
 by setting its speed and way rather than with held keys.
 
+## Data lens
+
+The far worlds are built from spacecraft measurements, but a photograph laid over hills doesn't say
+so. The data lens does: **L** or the **Heights** button (bottom right; on a phone at the top) colours
+the Moon's, Mars's, Vesta's or Ceres's ground by its real measured height, on the globe and while
+driving, with a scale bar that names the dataset. It isn't on the Earth: its ground is Google's
+tiles, with no height grid of ours under it.
+
+### What it shows
+- The colours are **viridis** (dark violet low, yellow high: even steps to the eye and readable with
+  colour blindness), with thin contour lines, every 1,000 m over the whole world and every 250 m
+  around the car; lines fade where they'd crowd closer than a few pixels. The light still falls on the
+  slopes, so the relief reads under the colours.
+- Heights are over each world's datum, the level its mission's team gives heights over: the Moon's
+  1,737.4 km sphere (LOLA's reference), Mars's areoid (its "sea level"), and on Vesta and Ceres their
+  level spheroids (285 × 229 km for Vesta, the one the Dawn team uses; 482 × 446 km for Ceres, the
+  game's own), not the spheres their maps are laid on, whose "heights" would mostly just be the
+  asteroid's flattening. The same sum (`levelRadius` in level.js) gives the heights on the Discoveries'
+  cards, so the two always agree.
+- **Only the measured grid.** The game adds small made-up craters and rolling ground for close-up
+  driving; they're in the ground's shape but not in the lens's colours. Where the colours stop
+  changing is where the data's detail ends: about 7.6 km on the Moon, 7.4 km on Mars, 570 m on
+  Vesta, 1 km on Ceres.
+- The bar: the scale's ends, 0 (the datum) when it's in range and one round value between; under it
+  what the colours are ("Height above Mars's datum (the areoid) · lines every 1,000 m") and where the
+  heights come from and what the game did to them ("Heights: NASA MGS MOLA (MEGDR, 1/16°), resampled
+  to a 1/8° grid (~7.4 km), above the areoid…").
+- **Whole world / Around me** (driving only): the world's measured lowest to highest, or 5 km either
+  side of the car's height, re-centred a kilometre at a time (on Mars most of the planet otherwise
+  sits in the violet third between Tharsis and Hellas). The globe always shows the whole world.
+- **Here:** while driving, the height under the car twice a second ("Here: 4,510 m below the datum
+  · MOLA") with a ▲ on the bar, read from the same grid as the colours, so the number matches the
+  colour under the wheels. Drive uphill and watch it climb the real data.
+- Whether it's on and which range was picked are kept per browser (`localStorage`
+  `world-drive.lens`).
+
+### How it works
+`lens.js` makes, the first time the lens is on for a world, a texture of the world's height grid
+(`body.heights()`, body-height.js's `heightsTable`: height.bin as loaded) in half floats, metres over
+the datum (`lens-heights.js`'s `lensTexels`), and hands it to the world's own ground material
+(body.js: `lensAmount`, `lensHeights`, `lensRamp`, `lensLow`, `lensHigh`, `lensStep`). The fragment
+shader reads it by the same longitude/latitude it reads the picture by, so nothing is rebuilt and it
+works at globe scale. Its rows are written south first: a DataTexture's first row is at the bottom,
+where body.js's picture coordinates have the south pole (the picture only lines up because image
+textures are flipped on upload). About 8 MB per world (the Moon's 2 MB), made once, in a tenth of a
+second or two (the button says "Measuring…"), let go when the world is left. Off, it costs the shader
+one uniform test; on, two texture reads per pixel. It never touches the physics or the Earth.
+
+### How it's tested
+`npm run test:drive-lens` (node, on the real height.bin files): `levelRadius` (spheres unchanged,
+Vesta's and Ceres's spheroids at the equator and poles, and Vesta spanning about +19.6 to −22.4 km
+over its spheroid), the texture (one value per cell; Mars's highest at Olympus Mons and lowest in
+Hellas, the grid's own values; rows south first; Vesta's over its spheroid), the readout agreeing with
+the texture, the ranges, ticks and labels ("1,930 m below", never "−1,930 m below"), and every world
+naming its dataset. `npm run test:drive-lens-ui` (browser): nothing on the Earth; on Mars's globe L
+colours the ground (Olympus Mons's summit yellow with it, not without), the bar names MOLA and the
+areoid; L again takes it off; driving at Bradbury Landing shows "Here: … m below the datum · MOLA"
+(Gale's floor) and Around me / Whole world change the scale; kept across a reload.
+
+## Discoveries
+
+Driving on the Moon, Mars, Vesta and Ceres is driving on real mission data, and Discoveries show it
+off: real, named places on those four worlds (68 of them: 21 on the Moon, 20 on Mars, 13 on Vesta,
+14 on Ceres) each marked by a glowing beacon. Drive or fly to one and it's collected, with a card of
+true facts about it, its height in the very data the ground is built from, and that data named. Each
+world has a collection book, and they count toward XP and achievements. The Earth has none: its
+ground is Google's tiles, not data the game can show or credit as its own. In the code they're
+`finds` everywhere ("discoveries" already means the first drives in the Earth's areas and spots).
+
+**The list** (`src/drive-app/finds-data.js`): each find's id is its place's id in the world's
+`*-places.js`, which is where its name and coordinates come from, never typed twice. Landing sites
+of the famous missions (Apollo 11, 15 and 17, Lunokhod 1, Chang'e 4, Chandrayaan-3; Curiosity,
+Perseverance, Viking 1, Pathfinder, Opportunity, Zhurong) and features whose real shape reads at the
+grid's size (Tycho, Copernicus, Orientale, the Moon's highest and lowest places; Olympus Mons and its
+summit, Valles Marineris, the Tharsis volcanoes, Hellas, Badwater, Gale and Mount Sharp; Rheasilvia
+and its central peak, the Snowman; Occator and its bright spots, Ahuna Mons, Kerwan...).
+
+**The facts rule.** Every fact on a card says where it's from (`source`, kept in the data, never
+shown, and checked by the test): the hand-checked pages of `drive/site/<world>.js`, the place's own
+line in `*-places.js`, the IAU's gazetteer for a namesake, NASA's NSSDCA for a mission's date, or
+MOLA's data file's own label for its highest and lowest. Nothing else; where the sources disagree
+(Rheasilvia's size: 450 km in the gazetteer, about 505 km since Dawn), the number is left out. No
+general sentence about how a world's features are named.
+
+**Heights are measured, not typed.** `scripts/make-finds.mjs` (run by hand) reads each find's height
+from the world's own `height.bin` the way the game reads it (`body-height.js`), with the made-up
+craters and rolling ground left out, and writes `src/drive-app/finds-heights.js`: over the Moon's
+1,737.4 km sphere, over Mars's areoid, and on Vesta and Ceres over the world's `level` spheroid
+(`level.js`'s `levelRadius`, which the data lens uses too, so the card and the lens's scale bar give
+the same number). For a feature with a `relief`, also the lowest and highest ground within that many
+km ("Rises 5,800 m from its lowest to its highest point within 60 km"), kept within the feature
+itself (no wider than its radius), and left out where even that ring takes in ground that would read
+as a wrong size: Ahuna Mons (the ground falls far below its foot on one side, so the rise comes to
+well over its 4 km) and Kerwan (9 km from its middle within its own radius, beside "shallow for its
+size"). A mountain or volcano whose beacon, at its named point, is 500 m or more below the highest
+ground in its ring says so ("… at the beacon; the highest ground within 30 km is 2,870 m above":
+Mons Huygens's point is 2 km under its summit in LOLA's grid; a Tharsis volcano's is its caldera),
+so the height isn't read as the peak's. Where a published figure sits
+beside the measured one, the card says why they differ: "MOLA's 1/16° grid has it at 21,171 m above;
+this map's 7.4 km cells average it to 21,160 m above." Every card carries the grid's size and a note
+that narrow peaks and pits read lower or shallower than they are, and every landing site a "What
+you're looking at" line: the lander isn't in the map, this is the ground around it. The test
+(`test-drive-finds.mjs`) measures every height again and fails if the file is out of date.
+
+**Finding them.** On the globe each is a pin (gold not found, cyan found); clicking one opens its
+tile in the book. While driving, a pointer always names the nearest one not yet found and how far
+("Tycho · 412 km"), at the screen's edge when it's out of view; beacons stand over those within
+150 km, taller the further off. A drop-in on one not yet found (the search, a spot, a pin, the book's
+"Drive to it") starts the car 2.5 km from it, facing it from the flattest of eight ways in. It's
+collected within 150 m in a car, or within 250 m and no more than 2,000 m up in the air (a plane, a
+jump, falling, a parachute), tested along each frame's step so a fast plane on a slow phone can't
+skip over one; and only once the car has been a kilometre from it since it was put down (so a drop-in
+right on one doesn't count), which the approach spawn meets by itself. That rule starts again only
+when the car really is put down somewhere (a drop-in, Go beside, a challenge's Retry), never on
+resuming from a pause or changing ride, where it hasn't moved. In a challenge's run the card is small
+and nothing else changes; finds score no stunt points and send nothing to a room. The card goes when
+the drive pauses (so Esc, which pauses, closes it), its Collection button pauses the drive before
+the book opens over it (as every dialog opened mid-drive does), and on a touch screen it sits above
+the driving buttons, never under a pedal. On the dev server the approach spawn is off unless a test
+asks for it (`window.worldDriveFindsTest = { approach: true }`), since the other suites drop in on
+those same places and look for the car on them.
+
+**Kept and counted.** Collected ones are kept in the browser (`localStorage['world-drive.finds']`),
+so they're everyone's, nickname or not. With a nickname they go with the progress reports as
+`feats.finds` (a list of ids): the Worker takes each once (real ids only, a 400 otherwise), at most
+one and one more a minute a report (`findsRate`), 40 a UTC day (`TALLY_DAY.finds`) and 10 in a new
+nickname's claim (`CLAIM_TALLY.finds`), kept in `players.tallies` with the other trusted counts (no
+migration; never in the `discoveries` table), each worth 100 XP (`XP.find`). Nothing is lost to a
+cap: the answer lists the ones it took (`accepted.finds`) and the rest go with the next report, and
+every answer carries the player's whole list (`finds`), whose missing ones the page sends again
+(`applyServer`): only those collected in this browser, never one that came from the Worker; the
+achievements answer carries the account's, all its players' together, which the book merges in (so a
+book filled on two devices is whole on both) but which isn't sent again as this player's, or one
+find could be paid on two players of an account. The Worker doesn't check where
+the car was: the stakes are a book, at most 6,800 XP once, and no board.
+
+**The collection book.** **Discoveries** (🔭, beside Achievements under your nickname, `profile.js`,
+with "n / 68" on it), a card's **Collection**, or a world's line in the orrery opens it: a dialog
+with a button a world ("Moon 3 / 21", the one shown pressed), a bar of how many are found, and a
+tile a find. A found one shows its card's facts, its height and the day it was found; one not yet
+found shows its name and region, **Drive to it** (the approach drop-in) and, on the globe, **Show on
+the globe**. Its foot names that world's data, as the card does. Each world's sheet in
+[the orrery](#picking-a-world-the-orrery) says how many are found there ("3 / 21 discovered") with
+the same **Collection** button. The count goes toward the [achievements](#achievements-and-rewards) and each
+first find is worth 100 XP ([How XP is earned](#how-xp-is-earned)).
+
+**Every world's list.** The ground each is driven on, and so the data every card names:
+
+- **The Moon** (21): heights from NASA LRO's laser altimeter (LOLA, a quarter degree, about 7.6 km),
+  colour from LRO's camera (LROC), over the 1,737.4 km sphere. Tranquility Base (Apollo 11, 1969),
+  Hadley Rille (Apollo 15, 1971), Taurus-Littrow valley (Apollo 17, 1972), Lunokhod 1 (Luna 17,
+  1970), Von Kármán crater (Chang'e 4, 2019), Shiv Shakti point (Chandrayaan-3, 2023); the craters
+  Tycho, Copernicus, Aristarchus, Plato, Shackleton's rim, Tsiolkovskiy, Alphonsus, Clavius,
+  Theophilus, Petavius and Schickard; Mons Huygens; Mare Orientale; the Selenean summit (the
+  highest point) and Antoniadi crater (the lowest).
+- **Mars** (20): heights from NASA Mars Global Surveyor's laser altimeter (MOLA, its 1/16° grid
+  resampled to 1/8°, about 7.4 km), colour from the Viking orbiters' mosaic (USGS), over the
+  areoid. Bradbury Landing (Curiosity, 2012), Jezero crater (Perseverance, 2021), Chryse Planitia
+  (Viking 1, 1976), Ares Vallis (Mars Pathfinder, 1997), Meridiani Planum (Opportunity, 2004), the
+  Zhurong site (Tianwen-1, 2021); Olympus Mons and its summit (the highest point), Arsia, Pavonis,
+  Ascraeus and Elysium Mons; Valles Marineris and Noctis Labyrinthus; Hellas and Argyre Planitia;
+  Badwater crater (the lowest point); Gale crater and Mount Sharp; Korolev crater.
+- **Vesta** (13): heights from DLR's model of its shape from NASA Dawn's framing camera (HAMO, about
+  570 m apart), the same camera's pictures, over the Dawn team's 285 × 229 km spheroid.
+  Rheasilvia and its central peak; Veneneia; the Snowman's Marcia, Calpurnia and Minucia; Divalia
+  and Saturnalia Fossae (the troughs); Matronalia Rupes; Vestalia Terra; the craters Cornelia,
+  Numisia and Aconia.
+- **Ceres** (14): heights from DLR's HAMO model from Dawn (about 1 km apart) and Dawn's pictures,
+  over the game's 482 × 446 km spheroid. Occator and its Cerealia Facula and Vinalia Faculae (the
+  bright spots); Ahuna Mons; Kerwan; Yalode, Urvara, Dantu, Haulani, Ernutet, Juling, Kait, Ezinu and
+  Azacca.
+
+Those datasets and their credits are the worlds' own (`worlds.js`, `FIND_DATA` in finds-data.js, the
+About box and the site pages), so a card never names a source the ground isn't made from. To add a
+find: give its place an id in the world's `*-places.js` (it needs one there anyway to be searched
+for), add it to `FINDS` with facts from one of the sources above and each one's `source`, run
+`node scripts/make-finds.mjs`, then `npm run test:drive-finds` (it fails on a fact over 160
+characters or with no source, a landing site with no "What you're looking at" line, two finds on a
+world within 2 km, or a stale height); the achievements' targets follow the list by themselves.
+
+**How it's tested**: `npm run test:drive-finds` (`scripts/test-drive-finds.mjs`, node, on the real
+height.bin files), 26 tests: the facts rule (every find a place on its world, once; every fact short
+with its source; every kind a real one; every landing site's seeing line; none within 2 km of another;
+every world naming its data), the heights (finds-heights.js within 10 m of the grid today, and the
+highest and lowest finds the grid's own highest and lowest ground), the card's words on each world
+(over the sphere, the areoid, the Dawn team's spheroid and the game's, the published figure beside
+the measured one, "… m below" and never a minus sign, every find a whole card), reaching one (150 m in
+a car, 250 m and 2,000 m up in the air, along the frame's step, the 1 km rule), the approach spawn,
+what's kept and sent again, every start spot with a find within 80 km, and the achievements' rules
+(eleven, every target from the list, real ids once, the caps, an account's union).
+`npm run test:drive-finds-ui` (`scripts/test-drive-finds-ui.mjs`, browser, on `TEST_VITE_PORT`, 5583
+if unset), six tests: the Moon's globe with a gold pin for each find in view and none on the Earth;
+a drop-in on Tranquility Base from the search starting about 2.5 km out, facing it; driven in, its
+card (the name, what you're looking at, its height in the map); the book at 1 / 21 and the orrery's
+sheet with the count and the Moon's data; a plane's pass 500 m over one collecting it, one at 2.5 km
+not; and a reload keeping them. The Worker's side is in `npm run test:drive-levels` (the claim, the
+report's rate and day caps, carry-over, XP, 400s, an account's union and its owed achievements, and
+an account merge's union).
+
 ## Driving with others
 
 Other people driving World Drive show up as they drive: their car, in their own ride and Garage
@@ -2561,7 +2971,8 @@ always was.
   bend it was taking. Each wears its driver's look, its underglow too (fading off the ground as
   yours does, by what its car sends). Their flame or boost style, trail, drift smoke and sparks,
   the bursts as their booster lights and runs dry and as a drift charges and pays out
-  ([below](#how-boosting-and-driving-look)), overdrive's boom and streaks, the hovercraft's spray
+  ([below](#how-boosting-and-driving-look)), overdrive's boom (in their ride's colour) and streaks
+  and their flame's shock diamonds, the hovercraft's spray
   (and a sinking car's splash, from a page loaded while water was still a splash: [water](#water))
   show for the nearest 6 within
   300 m, and their wheels turn. A name tag hangs over each (hidden beyond 400 m), with a 📣 when they
@@ -3271,6 +3682,7 @@ the Worker both import, so the page shows what the Worker counts.
 | Each minute driving with others in your room (someone else there, driving on the same world: not on the globe, nor a party friend on another world) | 6 |
 | The first drive in an area (live-protocol.js's `cellOf`, about 11 km across), once you've driven a km in it | 100 |
 | Each start spot, the first time (driving within 300 m of it, 100 m into the drive) | 250 |
+| A [Discovery](#discoveries) collected (the first time) | 100 |
 | The day's first drive (UTC days), once you've driven 250 m | 100, and 25 more for each day in a row before it, up to 200 from the fifth |
 | A landed trick run | half the square root of the run's points (10,000 points is 50 XP, 40,000 is 100), 300 at most a run |
 | With the Supporter Pass | everything ×1.5 |
@@ -3387,7 +3799,7 @@ first and the fast ones later. They're `ride` rewards in `REWARDS` (`rideLevel`,
 ### What the Supporter Pass gives
 
 Every Garage look at once (the 41 on the track and the 47 that are the pass's alone), the six cars
-on the track and its own eleven rides, **+50% XP**; and still a ⭐ and 30 drives a day
+on the track and its own eleven rides, **+50% XP**; and still a ⭐ and 30 Earth drives a day
 ([below](#supporter-pass-buying-it)). Levels' own rewards (titles, badges, the level-only colours)
 come with levels for everyone, supporters too. The ×1.5 is the Worker's: it looks up the pass of the
 account the player is linked to, never anything the page says.
@@ -3643,8 +4055,8 @@ only when the page is on `localhost` or `127.0.0.1` (`testPass` decides), never 
 
 **Locked things** show a small **⭐ Supporter Pass** badge (in the Garage, a ⭐ on each locked choice
 under one line saying what the stars mean), and picking one opens the pass's sheet
-instead (`src/drive-app/pass.js`): what the pass is and what comes with it (seventeen more rides,
-thirteen cars, six of which levels bring too, and four built in code, each with its picture in two
+instead (`src/drive-app/pass.js`): what the pass is and what comes with it (twenty more rides,
+thirteen cars, six of which levels bring too, and seven built in code, each with its picture in two
 rows; every Garage look at once, which levels otherwise unlock some of over time; +50% XP; a ⭐ by
 your name on the leaderboard, 30 Earth drives a day instead of 1) and its buy
 area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
@@ -3656,9 +4068,9 @@ sheet only opens when something locked, or one of those buttons, is picked.
 The leaderboard takes runs in the pass's rides and cars as in the free ones (`PASS_RIDES` and
 `DRIVE_CARS` in `src/drive-app/catalog.js`, which `VEHICLES` in `worker/drive/scores.js` reads).
 
-### The four rides
+### The seven rides
 
-Built in code like the kart (`src/drive-app/rides/`), each 3,600 to 7,800 triangles, facing -Z on
+Built in code like the kart (`src/drive-app/rides/`), each 3,600 to 10,600 triangles, facing -Z on
 y = 0 at its real size, with its own handling (`handling` in its tuning, which `drive.js` reads in
 place of its constants: see `HANDLING` there; vehicles without it handle as before):
 
@@ -3668,10 +4080,22 @@ place of its constants: see `HANDLING` there; vehicles without it handle as befo
 | Monster truck | 5.4 × 3.5 m, 3.4 m tall | 125 km/h | Thrown about twice as high by the same hit (gravity at 0.75 in the air, launches × 1.3), quicker to flip than its size would make it (as quick as the kart) and landing up to 55° off upright, bouncing on soft springs; its bumpers are 1.5 m up, so it drives up over cars, barriers and kerbs |
 | City bus | 12 × 2.55 m, 3.2 m tall | 90 km/h | Slow away (22 km/h after 3 s), rolls on and on off the gas, turns wide; barely thrown up by a crash, slow to turn in the air, and squashes and shakes the view the most |
 | Hovercraft | 4.2 × 2.1 m | 135 km/h | No wheels: it floats 16 cm up on its skirt, over [water](#water) too (which every ride drives on), throwing up spray there; slides wide through every turn (about 50° at 50 km/h, under 10° for the others), glides on and stops slowly, and bounces on its cushion |
+| Lunar rover | 3.6 × 2.4 m, 2.1 m tall | 75 km/h | Made for [the Moon](#the-moon) but drives anywhere: slow, floaty (gravity at 0.55 in the air, launches × 1.25), a long ride off every ramp and a soft landing on its struts |
+| Flying saucer | 4.8 m across, 2.0 m tall | 170 km/h | No wheels: hovers 50 cm up, over water too (spray there, as the hovercraft); slides through turns, turns at much the same rate whatever its speed, glides on, floats down |
+| Rocket dragster | 7.2 × 2.2 m | 215 km/h | The quickest away of everything and as fast as the hypercar, but turns like a train (32°/s at speed) with a racer's lock; stops hard, as if its parachute were out |
 
 Wheels spin and front wheels steer (the monster truck steers all four, the back ones the other way);
 the monster truck's body rides on springs that sink and rebound as it lands and lean it out of
 turns; the hovercraft bobs, its fan spins up with the gas and its rudders follow the steering.
+The lunar rover's six wheels ride up and down over the bumps each on its own strut, hang in the
+air and squash as it lands; its front and back pairs steer opposite ways, its dish antenna turns
+slowly to keep its fix, its camera mast pans where it steers and its beacon double-blinks. The
+flying saucer bobs and banks into turns, dipping its nose as it speeds up; its ring of lights turns
+with the speed and chases round faster with the gas, and while it dawdles a tractor beam shimmers
+down to the ground, fading out at speed and in the air. The rocket dragster's flame roars out
+long and bright with the gas (three cones and shock diamonds, drawn added to what's behind) and
+drops back to a flicker without it, its nozzle glowing hot and cooling, and its nose lifts as it
+launches. These moving parts play on the Garage's turntable too.
 Nothing turns in the air faster than the kart, whatever its handling: the leaderboard's limits
 (`SCORING` in `worker/drive/scores.js`) take the kart's rate as the most there is. Each
 has a driver: behind tinted glass in the coupe and the truck, at the front of the bus (with its
@@ -3963,27 +4387,70 @@ your horn, theirs in theirs.
 | Style | | As it lights ([more](#how-boosting-and-driving-look)) |
 | --- | --- | --- |
 | Classic flame | The flame as it always was, in its colour | The flame popping, a flash and a ring in its glow's colour |
-| Bubbles | Soap bubbles floating up and wobbling away, each popping at the end | A froth of big bubbles blown out round the exhaust |
-| Confetti | Paper rectangles in party colours, tumbling over and over as they flutter down behind | A party popper: a cone of confetti shot up and out |
-| Plasma | A blue-white electric flame crackling with little arcs, throwing blue sparks | Arcs crackling out all round the exhaust at once, and a spray of sparks |
-| Lightning | Forked bolts crackling back and out from the exhaust, struck again every few hundredths of a second | A strike: four long forks thrown out behind and to both sides, each with a flash |
-| Glitter | A stream of tiny twinkling stars in white, gold, pink, sky and lilac | A puff of stars bursting out every way |
-| Comet | A throbbing white-blue head and a long glowing tail that narrows and turns blue behind it | Its head flaring up, and a shower of specks |
-| Neon rings | Glowing hoops thrown out flat across the way it's going, so the camera looks through them | Three hoops at once, one inside the next |
-| Fireworks | Little rockets bursting over it into balls of sparks in one colour, which fall and twinkle out | A starburst at the exhaust and a salvo of three rockets bursting just over it |
-| Hearts | Hearts rising and swaying away, beating as they go | A ring of hearts thrown out round the exhaust, then rising |
-| Pixel | Chunky squares in a bright palette on a grid in the world, shrinking in steps and blinking out | An old game's explosion: pixels thrown out eight ways in rings, white-hot inside |
-| Ink | Blobs of bright paint flung out behind, leaving splats on the road for five seconds, drawn out longer the faster it goes | A big splash of blobs in a fan, and a few splats on the road at once |
-| Music notes | Eighth notes and beamed pairs in bright colours, rising and swaying away, all bobbing to one beat (two a second) | A chord: a ring of notes thrown out round the exhaust |
-| Cherry blossom | Pink petals fluttering out behind, tumbling over and over as they drift down, and now and then a whole flower | A gust of blossom swirling out round the exhaust |
-| Afterburner | A jet's long blue cone with a row of white shock diamonds burning in it, throbbing, a rosy glow at its tail and blue sparks streaming off it | A shock ring blown out behind, diamonds shot back down the cone, and a spray of sparks |
-| Frost | Snowflakes turning as they drift, and glints of ice, out of a cold mist | Shards of ice thrown out all round the exhaust, a cold puff and a flurry of snow |
-| Galaxy | A violet flame streaming twinkling stars through drifting pink and blue clouds of nebula | A little spiral galaxy, two arms of stars swirling out round a bright core |
-| Dragon fire | A deep red flame roaring out tongues of fire that cool from orange to a deep red, with glowing embers floating up and curls of dark smoke | A roar: a fireball of tongues, a shower of embers and a ring of smoke |
-| Butterflies | Butterflies in bright colours fluttering up and away, wings beating, each wandering its own way | A flutter of butterflies bursting out every way |
-| Spooky | Glowing wisps curling up out of a ghostly green flame, and now and then a little ghost floating off behind, bobbing as it goes | "Boo!": a ring of ghosts popping out round the exhaust, and a puff of wisps |
-| Neon laser | A laser show: beams in cyan, pink, lime and blue fanning up and out behind and sweeping, with bolts of light shot along them | A starburst of beams all round at once, and a hoop of light |
-| Slime | Blobs of green goo flung out behind, wobbling as they fly, bubbles that swell and pop, and puddles on the road for a couple of seconds | A splurt of blobs in a fan, a froth of bubbles and a puddle or two |
+| Bubbles | Soap bubbles blown out of a wand at the exhaust (its ring slowly changing colour, the next bubble seen swelling in it), floating up and wobbling away, each popping into a ring and, a big one, a few droplets | A froth of big bubbles blown out round the exhaust |
+| Confetti | Paper rectangles in party colours shot out of two cannons at the corners of its back in a V, tumbling over and over as they flutter down behind, with streamers curling after them | A party popper: a cone of confetti shot up and out |
+| Plasma | A blue-white electric flame crackling with little arcs, pinched by magnetic rings running back down it, throwing blue sparks drawn along the way they fly | Arcs crackling out all round the exhaust at once, and a spray of sparks |
+| Lightning | Forked bolts crackling back and out from the exhaust, struck again every few hundredths of a second, each ending in a hot point of light; every third grounds on the road behind with a scorch | A strike: four long forks thrown out behind and to both sides, each with a flash |
+| Glitter | A corkscrew of twinkling stars in white, gold, pink, sky and lilac twisting back from the exhaust in a scatter of more, every seventh a big one that catches the light in a cross glint | A puff of stars bursting out every way |
+| Comet | A small bright head in a faint blue coma, a straight blue ion tail, and a long dust tail that curves away, narrowing and turning blue behind it | Its head flaring up, and a shower of specks |
+| Neon rings | Glowing double hoops (a neon tube's two lines) thrown out in threes to a beat, flat across the way it's going, so the camera looks through them | Three hoops at once, one inside the next |
+| Fireworks | Little rockets on short arcs, trailing sparks, bursting just over and behind it as peonies, rings or drooping golden willows, in colours that show in daylight | A starburst at the exhaust and a salvo of three rockets bursting just over it |
+| Hearts | Big and little hearts streaming out behind, swaying, all beating together, lub-dub | A ring of hearts thrown out round the exhaust, then rising |
+| Pixel | Chunky squares in three lanes on a grid that moves with it, white-hot at the exhaust and cooling in steps through yellow, orange and red to purple, shrinking in steps and blinking out | An old game's explosion: pixels thrown out eight ways in rings, white-hot inside |
+| Ink | Strings of bright paint flung out behind, splatting where they land on the road and staying four or five seconds, drawn out longer the faster it goes | A big splash of blobs in a fan, and a few splats on the road at once |
+| Music notes | Eighth notes and beamed pairs in bright colours rising and swaying away off a five-line staff that ripples out behind it, all bobbing to one beat (two a second) | A chord: a ring of notes thrown out round the exhaust |
+| Cherry blossom | Pink petals whirling out behind in a soft pink haze, tumbling over and over as they drift down, and now and then a whole flower, out of a pink glow at the exhaust | A gust of blossom swirling out round the exhaust |
+| Afterburner | A jet's long blue cone with a row of white shock diamonds burning in it, each with its Mach disk (a ring across the cone), throbbing, a rosy glow at its tip and blue sparks streaming off it | A shock ring blown out behind, diamonds shot back down the cone, and a spray of sparks |
+| Frost | Snowflakes turning as they drift, and glints of ice, out of a cold mist under a crown of ice spinning across the exhaust, frosting the road behind it | Shards of ice thrown out all round the exhaust, a cold puff and a flurry of snow |
+| Galaxy | A violet flame streaming a two-armed spiral of twinkling stars, some glinting, through drifting violet, pink and blue clouds of nebula over a strip of dark night sky | A little spiral galaxy, two arms of stars swirling out round a bright core |
+| Dragon fire | A deep red flame (drawn over what's behind it, as the red flame is) roaring in breaths, ragged tongues of fire that cool from orange to a deep red, embers streaking up and curls of dark smoke | A roar: a fireball of tongues, a shower of embers and a ring of smoke |
+| Butterflies | Clutches of butterflies in neighbouring colours fluttering up and away, keeping up with it, wings beating, each wandering its own way with a gold sparkle | A flutter of butterflies bursting out every way |
+| Spooky | Glowing wisps streaming and corkscrewing out of a ghostly green flame, and little ghosts floating off behind, creeping after it, bobbing as they go | "Boo!": a ring of ghosts popping out round the exhaust, and a puff of wisps |
+| Neon laser | A laser show: beams in cyan, pink, lime and blue fanning up and out behind and sweeping, a flare at each one's end, with bolts of light shot along them and a scan line swept across the road behind | A starburst of beams all round at once, and a hoop of light |
+| Slime | Blobs of green goo out of a gooey jet, wobbling as they fly and splatting where they land, bubbles that swell and pop, and puddles on the road for a couple of seconds | A splurt of blobs in a fan, a froth of bubbles and a puddle or two |
+
+In **overdrive** each style has a form of its own, raising its own density or brightness so it reads
+through the shared streaks of air, and **let go** each has a moment of its own as its stream dies
+down with the flame (run dry, a sputter):
+
+| Style | In overdrive | Let go (run dry) |
+| --- | --- | --- |
+| Bubbles | A fizzy jet of little bubbles, and every 0.4 s a big one riding along with it | One last big bubble (one swelling at the exhaust and popping at once) |
+| Confetti | A ticker-tape parade: thicker, more streamers, and foil flashing as it turns to the light | A last little popper and two streamers (one limp streamer flopping out) |
+| Plasma | A Tesla cage: arcs reaching in to the flame off the corners of its back; the pinches faster and tighter | A ball of lightning hanging at the exhaust, shrinking, then popping with a few arcs (and a whiff of ozone) |
+| Lightning | A steady return stroke straight back from it, and the forks crawling forward round its flanks | A last strike straight back with a flash (its last forks dulling as they sputter) |
+| Glitter | A tighter, faster white-hot spiral of diamond dust, with gems in it | The glitter in the air slows and drifts down (the shaker gives three pinches, each smaller) |
+| Comet | Perihelion: both tails longer, the ion tail paler, and a flare across the head | It breaks up, twinkling fragments flung off its head |
+| Neon rings | A warp tunnel of rings and shock waves walking through the hues | The last three hoops implode (one big faint ring) |
+| Fireworks | A grand finale: rockets in pairs, every burst a ring with a flare | A last salvo of three (two duds, fizzling out in dim embers) |
+| Hearts | Two spiralling strands, and on each beat a ring of heart blown out round it | A blown kiss: the hearts float up and away (heartbreak: three dull hearts drooping out of it) |
+| Pixel | A rainbow band of scan lines, white pixels flickering in it | The trail powers down, every pixel shrinking a step at once (game over: grey pixels falling, blinking) |
+| Ink | Twin pressure-washer jets, painting two lanes in two colours | A drip and a last blot on the road (half grey: the paint's run out) |
+| Music notes | Double time, chords on the beat and a speaker's thump, the staff brighter | A fermata: a double bar line, the notes holding (a sour note: three grey notes drooping) |
+| Cherry blossom | A storm of blossom off the cone of the shock as well, the haze deeper pink | Petals settle round it and on the road (a wilting flower dropping out) |
+| Afterburner | Reheat: up to seven diamonds, further apart, the first pure white and the last violet, a violet tail and a flare across the nozzle | The diamonds collapse tail first (a compressor stall: two bangs and a puff) |
+| Frost | A blizzard: driven snow streaking back, a bigger crown spinning faster | Every flake freezes where it is, hangs a moment and shatters into glints (a last cold breath) |
+| Galaxy | Warp: the stars stretch into hyperspace lines round a turning accretion disk and a white core | The galaxy drifts on (a dying star: a red giant shrinking in a nova's shell) |
+| Dragon fire | Blue-hot breath, a blue base to the flame and volleys of fireballs | A snort of smoke from both nostrils (a choke: three black puffs) |
+| Butterflies | A migration: V formations of monarchs, banked, beating quicker | They scatter (three tired ones, wings shut, spiralling down) |
+| Spooky | A vortex of spirits circling the exhaust, more wisps, and the shock diamonds burning green | Every ghost vanishes with a poof (one big ghost rising out of it: it gave up the ghost) |
+| Neon laser | The beams close into a turning tunnel, longer and thicker, shot through with hoops | The beams retract into the exhaust (run dry, they drop out one by one, each with a ring) |
+| Slime | Rooster tails of it thrown up off the rear wheels, and more puddles | It drips for a moment (a sploot: a big blob, bubbles popping and a puddle) |
+
+Each style's stream runs at its `flow( frame )`: what the booster asks while it's held, and once
+it's let go a little less than the flame's own dying down (`frame.lit`, drive-fx.js's
+`FLAME_FALL`), so a stream thins out over about a quarter of a second with the flame rather than
+stopping in one frame, and run dry it sputters on the flame's own three coughs. The exhaust cools
+in the style's own colours where it has them (frost to ice blue, petals to pink, notes to cream,
+the comet to blue, bubbles to white, the galaxy to violet, spooky to green, slime to lime,
+butterflies to gold; `ember` and `ash`, see drive-bursts.js). For a visitor asking for less motion
+the styles have no new flare, starburst, strobe or blink: a bolt only shimmers (never under 0.6 of
+its brightness) rather than flickering off, the throbs are steady, and a beat or a spin is slower.
+On a phone each steady stream is thinner (its rates times the effects' `detail`). With no air
+(World Drive's Moon) every style's particles fall at the Moon's gravity, nothing floats up (bubbles,
+hearts, notes, spooky's wisps), there's no smoke or mist (dragon fire, frost, cherry blossom's haze,
+the afterburner's stall, plasma's ozone), fireworks burst in perfect widening spheres, butterflies
+fall in long arcs, and the afterburner's plume is a widening glow with no diamonds.
 
 The flame colour was the Garage's only boost choice before the styles. It's now the classic flame's
 colour, shown under it, so a look saved before (a flame and no style) is the classic flame in the
@@ -4002,20 +4469,26 @@ never left out of view while any of it is on screen), so the three are as far fr
 any side, and three.js draws them in the order they were made: the cone, the core over it and the
 glow over both.
 
-Each style is one batch of quads drawn from one picture sheet, in one draw call (dragon fire and
-spooky two: their glowing parts are added to what's behind, their tongues of fire, smoke and ghosts
-drawn over it, so the fire stays red and the ghosts white against a bright sky): billboards, strips
+Each style is one batch of quads drawn from one picture sheet, in one draw call (dragon fire,
+spooky, fireworks and the galaxy two: their glowing parts are added to what's behind, their tongues
+of fire, smoke, ghosts, fireworks' bursting stars and the galaxy's strip of night sky drawn over
+it, so the fire stays red, the ghosts white, the stars in their colours and the night dark against
+a bright sky): billboards, strips
 along a line (a bolt, a comet's tail, a laser's beam, a tongue of fire) or quads flat across a
 normal (a ring, a splat on the road). The sheet is drawn once on a canvas, 6 by 6 pictures of
 128 px: soft glows, stars, a heart, pixels, rings, bubbles, splats, sparks, a shock diamond, a
 snowflake, notes, a petal and a blossom, a ghost, a shard of ice, a puff of cloud, a butterfly, a
 wisp and a beam. A style has a fixed number of particles, made once with its buffers (its budget,
-40 to 280; the oldest is reused when they're all in use), and each frame only the numbers in its
+70 to 320, and up to 55 quads put down each frame; the oldest is reused when they're all in use), and each frame only the numbers in its
 buffers change, so
 nothing is made while boosting. Most of what's thrown out is carried along at 85 to 97 % of the
 vehicle's speed (ink and a comet's tail less), with the air slowing only its own motion, so at
 150 km/h it trails a few metres behind, between the vehicle and the chase camera, rather than being left on the road, which at that
-speed is behind the camera in a tenth of a second. The supersonic effects are one more batch (120).
+speed is behind the camera in a tenth of a second. Nothing is carried on faster than the vehicle
+is going now, so as it slows (out of overdrive, or braking) a trail never catches it up and flies
+through the chase camera, and any quad within about 2 m of the camera fades out rather than filling
+the view. The supersonic effects are one more batch (136
+particles, and 8 quads for overdrive's shock diamonds, put down each frame).
 On the test pad (software rendering in the test's browser), a minute of boosting each made nothing
 new (no geometries, textures, programs, objects or materials) and kept within its budget (at most
 205 alive, glitter's); the driving and its effects took 0.1 to 0.2 ms a frame with any style, and
@@ -4083,7 +4556,13 @@ turning in the air faster than the kart, each ride going supersonic, the boost s
 (five free, the rest opening the sheet, each with its picture and saying what unlocks it: "Pass", or
 "Lv 12 · or Pass" for those on the track), a look saved before the styles keeping its flame's colour,
 every style drawn at 150 km/h (with a picture of each), making nothing new in a minute of boosting
-and timed, every flame colour drawn in its own colours and every trail drawn (seen from behind and
+and timed, each style still drawn 50 ms after it's let go, coughing out run dry within its budget,
+having an overdrive of its own (pictures or a count it doesn't have short of it) and making nothing
+new through it all, and on the Moon every style's particles falling at its gravity with no smoke
+or mist from those that have it and no bubble floating up, for a visitor asking for less motion no
+flare or starburst drawn boosting, in overdrive, let go or run dry and its bolts never dimmed under
+0.6 of their brightness (flickering down to a quarter otherwise), and on a phone no more alive
+after two seconds of boosting, every flame colour drawn in its own colours and every trail drawn (seen from behind and
 off to the side, a good deal more than the flame alone), the ribbons drawn out on the turntable
 (more than 3 m behind a 2 m ride in three quarters of a second) and as they were standing still
 anywhere else and moving, and the Garage (375 px across, its row of
@@ -4112,25 +4591,51 @@ others keep their paint, with only an underglow, boost, trail and horn to pick.
 
 ## Supporter Pass (buying it)
 
-The pass is a **subscription** (`SUPPORTER_PRICE`, CA$1.99/month as set), through a Stripe Payment
-Link in World Drive's own Stripe account, and lasts while the subscription is active. Passes bought
-before it was a subscription (one payment each, no subscription id) are **legacy passes, kept for
-good**. It comes with what's [above](#supporter-pass-content) (seven cars of its
-own, the six levels bring, the four rides and every Garage look at once), **+50% XP** for
-[levels](#levels), a **⭐ by your name on the leaderboard**, and **30 Earth drives a day** instead of 1.
+The pass is bought three ways, each through a Stripe Payment Link of its own in World Drive's own
+Stripe account: **monthly** (`SUPPORTER_MONTHLY_PRICE`, CA$1.99/month, a subscription kept while it
+runs: the first one was bought on 20 November 2026, so it stays and leads), **once and kept for
+good** (`SUPPORTER_PRICE`, CA$19.99), or for **24 hours** (a **day pass**, `DAY_PASS_PRICE`,
+CA$0.99: the same pass for a day, then it simply ends). One-time CA$4.99 passes from before keep
+working for good. It comes with what's [above](#supporter-pass-content) (seven cars of its own, the
+six levels bring, the seven rides and every Garage look at once), **+50% XP** for [levels](#levels),
+a **⭐ by your name on the leaderboard**, and **30 Earth drives a day** instead of 1, which the day's
+cap for everyone never turns away: they've paid for them.
+
+**Where it's offered.** On the pass's sheet, from anything locked, as before; and above all where
+someone wants more of the Earth: a visit over the Earth's caps (its address's one free drive, or the
+day's 300 for everyone) opens on the Moon with a toast that now has **Get more Earth drives**, and
+picking the Earth there shows the used-up notice with the same button first (`boot.js`'s `usedUp`,
+`screens.js`'s `notice` with `onPass`). Both open the pass's sheet, counted as `pass:pitch` in the
+play stats. About 125 visits a day were reaching that cap when this was added.
+
+**Buying from anywhere.** The links are in CAD and take cards and wallets from any country (Stripe
+shows the methods that suit the buyer's country; Managed Payments is on, so Stripe works out and
+collects each country's tax). A buyer outside Canada is charged in CAD, which their bank converts;
+Stripe's **Adaptive Pricing** (Dashboard → Settings → Payments) can show them the price in their own
+currency.
 A pass is an account's (Google's sign-in, or a [username and password](#username-and-password-accounts)),
 so it's yours in any browser you sign in on: signing in is only ever for the pass and your level
 and times on every device, and driving and the leaderboard never need it.
 
 ### What people see
 
-- **The pass's sheet** (any locked ride or Garage choice, or **⭐ Supporter Pass** under the rides):
-  signed out, Google's **Sign in with Google** button ("Sign in to buy, so the pass is yours in any
-  browser. Bought it already? Signing in brings it back."). Signed in, **Buy for CA$4.99**, with
-  "Signed in as ... · Restore purchases · Sign out" under it.
-- **Buy** opens the Payment Link in a new tab, with `client_reference_id` (the account's id, which
-  Stripe hands back with the payment, so the Worker knows whose it is) and `prefilled_email` (the
-  Google address). The sheet says to finish paying there, with **Check again**.
+- **The pass's sheet** (any locked ride or Garage choice, **⭐ Supporter Pass** under the rides, or
+  **Get more Earth drives**): the three ways to buy it for everyone, signed in or not, **24 hours:
+  CA$0.99**, **Monthly: CA$1.99/month** (the main button) and **For good: CA$19.99**, and "Monthly is
+  a subscription: cancel any time. For good and 24 hours are paid once. Paid securely with Stripe,
+  in any country." Signed out, the prices and "Have the pass already? Sign in"; picking one shows
+  Google's **Sign in with Google** button and, with usernames on, "Or use a username and password"
+  under them, and says "Sign in or make a free account first, so the pass is yours
+  on any device." (`pass:ask_signin`), and once signed in that one's button stands out ("Signed in.
+  Tap For good to pay."): a new tab opened by signing in rather than by a tap would be blocked.
+  Signed in, "Signed in as ... · Restore purchases · Sign out" under them.
+- **Buying** opens that pass's Payment Link in a new tab (`pass:buy`, `pass:buy_month`, `pass:buy_day`), with
+  `client_reference_id` (the account's id, which Stripe hands back with the payment, so the Worker
+  knows whose it is) and `prefilled_email` (the Google address, or a username's [email for
+  receipts](#username-and-password-accounts)). The sheet says to finish paying there, with **Check
+  again**.
+- **With a day pass**, the sheet says "Your 24-hour pass has 14 h left" and offers **Keep it for
+  good: CA$19.99** and **Monthly** (not another day pass while one runs).
 - **Back from Stripe.** Stripe sends the buyer to `https://worlddrive.app/?supporter=thanks`: the page
   tidies the address, asks the Worker (again every 3 s for half a minute, in case Stripe's webhook is
   a moment behind) and says **Thanks! Supporter Pass unlocked**. Going back to the first tab instead,
@@ -4213,14 +4718,22 @@ and times on every device, and driving and the leaderboard never need it.
   the pass; anything else (`canceled`, `unpaid`, `incomplete_expired`, `paused`) takes it away until
   it's active again. A subscription's renewals are charged on its invoices, not its checkout, so to
   refund a subscriber, cancel the subscription in Stripe (that takes the pass away), then refund.
+- **Day passes** (`0012_day_pass.sql`): a checkout through `DAY_PASS_PAYMENT_LINK_ID`'s link is kept
+  with `pass = 'day'`, and gives the pass for 24 hours from when it was recorded (`DAY_PASS_MS`); any
+  other (`pass` NULL) is a pass for good. The day pass's link is told apart only by its id, so the
+  page is only offered it with both the link and its id set. A day pass bought while one runs starts
+  its own 24 hours (they don't add up); the sheet doesn't offer one then.
 - **Who has the pass** (`hasPass`): an account with a purchase that isn't refunded (and, for a
-  subscription, still active), its own or one paid with its email by someone not signed in, or whose
-  email is in `SUPPORTER_EMAILS`. `/api/me` also says `subscribed: true` when it's a running
+  subscription, still active; for a day pass, under 24 hours old), its own or one paid with its
+  email by someone not signed in, or whose email is in `SUPPORTER_EMAILS`. The time is the request's,
+  bound with `SUPPORTER_EMAILS` as one JSON parameter (`supporterEmails( env, now )`). `/api/me` says
+  `dayPassUntil` (ms) when all the account has is a day pass. `/api/me` also says `subscribed: true` when it's a running
   subscription's, and the sheet then links to `SUPPORTER_MANAGE_LINK` (**Manage your subscription**). It's looked up
   each time, never copied, so a refund or a change to `SUPPORTER_EMAILS` counts straight away.
-- **30 drives a day**: `/api/visit` with a supporter's session counts the visit against the account
-  (hashed with the day's salt, like an address) with `PER_VISITOR_DAILY_SUPPORTER` (30), not against
-  the address. It still counts towards `DAILY_VISITS` for everyone. If the database can't be asked
+- **30 drives a day**: `/api/visit` with a supporter's session (a day pass's too) counts the visit
+  against the account (hashed with the day's salt, like an address) with
+  `PER_VISITOR_DAILY_SUPPORTER` (30), not against the address, and `DAILY_VISITS` never turns it
+  away (it still counts towards it for everyone else). If the database can't be asked
   just then, the visit goes ahead as anyone's.
 - **The ⭐**: leaderboard rows (and your own row) have `supporter: true` for a player linked to a
   supporter's account, looked up as the board is made (one look in each index per row); boards are
@@ -4234,13 +4747,18 @@ and times on every device, and driving and the leaderboard never need it.
 | Setting | Where | What it is |
 | --- | --- | --- |
 | `GOOGLE_CLIENT_ID` | `vars` | The OAuth web client's id (public). Empty: no signing in, no buying, and the sheet says "Coming soon" |
-| `SUPPORTER_PAYMENT_LINK` | `vars` | The Payment Link, `https://buy.stripe.com/00weVc36c5rVaPE7F4frW01` (live, public) |
-| `SUPPORTER_PRICE` | `vars` | The price as the page shows it: `CA$1.99/month` |
+| `SUPPORTER_PAYMENT_LINK` | `vars` | The lifetime pass's Payment Link, `https://buy.stripe.com/aFa8wOgX2cUn1f4aRgfrW04` (live, public) |
+| `SUPPORTER_PRICE` | `vars` | Its price as the page shows it: `CA$19.99` |
+| `SUPPORTER_MONTHLY_PAYMENT_LINK` | `vars` | The subscription's Payment Link, `https://buy.stripe.com/00weVc36c5rVaPE7F4frW01` (live, public) |
+| `SUPPORTER_MONTHLY_PRICE` | `vars` | Its price as the page shows it: `CA$1.99/month` |
+| `DAY_PASS_PAYMENT_LINK` | `vars` | The 24-hour pass's Payment Link, `https://buy.stripe.com/28E14mgX21bFf5U1gGfrW03` (live, public) |
+| `DAY_PASS_PAYMENT_LINK_ID` | `vars` | Its `plink_...` id, `plink_1UdfbbCEvam6zTiEHMlUr66T`: how a checkout is known to be a day pass. Without it the day pass isn't offered |
+| `DAY_PASS_PRICE` | `vars` | Its price as the page shows it: `CA$0.99` |
 | `SUPPORTER_MANAGE_LINK` | `vars` or dashboard text, optional | Stripe's customer portal login link, `https://billing.stripe.com/p/login/...`: where subscribers cancel or change their card |
-| `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's Earth drives a day (30) |
+| `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's Earth drives a day, a day pass's too (30) |
 | `STRIPE_WEBHOOK_SECRET` | secret | The webhook endpoint's signing secret, `whsec_...`: the live endpoint's while the link is live |
 | `SUPPORTER_EMAILS` | secret, optional | Comma-separated: people who have the pass without paying (you, testers) |
-| `SUPPORTER_PAYMENT_LINK_ID` | dashboard text, optional (recommended) | The link's `plink_...` id: only its checkouts count |
+| `SUPPORTER_PAYMENT_LINK_ID` | `vars`, optional (recommended) | The links' `plink_...` ids, comma-separated: only their checkouts (and the day pass's) count. Set to the lifetime link and the monthly one |
 
 Buying is on only when `GOOGLE_CLIENT_ID`, the link (an `https://` address) and a `whsec_` secret
 are all set, and `SUPPORTER_PAYMENT_LINK_ID`, if set, is a `plink_` id. Anything else leaves it off,
@@ -4309,6 +4827,25 @@ offers buying just then.
    dashboard, the new link's `plink_...` there. Commit and push: the deploy applies
    `0010_supporter_subscriptions.sql` first.
 
+### Monthly, lifetime and the day pass side by side
+
+What was done in November 2026, for changing prices again the same way:
+
+1. **Stripe** (live): the monthly subscription's link as it was; a product **Supporter Pass
+   (lifetime)** at CA$19.99 and **24-hour pass** at CA$0.99, one-time prices, tax code
+   `txcd_10201004` as the pass had, each with a Payment Link whose **After payment** redirects to
+   `https://worlddrive.app/?supporter=thanks`, Managed Payments and automatic tax on. (A CA$9.99
+   lifetime link made first, never bought through, is deactivated.)
+2. **`wrangler.drive.jsonc`**: `SUPPORTER_PAYMENT_LINK` and `SUPPORTER_PRICE` (lifetime),
+   `SUPPORTER_MONTHLY_PAYMENT_LINK` and `SUPPORTER_MONTHLY_PRICE`, the day pass's link, id and price
+   in `DAY_PASS_PAYMENT_LINK`, `DAY_PASS_PAYMENT_LINK_ID` and `DAY_PASS_PRICE`,
+   `SUPPORTER_PAYMENT_LINK_ID` listing the lifetime and monthly links, and
+   `PER_VISITOR_DAILY_SUPPORTER` 30. The webhook needs nothing new. The deploy applies
+   `0012_day_pass.sql` and `0013_contact_email.sql` first.
+
+To change a price, make a new price and Payment Link in Stripe, and put the link (and, for the day
+pass, its id) and the price as it should read in the vars above.
+
 ### Giving and taking away a pass by hand
 
 In the D1 console (Storage & Databases → D1 → **world-drive** → **Console**; times are milliseconds
@@ -4370,9 +4907,14 @@ either signs in to the one account. Driving and the leaderboard still never need
   signing in) the line names a Google account by its email, since that's whose the purchase is, and
   the pause menu by its name; an account with no Google account by its username.
 - **Creating an account**: Username ("3 to 20 letters, digits, _ or -. Only you see it: the boards
-  show your nickname.") and Password ("At least 8 characters. A few words together make a good
-  one."), then, in a box: "There's no email here, so a forgotten password can't be recovered,
-  unless you also link Google. Keep it in a password manager." The rules are checked in the page
+  show your nickname."), Password ("At least 8 characters. A few words together make a good
+  one.") and **Email (optional)** ("For your receipts if you buy the pass. Never shown, never used
+  for anything else."), then, in a box: "The email is only for receipts: nothing is sent to it, so a
+  forgotten password can't be recovered, unless you also link Google. Keep it in a password
+  manager." The email (`contact_email`, `0013_contact_email.sql`) is never checked, so it's kept
+  apart from a Google account's `email` and only ever put on the Stripe checkout
+  (`prefilled_email`): it never makes a purchase the account's. Signed in without Google, the panel
+  has **Email for receipts** to add, change or clear it (`POST /api/account/email`). The rules are checked in the page
   before anything is sent (the same code as the Worker's, `password-rules.js`), then the robot
   check (Turnstile, usually without a click), then the account is made and signed in.
 - **Signing in**: a wrong password and a username nobody has both say "Wrong username or password."
@@ -4747,50 +5289,115 @@ accounts by kind. Pictures: `account-1-create-desktop` to `account-11-sign-out-f
 ## What a visit costs, and how it's capped
 
 Google bills the Map Tiles API by the **3D tiles session**: each page that loads the root tileset
-starts one. World Drive is built so that one page load is one session, however much you fly about:
+starts one. World Drive is built so that a page starts one only when it drives on the Earth, and
+never more than one, however much you fly about:
 
-- The root tileset is requested once per page load. **Drive here** doesn't load a new world: it moves
+- **The globe is our own Earth.** The globe a place is picked on is an ellipsoid the Earth's size with
+  NASA's Blue Marble on it (`createTestGlobe` in `src/drive-app/test-globe.js`, its picture
+  `drive/public/earth/colour.webp`, 4096 × 2048, 527 KB, public domain: `npm run make-earth` makes it,
+  `scripts/make-earth.mjs`, from the copy in the three-globe package on npm, the one the orrery's small
+  Earth comes from), which costs nothing to show. Its credit, "Earth: NASA Blue Marble", is where
+  Google's would be (`#earth-credit`) while it's shown. Everything the globe does is done on it: a tap
+  pins, search, the start spots and recent places, **Driving now** and its dots, a party's **Go to**
+  and **Join**, the orrery. A place picked is flown to from 1,200 km up (`PICTURE_PIN_DISTANCE` in
+  main.js; over Google's tiles it's 2.2 km), as a texel of the picture is about 10 km. (The globe
+  was Google's tiles before, the same ones driven on, so every page load was a billed session: about
+  28% of the globe's views never dropped in, and every page that went to the Moon or Mars was one
+  more.)
+- **Google's tiles come with the first drive on the Earth.** **Drive here** on the Earth (a pin, a
+  spot, a search, a link's place), **Join** or **Go to** a friend there, an Earth challenge's start
+  (from its card or a friend's link): each is a drop-in on the Earth (main.js's `dropIn`), and the
+  first in the page asks for the Earth's drive (`openEarth`, boot.js's `earthVisit`) with the loading
+  card up (**Opening the 3D Earth...**, its **Back to the globe** to give up on it): the robot check
+  again (Turnstile's tokens are good for one ask each; its widget, if it wants a click, in the loading
+  card), then `POST /api/visit` with `fromGlobe: true` (below). With the key, Google's tiles are made
+  (`useTiles`) and the drop-in goes on as ever. Two asked for at once share the one ask, and once the
+  page has a key it never asks again: the globe from then on (**M**) is Google's tiles as it always
+  was, and every drop-in on the Earth is on the same session.
+- The root tileset is requested once per page. **Drive here** doesn't load a new world: it moves
   the one already loaded so the new place is at the scene's centre (`recentreTiles` in `src/world.js`,
   the same transform `ReorientationPlugin` makes when the tiles arrive), and keeps the camera where it
-  was on the Earth (`GlobeView.capture` / `restore`). Tiles already loaded stay loaded.
+  was on the Earth (`GlobeView.capture` / `restore`). Tiles already loaded stay loaded. The Earth's
+  frame is our own globe's group from start to end (its world matrix is what the globe, the rooms and
+  the dots go by), placed on each new place as the tiles are (`placeEarth`, main.js's `frameOn`), so
+  the tiles arriving don't move anything under the camera. Our own Earth is sunk 3 km under them
+  (`PICTURE_SINK`) once they're made, so the two don't fight where both are drawn, and goes once
+  their first loads are all in (`tilesUp`).
 - The tiles' session isn't renewed by itself (`autoRefreshToken: false`): renewing would be a new
   billed session. After a few hours on one page, Google ends the session; World Drive then says to
   reload, which counts as a new visit.
-- The built site never contains the Maps key. The page asks the Worker for it once as it starts
-  (`POST /api/visit`), after an invisible Cloudflare Turnstile check and once the game's code has
-  arrived (so a download that fails spends no drive: [the load](#the-load)), and only while the
-  day's visits are under two caps: **DAILY_VISITS** for everyone together (300) and
-  **PER_VISITOR_DAILY** for each visitor (1: one free Earth drive a day; a supporter signed in has
-  **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account). Both start again at midnight UTC.
-  The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all.
+- The built site never contains the Maps key. The page asks the Worker for a visit once as it starts,
+  after an invisible Cloudflare Turnstile check and once the game's code has arrived ([the
+  load](#the-load)): a plain load's the orrery's (`{ world: 'moon', start: 'orrery' }`: [orrery
+  first](#orrery-first)), a page opened on a link to another world that world's, and anything else
+  (a link to an Earth place, an Earth challenge or a party, `?worlds=0`, `?worlds=1`) the globe's
+  (`globe: true`: `{ free: true, globe: true, world: 'earth', visit }`). Each is a free world's kind
+  of token (visits.js), no key, never limited and counted against no cap, so the leaderboard,
+  levels, the play stats and driving with others have a visit from the start. The Earth's drive,
+  asked for at the first drive on the Earth, is the Maps key, only while the day's Earth drives are
+  under two caps: **DAILY_VISITS** for everyone together (300) and **PER_VISITOR_DAILY** for each
+  visitor (1: one free Earth drive a day; a supporter signed in has **PER_VISITOR_DAILY_SUPPORTER**,
+  30, counted by their account, and never turned away by the cap for everyone). Both start again at
+  midnight UTC. The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all. With the key
+  comes an Earth visit's token, which the page posts with from then on (main.js's `setVisit`:
+  scores, levels, challenge times, as an Earth challenge's needs one, the play stats and their Earth
+  drop-in places, which only an Earth visit posts, and the rooms connected to from then on).
+- **Picking the Earth spends nothing.** On a plain load's orrery, or on any page from **Worlds**,
+  picking the Earth turns the page to its globe in place (main.js's `setWorld`), no reload and no
+  visit: the Earth's globe is hidden behind a plain load's orrery until then (`earthHidden`), and its
+  picture is fetched the first time it's shown (`showPicture`).
+- **Links ask for nothing more as they load.** A link to a place on the Earth (`?spot=`, `?at=`), an
+  Earth challenge's link, a party's (`?party=`) or the Earth's own address (`?worlds=0`) opens on the
+  globe of the Earth, which only flies there and pins it, opens the challenge's card, or joins the
+  party's room, as ever: the Earth's drive is asked for at its **Drive here**, **Start** or **Join**,
+  so someone who opens a link and leaves costs nothing. (A page asked for the key as it loaded with
+  any of them before.)
 - **Every world but the Earth is never limited** (the Moon, Mars, Vesta and Ceres: worlds.js's `free`). Their
   ground is our own (body.js), so it costs nothing to stream. A page opened on a link to one
   (`?spot=moon-...`, `?spot=mars-...` and the like, or `?at=` with `world=moon`, `world=mars` and so on, or a challenge's
-  link on one) asks for a visit with that `world`: after the robot check it gets `{ moon: true,
-  free: true, world, visit }` (`moon: true` as the answer always was, for a page from before Mars
-  still in a browser's cache), no key, and nothing is counted against the caps. It opens on that
-  world with the Earth closed (main.js's `earthClosed`, which was `moonOnly`): picking the Earth
-  reloads the page without the link, which asks for one of the day's Earth drives as usual. A
-  `world` that isn't a free world (one that isn't a world at all, or `earth`) asks for an Earth
-  visit.
-- **Over a cap the page opens on the Moon by itself** (worlds.js's `FALLBACK`; the other free worlds
-  are picked in the orrery, from **Worlds**): the 429 carries a visit (for scores and stats), the game starts on the Moon's globe
-  without a key, loading nothing from Google, and a toast says why (*You've had today's free Earth
-  drive, so you're on the Moon: free and unlimited, as Mars, Vesta and Ceres are...*, the others
-  listed by worlds.js's `listOf`, or *Today's free Earth drives
-  are all taken...* when it's the cap for everyone). Picking the Earth there shows **You've had
-  today's free Earth drive** (or **Today's free Earth drives are used up**), with how long until
-  fresh ones and **Drive on the Moon** to go back; over the visitor's own cap it also has a sign-in,
-  so a supporter on a new browser, or back from paying before Stripe's webhook, signs in and the
-  page reloads once to ask for an Earth drive as theirs.
-- **Every visit is counted for the admin page**, those over a cap too: `visit` for all of them, and
-  `visit_kind` by where it went (`earth`, `earth_supporter`, `owner`, `moon_link`, `mars_link`,
-  `vesta_link` and `ceres_link` for a page opened on a link to one, and `moon_daily_cap` or `moon_visitor_cap` for one sent to the
-  Moon). The admin page shows **Earth drives** and **Over a cap, sent to the Moon** beside
+  link on one) asks for a visit with that `world` in place of the globe's: after the robot check it
+  gets `{ moon: true, free: true, world, visit }` (`moon: true` as the answer always was, for a page
+  from before Mars still in a browser's cache), no key, and nothing is counted against the caps. It
+  opens on that world (main.js's `opensOn`); the Earth is our own globe there as anywhere, its drive
+  asked for at the first drive on it. A `world` that isn't a free world (one that isn't a world at
+  all, or `earth`) is the globe's or the Earth's, as `globe` says.
+- **Over a cap at Drive here** (a 429 to the Earth's drive) the page shows **You've had today's free
+  Earth drive** (or **Today's free Earth drives are used up**), with how long until fresh ones and
+  **Drive on the Moon**, which turns the globe to the Moon (worlds.js's `FALLBACK`; the other free
+  worlds are picked in the orrery, from **Worlds**): boot.js's `usedUpNotice` (screens.js's
+  `notice( 'used-up' )`), the same notice a page turned away as it loaded shows, called from
+  `earthVisit`, with signing in set up its **Get more Earth drives** (main.js's `pitchPass`, the
+  pass's sheet) and a sign-in, over either cap. The drop-in ends, back on the globe of the Earth with
+  the pin still there and nothing loaded from Google. A **Drive here** on the Earth again before the
+  caps start afresh shows the notice again without asking (the Worker would only say the same). A
+  supporter on a new browser, or back from paying before Stripe's webhook, signs in there, and once
+  the account here has the pass the notice goes and the next **Drive here** asks again, counted by
+  their account. What the Worker said is kept for the orrery's Earth sheet as before
+  (`EARTH_USED_UP`), though nothing reads it while the Earth is in place rather than a reload away.
+- **A Worker from before the globe's visit** takes `globe: true` for an Earth visit: the page then
+  has the key as it loads and starts on Google's tiles, as it did, or over a cap **opens on the Moon
+  by itself**: the 429 carries a visit (for scores and stats), the game starts on the Moon's globe
+  without a key with the Earth closed (main.js's `earthClosed`), and a toast says why (*You've had
+  today's free Earth drive, so you're on the Moon: free and unlimited, as Mars, Vesta and Ceres
+  are...*, or *Today's free Earth drives are all taken...* when it's the cap for everyone); picking
+  the Earth there shows the used-up notice (boot.js's `usedUp`), with the pitch and a sign-in that
+  reloads the page once to ask again as a supporter's.
+- **Every visit is counted for the admin page**, those over a cap too: `visit` once a page (its
+  orrery's, its globe's or its link's), and `visit_kind` by where it went (`orrery` for a plain
+  load's free visit, its body's `start: 'orrery'` with a free world, anything else in `start`
+  ignored; `globe` for a page opened on the globe; `earth`, `earth_supporter` or `owner` for its
+  Earth drive when it's asked for, and a page given the key as it loads; `moon_link`, `mars_link`,
+  `vesta_link` and `ceres_link` for a page opened on a link to one; and `moon_daily_cap` or
+  `moon_visitor_cap` for an Earth drive turned away by a cap, from the globe or, from a Worker from
+  before, a page sent to the Moon). An Earth drive asked for by a page that has its visit
+  (`fromGlobe: true`) is counted only by where it went (`countVisit`'s `again`), not as a visit
+  again, so **Visits** stay one a page. The admin page shows **Earth drives**, **Opened on the
+  orrery**, **Opened on the globe** and **Over a cap, no Earth drive** beside
   **Visits**, and each world's link visits in its card **The worlds**. (Before this, a visit turned away
-  wasn't counted at all, so the visits seemed to stop at `DAILY_VISITS`.) A failed robot check shows **We couldn't check you're a person**
-  with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
-  to drive, which costs nothing).
+  wasn't counted at all, so the visits seemed to stop at `DAILY_VISITS`.) A failed robot check as the
+  page loads shows **We couldn't check you're a person** with **Try again**; at **Drive here**, a
+  toast, to press it again. With no key set, it shows **World Drive is getting ready** (with a flat
+  test pad to drive, which costs nothing).
 
 A visitor is a hash of their IP address with a random salt made each day (for IPv6, the address's
 first half, its /64: the block a home or a phone is given, so the billions of addresses in it are one
@@ -4815,6 +5422,18 @@ Cloudflare's cache for a day (by the tidied query, so `Furka  Pass` and `furka p
 answers only with `{ name, lat, lon, type }`, and refuses queries over 120 characters or with
 anything but letters, numbers and an address's punctuation. The globe's panel shows
 "Search © OpenStreetMap contributors".
+
+**A plain load's visit.** A plain load opens on the orrery and asks for a free visit, so none of the
+day's Earth drives is spent until someone drives on the Earth (picking it turns the page to our own
+globe of it in place; the first **Drive here** there asks for the Earth's drive, which the caps count
+as always, `fromGlobe`, not counted as a visit again). The `earth` visit stat now counts people who
+drove on the Earth. The cost: an Earth drive takes two robot checks and two visit tokens (the free
+one, then the Earth's), the second while the loading card is up (about a second). Free visits skip the Earth's caps, but their rooms count against `LIVE_ADDRESS_VISITS` (20 an
+address a day, live.js, only for visits that connect), so shared addresses (schools, carrier NAT) reach
+it a little sooner. Watch the admin page's `orrery` and `earth` rows after release; nothing changes
+unless they show a problem. `boot.js` keeps `localStorage['world-drive.earth-used-up']` (the UTC day an
+Earth visit was turned away, cleared by any that gets in), which the orrery's Earth sheet read while
+picking the Earth reloaded the page; with the Earth in place it no longer says anything of it.
 
 ## The leaderboard
 
@@ -4855,7 +5474,8 @@ see. There's no sign-up: a nickname is all it takes.
 The game runs in your browser, so the Worker never sees a score being made. What it can do is make
 cheating cost something and keep the boards believable (`worker/drive/scores.js`):
 
-- **A visit token.** A score is only taken with the token `/api/visit` hands out with the Maps key:
+- **A visit token.** A score is only taken with the token `/api/visit` hands out (with the globe's
+  visit, a link's to another world, or the Earth's drive with the Maps key):
   "v1.<visit id>.<expiry>.<signature>", an HMAC-SHA256 of the id and the expiry whose key is derived
   (HKDF) from `TURNSTILE_SECRET`, so there's no new secret to set, and good for 6 hours. The id is
   21 random letters and one saying the kind of visit: `e` for a visit the Earth's caps let through,
@@ -4936,6 +5556,18 @@ A removed player's browser is asked for a new name the next time it posts. There
 ban; a determined nuisance is limited by the visit caps, and an address can be blocked with a
 Cloudflare WAF rule if it comes to that.
 
+## The loading screen
+
+The splash while World Drive starts has a scene across its top, new each load (never the same as the
+last one in that browser): a sunset coast, a night city, an alpine pass, a desert highway, the Moon,
+Mars or a neon night, with two layers of scenery rolling by at different speeds and a car of a random
+colour (or now and then a monster truck) bumping along the road, hopping every few seconds. Under it,
+tips (the keys, the other worlds, challenges, a few real facts) change every few seconds. The drop-in's
+loading card shows the same scene, smaller, and the same tips. It's drawn by a small script in
+`drive/index.html`, right after the splash, so it's there at the first paint, before the game's code;
+`?scene=<id>` (`sunset`, `city`, `alps`, `desert`, `moon`, `mars`, `neon`) picks one. With reduced
+motion asked for, nothing moves.
+
 ## Play stats
 
 The owner's page of how World Drive is played: **`https://worlddrive.app/admin.html`**, for a Google
@@ -4950,7 +5582,16 @@ Ceres's from theirs, so their first periods show them rising from none, which th
 after, shows no false rise; the page says which have no ▲ or ▼, and why. The facts from the Worker's
 own tables are always compared. On it:
 
-- **Tiles**: today so far (visits and play time), visits, play time, play per visit, drop-ins, the
+- **What to work on**, at the bottom of the page: advice read from the period's numbers, the most pressing first, each
+  marked **Fix**, **Look at** or **Going well**, with what was seen and something to try. Plain rules
+  with thresholds (shown once the period has about 20 visits): the funnel's biggest drop, slow loads
+  and drop-ins, the commonest problem (and whether it's rising), searches finding nothing, the ride
+  that keeps people longest and a popular one driven briefly, another world turned to but rarely
+  driven, the pass's sheet, Stripe and the free-Earth limit, playing alone, the Garage, challenges,
+  phones, and visits and play per visit against the period before. Five shown, the rest under
+  **More**. A row of links under the title jumps to each part of the page.
+- **Tiles**, in groups (who's coming, are they having fun, is it working, money), each with a small
+  line of its days and what it means on hover: today so far (visits and play time), visits, play time, play per visit, drop-ins, the
   share of visits that drove and that drove 10 minutes or more, the share of play with others and on
   each other world (**On the Moon**, **On Mars**, **On Vesta**, **On Ceres**), searches, problems, the mean load time, new
   players, new accounts, passes bought and the revenue.
@@ -4968,6 +5609,10 @@ own tables are always compared. On it:
 - **From the leaderboard and the pass** (the Worker's own tables, below): new players, new bests, new
   accounts (Google and username), passes by status and the revenue; and now, the players, the accounts, the accounts
   with the pass and the passes nobody has signed in for yet.
+- **How far visits get** marks its biggest drop. **Rides compared**: each ride's picks, share, play
+  time and play per pick (green the longest, red the shortest, of rides picked 5 times or more).
+  **Challenges played**: the list opened, runs started, finished and posted, the nudge while driving
+  and links shared to friends, each with its share of the step before.
 - As before: visits by hour of the day (counted in UTC hours, shown in the viewer's time), where
   people come from, play time by ride, the rides dropped in with and the start spots dropped in at,
   the Garage's changes by part, and load time.
@@ -4984,7 +5629,7 @@ share), a day, as `metric:key`:
 
 | Metric | Keys | What it's for |
 | --- | --- | --- |
-| `visit`, `visit_hour` | `all`; the UTC hour | Visits (each Maps key handed out, counted by the Worker as `/api/visit` answers), and when |
+| `visit`, `visit_hour` | `all`; the UTC hour | Visits (one a page: its globe's visit or its link's, counted by the Worker as `/api/visit` answers; an Earth drive asked for later is a `visit_kind` alone), and when |
 | `load` | the referring site's host name, or `direct` | Where people come from (once a visit) |
 | `load_time`, `load_ms` | a bucket (under 2 s to over 20 s); `total` | From asking for the page to the globe showing, and the milliseconds together for the mean |
 | `funnel` | `globe`, `pin`, `dropin`, `driving`, `drove_1m`, `drove_10m`, `drove_30m` | How far a visit gets, each step once a visit as it's reached: the globe shown, a place first pinned (a spot, a search result, a recent place, a link, a tap, an area of people driving), a drop-in first started, the first drive, and the visit's driving (not paused) passing 1, 10 and 30 minutes. A party's Join drops in without a pin, so a step can be more than the one before |
@@ -5528,10 +6173,13 @@ and a route the same for everyone in its period, with its own board of each play
   recent places (`recent: false`: picking it there later would drop you kilometres from the
   landmark). Pressed as its period ends (the list a moment behind), a challenge that's over doesn't
   start: the list says why ("That challenge has ended, so a run of it wouldn't count. Here are the
-  new ones."). With today's Earth drives used up (or a page opened on a link to another world:
-  main.js's `earthClosed`), the Earth's cards say **Needs an Earth drive**, which shows why (the
-  used-up screen, or for a page opened on another world, the reload to the Earth); the other
-  worlds' start there as anywhere, from the used-up screen's **Drive on the Moon** too.
+  new ones."). An Earth challenge's **Start** on a page with no Earth drive yet asks for it, as any
+  drop-in on the Earth does ([what a visit costs](#what-a-visit-costs-and-how-its-capped)), turning
+  the page to the Earth's globe first if it's on another world, and over a cap shows the used-up
+  screen. With today's Earth drives used up as the page loaded (a Worker from before the globe's
+  visit: main.js's `earthShut`), the Earth's cards say **Needs an Earth drive**, which shows the
+  used-up screen; the other worlds' start there as anywhere, from the used-up screen's **Drive on
+  the Moon** too.
 - **The run.** The car comes down at the start and a countdown, **3, 2, 1, GO!**, holds it there:
   the gas can be held down, ready, and nothing moves till GO. The visit's first time on a computer,
   the keys card is shown over the countdown, which is longer then (6 s, "Get ready" till the 3), and
@@ -6038,12 +6686,12 @@ page's first load but the few lines `boot.js` needs to ask what a link is (below
   beside the robot check, so it costs no wait: the visit waits for its answer at most `LINK_WAIT` (4
   s) after the check, to know its world, and one slower than that opens its card when it comes (over
   whatever's going on, a drive paused as Challenges does), the visit's world the Earth for want of
-  knowing. The challenge's world is the visit's: **an Earth challenge spends an Earth drive** as any
-  page load on the Earth does, **one on another world none**, the game opening on its world with
-  the Earth closed (`earthClosed`, as a [link to another world](#what-every-world-but-the-earth-has)
-  does: a free visit, `{ world: 'mars' }` for a Mars challenge's). With today's Earth drives used up
-  an Earth challenge's link shows the used-up screen, and **Drive on the Moon** opens the Moon with
-  the link's card, its Start saying **Needs an Earth drive**. The globe comes up as for a link to a
+  knowing. The challenge's world is the visit's: **an Earth challenge's link spends no Earth drive as
+  it opens** (the globe's visit; its **Start** asks for one, as any drop-in on the Earth does), **one
+  on another world none**, the game opening on its world (`opensOn`, as a [link to another
+  world](#what-every-world-but-the-earth-has) does: a free visit, `{ world: 'mars' }` for a Mars
+  challenge's). With today's Earth drives used up an Earth challenge's **Start** shows the used-up
+  screen, and **Drive on the Moon** turns the globe to the Moon. The globe comes up as for a link to a
   place, then the challenges' list with the link's card over it: "Ann Racer's time to beat: 0:21.40
   on the daily checkpoint sprint at Furka Pass, 5 h 12 m left." and **Start: race their ghost** (a
   drop-in at its start, racing their ghost). The link leaves the address once it's opened, the
@@ -6937,7 +7585,8 @@ within a day, or at once after a purge of the cache.
   gate on the Moon's own heights (where a ray down meets the ground built there, within a metre),
   driven through and posted with the Moon visit.
 - `npm run test:drive-mars-ui`: a Mars challenge from a link: a free visit (`{ token, world: 'mars'
-  }`), on Mars at once, "On Mars" first and the Earth's needing an Earth drive, a gate on Mars's own
+  }`), on Mars at once, "On Mars" first and the Earth's a reload away (**Opens the Earth
+(reloads)**, as no Earth drive was turned away today), a gate on Mars's own
   heights within a metre, driven through and posted with that visit.
 - `npm run test:drive-asteroids-ui`: a sprint on Vesta driven across a moving recentre, its time
   and ghost posted with the visit and taken by `checkPasses` and `ghostFault`, then **Retry** moving
@@ -7027,7 +7676,7 @@ migration `0009_achievements.sql`), and checks a construction ride wherever it s
 
 ### The list
 
-34 achievements, in the grid's order. **Checked**: the Worker counts it from its own records.
+45 achievements, in the grid's order. **Checked**: the Worker counts it from its own records.
 **Trusted**: only the page can say it (as it says what it drove for XP), so the Worker takes it within
 its caps.
 
@@ -7041,6 +7690,10 @@ its caps.
 | Touchdown, Red regular, Martian | Drive on Mars (1, 10, 50 times) | Mars drives (the same) in reports | trusted | |
 | Into the belt, Vesta regular, Vestal | Drive on Vesta (1, 10, 50 times) | Vesta drives (the same) in reports | trusted | |
 | Bright spot, Ceres regular, Cererian | Drive on Ceres (1, 10, 50 times) | Ceres drives (the same) in reports | trusted | |
+| Ground truth, Field notes | Collect 1, 10 discoveries | Discoveries collected (ids) in reports | trusted | |
+| Lunar notes, Red notes, Vesta notes, Ceres notes | Collect half of a world's discoveries (11, 10, 7, 7) | the account's finds on that world, together | trusted | |
+| Lunar atlas, Red atlas, Vesta atlas, Ceres atlas | Collect every discovery on a world (21, 20, 13, 14) | the same | trusted | |
+| Grand tour | Collect every discovery on all four worlds (68) | the same | trusted | |
 | First challenge, 10 challenges, 50 challenges | Finish a challenge (1, 10, 50) | `challenge_times`: a time on the board | checked | **Concrete mixer** (1), **Dump truck** (10) |
 | Top 10, Podium, Winner | Finish a challenge in its top 10, top 3, first | `final_rank` on a finished board, any period | checked | **Bulldozer** (top 10) |
 | Daily winner | First on a daily | `final_rank` on a finished daily | checked | |
@@ -7062,14 +7715,18 @@ supporters and everyone else earn them alike (`rideUnlock` in `vehicles.js` says
 - **Trusted counts ride on the progress reports** (`POST /api/progress`,
   [levels](#reports-and-how-cheating-is-limited)): the report's own km (already capped by the time
   since the last report, 450 km/h of it), and a new `feats: { moon, mars, vesta, ceres, looks,
-  rides }` (drives on each other world, Garage changes, the ids of rides tried, each since the last
-  report; a page from before Mars sends no `mars`, and one from before Vesta and Ceres no `vesta` or
+  rides, finds }` (drives on each other world, Garage changes, the ids of rides tried, and of
+  [Discoveries](#discoveries) collected, each since the last report; a page from before Mars sends no `mars`, and one from before Vesta and Ceres no `vesta` or
   `ceres`, which is none; `checkTallies`: whole numbers, ride ids the game
   offers, a 400 otherwise; a Garage change is counted only when it changes the look, `garage.js`).
   The Worker adds them to the player's `players.tallies` (JSON: `{ km, moon, mars, vesta, ceres,
-  looks, rides: [ ids ], streak, run, runDay, day, today }`; tallies kept before Mars, or before
+  looks, rides: [ ids ], finds: [ ids ], streak, run, runDay, day, today }`; tallies kept before Mars, or before
   Vesta and Ceres, with none of theirs, read as none there), each held to a day's worth
-  (`TALLY_DAY`): 500 km, 10 drives on each other world, 10 Garage changes and 4 new rides a UTC day, whatever the reports say. So 1,000 km takes at least two
+  (`TALLY_DAY`): 500 km, 10 drives on each other world, 10 Garage changes, 4 new rides and 40 Discoveries a UTC day, whatever the reports say. The
+  Discoveries' counts (`finds`, `finds-moon`, ...) are worked out from the list by `FINDS_ON`, and on an
+  account from all its players' lists together (POST /api/achievements writes any of their achievements
+  that union has reached), not the best of them, so the book and the atlas achievements agree on two
+  devices. So 1,000 km takes at least two
   days of a script (and more than two hours of reports at the time cap), 25 looks three days, 50
   Moon drives five, and 50 on Mars, Vesta or Ceres five. The claim (a new nickname's first report, carrying what was
   driven before it) counts for XP as before (an hour's km at most), but toward the achievements only
@@ -7211,7 +7868,7 @@ on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them 
 
 ### What's kept, and what isn't
 
-`achievements`: a player's id, an achievement's id and when, 34 rows a player at most, removed with
+`achievements`: a player's id, an achievement's id and when, 45 rows a player at most, removed with
 the player. `players.tallies` (a few numbers, the ids of up to 31 rides, the days in a row and the
 day's counts), `players.parties` and `players.party_marks` (up to 10 short HMACs of the player's id
 with a party's code under a key from the Worker's secret, so a party isn't counted twice; not the
@@ -7229,7 +7886,7 @@ a month included):
 
 | | Rows read | Rows written | Other |
 | --- | --- | --- | --- |
-| A report with something in it | none more (the tallies are in the player's row) | none more, and 1 an achievement earned (34 a player, ever) | |
+| A report with something in it | none more (the tallies are in the player's row) | none more, and 1 an achievement earned (45 a player, ever) | |
 | An empty report | the player's row, as before | none | |
 | The page's ask for the whole list (an empty report with `feats: true`, once a visit) | the account's achievements: a few dozen, about 250 at most whatever the account (its first 20 players, 200 rows of the others', each counted again as they're grouped) | 1 (`visits.listed`) | |
 | A challenge time, a player's first on that challenge | up to 50 (their nth time, by key), usually 1 to 10 | 1 an achievement earned | |
@@ -7251,7 +7908,7 @@ reads, and no writes. An empty report reads only the player's row; the whole lis
 (8 Earth visits a day an address, and a robot check each for the other worlds'), so about 250
 rows a page load at most. Its reports, times and parties were bounded already (levels' 30 s gap and
 `PROGRESS_POSTS`, the challenges' `CHALLENGE_MISSES` and daily caps, `LIVE_CONNECTS`), and
-achievements add at most 34 rows written a player, ever, 2 a party joined and 1 a visit's list. A
+achievements add at most 45 rows written a player, ever, 2 a party joined and 1 a visit's list. A
 score in a locked construction ride is refused only after the score's gap (one every 10 s a player)
 and the visitor's day (1,500 an address), as any score is: at most 1,500 lookups of about 60 rows,
 90,000 rows a day. A time in one likewise only after the time's gap (one every 10 s a player), its
@@ -7311,7 +7968,7 @@ which phones already draw.)
 
 ### How it's tested
 
-- `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the rules as written (34, each
+- `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the rules as written (45, each
   count known, every construction ride unlocked by one, the pass none; `checkTallies` turning away a
   ride that isn't one, a count that isn't whole or is negative; a day's worth taken by `addTallies`
   and again the next day; what `crossed` reaches; the grid's lines), then the Worker under `wrangler
@@ -7344,7 +8001,12 @@ which phones already draw.)
   they're reached: Touchdown, Red regular, Martian), with tallies kept from before Mars (no `mars`
   in them) counting none there; and Vesta's and Ceres's the same (a claim's 2 each earning Into the
   belt and Bright spot, a day's 10 Vesta regular, the grid's counts, `own` and `left` for each, and
-  a count that isn't whole, is negative or isn't a number a 400).
+  a count that isn't whole, is negative or isn't a number a 400); and [Discoveries](#discoveries)
+  (a claim's first 10, one and one more a minute a report, 40 a UTC day, the rest carried to the
+  next report, 100 XP each once, a find that isn't one a 400; on an account, the counts from all its
+  players' finds together and the achievements that union has reached written as asked; an account
+  merge taking the union). `npm run test:drive-finds` has the eleven Discoveries achievements' rules
+  without the Worker.
 - `npm run test:drive-worker`: migration 0009 on top of 0001 to 0008 with a player kept and their
   counts none yet, one row an achievement, removed with the player; in the challenges' story a
   player's first time writing their first challenge finished (and the rows a time writes, one more
@@ -7423,7 +8085,9 @@ ON CONFLICT DO NOTHING;
 ## Ads
 
 World Drive can show one Google AdSense display ad, and only on the globe: off until the owner sets
-a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-buying-it).
+a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-buying-it). A plain
+load opens on [the orrery](#picking-a-world-the-orrery), and ads.js holds every ad while
+`body[data-orrery='open']`, so the first ad waits until it's closed (as it does under `?worlds=1`).
 
 ### What people see
 
@@ -7559,11 +8223,11 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `DAILY_VISITS` | 300 | Visits a day for everyone together; 0 closes for the day |
 | `PER_VISITOR_DAILY` | 8 | Visits a day per visitor |
 | `TURNSTILE_SITE_KEY` | `0x4AAAAAAFs3k5sgUIQHSuGC` | The worlddrive.app Turnstile widget (public) |
-| `PER_VISITOR_DAILY_SUPPORTER` | 30 | Visits a day for a supporter, signed in |
+| `PER_VISITOR_DAILY_SUPPORTER` | 30 | Visits a day for a supporter (or a day pass), signed in |
 | `PASSWORD_ACCOUNTS` | unset (on) | [Username and password accounts](#username-and-password-accounts); `off` switches them off |
 | `GOOGLE_CLIENT_ID` | empty | The Supporter Pass's Google sign-in (public); empty, no signing in or buying |
 | `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
-| `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
+| `SUPPORTER_PRICE` | `CA$19.99` | Its price, as the page shows it |
 | `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
 | `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use on the Earth; 0 is off there |
 | `LIVE_MOON_DAILY_BUDGET` | 20000 | [The Moon's own](#driving-with-others-on-the-moon), apart; 0 is off on the Moon |
@@ -7676,6 +8340,22 @@ it did. **Vesta and Ceres** came the same way, with no migration: a page from be
 `vesta` or `ceres` in its reports (none), and its list shows the nine of the three worlds it knows
 (it lists by its own list of worlds), leaving the new six out. `CHALLENGE_MISSES`' new 24 comes with `wrangler.drive.jsonc`.
 
+**The orrery first, Discoveries and the plane's tricks** came with no migration either, and no new
+setting, secret or binding: `npm run deploy:drive` as always (it finds no migration to apply). What
+changed in the Worker: a free visit's `start: 'orrery'` counted `orrery` (`index.js`, `stats.js`'s
+`VISIT_KINDS`; the admin page's **Opened on the orrery** row); the reports' `finds`, kept in
+`players.tallies` beside the other trusted counts, with their caps and XP (`progress.js`), an
+account's finds together in POST /api/achievements and its eleven new achievements
+(`achievements.js`, the rules in `achievement-rules.js`, which the page shares), a merge's union
+(`accounts.js`); and the leaderboard's `TRICK` pattern taking "Loop!" and "Outside loop!"
+(`scores.js`). A page from before it, still in a browser's cache, sends no `start` and no `finds`
+and does no loops, so it's taken and counted as before; the new page needs the new Worker for its
+loops' scores and finds' XP, so the two go out together, as `deploy:drive` sends them. The live
+rooms take up to 1,100 m/s from this deploy (`TOP_SPEED`), but pages send no more than 790 until
+those from before it have aged out of browsers' caches (a few weeks); then `MAX_SPEED` in `live.js`
+can go up to 1,090 ([Plane mode](#plane-mode)). After it, watch the admin page's **Opened on the
+orrery** and **Earth drives** rows for a few days ([A plain load's visit](#what-a-visit-costs-and-how-its-capped)).
+
 To deploy from GitHub on every push with Workers Builds (as the construction app is): in the
 Cloudflare dashboard open the **world-drive** Worker → Settings → Build, connect this repository and
 set
@@ -7705,6 +8385,15 @@ flying, other drivers as ghosts and party links, levels, free in the browser wit
 download. "Drive on the Moon" is a search with only throwaway games in it, and World Drive's Moon
 is made from NASA's own maps of it, so [the Moon has pages of its own](#the-moons-pages) too, and so,
 made the same way, have [Mars](#marss-pages) and [Vesta and Ceres](#vestas-and-ceress-pages).
+
+Two pages more go across the worlds, for searches that name none of them: **`/space/`** ("Drive on
+the Moon, Mars and Asteroids in 3D": the four other worlds together, each with its gravity, what
+it's made from, a few of its places and its own page) and **`/multiplayer/`** ("Multiplayer Driving
+Game in Your Browser": driving with everyone nearby and with friends by a party link, on every
+world, challenges, ghosts and "challenge a friend", what others see). Both are made by the build
+(`spacePage`, `multiplayerPage` in `drive/site/build.js`), are in the sitemap, and are linked from
+the home page's words (the "Drive with others" line, "Can I play with friends?" and "Can I drive on
+other planets?") and from each other. The home page's title stays the Earth's.
 
 ### What a search engine reads
 
@@ -7954,9 +8643,10 @@ beside it, then asks for the visit; the splash's line about World Drive is on th
 first paint and is its largest paint, so the page counts as loaded then; and on worlddrive.app the
 head opens the connections to Turnstile and to Google's tiles at once.
 
-The visit (`POST /api/visit`) is one of the day's drives, the visitor's and everyone's, so it waits
-for both the robot check and the game's code: a download that fails (a phone losing its connection)
-spends none, nor does each **Try again** after it, which reloads the page. Whichever of the two fails
+The visit (`POST /api/visit`) waits for both the robot check and the game's code: a download that
+fails (a phone losing its connection) asks for nothing, nor does each **Try again** after it, which
+reloads the page. (It's the globe's visit, which spends none of the day's Earth drives: the Earth's
+drive is asked for at the first drive on the Earth, [what a visit costs](#what-a-visit-costs-and-how-its-capped).) Whichever of the two fails
 first says so: the robot check's screen, or "World Drive didn't finish loading. Check your
 connection" (a script that arrives but breaks as it runs, as on an older browser, says "World Drive
 couldn't start in this browser" instead, and both are logged to the console). The check's 45 s
@@ -8167,7 +8857,9 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   driving with others), as `scripts/test-drive-levels-ui.mjs` does, and `window.worldDriveStatsTest
   = { visit }` one for the [play stats](#play-stats) alone, as `scripts/test-drive-ui.mjs` does.
   `window.worldDriveOrreryTest = { onLoad: true }` opens [the orrery](#picking-a-world-the-orrery)
-  as the page loads, as `?worlds=1` does (`scripts/test-drive-orrery-ui.mjs`).
+  as the page loads, as `?worlds=1` does, and `{ first: true }` gives a test's browser a plain load's
+  orrery (which it otherwise doesn't get on the dev server: `scripts/test-drive-orrery-ui.mjs`,
+  `scripts/test-drive-orrery-first.mjs` for which loads open it).
 - The other worlds need neither a key nor the Worker: their files are in the repository
   (`drive/public/moon/`, `drive/public/mars/`, `drive/public/vesta/`, `drive/public/ceres/`), so
   they're the real worlds under `npm run dev:drive` alone. `npm run make-moon`, `npm run make-mars`
@@ -8188,76 +8880,82 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   yet), and with driving with others on, `live`, `ghosts` and `friends`; and `orrery` (`open()`,
   `close()`, `isOpen`).
 
-Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile
-and Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and
-JSON checks, the search's validation, cache and one-a-second limit, www, and that the key is only
-ever in the answer to a visit that passed; and the leaderboard on a throwaway D1 database: name
-rules, the filter and uniqueness, renaming, scores with a visit token, every cheat above turned
-away, SQL-ish names and places kept as text, the top 20 and your own rank, one place's board, the
-cache, days and weeks turning over, the tidying after 35 days, what's stored, and the console's SQL
-above; and the Supporter Pass, with test keys standing in for Google's and a made-up webhook secret
-for Stripe's: signing in and every bad token turned away, the session cookie, `/api/me`, the
-webhook's signatures and five minutes, a payment once, bank debits, buying before signing in,
-refunds and chargebacks (either delivered before its checkout), another link's checkouts, test-mode
-payments with a live link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`,
-30 drives a day for a supporter, the ⭐, the owner's SQL, and buying off without its settings;
-[usernames and passwords](#how-usernames-and-passwords-are-tested) (all that's listed there); and
-the [play stats](#play-stats): each metric's keys checked and held to a post's most, `MAX_COUNTS`,
-and the admin page's answer with the facts from the leaderboard's and the pass's tables, refunds
-left out, the period before added up, the totals and the tidying after two years), and `npm run
-test:drive-ui` (the page in Chromium without a key: the globe and panel, search on Enter, spots,
-pins, dropping in and driving, the play stats it posts (the funnel once a visit, the device,
-searches by kind and never what was typed, play time, a drop-in's time and one left for the globe),
-stunts (a wall throwing the kart into the air and never through it, a backflip landed for points,
-the DRIFT button), changing ride, M and teleporting again without a reload, recent places, a phone
-with touch buttons, boosting flat out going supersonic in each free ride (the boom, the streaks, the
-tag and the wider view, and its end as it slows), boost pads on the test pad (off until the pause
-menu's switch turns them on, kept across a reload, and off again; put down as it drives, never on a
-roof, a car, a shelter or a slope nor from high up, moved onto sharper ground, a small one's 12 %
-and a big one's fill, dark then lit again, left lit with a full gauge, recycled; each test that
-needs them switches them on), water (the test pad's sea given one even sea colour, as Google draws
-water, driven on as on the ground: off its edge at speed and slowly, down onto its surface and on
-across it, never sinking, splashing or put back; off a ramp, a spin landed on it scoring; slowly
-down a beach, out across the sea and back up onto the land; flown out and let down onto it; R on it
-and by it putting it a few metres on, on the water; paused out on it and driven on, sending others
-no splash or spray; boost pads never on it or by it; Google's other water colours, a bluish lawn
-among ball fields and a lagoon's turquoise; a canal's water by its wall never taken for dry), the
-open sea and the big lakes (the pad lowered under the water's surface, as Google draws the bed:
-started on the sea's surface or Lake Baikal's, ridden on, flown over and come down on, no boost pads
-on it, a floating ride's spray, from an island out across it and back onto the island; 14 m under
-the sea, on Google's water as before; the Dead Sea's shore, land, never; the map's sea, coasts,
-lakes and land; land walled off from the sea by ground over it, the side of the Assal depression,
-never; Lake Erie's surface gone out over land to Niagara's gorge and back by the lake; driven and
-flown out from a coast over a bed sloping under the sea in the sea's colours, the sea's surface laid
-before the kart is under it (by the frame loop's own look too, with houses behind the beach, and
-reversing out, and driven and flown past moored boats, between two jetties and through a marina),
-its look round the bed spread over frames (never more than 12 rays in one, all down, nor more than
-one first ray into new ground made slow as a tile's, with tiles 25, 15 or 10 m across) and carried
-on till it's known (laid in time at 100 and 300 km/h and 20 frames a second too), but not over
-ground coloured as sand or with no picture, nor in Death Valley's square, nor with the kart in a
-hollow under it, and a big lake's only over its bed 15 m under it; New Orleans' streets under the
-sea behind its levee, among houses, driven into, flown over and started in, never, nor beside
-someone flying over them, even with the surface already laid; Go to beside a driver out on the sea's
-surface, or hopping, flying or rolled onto their side over it (beside them at their height), in the
-scene and by a drop-in, on it with them; with the surface laid, beside someone flying over Lake
-Baikal's shelf, a sandy bed or the bed between a harbour's moles, on it with them, and by a drop-in
-from 12 km off over that shelf too, and over its shelf in a square its shore crosses, in the scene
-and by a drop-in from 24 km off, but not between moles a street's width apart nor over a hollow
-inland, nor two or four squares from the lake's (laid in its own square or the shore square); with
-the sea laid off Santa Monica, by a drop-in beside someone flying over a sandbank 14 km off, on it,
-but over a field under the sea in New Orleans, on the field; with none laid, beside someone riding
-on a surface of their own over Baikal's shelf, a sandy bed or an inlet, from the globe, or over a
-sandy bed 2 m down in the scene, on it with them, but not beside one on a levee at the sea's height,
-one in the air at that height, nor one riding over New Orleans' street, there or 25 m from a
-crossing, nor, with its houses' fronts 20 m apart, one riding or flying over its street where a
-bearing threads between them past every ray down, nor, with a boulevard 49 m across it, one riding
-or flying over the street where it meets it, where five bearings thread between the houses past
-every ray down and along them (but, as a known limit, with the two houses facing each other across a
-street by it left empty, beside one riding by them, there and from the globe, on it with them), nor,
-laid out more sparsely, one riding or flying over its street, there or from the globe (though flown
-over it, the frame loop's look lays it); without the map, only the deep sea), the used-up,
-robot-check and getting-ready screens, the visit asked for only once the game's code is here (a
-download that fails, and its Try again, spend none; a script that breaks is told from a dropped
+Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile and
+Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and JSON
+checks, the search's validation, cache and one-a-second limit, www, and that the key is only ever in
+the answer to a visit that passed; and the leaderboard on a throwaway D1 database: name rules, the
+filter and uniqueness, renaming, scores with a visit token, every cheat above turned away, SQL-ish
+names and places kept as text, the top 20 and your own rank, one place's board, the cache, days and
+weeks turning over, the tidying after 35 days, what's stored, and the console's SQL above; and the
+Supporter Pass, with test keys standing in for Google's and a made-up webhook secret for Stripe's:
+signing in and every bad token turned away, the session cookie, `/api/me`, the webhook's signatures
+and five minutes, a payment once, bank debits, buying before signing in, refunds and chargebacks
+(either delivered before its checkout), another link's checkouts, test-mode payments with a live
+link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`, 30 drives a day for a
+supporter, the ⭐, the owner's SQL, and buying off without its settings; [usernames and
+passwords](#how-usernames-and-passwords-are-tested) (all that's listed there); and the [play
+stats](#play-stats): each metric's keys checked and held to a post's most, `MAX_COUNTS`, and the
+admin page's answer with the facts from the leaderboard's and the pass's tables, refunds left out,
+the period before added up, the totals and the tidying after two years), and `npm run test:drive-ui`
+(the page in Chromium without a key: the globe and panel, search on Enter, spots, pins, dropping in
+and driving, the play stats it posts (the funnel once a visit, the device, searches by kind and
+never what was typed, play time, a drop-in's time and one left for the globe), stunts (a wall throwing the kart into the air and never through it, a backflip landed
+for points, the DRIFT button), crashes (a wall hit's layers growing with its tier, its bits lying
+on the ground, the view kicked, none of it for a visitor asking for less motion, fewer on a phone,
+no dust on the Moon, fifty hits making nothing new; the same hit going the same way with its
+effects and without, hitch and all; BONK!, BOING! and WHAM! each their own way over the kart,
+counting up, only fading for less motion, and "Crash!" knocked in red; a wipeout's flat slam, a
+landing's dust by how hard, regolith on the Moon, and a scrape's sparks by its speed), changing ride, M and teleporting again without a reload, recent
+places, a phone with touch buttons, boosting flat out going supersonic in each free ride (the boom,
+the streaks, the flame's shock diamonds and white-hot core, the tag glowing in the ride's colour
+with its sheen, the wider view, and its end as it slows), boost pads on the test pad (off
+until the pause menu's switch turns them on, kept across a reload, and off again; put down as it
+drives, never on a roof, a car, a shelter or a slope nor from high up, moved onto sharper ground, a
+small one's 12 % and a big one's fill, dark then lit again, left lit with a full gauge, recycled;
+each test that needs them switches them on), water (the test pad's sea given one even sea colour,
+as Google draws water, driven on as on the ground: off its edge at speed and slowly, down onto its
+surface and on across it, never sinking, splashing or put back; off a ramp, a spin landed on it
+scoring; slowly down a beach, out across the sea and back up onto the land; flown out and let down
+onto it; R on it and by it putting it a few metres on, on the water; paused out on it and driven
+on, sending others no splash or spray; boost pads never on it or by it; Google's other water
+colours, a bluish lawn among ball fields and a lagoon's turquoise; a canal's water by its wall
+never taken for dry), the open sea and the big lakes (the pad lowered under the water's surface,
+as Google draws the bed: started on the sea's surface or Lake Baikal's, ridden on, flown over and
+come down on, no boost pads on it, a floating ride's spray, from an island out across it and back
+onto the island; 14 m under the sea, on Google's water as before; the Dead Sea's shore, land, never;
+the map's sea, coasts, lakes and land; land walled off from the sea by ground over it, the side
+of the Assal depression, never; Lake Erie's surface gone out over land to Niagara's gorge and back
+by the lake; driven and flown out from a coast over a bed sloping under the sea in the sea's
+colours, the sea's surface laid before the kart is under it (by the frame loop's own look too, with
+houses behind the beach, and reversing out, and driven and flown past moored boats, between two
+jetties and through a marina), its look round the bed spread over frames (never more than 12 rays
+in one, all down, nor more than one first ray into new ground made slow as a tile's, with tiles 25,
+15 or 10 m across) and carried on till it's known (laid in time at 100 and 300 km/h and 20 frames a
+second too), but not over ground coloured as sand or with no picture, nor in Death Valley's square,
+nor with the kart in a hollow under it, and a big lake's only over its bed 15 m under it; New
+Orleans' streets under the sea behind its levee, among houses, driven into, flown over and started
+in, never, nor beside someone flying over them, even with the surface already laid; Go to beside a
+driver out on the sea's surface, or hopping, flying or rolled onto their side over it (beside them
+at their height), in the scene and by a drop-in, on it with them; with the surface laid, beside
+someone flying over Lake Baikal's shelf, a sandy bed or the bed between a harbour's moles, on it
+with them, and by a drop-in from 12 km off over that shelf too, and over its shelf in a square its
+shore crosses, in the scene and by a drop-in from 24 km off, but not between moles a street's width
+apart nor over a hollow inland, nor two or four squares from the lake's (laid in its own square or
+the shore square); with the sea laid off Santa Monica, by a drop-in beside someone flying over a
+sandbank 14 km off, on it, but over a field under the sea in New Orleans, on the field; with none
+laid, beside someone riding on a surface of their own over Baikal's shelf, a sandy bed or an inlet,
+from the globe, or over a sandy bed 2 m down in the scene, on it with them, but not beside one on a
+levee at the sea's height, one in the air at that height, nor one riding over New Orleans' street,
+there or 25 m from a crossing, nor, with its houses' fronts 20 m apart, one riding or flying over
+its street where a bearing threads between them past every ray down, nor, with a boulevard 49 m
+across it, one riding or flying over the street where it meets it, where five bearings thread
+between the houses past every ray down and along them (but, as a known limit, with the two houses
+facing each other across a street by it left empty, beside one riding by them, there and from the
+globe, on it with them), nor, laid out more sparsely, one riding or flying over its street, there or
+from the globe (though flown over it, the frame loop's look lays it); without the map, only the deep
+sea), the used-up, robot-check and getting-ready screens, the visit asked for only once the game's
+code is here (a download that fails, and its Try again, spend none; a script that breaks is told
+from a dropped
 connection, and logged), a Turnstile script that never comes ending on the robot check's screen at
 its deadline (and Try again asking for it afresh), a place's link kept in the address until Google's
 root has come, and the leaderboard with its answers made in the test: tabs, your own row, picking a
@@ -8272,8 +8970,13 @@ test:drive-live-ui` [driving with others](#how-its-tested), `npm run test:drive-
 test:drive-levels-ui` [levels](#how-levels-are-tested), `npm run test:drive-moon-ui` [the
 Moon](#how-the-moon-is-tested), `npm run test:drive-mars-ui` [Mars](#how-mars-is-tested) (5581
 its port unless `TEST_VITE_PORT` says), `npm run test:drive-asteroids-ui` [Vesta and
-Ceres](#how-vesta-and-ceres-are-tested) (5591) and `npm run test:drive-orrery-ui` [the
-orrery](#picking-a-world-the-orrery) (5601). The UI tests drive the go-kart unless a test picks another
+Ceres](#how-vesta-and-ceres-are-tested) (5591), `npm run test:drive-orrery-ui` [the
+orrery](#picking-a-world-the-orrery) (5601), `npm run test:drive-finds-ui`
+[Discoveries](#discoveries) (5583) and `npm run test:drive-lens-ui` [the data lens](#data-lens)
+(5587). Without a browser: `npm run test:drive-orrery-first` (which loads open on the orrery),
+`npm run test:drive-plane` ([the plane](#plane-mode)'s speeds, fall, parachute and tricks),
+`npm run test:drive-finds` and `npm run test:drive-lens`. Run the browser suites one at a time:
+each starts its own dev server and Chromium's software renderer is slow. The UI tests drive the go-kart unless a test picks another
 (the pickup, the default, is 219,000 triangles, about a frame a second in Chromium's software
 renderer); `npm run test:drive-ui` checks the pickup is the default, and that the go-kart takes over
 if its model doesn't load. `TEST_VITE_PORT` picks a test's port, and `TEST_VITE_CACHE` a folder for
@@ -8319,7 +9022,7 @@ src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the
                              boosts.js the boost styles it offers; underglow.js the glow under a
                              ride; horns.js the horns' sounds and the Horn sounds switch
 src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
-src/drive-app/screen-fx.js   what's done to the view: speed lines, overdrive's white edges, the pause
+src/drive-app/screen-fx.js   what's done to the view: speed lines, overdrive's flashing edges, the pause
                              menu's Camera effects switch and asking for less motion
 src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for the hovercraft's
                              spray and to keep boost pads off it; and dry land's colours, kept
@@ -8389,7 +9092,16 @@ src/drive-app/online.js      who's driving now on the globe: /api/online, the do
 src/drive-app/orrery.js      the orrery: the Solar System the worlds are picked from, in the
                              #orrery dialog, drawn by the page's renderer, a chunk of its own
                              loaded as it first opens (orrery.css its look); orrery-bodies.js its
-                             eleven bodies
+                             eleven bodies; orrery-first.js which loads open on it first and
+                             the address every reload to the Earth goes to
+src/drive-app/finds.js       Discoveries: the beacons, the pointer, the globe's pins, the card and
+                             the collection book (finds.css its look); finds-data.js the list and
+                             its facts with their sources; finds-heights.js each one's height in
+                             the game's own data, which scripts/make-finds.mjs makes; finds-rules.js
+                             reaching one, the card's words, what's kept (node can test it)
+src/drive-app/lens.js        the data lens: L and the Heights button, the scale bar and the reading
+                             under the car (lens.css its look); lens-heights.js the height texture,
+                             ranges and labels; body.js's shader colours the ground with it
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
 src/drive-app/stats.js       the play stats in the page: counting, posting with the visit's token;
@@ -8435,7 +9147,9 @@ The driving and its effects are shared with the construction app, World Drive's 
 options on: `src/drive.js` (the Driver; its feel, `BODY`, `SPIN` and the jolts, only with the
 booster, drifts or stunts), `src/drive-fx.js` (the flame, smoke, sparks and the rest),
 `src/drive-boosts.js` (the boost styles, each one's ignition, overdrive), `src/drive-bursts.js` (the
-bursts of each moment) and `src/drive-hud.js` (the HUD, its gauge pulsing and flashing).
+bursts of each moment) and `src/drive-hud.js` (the HUD, its gauge pulsing and flashing). The plane
+is the Driver's `plane` option (World Drive's alone): `src/plane.js` (flying, the drop and the
+parachute) and `src/plane-tricks.js` (its tricks' rules, which node can test without three.js).
 
 Shared modules take World Drive's place as a parameter, with the terminal as the default:
 `createGoogleTiles( { site } )` and `recentreTiles` in `src/world.js`, and the `site` argument of

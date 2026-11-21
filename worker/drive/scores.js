@@ -64,8 +64,12 @@ const SCORES_DAILY = 1500;
 // A UTC day (ms): DriveLimits' days end at its midnights.
 const DAY = 24 * 60 * 60 * 1000;
 export const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDES, ...DRIVE_CARS, ...PASS_RIDES ] );
-// The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + ".
-const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
+// The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + "; and a
+// plane's (src/plane-tricks.js): its rolls are barrel rolls, and its loops "Loop!" or "Outside
+// loop!", two at most in a pass (×2), which is all the page scores. (Its other limits, three rolls
+// a pass, repeats worth less and height worth less, are the page's: a plane's barrel roll can't be
+// told from a car's here, the same trust as every car trick.)
+export const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|(?:Outside loop|Loop)(?:!| ×2)|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
 const MAX_TRICKS = 120;
 // Kept: the log, and the day and week boards, for this long (ms). (The admin page's scores a day
 // come from the log, so go back this far: stats.js.)
@@ -195,7 +199,7 @@ export async function leaderboard( { env, url, now } ) {
 		const [ top, count ] = await db.batch( [
 			db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at, ${ hasPass( 'p.account_id', '?4' ) } AS supporter,
 				${ xpOf( 'p' ) } AS xp, p.title FROM best_scores b JOIN players p ON p.id = b.player_id
-				WHERE b.period = ?1 AND b.place_key = ?2 ORDER BY b.score DESC, b.created_at, b.player_id LIMIT ?3` ).bind( period, where, TOP, supporterEmails( env ) ),
+				WHERE b.period = ?1 AND b.place_key = ?2 ORDER BY b.score DESC, b.created_at, b.player_id LIMIT ?3` ).bind( period, where, TOP, supporterEmails( env, now ) ),
 			db.prepare( 'SELECT COUNT(*) AS total FROM best_scores WHERE period = ? AND place_key = ?' ).bind( period, where ),
 		] );
 		board = { total: count.results[ 0 ].total, rows: top.results.map( ( row, i ) => ( { rank: i + 1, ...entry( row ) } ) ) };
@@ -215,7 +219,7 @@ export async function leaderboard( { env, url, now } ) {
 
 			const row = await db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at,
 				( SELECT COUNT(*) FROM best_scores o WHERE ${ ahead( 'o', 'b' ) } ) + 1 AS rank, ${ hasPass( 'p.account_id', '?4' ) } AS supporter,
-				${ xpOf( 'p' ) } AS xp, p.title FROM best_scores b JOIN players p ON p.id = b.player_id WHERE b.player_id = ?1 AND b.period = ?2 AND b.place_key = ?3` ).bind( id, period, where, supporterEmails( env ) ).first();
+				${ xpOf( 'p' ) } AS xp, p.title FROM best_scores b JOIN players p ON p.id = b.player_id WHERE b.player_id = ?1 AND b.period = ?2 AND b.place_key = ?3` ).bind( id, period, where, supporterEmails( env, now ) ).first();
 			answer.me = row ? { rank: row.rank, ...entry( row ) } : null;
 			await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
 

@@ -1,13 +1,20 @@
 import './style.css';
 import { getConfig, postVisit, robotCheck, send } from './api.js';
 import * as screens from './screens.js';
+import { EARTH_USED_UP, earthUrl, orreryFirstFor, utcDay, writeStored } from './orrery-first.js';
 import { EARTH, FALLBACK, listOf, OFF_EARTH, onWorld, spotWorld } from './worlds.js';
+
+// (Which loads open on the orrery, and the Earth's address from one: orrery-first.js's, kept apart from
+// this script, which starts the page as it's imported, so the tests can load them in node.)
+export { earthUrl, orreryFirstFor };
 
 // World Drive's first script (docs/world-drive.md): the splash, the Worker's settings and the robot
 // check, while the game itself (main.js: three.js, the tiles, the driving, nearly all of the page's
-// code) comes down beside them rather than before them; then the visit (the Maps key). So the
-// splash and what World Drive is show at once, the robot check runs while the game loads, and the
-// globe is up as soon as both are done and the visit's answered.
+// code) comes down beside them rather than before them; then the visit (the globe's, free: no Maps
+// key). So the splash and what World Drive is show at once, the robot check runs while the game
+// loads, and the globe is up as soon as both are done and the visit's answered. The Earth's drive
+// (the Maps key, one of the day's Earth drives) is asked for later, only when the page first drives
+// on the Earth (earthVisit).
 
 // Only the dev server has this (vite.drive.config.js): a key from the environment, for driving on
 // Google's tiles without the Worker. The built site always asks the Worker.
@@ -23,6 +30,16 @@ const LINK_WAIT = 4000;
 const $ = id => document.getElementById( id );
 // Without WebGL 2 (which three.js needs) there's no game to load, nor a visit to spend on it.
 const webgl = hasWebGL();
+// Whether this load opens on the orrery to pick a world (orrery-first.js): a plain load does, a link
+// to a place, a challenge or a party doesn't. Decided once, from the address as it came (the game
+// takes things out of it as it uses them). A test's browser on the dev server is asked about only
+// there: a built page never reads navigator.webdriver.
+const orreryFirst = orreryFirstFor( location.search, {
+	path: location.pathname,
+	dev: import.meta.env.DEV,
+	webdriver: import.meta.env.DEV && navigator.webdriver === true,
+	seam: import.meta.env.DEV ? window.worldDriveOrreryTest ?? null : null,
+} );
 const game = webgl ? import( './main.js' ) : null;
 // Caught where it's waited for (start, visit); this only keeps a failed load from being reported twice.
 game?.catch( () => {} );
@@ -34,8 +51,12 @@ async function boot() {
 	if ( ! webgl ) return noWebGL();
 	screens.splash( 'Warming up the engine...' );
 	const config = await getConfig();
-	// The Vite dev server on its own: a key from the environment, or the test globe.
-	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
+	// The Vite dev server on its own (or a built page with no Worker): a key from the environment, or
+	// the test globe. A plain load there opens on the orrery as anywhere, the test globe hidden behind
+	// it till the Earth's picked; not with a key, which is a developer driving Google's tiles.
+	if ( ! config ) return start( orreryFirst && ! DEV_KEY
+		? { key: null, worker: false, orreryFirst: true }
+		: { key: DEV_KEY || null, worker: false } );
 	// (Maps off: the test pad, a challenge link's card over it all the same.)
 	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, liveMoon: config.liveMoon ?? null, liveMoonReason: config.liveMoonReason ?? '', liveWorlds: config.liveWorlds ?? null, adsense: config.adsense ?? null, challengeLink: challengeLink() } ) } );
 	visit( config );
@@ -112,9 +133,14 @@ function loadFailed( err ) {
 
 }
 
-// Once per page load: the robot check, then the Maps key for this visit. The visit is one of the
-// day's drives (the visitor's and everyone's), so it's only asked for once the game's code is here
-// too: a download that fails, and each Try again after it, spends none. The two come down side by
+// Once per page load: the robot check, then this visit: the globe's (globe: true), which costs
+// nothing and is never limited, or a link's to another world, the same. Neither is one of the day's
+// Earth drives: the page asks for that (earthVisit) only when it first drives on the Earth, a Drive
+// here there, a Join or Go to a friend there, an Earth challenge's start, a link to an Earth place or
+// challenge as much as anything else (they only fly the globe there, or open the challenge's card).
+// So the Google session it pays for goes only to pages that drive on the Earth, where the globe it
+// was spent on used to cost one a page. It's still only asked for once the game's code is here too
+// (a download that fails, and each Try again after it, is asked nothing); the two come down side by
 // side, and whichever fails first says so.
 async function visit( config ) {
 
@@ -129,15 +155,30 @@ async function visit( config ) {
 	if ( robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	if ( err ) return loadFailed( err );
 
-	const challenge = await linkWithin();
-	const linkedWorld = opensOffEarth( location.search ) ?? offEarth( challenge?.answer.body?.challenge?.world );
-	const outcome = await postVisit( token, { world: linkedWorld ?? EARTH } );
+	// A plain load opening on the orrery asks for a free visit (the Moon's, as the fallback world is,
+	// but counted as the orrery's); a link to another world, that world's; anything else (a link to an
+	// Earth place, an Earth challenge or a party, or ?worlds=0) the globe's, our own picture of the
+	// Earth. None of them spends any of the day's Earth drives: the page asks for one (earthVisit) only
+	// when it first drives on the Earth.
+	const challenge = orreryFirst ? null : await linkWithin();
+	const linkedWorld = orreryFirst ? null : opensOffEarth( location.search ) ?? offEarth( challenge?.answer.body?.challenge?.world );
+	const outcome = await postVisit( token, orreryFirst ? { world: FALLBACK, start: 'orrery' } : linkedWorld ? { world: linkedWorld } : { globe: true } );
 	// (The link's answer as it comes, if it hadn't within LINK_WAIT.)
 	const settings = { googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, liveMoon: config.liveMoon ?? null, liveMoonReason: config.liveMoonReason ?? '', liveWorlds: config.liveWorlds ?? null, adsense: config.adsense ?? null, challengeLink: challengeLink() };
+	// (A Worker from before the globe's visit takes it for an Earth visit: the key now, as it was.)
 	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
-	// A link to another world (a challenge's there too): on that world, with none of the day's Earth
-	// drives spent. The Earth is a reload away (without the link, so that one does ask for a drive).
-	if ( outcome.free ) return run( main, { key: null, visit: outcome.visit, ...settings, earthClosed: { onEarth: toEarth, world: linkedWorld } } );
+	// The orrery (a plain load, over nothing shown yet: main.js), the globe of the Earth, or a link's
+	// other world: none of the day's Earth drives spent, and one asked for when the page drives on the
+	// Earth. Picking the Earth anywhere turns the page to its globe, in place.
+	if ( outcome.free ) {
+
+		let game = null;
+		const started = run( main, { key: null, visit: outcome.visit, ...settings, earthVisit: earthVisit( config, () => game ), opensOn: linkedWorld, orreryFirst } );
+		started.then( handle => game = handle ?? null );
+		return started;
+
+	}
+
 	if ( outcome.usedUp ) return usedUp( config, outcome, main, challengeLink() );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
@@ -161,14 +202,109 @@ function offEarth( id ) {
 
 }
 
-// From a page opened on another world by a link, to the Earth: the same page without the link (at /, a
-// challenge link's /c too), which asks for one of the day's drives as it loads (a ?party= stays).
-function toEarth() {
+// The Earth's drive for a page on the globe (main.js's earthVisit, called by its openEarth the first
+// time the page drives on the Earth, and never again once it's had a key): the robot check again
+// (Turnstile's tokens are good for one ask each; its widget, if it needs a click, in the drop-in's
+// loading card, which is up meanwhile), then POST /api/visit as an Earth drive for a page already
+// counted as a visit (fromGlobe). Resolves { key, left, visit }, or null with a word on why: over a
+// cap, the used-up notice (usedUpNotice, as for a page opened over one), its button turning the globe
+// to the Moon (game(): main.js's handle, once it has started); the check or the Worker failing, a
+// toast, to try Drive here again. Over a cap, a Drive here again before the caps start afresh shows
+// the notice again without asking (the Worker would only say the same). With signing in set up, the
+// notice has the pitch ("Get more Earth drives": main.js's pitchPass, the pass's sheet) and a sign-in,
+// as usedUp's does, over either cap: a supporter signing in there, or getting the pass, has it asked
+// for again at the next Drive here, counted by their account (and past the cap for everyone). What the
+// Worker says is kept for the orrery's Earth sheet too (EARTH_USED_UP: used up today, or got in).
+function earthVisit( config, game ) {
 
-	const url = new URL( location.href );
-	url.pathname = '/';
-	for ( const name of [ 'spot', 'at', 'name', 'region', 'heading', 'world', 'challenge', 'vs' ] ) url.searchParams.delete( name );
-	location.assign( url );
+	let refused = null;
+	const accounts = !! ( config.googleClientId || config.passwords === true );
+	const turnedAway = async outcome => {
+
+		refused = { outcome, until: Date.now() + outcome.retryAfter * 1000 };
+		const pitch = game()?.pitchPass;
+		usedUpNotice( outcome, { world: FALLBACK, onMoon: () => game()?.setWorld( FALLBACK ), onPass: accounts && pitch ? () => pitch() : undefined } );
+		if ( ! accounts ) return;
+		let supporter;
+		try {
+
+			// (Already here: it comes with the game's code.)
+			supporter = await import( './supporter.js' );
+
+		} catch ( err ) {
+
+			console.error( err );
+			return;
+
+		}
+
+		supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
+		// A supporter here already has had their 30 today; anyone else signing in with the pass (or
+		// getting it) is a supporter whose drives are their account's: asked again at the next Drive here.
+		const setUp = onPass => supporter.setUpSupporter( { worker: true, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, onPass } );
+		if ( setUp( null )?.me?.supporter ) return;
+		setUp( () => {
+
+			refused = null;
+			$( 'notice' ).hidden = true;
+			screens.toast( 'You have the Supporter Pass: press Drive here again for your Earth drive.', 8000 );
+
+		} );
+
+	};
+
+	return async () => {
+
+		if ( refused && Date.now() < refused.until ) {
+
+			turnedAway( refused.outcome );
+			return null;
+
+		}
+
+		let token;
+		try {
+
+			token = await robotCheck( config.turnstileSiteKey, $( 'loading' ).querySelector( '.robot-check' ) );
+
+		} catch {
+
+			screens.toast( 'The quick robot check didn\'t go through, so the 3D Earth didn\'t open. Try Drive here again (it can help to turn off a blocker for this site).', 9000 );
+			return null;
+
+		}
+
+		const outcome = await postVisit( token, { fromGlobe: true } );
+		if ( outcome.key ) {
+
+			writeStored( EARTH_USED_UP, null );
+			return outcome;
+
+		}
+
+		if ( outcome.usedUp ) {
+
+			writeStored( EARTH_USED_UP, utcDay() );
+			turnedAway( outcome );
+			return null;
+
+		}
+
+		screens.toast( outcome.robot ? 'The quick robot check didn\'t go through, so the 3D Earth didn\'t open. Try Drive here again.' : `${ outcome.error } Try Drive here again.`, 9000 );
+		return null;
+
+	};
+
+}
+
+// The used-up notice (screens.js's 'used-up'), wherever today's Earth drives turn out to be used up:
+// a page whose visit was turned away as it loaded (usedUp) and a Drive here on the Earth turned away
+// (earthVisit). outcome: postVisit's { retryAfter, reason }; world: the free world its button names,
+// onMoon what it does; onPass, with signing in set up, its "Get more Earth drives" (main.js's
+// pitchPass: the pass's sheet).
+function usedUpNotice( { retryAfter, reason }, { world, onMoon, onPass } ) {
+
+	screens.notice( 'used-up', { retryAfter, reason, world, onMoon, onPass } );
 
 }
 
@@ -176,25 +312,28 @@ function toEarth() {
 // worlds (the Moon, Mars, Vesta and Ceres) are ours to stream and cost nothing, so they're never
 // limited: the game starts on the Moon at once, on the Moon's globe with the Earth closed (main.js's
 // earthClosed; the others are a tap away), and a toast says why. Picking the Earth shows the used-up
-// notice, with its countdown and a way back to the Moon. A supporter's drives are counted by their
-// account, not this address (30 a day), so with signing in set up that notice has a sign-in too: a supporter on a new browser, or back from paying before Stripe's word arrived
-// (?supporter=thanks, supporter.js), would otherwise be stuck on the Moon until tomorrow. Once the
-// account here has the pass (signing in there, or the page's own first word on it), the page
-// reloads to ask for the visit again: once, so a supporter who has had their 30 stays on the Moon
-// rather than reloading round and round.
+// notice, with its countdown and a way back to the Moon. A supporter's drives (a day pass's too) are
+// counted by their account, not this address (10 a day), and the day's cap for everyone doesn't
+// turn them away, so with signing in set up that notice has a sign-in too, and the pitch: this is
+// the moment someone wants more of the Earth, so the toast and the notice both offer "Get more Earth
+// drives" (the pass's sheet: 24 hours, or for good). A supporter on a new browser, or back from
+// paying (?supporter=thanks, supporter.js, or the tab they paid in closed), would otherwise be stuck
+// on the Moon until tomorrow. Once the account here has the pass (signing in there, paying, or the
+// page's own first word on it), the page reloads to ask for the visit again: once, so a supporter
+// who has had their 10 stays on the Moon rather than reloading round and round.
 // (supporter.js comes with the game's code, so it's waited for here.)
 async function usedUp( config, outcome, main, link = null ) {
 
 	const { retryAfter, reason } = outcome;
-	// The notice's sign-in: only when it's this address's drives that are used up (a supporter's
-	// own are counted by their account), and only with signing in set up.
-	const accounts = reason === 'visitor' && !! ( config.googleClientId || config.passwords === true );
+	// The notice's sign-in and the pitch: only with signing in set up (a pass is an account's).
+	const accounts = !! ( config.googleClientId || config.passwords === true );
 	const watch = accounts && ! askedAgain();
 	let supporter = null;
+	// (Not a plain reload, which would be a plain load, the orrery's: the same page at an Earth address.)
 	const again = () => {
 
 		markAskedAgain();
-		location.reload();
+		location.assign( earthUrl( null, location.href ) );
 
 	};
 	const watchForPass = () => {
@@ -209,7 +348,7 @@ async function usedUp( config, outcome, main, link = null ) {
 	let game = null;
 	const earthClosed = () => {
 
-		screens.notice( 'used-up', { retryAfter, reason, world: game?.world ?? FALLBACK, onMoon: () => {} } );
+		usedUpNotice( outcome, { world: game?.world ?? FALLBACK, onMoon: () => {}, onPass: accounts && game?.pitchPass ? () => game.pitchPass() : undefined } );
 		if ( ! supporter ) return;
 		watchForPass();
 		supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
@@ -217,7 +356,7 @@ async function usedUp( config, outcome, main, link = null ) {
 	};
 	const started = run( main, {
 		key: null, visit: outcome.visit, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, liveMoon: config.liveMoon ?? null, liveMoonReason: config.liveMoonReason ?? '', liveWorlds: config.liveWorlds ?? null, adsense: config.adsense ?? null, challengeLink: link,
-		earthClosed: { onEarth: earthClosed },
+		earthClosed: { onEarth: earthClosed, usedUp: true },
 	} );
 	// Once the globe has turned to the Moon (it loads after the game starts), so it's read with the
 	// Moon in view rather than running out over the splash; named by the world it's on by then (Mars,
@@ -231,7 +370,8 @@ async function usedUp( config, outcome, main, link = null ) {
 			const here = game.world;
 			const others = OFF_EARTH.filter( id => id !== here );
 			const free = `so you're ${ onWorld( here ) }: free and unlimited, as ${ listOf( others ) } ${ others.length > 1 ? 'are' : 'is' }. The Earth opens again tomorrow.`;
-			screens.toast( reason === 'daily' ? `Today's free Earth drives are all taken, ${ free }` : `You've had today's free Earth drive, ${ free }`, 10000 );
+			const more = accounts && game.pitchPass ? { label: 'Get more Earth drives', onClick: () => game.pitchPass() } : null;
+			screens.toast( reason === 'daily' ? `Today's free Earth drives are all taken, ${ free }` : `You've had today's free Earth drive, ${ free }`, more ? 15000 : 10000, more );
 
 		} );
 

@@ -1233,6 +1233,9 @@ describe( 'World Drive leaderboard', () => {
 // Made up, in Stripe's and Google's formats: nothing here is a real link, secret or account.
 const PASS_LINK = 'https://buy.stripe.com/test_7sYmadeUp00000000000';
 const PASS_LINK_ID = 'plink_1MadeUpSupporterLink0000';
+const DAY_LINK = 'https://buy.stripe.com/test_dayMadeUp000000000000';
+const DAY_LINK_ID = 'plink_1MadeUpDayPassLink00000';
+const MONTH_LINK = 'https://buy.stripe.com/test_monthMadeUp0000000000';
 const WEBHOOK_SECRET = 'whsec_made_up_for_world_drive_tests_0123';
 // Tuesday 3 November 2026 at noon UTC: everything on the Supporter Pass's Worker happens then,
 // sessions included, unless a test says otherwise.
@@ -1327,6 +1330,12 @@ describe( 'World Drive Supporter Pass', () => {
 				GOOGLE_CLIENT_ID: CLIENT_ID,
 				GOOGLE_JWKS_URL: keys.url,
 				SUPPORTER_PAYMENT_LINK: PASS_LINK,
+				// wrangler.drive.jsonc's real links' ids aren't these tests' made-up ones: any link
+				// counts here, and the day pass is its own made-up link.
+				SUPPORTER_PAYMENT_LINK_ID: '',
+				DAY_PASS_PAYMENT_LINK: DAY_LINK,
+				SUPPORTER_MONTHLY_PAYMENT_LINK: MONTH_LINK,
+				DAY_PASS_PAYMENT_LINK_ID: DAY_LINK_ID,
 				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
 				SUPPORTER_EMAILS: ' Friend@Example.com, ',
 				ADMIN_EMAILS: 'nobody@example.com, Boss@Example.com , chief@example.com',
@@ -1398,7 +1407,7 @@ describe( 'World Drive Supporter Pass', () => {
 		const res = await me();
 		assert.equal( res.status, 200 );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
-		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$1.99/month' } } );
+		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$19.99', monthly: { link: MONTH_LINK, price: 'CA$1.99/month' }, day: { link: DAY_LINK, price: 'CA$0.99' } } } );
 		assert.equal( ( await call( server, '/api/config' ) ).json.googleClientId, CLIENT_ID );
 
 	} );
@@ -1412,7 +1421,7 @@ describe( 'World Drive Supporter Pass', () => {
 		// the whole site, never from http or another site).
 		assert.equal( alice.headers.get( 'Set-Cookie' ), `__Host-wd_session=${ alice.token }; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax; Secure` );
 		const [ account ] = server.d1( 'SELECT id, google_sub, email, name FROM accounts WHERE google_sub = \'1001\'' );
-		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$1.99/month', clientReferenceId: String( account.id ) } } );
+		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, contactEmail: '', supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$19.99', monthly: { link: MONTH_LINK, price: 'CA$1.99/month' }, day: { link: DAY_LINK, price: 'CA$0.99' }, clientReferenceId: String( account.id ) } } );
 		alice.id = account.id;
 		assert.deepEqual( ( await me( alice.cookie ) ).json, alice.json );
 		// Only the token's SHA-256 is kept.
@@ -1576,6 +1585,47 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
+	test( 'a day pass gives the pass for 24 hours from its payment, then nothing; a lifetime pass beside it lasts', async () => {
+
+		const gus = await signIn( { sub: '1031', email: 'gus@example.com', name: 'Gus' } );
+		const reference = gus.json.purchase.clientReferenceId;
+		const hour = 60 * 60 * 1000;
+		assert.equal( ( await webhook( server, checkout( 'gus_day', { reference, email: 'gus@example.com', link: DAY_LINK_ID } ) ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT pass, created_at FROM purchases WHERE checkout_session = \'cs_test_gus_day\'' ), [ { pass: 'day', created_at: PASS_DAY } ] );
+		const now = ( await me( gus.cookie ) ).json;
+		assert.equal( now.supporter, true );
+		assert.equal( now.dayPassUntil, PASS_DAY + 24 * hour );
+		// Thirty drives that day, by the account, even with the address's own spent.
+		const drive = time => call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json', Cookie: gus.cookie }, body: JSON.stringify( { token: TOKEN } ), ip: nextIp(), time } );
+		assert.equal( ( await drive( PASS_DAY + hour ) ).json.left, 29 );
+		// Still there a minute before the 24 hours are up; gone after.
+		assert.equal( ( await me( gus.cookie, PASS_DAY + 24 * hour - 60000 ) ).json.supporter, true );
+		const after = ( await me( gus.cookie, PASS_DAY + 24 * hour + 60000 ) ).json;
+		assert.equal( after.supporter, false );
+		assert.equal( after.dayPassUntil, undefined );
+		// And it's the address that counts for its drives again.
+		const left = ( await drive( PASS_DAY + 25 * hour ) ).json.left;
+		assert.equal( left, 7 );
+		// A lifetime pass bought beside it: the pass, with no end to say.
+		assert.equal( ( await webhook( server, checkout( 'gus_life', { reference, email: 'gus@example.com' } ) ) ).status, 200 );
+		const both = ( await me( gus.cookie ) ).json;
+		assert.equal( both.supporter, true );
+		assert.equal( both.dayPassUntil, undefined );
+		assert.equal( ( await me( gus.cookie, PASS_DAY + 20 * DAY ) ).json.supporter, true );
+		// (The suite's later tests count the purchases as they were.)
+		server.d1( 'DELETE FROM purchases WHERE checkout_session IN ( \'cs_test_gus_day\', \'cs_test_gus_life\' )' );
+
+	} );
+
+	test( 'with only some links counted (SUPPORTER_PAYMENT_LINK_ID), the day pass\'s link still counts, as a day pass', () => {
+
+		assert.deepEqual( purchaseFor( { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, SUPPORTER_PAYMENT_LINK_ID: `${ PASS_LINK_ID }, plink_1Other`, DAY_PASS_PAYMENT_LINK: DAY_LINK, DAY_PASS_PAYMENT_LINK_ID: DAY_LINK_ID, DAY_PASS_PRICE: 'CA$0.99', SUPPORTER_PRICE: 'CA$9.99' }, null ),
+			{ enabled: true, link: PASS_LINK, price: 'CA$9.99', day: { link: DAY_LINK, price: 'CA$0.99' } } );
+		// Without its id, the day pass isn't offered (its checkouts couldn't be told from a lifetime pass's).
+		assert.equal( purchaseFor( { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, DAY_PASS_PAYMENT_LINK: DAY_LINK }, null ).day, undefined );
+
+	} );
+
 	test( 'bought before signing in: whoever then signs in with the email paid with has it', async () => {
 
 		// No account named (the bare link), and one that doesn't exist: both are the email's.
@@ -1672,7 +1722,7 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
-	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went (a link to the Moon or to Mars each its own)', async () => {
+	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went (a link to the Moon or to Mars each its own, a plain load\'s orrery its own)', async () => {
 
 		// On the suite's own day (others' visits that day are counted too: what these add is compared).
 		const day = PASS_DAY;
@@ -1686,14 +1736,72 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await drive() ).status, 429 );
 		assert.equal( ( await drive( { world: 'moon' } ) ).status, 200 );
 		assert.equal( ( await drive( { world: 'mars' } ) ).status, 200 );
+		// A plain load, which opens on the orrery (boot.js): free, and counted as the orrery's; a start
+		// the Worker doesn't know is let go of (a link to the Moon, as before).
+		const orrery = await drive( { world: 'moon', start: 'orrery' } );
+		assert.equal( orrery.status, 200 );
+		assert.equal( orrery.json.free, true );
+		assert.equal( orrery.json.mapsKey, undefined );
+		assert.equal( typeof orrery.json.visit, 'string' );
+		assert.equal( ( await drive( { world: 'moon', start: 'nonsense' } ) ).status, 200 );
 		const added = () => {
 
 			const now = counts();
 			return Object.fromEntries( Object.entries( now ).map( ( [ name, n ] ) => [ name, n - ( before[ name ] ?? 0 ) ] ).filter( ( [ , n ] ) => n ) );
 
 		};
-		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 12; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
-		assert.deepEqual( added(), { 'visit:all': 12, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 1, 'visit_kind:mars_link': 1 } );
+		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 14; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		assert.deepEqual( added(), { 'visit:all': 14, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 2, 'visit_kind:mars_link': 1, 'visit_kind:orrery': 1 } );
+
+	} );
+
+	test( 'the globe\'s visit is free and never limited, counted as a visit on the globe; its Earth drive, asked for later, is counted by where it went and not as a visit again', async () => {
+
+		const day = PASS_DAY + 3600000;
+		const key = new Date( day ).toISOString().slice( 0, 10 );
+		const counts = () => Object.fromEntries( server.d1( `SELECT metric, key, n FROM stats_daily WHERE day = '${ key }' AND metric IN ( 'visit', 'visit_kind' )` ).map( r => [ `${ r.metric }:${ r.key }`, r.n ] ) );
+		const before = counts();
+		const ip = nextIp();
+		const ask = body => call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, ...body } ), ip, time: day } );
+		// As many globes as anyone likes, none of them an Earth drive: no key, and a free world's token.
+		for ( let i = 0; i < 10; i ++ ) {
+
+			const globe = await ask( { globe: true } );
+			assert.equal( globe.status, 200 );
+			assert.deepEqual( Object.keys( globe.json ).sort(), [ 'free', 'globe', 'visit', 'world' ] );
+			assert.equal( globe.json.free, true );
+			assert.equal( globe.json.world, 'earth' );
+			assert.equal( globe.json.mapsKey, undefined );
+			assert.match( globe.json.visit, /^v1\.[A-Za-z0-9_-]{21}m\./ );
+
+		}
+
+		// A free world's link wins over globe: true (its own kind).
+		assert.equal( ( await ask( { globe: true, world: 'moon' } ) ).json.world, 'moon' );
+		// Then the Earth's drives from the globe: the caps as ever (8 a visitor in this suite), the key,
+		// and an Earth visit's token.
+		for ( let i = 0; i < 8; i ++ ) {
+
+			const earth = await ask( { fromGlobe: true } );
+			assert.equal( earth.status, 200, earth.text );
+			assert.equal( typeof earth.json.mapsKey, 'string' );
+			assert.match( earth.json.visit, /^v1\.[A-Za-z0-9_-]{21}e\./ );
+
+		}
+
+		const over = await ask( { fromGlobe: true } );
+		assert.equal( over.status, 429 );
+		assert.equal( over.json.reason, 'visitor' );
+		const added = () => {
+
+			const now = counts();
+			return Object.fromEntries( Object.entries( now ).map( ( [ name, n ] ) => [ name, n - ( before[ name ] ?? 0 ) ] ).filter( ( [ , n ] ) => n ) );
+
+		};
+		for ( let tries = 0; tries < 30 && added()[ 'visit_kind:moon_visitor_cap' ] !== 1; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		// Eleven pages (ten globes and the Moon's link), not twenty: the Earth drives and the one over
+		// the cap were each a page already counted.
+		assert.deepEqual( added(), { 'visit:all': 11, 'visit_kind:globe': 10, 'visit_kind:moon_link': 1, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 1 } );
 
 	} );
 
@@ -3145,6 +3253,12 @@ describe( 'World Drive username and password accounts', () => {
 				GOOGLE_CLIENT_ID: CLIENT_ID,
 				GOOGLE_JWKS_URL: keys.url,
 				SUPPORTER_PAYMENT_LINK: PASS_LINK,
+				// wrangler.drive.jsonc's real links' ids aren't these tests' made-up ones: any link
+				// counts here, and the day pass is its own made-up link.
+				SUPPORTER_PAYMENT_LINK_ID: '',
+				DAY_PASS_PAYMENT_LINK: DAY_LINK,
+				SUPPORTER_MONTHLY_PAYMENT_LINK: MONTH_LINK,
+				DAY_PASS_PAYMENT_LINK_ID: DAY_LINK_ID,
 				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
 				ADMIN_EMAILS: 'boss@example.com',
 			},
@@ -3272,7 +3386,7 @@ describe( 'World Drive username and password accounts', () => {
 		const made = await signUp( 'Racer_1', 'correct horse battery staple' );
 		assert.equal( made.status, 200, made.text );
 		assert.equal( made.headers.get( 'Set-Cookie' ), `${ made.cookie }; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax; Secure` );
-		const signedIn = { signedIn: true, name: '', email: '', google: false, username: 'Racer_1', supporter: false };
+		const signedIn = { signedIn: true, name: '', email: '', google: false, username: 'Racer_1', contactEmail: '', supporter: false };
 		assert.deepEqual( { ...made.json, purchase: undefined }, { ...signedIn, purchase: undefined } );
 		assert.equal( made.json.purchase.clientReferenceId, String( login( 'racer_1' ).account_id ) );
 		assert.deepEqual( { ...( await me( made.cookie ) ).json, purchase: undefined }, { ...signedIn, purchase: undefined } );
@@ -3748,6 +3862,28 @@ describe( 'World Drive username and password accounts', () => {
 		const u = await signUp( 'No_Email', 'no email passphrase' );
 		assert.equal( u.json.supporter, false );
 		assert.equal( ( await me( u.cookie ) ).json.supporter, false );
+
+	} );
+
+	test( 'a username\'s account keeps an email for receipts, given at sign-up or later; it never makes a purchase its own', async () => {
+
+		const made = await send( 'POST', '/api/account/sign-up', { username: 'Receipts', password: 'the receipts passphrase', token: TOKEN, email: ' Ann@Example.com ' } );
+		assert.equal( made.status, 200, made.text );
+		assert.equal( made.json.contactEmail, 'ann@example.com' );
+		assert.equal( made.json.email, '' );
+		const cookie = cookieOf( made );
+		assert.equal( ( await send( 'POST', '/api/account/sign-up', { username: 'Receipts2', password: 'the receipts passphrase', token: TOKEN, email: 'not an email' } ) ).status, 400 );
+		// Changed, and taken off; signed out, nothing to change.
+		const changed = await send( 'POST', '/api/account/email', { email: 'Other@Example.org' }, { cookie } );
+		assert.equal( changed.status, 200, changed.text );
+		assert.equal( changed.json.contactEmail, 'other@example.org' );
+		assert.equal( ( await send( 'POST', '/api/account/email', { email: 'nope' }, { cookie } ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/account/email', { email: 'x@example.org' } ) ).status, 401 );
+		// Someone else's purchase with that email (never checked) doesn't become this account's pass.
+		server.d1( `INSERT INTO purchases ( checkout_session, email, status, created_at ) VALUES ( 'cs_receipts', 'other@example.org', 'paid', ${ Date.now() } )` );
+		assert.equal( ( await me( cookie ) ).json.supporter, false );
+		server.d1( 'DELETE FROM purchases WHERE checkout_session = \'cs_receipts\'' );
+		assert.equal( ( await send( 'POST', '/api/account/email', { email: '' }, { cookie } ) ).json.contactEmail, '' );
 
 	} );
 
