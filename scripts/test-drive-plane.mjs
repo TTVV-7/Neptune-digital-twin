@@ -144,23 +144,26 @@ describe( 'the drop (bailing out)', () => {
 
 	}
 
-	test( 'on the Earth: 90 m/s spread out and never faster; 144 m/s diving', () => {
+	test( 'on the Earth: 160 m/s spread out and never faster; 256 m/s diving; there in under 7 s', () => {
 
-		assert.ok( Math.abs( freefall( dropping( rig( { y: 6000 } ) ) ) - 90 ) < 1, 'spread out' );
+		assert.ok( Math.abs( freefall( dropping( rig( { y: 6000 } ) ) ) - 160 ) < 1, 'spread out' );
 		const diving = dropping( rig( { y: 6000 } ) );
 		diving.d.keys.add( 'KeyW' );
-		assert.ok( Math.abs( freefall( diving ) - 144 ) < 1, 'diving' );
-		assert.ok( Math.abs( dropTerminal( G.mars ) - 67.7 ) < 0.1 );
-		assert.ok( Math.abs( dropTerminal( G.moon, true ) - 96 ) < 0.05 );
+		assert.ok( Math.abs( freefall( diving ) - 256 ) < 1, 'diving' );
+		// Falling at 2.5 times the Earth's gravity: like a stone, not a drift.
+		const r = dropping( rig( { y: 6000 } ) );
+		assert.ok( run( r, 30, { until: () => - r.d.vy >= 159.9 } ) < 7 );
+		assert.ok( Math.abs( dropTerminal( G.mars ) - 115.3 ) < 0.2 );
+		assert.ok( Math.abs( dropTerminal( G.moon, true ) - 160 ) < 0.05 );
 
 	} );
 
-	test( 'on the Moon it reaches 60 m/s within 13 s (falling at 5 m/s² at least)', () => {
+	test( 'on the Moon it reaches 100 m/s within 9 s (falling at 12 m/s² at least)', () => {
 
 		const r = dropping( rig( { gravity: G.moon, y: 4000 } ) );
-		const t = run( r, 30, { until: () => - r.d.vy >= 59.9 } );
-		assert.ok( t < 13, `took ${ t.toFixed( 1 ) } s` );
-		assert.ok( Math.abs( freefall( r ) - 60 ) < 0.5 );
+		const t = run( r, 30, { until: () => - r.d.vy >= 99.9 } );
+		assert.ok( t < 9, `took ${ t.toFixed( 1 ) } s` );
+		assert.ok( Math.abs( freefall( r ) - 100 ) < 0.5 );
 
 	} );
 
@@ -189,23 +192,26 @@ describe( 'the parachute', () => {
 
 	}
 
-	test( 'it lowers it slowly: 2.5 m/s on the Earth, 1 m/s on the Moon and Vesta, twice that spilling air', () => {
+	test( 'it lowers it briskly: 10 m/s on the Earth, about 4 on the Moon, 3 on Vesta, twice that spilling air', () => {
 
-		assert.ok( Math.abs( sink( G.earth ) - 2.5 ) < 0.05 );
-		assert.ok( Math.abs( sink( G.moon ) - 1 ) < 0.05 );
-		assert.ok( Math.abs( sink( G.vesta ) - 1 ) < 0.05 );
-		assert.ok( Math.abs( sink( G.earth, true ) - 5 ) < 0.1 );
-		assert.ok( Math.abs( sink( G.moon, true ) - 2 ) < 0.05 );
+		assert.ok( Math.abs( sink( G.earth ) - 10 ) < 0.1 );
+		assert.ok( Math.abs( sink( G.moon ) - 4.06 ) < 0.05 );
+		assert.ok( Math.abs( sink( G.vesta ) - 3 ) < 0.05 );
+		assert.ok( Math.abs( sink( G.earth, true ) - 20 ) < 0.2 );
+		assert.ok( Math.abs( sink( G.moon, true ) - 8.13 ) < 0.1 );
 		assert.ok( Math.abs( chuteSink( G.mars ) - PARACHUTE.sink * Math.sqrt( G.mars ) ) < 1e-9 );
 
 	} );
 
-	test( 'on the Earth it opens 108 m up spread out (1.2 s of a 90 m/s fall)', () => {
+	test( 'on the Earth it opens 112 m up spread out (0.7 s of a 160 m/s fall), and it\'s down within 15 s of opening', () => {
 
 		const r = dropping( rig( { y: 3000 } ) );
 		let opened = null;
 		run( r, 600, { until: () => r.d.chute.open && ( opened = over( r ) ) } );
-		assert.ok( Math.abs( opened - 108 ) < 3, `opened at ${ opened } m` );
+		// (Within a frame of the fall: at 160 m/s a frame is a few metres.)
+		assert.ok( Math.abs( opened - 112 ) < 6, `opened at ${ opened } m` );
+		const down = run( r, 60, { until: () => ! r.plane.on } );
+		assert.ok( down < 15, `${ down.toFixed( 1 ) } s under the parachute` );
 
 	} );
 
@@ -221,10 +227,11 @@ describe( 'the parachute', () => {
 		};
 
 		const flat = opensAt( () => 0 );
-		// Rising half a metre for each one north, the way it's going: 25 m/s coming up at it.
+		// Rising half a metre for each one north, the way it's going: 25 m/s coming up at it, so
+		// PARACHUTE.lead s of that sooner.
 		const slope = opensAt( ( east, north ) => north * 0.5 );
 		assert.ok( Math.abs( flat - PARACHUTE.lead * dropTerminal( G.mars ) ) < 3, `flat ${ flat }` );
-		assert.ok( slope > flat + 20, JSON.stringify( { flat, slope } ) );
+		assert.ok( slope > flat + PARACHUTE.lead * 25 * 0.7, JSON.stringify( { flat, slope } ) );
 
 	} );
 

@@ -2,7 +2,7 @@ import { BufferGeometry, Box3, DoubleSide, Euler, Float32BufferAttribute, Group,
 import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from './geo.js';
 import { blocks, isTyping } from './walk.js';
 import { createDriveFx } from './drive-fx.js';
-import { PARACHUTE, PlaneMode } from './plane.js';
+import { PARACHUTE, PlaneMode, chuteSink } from './plane.js';
 
 // Race mode: drive a placed vehicle at highway speeds. Arcade physics rather than a simulation:
 // the vehicle follows the ground under its wheels, keeps its upward speed off ramps and crests so
@@ -208,11 +208,14 @@ const FLIGHT_DAMP = 4;
 const FLIGHT_RIGHTING = 3;
 // It lands within LAND_TILT° of upright. Past that it's a wipeout: a short tumble, thrown up at
 // up to WIPE_HOP m/s and keeping WIPE_KEEP of its speed, then RIGHT_TIME s rolling back onto its
-// wheels where it comes down.
+// wheels where it comes down (falling WIPE_FALL times as fast meanwhile).
 const LAND_TILT = 40;
 const WIPE_HOP = 3;
 const WIPE_KEEP = 0.5;
 const RIGHT_TIME = 0.55;
+// In a wipeout's tumble it comes down this many times as fast as it falls otherwise: thrown, then
+// slammed back down, not floating.
+const WIPE_FALL = 3;
 // Tricks are whole turns in the air, give or take SPIN_TOL° for spins (a 180 counts) and FLIP_TOL°
 // for flips and rolls (as far off as it can land), and BIG_AIR s or more off the ground. POINTS
 // for each (air: per second); two or more in one jump are a combo, COMBO_BONUS times the points.
@@ -1528,12 +1531,12 @@ export class Driver {
 		if ( chute?.open ) {
 
 			chute.t += dt;
-			this.vy += ( - PARACHUTE.sink * Math.sqrt( this.gravity ) - this.vy ) * Math.min( 1, dt * PARACHUTE.settle );
+			this.vy += ( - chuteSink( this.gravity ) - this.vy ) * Math.min( 1, dt * PARACHUTE.settle );
 			this.speed *= Math.exp( - PARACHUTE.drag * dt );
 
 		} else {
 
-			this.vy -= this.fall * dt;
+			this.vy -= this.fall * ( this.air?.wipeout ? WIPE_FALL : 1 ) * dt;
 
 		}
 
