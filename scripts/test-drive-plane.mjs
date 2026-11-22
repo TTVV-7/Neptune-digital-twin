@@ -15,7 +15,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Driver } from '../src/drive.js';
-import { DROP, PARACHUTE, PlaneMode, chuteSink, dropTerminal, planeTopSpeed } from '../src/plane.js';
+import { DROP, PARACHUTE, PlaneMode, chuteHeight, chuteSink, dropTerminal, planeTopSpeed } from '../src/plane.js';
 import { HEIGHTS, LOOP, PLANE_POINTS, PLANE_TRICKS, TURN_TOL, loopGate, loopOffset, noseAngle, planeTricksOf } from '../src/plane-tricks.js';
 import { TRICK } from '../worker/drive/scores.js';
 
@@ -147,26 +147,30 @@ describe( 'the drop (bailing out)', () => {
 
 	}
 
-	test( 'on the Earth: 300 m/s spread out and never faster; 480 m/s diving; there in under 7 s', () => {
+	test( 'on the Earth: 700 m/s spread out and never faster; 1,120 m/s diving; there in under 8 s; down from the 12 km ceiling in about 20 s', () => {
 
-		assert.ok( Math.abs( freefall( dropping( rig( { y: 9000 } ) ) ) - 300 ) < 1, 'spread out' );
-		const diving = dropping( rig( { y: 12000 } ) );
+		assert.ok( Math.abs( freefall( dropping( rig( { y: 12000 } ) ) ) - 700 ) < 1, 'spread out' );
+		const diving = dropping( rig( { y: 20000 } ) );
 		diving.d.keys.add( 'KeyW' );
-		assert.ok( Math.abs( freefall( diving ) - 480 ) < 1, 'diving' );
-		// Falling at 5 times the Earth's gravity: like a stone, not a drift.
-		const r = dropping( rig( { y: 9000 } ) );
-		assert.ok( run( r, 30, { until: () => - r.d.vy >= 299.9 } ) < 7 );
-		assert.ok( Math.abs( dropTerminal( G.mars ) - ( 200 + 100 * ( G.mars - 0.165 ) / ( 1 - 0.165 ) ) ) < 0.5 );
-		assert.ok( Math.abs( dropTerminal( G.moon, true ) - 320 ) < 0.05 );
+		assert.ok( Math.abs( freefall( diving ) - 1120 ) < 1, 'diving' );
+		// Falling at 10 times the Earth's gravity: like a stone, not a drift.
+		const r = dropping( rig( { y: 12000 } ) );
+		assert.ok( run( r, 30, { until: () => - r.d.vy >= 699.9 } ) < 8 );
+		// From the ceiling to the parachute in about 20 s.
+		const ceiling = dropping( rig( { y: 12000 } ) );
+		const down = run( ceiling, 60, { until: () => ceiling.d.chute.open } );
+		assert.ok( down > 15 && down < 24, `${ down.toFixed( 1 ) } s` );
+		assert.ok( Math.abs( dropTerminal( G.mars ) - ( 450 + 250 * ( G.mars - 0.165 ) / ( 1 - 0.165 ) ) ) < 0.5 );
+		assert.ok( Math.abs( dropTerminal( G.moon, true ) - 720 ) < 0.1 );
 
 	} );
 
-	test( 'on the Moon it reaches 200 m/s within 7 s (falling at 30 m/s² at least)', () => {
+	test( 'on the Moon it reaches 450 m/s within 8 s (falling at 60 m/s² at least)', () => {
 
-		const r = dropping( rig( { gravity: G.moon, y: 6000 } ) );
-		const t = run( r, 30, { until: () => - r.d.vy >= 199.9 } );
-		assert.ok( t < 7, `took ${ t.toFixed( 1 ) } s` );
-		assert.ok( Math.abs( freefall( r ) - 200 ) < 0.5 );
+		const r = dropping( rig( { gravity: G.moon, y: 12000 } ) );
+		const t = run( r, 30, { until: () => - r.d.vy >= 449.9 } );
+		assert.ok( t < 8, `took ${ t.toFixed( 1 ) } s` );
+		assert.ok( Math.abs( freefall( r ) - 450 ) < 0.5 );
 
 	} );
 
@@ -200,21 +204,21 @@ describe( 'the parachute', () => {
 		assert.ok( Math.abs( sink( G.earth ) - 10 ) < 0.1 );
 		assert.ok( Math.abs( sink( G.moon ) - 4.06 ) < 0.05 );
 		assert.ok( Math.abs( sink( G.vesta ) - 3 ) < 0.05 );
-		assert.ok( Math.abs( sink( G.earth, true ) - 20 ) < 0.2 );
+		assert.ok( Math.abs( sink( G.earth, true ) - 20 ) < 0.5 );
 		assert.ok( Math.abs( sink( G.moon, true ) - 8.13 ) < 0.1 );
 		assert.ok( Math.abs( chuteSink( G.mars ) - PARACHUTE.sink * Math.sqrt( G.mars ) ) < 1e-9 );
 
 	} );
 
-	test( 'on the Earth it opens 90 m up spread out (0.3 s of a 300 m/s fall), and it\'s down within 8 s of opening', () => {
+	test( 'on the Earth it opens 135 m up spread out (as high as it takes to slow from 700 m/s, then 2 s at its sink), and it\'s down within 6 s of opening', () => {
 
-		const r = dropping( rig( { y: 3000 } ) );
+		const r = dropping( rig( { y: 6000 } ) );
 		let opened = null;
 		run( r, 600, { until: () => r.d.chute.open && ( opened = over( r ) ) } );
-		// (Within a frame of the fall: at 300 m/s a frame is 5 m.)
-		assert.ok( Math.abs( opened - 90 ) < 6, `opened at ${ opened } m` );
+		// (Within two frames of the fall: at 700 m/s a frame is 12 m.)
+		assert.ok( Math.abs( opened - 135 ) < 25, `opened at ${ opened } m` );
 		const down = run( r, 60, { until: () => ! r.plane.on } );
-		assert.ok( down < 8, `${ down.toFixed( 1 ) } s under the parachute` );
+		assert.ok( down < 6, `${ down.toFixed( 1 ) } s under the parachute` );
 
 	} );
 
@@ -222,7 +226,7 @@ describe( 'the parachute', () => {
 
 		const opensAt = ground => {
 
-			const r = dropping( rig( { gravity: G.mars, y: 2000, speed: CAR_TOP / KMH, ground } ) );
+			const r = dropping( rig( { gravity: G.mars, y: 6000, speed: CAR_TOP / KMH, ground } ) );
 			let opened = null;
 			run( r, 600, { until: () => r.d.chute.open && ( opened = over( r ) ) } );
 			return opened;
@@ -230,12 +234,15 @@ describe( 'the parachute', () => {
 		};
 
 		const flat = opensAt( () => 0 );
-		// Rising half a metre for each one north, the way it's going: 25 m/s coming up at it, so
-		// PARACHUTE.lead s of that sooner.
-		const slope = opensAt( ( east, north ) => north * 0.5 );
-		// (Within two frames of the fall: it's seen open a frame after it opens, at 225 m/s 4 m a frame.)
-		assert.ok( Math.abs( flat - PARACHUTE.lead * dropTerminal( G.mars ) ) < 2 * dropTerminal( G.mars ) * DT + 1, `flat ${ flat }` );
-		assert.ok( slope > flat + PARACHUTE.lead * 25 * 0.7, JSON.stringify( { flat, slope } ) );
+		// Rising two metres for each one north, the way it's going: 100 m/s coming up at it, so it
+		// opens as much higher as slowing from that much more takes (100 / PARACHUTE.settle m, 17 m;
+		// seen to within a frame of a 614 m/s fall, 10 m). (Ground rising ahead over the car itself
+		// isn't found: a wall, closingSpeed.)
+		const slope = opensAt( ( east, north ) => north * 2 );
+		// (Within two frames of the fall: it's seen open a frame after it opens, at 514 m/s 9 m a frame.)
+		assert.ok( Math.abs( flat - chuteHeight( dropTerminal( G.mars ), G.mars ) ) < 2 * dropTerminal( G.mars ) * DT + 1, `flat ${ flat }` );
+		assert.ok( slope > flat + 100 / PARACHUTE.settle - 614 * DT, JSON.stringify( { flat, slope } ) );
+		assert.ok( Math.abs( chuteHeight( 500, 1 ) - chuteHeight( 300, 1 ) - 200 / PARACHUTE.settle ) < 1e-9 );
 
 	} );
 

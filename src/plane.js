@@ -54,14 +54,14 @@ const KMH = 3.6;
 const CAR_SHARE = 2;
 // The parachute a plane's drop comes down under (here; drive.js's fallStep and airSpin read it
 // too): opened PARACHUTE.open m over the ground, or on the Earth `floor` m (where the drop is
-// fastest, and over buildings), or, coming at the ground faster, `lead` s of it out (see
-// closingSpeed), it slows the fall at `settle` (1/s) to `sink` m/s times the square root of the
+// fastest, and over buildings), or, coming at the ground faster, as high as it takes to slow from
+// that and then come down `lead` s at its sink (chuteHeight, closingSpeed), it slows the fall at `settle` (1/s) to `sink` m/s times the square root of the
 // gravity, but never slower than `sinkLeast` m/s (on Vesta and Ceres that would be minutes of
 // hanging there), and S held spills air from it for `spill` times that. Its speed across the ground
 // slows at `drag` (1/s), and it turns back upright at `right` (1/s), so it lands on its wheels.
 // `size`: the canopy's radius as a share of the vehicle's width (at least `least` m). On the
 // Earth that's 10 m/s (it was 2.5, a long, slow float): a few seconds down from 45 m.
-export const PARACHUTE = { open: 25, floor: 45, lead: 0.3, sink: 10, sinkLeast: 3, settle: 6, spill: 2, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
+export const PARACHUTE = { open: 25, floor: 45, lead: 2, sink: 10, sinkLeast: 3, settle: 6, spill: 2, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
 // The drop (T, flying): falling faster at `boost` times the gravity, and at `pull` m/s² at least (in
 // weak gravity a fall would crawl), so it drops like a stone rather than drifting, and at most at
 // `terminal` m/s on the Earth (well past a skydiver's: it's a game), `least` m/s on the Moon and
@@ -71,12 +71,13 @@ export const PARACHUTE = { open: 25, floor: 45, lead: 0.3, sink: 10, sinkLeast: 
 // and under `low` m over the ground, no drop, it lands and folds as before. (There's no air on
 // the Moon, Vesta or Ceres to set a falling speed: `least` is a game's cap there, which keeps the
 // parachute's opening sane and everything far under the live protocol's top speed.)
-// (Faster since 2026-11-22, the owner finding the fall far too slow: 300 m/s on the Earth, 200 on
-// the Moon, reached at 5 times the gravity, 30 m/s² at least, where it was 160 and 100 at 2.5 times
-// and 12; and the parachute opens later, `lead` 0.3 s of the fall over the ground where it was 0.7,
-// and bites harder, `settle` 6 where it was 4, so it isn't a longer float down instead and still
-// lands at its sink: about 5 s under it on the Earth.)
-export const DROP = { terminal: 300, least: 200, dive: 1.6, pull: 30, boost: 5, shed: 1.5, steer: 30, low: 12 };
+// (Faster twice on 2026-11-22, the owner finding the fall far too slow, the plane now flying from
+// 12 km: 700 m/s on the Earth (1,120 diving), 450 on the Moon, reached at 10 times the gravity (60
+// m/s² at least): about 20 s down from the ceiling, 13 diving. It was 160 and 100 at 2.5 times and
+// 12, then 300 and 200 at 5 and 30. The parachute opens as high as it takes to slow to its sink
+// and then come down `lead` 2 s at it (chuteHeight: about 135 m up spread out on the Earth) and
+// bites hard, `settle` 6, so it lands at its sink a few seconds after opening.)
+export const DROP = { terminal: 700, least: 450, dive: 1.6, pull: 60, boost: 10, shed: 1.5, steer: 30, low: 12 };
 // The gravity (a share of the Earth's) from which a fall is the Earth's, and under which `least`.
 const LIGHT = 0.165;
 
@@ -126,7 +127,7 @@ export function dropTerminal( gravity, diving = false ) {
 }
 
 // How fast (m/s²) the drop falls faster, in `gravity`: DROP.boost times its own, but never under
-// DROP.pull (49 on the Earth, 30 on the Moon and lighter).
+// DROP.pull (98 on the Earth, 60 on the Moon and lighter).
 export function dropPull( gravity ) {
 
 	return Math.max( 9.81 * gravity * DROP.boost, DROP.pull );
@@ -142,11 +143,14 @@ export function chuteSink( gravity, spilling = false ) {
 }
 
 // The height (m over the ground) the parachute opens at, coming at the ground at `closing` m/s, in
-// `gravity`: PARACHUTE.open, PARACHUTE.floor on the Earth (gravity 1), or `lead` s of the closing
-// speed out, whichever is highest.
+// `gravity`: PARACHUTE.open, PARACHUTE.floor on the Earth (gravity 1), or as high as it takes to
+// slow from that speed to its sink (the fall it sheds at `settle`: what's over the sink over
+// `settle` m) and then come down `lead` s at its sink, whichever is highest. (It was `lead` s of the
+// closing speed out, which at the faster fall left too little to slow in from a low drop.)
 export function chuteHeight( closing, gravity ) {
 
-	return Math.max( PARACHUTE.open, gravity >= 1 ? PARACHUTE.floor : 0, PARACHUTE.lead * closing );
+	const sink = chuteSink( gravity );
+	return Math.max( PARACHUTE.open, gravity >= 1 ? PARACHUTE.floor : 0, Math.max( 0, closing - sink ) / PARACHUTE.settle + sink * PARACHUTE.lead );
 
 }
 
