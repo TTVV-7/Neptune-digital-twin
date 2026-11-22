@@ -51,6 +51,23 @@ const AFTER = 4000;
 const VOLUME = 0.6;
 const PAUSED = 0.4;
 const FADE = 1.5;
+// A moment of silence (a WAV of 0.1 s, 8 kHz), which the decks are unlocked with (see decks).
+const SILENCE = ( () => {
+
+	const samples = 800;
+	const bytes = new Uint8Array( 44 + samples );
+	const view = new DataView( bytes.buffer );
+	const text = ( at, value ) => [ ...value ].forEach( ( c, i ) => view.setUint8( at + i, c.charCodeAt( 0 ) ) );
+	text( 0, 'RIFF' ); view.setUint32( 4, 36 + samples, true ); text( 8, 'WAVE' ); text( 12, 'fmt ' );
+	view.setUint32( 16, 16, true ); view.setUint16( 20, 1, true ); view.setUint16( 22, 1, true );
+	view.setUint32( 24, 8000, true ); view.setUint32( 28, 8000, true ); view.setUint16( 32, 1, true ); view.setUint16( 34, 8, true );
+	text( 36, 'data' ); view.setUint32( 40, samples, true );
+	bytes.fill( 128, 44 );
+	let binary = '';
+	for ( const byte of bytes ) binary += String.fromCharCode( byte );
+	return `data:audio/wav;base64,${ typeof btoa === 'function' ? btoa( binary ) : '' }`;
+
+} )();
 
 // The music for the page: update( { mode, world } ) as either changes (main.js's setMode and
 // setWorld); setOn, setVolume and on / volume for the settings, and onChange( fn ) to hear of them
@@ -71,7 +88,6 @@ export function createMusic( { enabled = true } = {} ) {
 	let playing = null; // { id, element, gain }
 	const turns = {}; // each scene's next track (its index in the playlist)
 	const listeners = new Set();
-	const elements = new Map();
 
 	function sceneOf( mode, world ) {
 
@@ -90,6 +106,7 @@ export function createMusic( { enabled = true } = {} ) {
 		master = context.createGain();
 		master.gain.value = level();
 		master.connect( context.destination );
+		makeDecks();
 		return true;
 
 	}
@@ -110,43 +127,92 @@ export function createMusic( { enabled = true } = {} ) {
 
 	}
 
-	function nodeFor( id ) {
+	// Two decks, each an <audio> element through a gain: the track playing on one, the one before
+	// fading out on the other. Always these two, whatever's played: an iPhone lets a page start an
+	// element playing only in a tap (or a moment after it), so a new element for each track was
+	// turned away (play() rejected, silence) whenever its scene came later than that, as driving
+	// does, after the drop-in's wait: only the globe's (started in the first tap) and the plane's
+	// (its ✈ a tap just before) were heard. An element once played in a tap may change its track and
+	// play again whenever, so both are started (on a moment of silence) in the first tap, then given
+	// each track's file in turn.
+	const decks = [];
+	function deckFor( id ) {
 
-		let node = elements.get( id );
-		if ( node ) return node;
-		const element = new Audio();
-		element.preload = 'auto';
-		element.src = `${ PATH }${ id }.m4a`;
-		const gain = context.createGain();
-		gain.gain.value = 0;
-		context.createMediaElementSource( element ).connect( gain );
-		gain.connect( master );
-		element.addEventListener( 'ended', () => {
+		const free = decks.find( deck => deck !== playing ) ?? decks[ 0 ];
+		if ( playing?.id === id ) return playing;
+		const url = `${ PATH }${ id }.m4a`;
+		if ( free.id !== id ) {
 
-			if ( playing?.element === element ) next();
+			free.id = id;
+			free.element.src = url;
 
-		} );
-		node = { id, element, gain };
-		elements.set( id, node );
-		return node;
+		}
+
+		return free;
 
 	}
 
-	function fade( node, to ) {
+	function makeDecks() {
+
+		for ( let i = 0; i < 2; i ++ ) {
+
+			const element = new Audio();
+			element.preload = 'auto';
+			const gain = context.createGain();
+			gain.gain.value = 0;
+			context.createMediaElementSource( element ).connect( gain );
+			gain.connect( master );
+			const deck = { id: null, element, gain, unlocked: false };
+			element.addEventListener( 'ended', () => {
+
+				if ( playing === deck ) next();
+
+			} );
+			decks.push( deck );
+
+		}
+
+	}
+
+	// In a tap: each deck not yet played plays a moment of silence (unless it's already playing), so
+	// it's one the browser lets play later.
+	function unlockDecks() {
+
+		for ( const deck of decks ) {
+
+			if ( deck.unlocked || deck === playing ) continue;
+			deck.unlocked = true;
+			deck.id = null;
+			deck.element.src = SILENCE;
+			deck.element.play().then( () => {
+
+				if ( deck.element.src === SILENCE ) deck.element.pause();
+
+			}, () => {
+
+				deck.unlocked = false;
+
+			} );
+
+		}
+
+	}
+
+	function fade( deck, to ) {
 
 		const now = context.currentTime;
-		node.gain.gain.cancelScheduledValues( now );
-		node.gain.gain.setValueAtTime( node.gain.gain.value, now );
-		node.gain.gain.linearRampToValueAtTime( to, now + FADE );
+		deck.gain.gain.cancelScheduledValues( now );
+		deck.gain.gain.setValueAtTime( deck.gain.gain.value, now );
+		deck.gain.gain.linearRampToValueAtTime( to, now + FADE );
 
 	}
 
-	function stop( node ) {
+	function stop( deck ) {
 
-		fade( node, 0 );
+		fade( deck, 0 );
 		setTimeout( () => {
 
-			if ( playing !== node ) node.element.pause();
+			if ( playing !== deck ) deck.element.pause();
 
 		}, FADE * 1000 + 100 );
 
@@ -154,15 +220,14 @@ export function createMusic( { enabled = true } = {} ) {
 
 	function start( id ) {
 
-		const node = nodeFor( id );
-		if ( playing && playing !== node ) stop( playing );
-		if ( playing === node && ! node.element.paused ) return;
-		const list = PLAYLISTS[ scene ];
-		node.element.loop = list.length === 1;
-		if ( node.element.ended ) node.element.currentTime = 0;
-		playing = node;
-		node.element.play().catch( () => {} );
-		fade( node, 1 );
+		const deck = deckFor( id );
+		if ( playing && playing !== deck ) stop( playing );
+		if ( playing === deck && ! deck.element.paused ) return;
+		deck.element.loop = PLAYLISTS[ scene ].length === 1;
+		if ( deck.element.ended ) deck.element.currentTime = 0;
+		playing = deck;
+		deck.element.play().catch( () => {} );
+		fade( deck, 1 );
 
 	}
 
@@ -173,8 +238,7 @@ export function createMusic( { enabled = true } = {} ) {
 		const at = turns[ scene ] ?? 0;
 		turns[ scene ] = ( at + 1 ) % list.length;
 		const id = list[ at ];
-		const node = nodeFor( id );
-		if ( playing === node ) node.element.currentTime = 0;
+		if ( playing?.id === id ) playing.element.currentTime = 0;
 		start( id );
 
 	}
@@ -205,19 +269,23 @@ export function createMusic( { enabled = true } = {} ) {
 
 	}
 
-	// Sound only after a click or a key; then whatever the scene is.
+	// Sound only after a click or a key. Every one of them (not only the first): the decks unlocked,
+	// the context going, and the scene's track started, or started again if the browser turned it
+	// away (a track that should be playing and isn't).
 	if ( enabled && typeof document !== 'undefined' ) {
 
-		const unlock = () => {
+		const tapped = () => {
 
-			document.removeEventListener( 'pointerdown', unlock, true );
-			document.removeEventListener( 'keydown', unlock, true );
-			play();
+			if ( ! on || ! ready() ) return;
+			unlockDecks();
+			if ( context.state === 'suspended' ) context.resume();
+			if ( playing && playing.element.paused && PLAYLISTS[ scene ]?.includes( playing.id ) ) playing.element.play().catch( () => {} );
+			else play();
 
 		};
 
-		document.addEventListener( 'pointerdown', unlock, true );
-		document.addEventListener( 'keydown', unlock, true );
+		document.addEventListener( 'pointerdown', tapped, true );
+		document.addEventListener( 'keydown', tapped, true );
 		// Not on while the page is out of sight (another tab, the phone locked).
 		document.addEventListener( 'visibilitychange', () => {
 

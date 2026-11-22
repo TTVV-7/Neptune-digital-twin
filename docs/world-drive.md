@@ -8152,8 +8152,14 @@ swap it twice). A playlist of one loops; otherwise a track's end starts the next
 fades one into the next (1.5 s); paused, it plays at 40 %; with the page out of sight (another tab,
 a locked phone) it stops until it's back.
 
-It goes through WebAudio (horns.js's AudioContext): an `<audio>` element a track, each through a
-gain into a master gain, since an iPhone won't let an element's own volume be set. A browser starts
+It goes through WebAudio (horns.js's AudioContext): two `<audio>` elements (decks), each through a
+gain into a master gain, since an iPhone won't let an element's own volume be set; the track
+playing on one, the one before fading out on the other, each given every track's file in turn. At
+first it was an element a track, and on an iPhone only the globe's and the plane's were ever heard:
+Safari lets an element start playing only in a tap or a moment after it, and the globe's started in
+the first tap and the plane's just after the ✈, while a world's comes after the drop-in's wait. So
+both decks are played (on 0.1 s of silence) in the first tap, which lets them play whatever they're
+given later; and every tap after that starts the scene's track again if it was turned away. A browser starts
 no sound before a click or a key, so the music starts at the first one. **Music** in the pause menu
 (with its volume) and under the rides in the globe's panel switch it, both the same, kept in this
 browser (`world-drive.music`, `world-drive.music-volume`); off, nothing is fetched.
