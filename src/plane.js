@@ -60,7 +60,7 @@ const CAR_SHARE = 2;
 // slows at `drag` (1/s), and it turns back upright at `right` (1/s), so it lands on its wheels.
 // `size`: the canopy's radius as a share of the vehicle's width (at least `least` m). On the
 // Earth that's 10 m/s (it was 2.5, a long, slow float): a few seconds down from 45 m.
-export const PARACHUTE = { open: 25, floor: 45, lead: 0.7, sink: 10, sinkLeast: 3, settle: 4, spill: 2, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
+export const PARACHUTE = { open: 25, floor: 45, lead: 0.3, sink: 10, sinkLeast: 3, settle: 6, spill: 2, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
 // The drop (T, flying): falling faster at `boost` times the gravity, and at `pull` m/s² at least (in
 // weak gravity a fall would crawl), so it drops like a stone rather than drifting, and at most at
 // `terminal` m/s on the Earth (well past a skydiver's: it's a game), `least` m/s on the Moon and
@@ -70,7 +70,12 @@ export const PARACHUTE = { open: 25, floor: 45, lead: 0.7, sink: 10, sinkLeast: 
 // and under `low` m over the ground, no drop, it lands and folds as before. (There's no air on
 // the Moon, Vesta or Ceres to set a falling speed: `least` is a game's cap there, which keeps the
 // parachute's opening sane and everything far under the live protocol's top speed.)
-export const DROP = { terminal: 160, least: 100, dive: 1.6, pull: 12, boost: 2.5, shed: 1.5, steer: 30, low: 12 };
+// (Faster since 2026-11-22, the owner finding the fall far too slow: 300 m/s on the Earth, 200 on
+// the Moon, reached at 5 times the gravity, 30 m/s² at least, where it was 160 and 100 at 2.5 times
+// and 12; and the parachute opens later, `lead` 0.3 s of the fall over the ground where it was 0.7,
+// and bites harder, `settle` 6 where it was 4, so it isn't a longer float down instead and still
+// lands at its sink: about 5 s under it on the Earth.)
+export const DROP = { terminal: 300, least: 200, dive: 1.6, pull: 30, boost: 5, shed: 1.5, steer: 30, low: 12 };
 // The gravity (a share of the Earth's) from which a fall is the Earth's, and under which `least`.
 const LIGHT = 0.165;
 
@@ -120,7 +125,7 @@ export function dropTerminal( gravity, diving = false ) {
 }
 
 // How fast (m/s²) the drop falls faster, in `gravity`: DROP.boost times its own, but never under
-// DROP.pull (24.5 on the Earth, 12 on the Moon and lighter).
+// DROP.pull (49 on the Earth, 30 on the Moon and lighter).
 export function dropPull( gravity ) {
 
 	return Math.max( 9.81 * gravity * DROP.boost, DROP.pull );
@@ -660,13 +665,19 @@ export class PlaneMode {
 		d.heading += steerInput * DROP.steer * dt;
 		d.course = d.heading;
 		d.steer = steerInput;
+		// (Where it was before this frame's fall: the ground is looked for from over that, below.)
+		const before = d.y;
 		this.move( dt );
 		d.y += this.vy * dt;
 		d.vy = this.vy;
 		d.pitch += ( 0 - d.pitch ) * Math.min( 1, dt * PARACHUTE.right );
 		d.roll += ( 0 - d.roll ) * Math.min( 1, dt * PARACHUTE.right );
 		this.kit?.update( dt, this.deploy, 0 );
-		const below = this.groundUnder( d.east, d.north, d.y );
+		// Looked for from over where it was before this frame's fall, not from where it is now: a free
+		// fall goes metres a frame (160 m/s, 8 m a frame on a phone at 20 fps), and from under the
+		// ground's surface the ray finds nothing (Google's map is a skin, seen only from above), so it
+		// landed on the ground it had found before, under the road, and stood half in it.
+		const below = this.groundUnder( d.east, d.north, Math.max( d.y, before ) );
 		if ( below !== null ) this.ground = below;
 		this.height = Math.max( 0, d.y - this.ground );
 		if ( d.y > this.ground ) return;

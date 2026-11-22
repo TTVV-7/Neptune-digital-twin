@@ -43,6 +43,9 @@ const JUMP_SPEED = 10;
 // the Earth's gravity, 200 m by that would be 8 km, over four minutes of falling with nothing
 // under it.
 const REACH_DOWN = 400;
+// How far over itself (m) a vehicle with no ground under it looks for ground it has ended up under
+// (a finer tile's road come in over the coarse one it stood on: see update).
+const SKIN_LOOK = 40;
 const FALL_RESET = 200;
 const FALL_MOST = 1500;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
@@ -981,10 +984,26 @@ export class Driver {
 
 		} else if ( heights.length === 0 ) {
 
-			// Off the edge of the world: put it back where it last stood.
-			if ( this.y < this.lastSafe.y - this.fallReset ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
-			this.vy -= this.fall * dt;
-			this.y += this.vy * dt;
+			// Nothing under it: under the ground's skin, or off the edge of the world. Under the skin is
+			// where it is when the ground came up over it: Google's tiles get finer as they stream in, and
+			// the finer one's road can be metres over the coarse one it landed on (dropping out of a plane
+			// from high up, the ground under it is coarse when it lands), or it was put down under it. It
+			// stands on that ground, looked for from well over it (SKIN_LOOK); off the edge, it falls, and
+			// is put back where it last stood.
+			const over = this.groundAt( this.east, this.north, this.y + SKIN_LOOK );
+			if ( over !== null && over > this.y ) {
+
+				this.y = over;
+				this.vy = 0;
+				this.lastSafe = { east: this.east, north: this.north, y: this.y };
+
+			} else {
+
+				if ( this.y < this.lastSafe.y - this.fallReset ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
+				this.vy -= this.fall * dt;
+				this.y += this.vy * dt;
+
+			}
 
 		} else {
 

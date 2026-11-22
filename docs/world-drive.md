@@ -174,21 +174,28 @@ under each, a fin rises at the back, and on a model car the wheels fold out flat
 a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
 of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and
 **Shift** comes down. **T** again **bails out** ("Freefall! W dive · A/D steer"): the wings fold away
-and the car drops like a stone, 160 m/s at most spread out on the Earth and 256 m/s head-down with
-**W** (`DROP` and `dropTerminal` in `src/plane.js`). It speeds up at 2.5 times the world's own gravity
-(`DROP.boost`), never slower than 12 m/s² (`DROP.pull`): there's no air on the Moon, Vesta or Ceres
+and the car drops like a stone, 300 m/s at most spread out on the Earth and 480 m/s head-down with
+**W** (`DROP` and `dropTerminal` in `src/plane.js`). It speeds up at 5 times the world's own gravity
+(`DROP.boost`), never slower than 30 m/s² (`DROP.pull`): there's no air on the Moon, Vesta or Ceres
 to set a falling speed and a real fall there would crawl for minutes, so their cap is a game's,
-100 m/s (160 diving), and Mars's about 115. What's left of the plane's speed across the ground over
+200 m/s (320 diving), and Mars's about 225. (Until 2026-11-22 it was 160 m/s on the Earth at 2.5
+times the gravity, 100 on the Moon, which the owner found far too slow.) What's left of the plane's speed across the ground over
 the ride's own is shed in a couple of seconds (`DROP.shed`), so a bail-out at 3,500 km/h reads as a
 fall, not a car skimming the ground. A **parachute** opens in good time before the ground: 25 m over
-it, 45 m on the Earth, or 0.7 s out at the speed it's coming at the ground, counting ground rising
+it, 45 m on the Earth, or 0.3 s out at the speed it's coming at the ground, counting ground rising
 along the way it's going (a ray 1 s ahead finds a slope on Mars or Vesta before the car reaches it:
-`chuteHeight` and `closingSpeed`), so on the Earth it opens about 112 m up, 179 m diving. It slows
-the fall quickly (`PARACHUTE.settle`) and the car comes down at 10 m/s on the Earth, about 6 on
+`chuteHeight` and `closingSpeed`), so on the Earth it opens about 90 m up, 144 m diving. It slows
+the fall hard (`PARACHUTE.settle`, 6 a second), so it still lands at its sink, about 5 s after opening on the Earth, and the car comes down at 10 m/s on the Earth, about 6 on
 Mars, 4 on the Moon and 3 on Vesta and Ceres (`chuteSink`: the square root of the gravity, never under
 3 m/s), and **S** (or ↓) spills air from the canopy to come down twice as fast. **A**/**D** steer it a
 little, and it rights the car to land on its wheels, driving on at the speed it landed with (never
-more than the booster's). Press **T** while falling to be a plane again. Within 12 m of the ground,
+more than the booster's). Press **T** while falling to be a plane again. Where it lands is found from over where it was
+before each frame's fall, not from where it is after it (`fall`): falling metres a frame, the ray
+from under the road found nothing (the map is a skin seen only from above) and it landed on the
+ground found the frame before, under the road, standing half in it. And a car with nothing under
+it looks again from 40 m over itself (`SKIN_LOOK` in `drive.js`) and stands on what it finds there:
+dropped from high up, it lands on the coarse tiles a fast plane makes do with (`PLANE_TILE_ERROR`,
+below), and the finer ones that stream in after can bring the road up over it. Within 12 m of the ground,
 **T** flies it down by itself instead and folds it back into a car on the ground (**T** on the way
 down flies on). Others driving with you see the plane fold away and the car come down, without the
 parachute. On a touch screen the ✈ button under CAM is T, FLY is up and BOOST is down, GAS dives and
@@ -306,9 +313,9 @@ and rocket dragster) get the wings but keep their wheels as they are.
 **How it's tested**: `npm run test:drive-plane` (`scripts/test-drive-plane.mjs`, node, no browser),
 26 tests: the speeds (3,500 km/h at the ceiling, still 60 km/h off the ground) and the live protocol
 taking a plane flat out with a loop's hump on top while what's sent stays under old pages' 800; the
-drop (160 m/s spread out on the Earth and never faster, reached within 7 s, 256 diving, 100 m/s on the Moon within 9 s, the
+drop (300 m/s spread out on the Earth and never faster, reached within 7 s, 480 diving, 200 m/s on the Moon within 7 s, the
 speed across the ground down to the car's own within 3 s of a bail-out at 3,500 km/h); the parachute
-(10 m/s on the Earth, about 4 on the Moon, 3 on Vesta, twice that spilling air, opening 112 m up on the Earth and down within 15 s,
+(10 m/s on the Earth, about 4 on the Moon, 3 on Vesta, twice that spilling air, opening 90 m up on the Earth and down within 8 s,
 and earlier over rising ground) and both flashes; the tricks' rules (whole turns give or take 40°, the
 per-pass caps, halving, the heights' shares, a repeat rounding to nothing, the nose angle, the points
 still drive.js's, the Worker's `TRICK` pattern); and tricks flown on a stand-in driver (Q a barrel

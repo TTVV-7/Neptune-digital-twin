@@ -144,26 +144,26 @@ describe( 'the drop (bailing out)', () => {
 
 	}
 
-	test( 'on the Earth: 160 m/s spread out and never faster; 256 m/s diving; there in under 7 s', () => {
+	test( 'on the Earth: 300 m/s spread out and never faster; 480 m/s diving; there in under 7 s', () => {
 
-		assert.ok( Math.abs( freefall( dropping( rig( { y: 6000 } ) ) ) - 160 ) < 1, 'spread out' );
-		const diving = dropping( rig( { y: 6000 } ) );
+		assert.ok( Math.abs( freefall( dropping( rig( { y: 9000 } ) ) ) - 300 ) < 1, 'spread out' );
+		const diving = dropping( rig( { y: 12000 } ) );
 		diving.d.keys.add( 'KeyW' );
-		assert.ok( Math.abs( freefall( diving ) - 256 ) < 1, 'diving' );
-		// Falling at 2.5 times the Earth's gravity: like a stone, not a drift.
-		const r = dropping( rig( { y: 6000 } ) );
-		assert.ok( run( r, 30, { until: () => - r.d.vy >= 159.9 } ) < 7 );
-		assert.ok( Math.abs( dropTerminal( G.mars ) - 115.3 ) < 0.2 );
-		assert.ok( Math.abs( dropTerminal( G.moon, true ) - 160 ) < 0.05 );
+		assert.ok( Math.abs( freefall( diving ) - 480 ) < 1, 'diving' );
+		// Falling at 5 times the Earth's gravity: like a stone, not a drift.
+		const r = dropping( rig( { y: 9000 } ) );
+		assert.ok( run( r, 30, { until: () => - r.d.vy >= 299.9 } ) < 7 );
+		assert.ok( Math.abs( dropTerminal( G.mars ) - ( 200 + 100 * ( G.mars - 0.165 ) / ( 1 - 0.165 ) ) ) < 0.5 );
+		assert.ok( Math.abs( dropTerminal( G.moon, true ) - 320 ) < 0.05 );
 
 	} );
 
-	test( 'on the Moon it reaches 100 m/s within 9 s (falling at 12 m/s² at least)', () => {
+	test( 'on the Moon it reaches 200 m/s within 7 s (falling at 30 m/s² at least)', () => {
 
-		const r = dropping( rig( { gravity: G.moon, y: 4000 } ) );
-		const t = run( r, 30, { until: () => - r.d.vy >= 99.9 } );
-		assert.ok( t < 9, `took ${ t.toFixed( 1 ) } s` );
-		assert.ok( Math.abs( freefall( r ) - 100 ) < 0.5 );
+		const r = dropping( rig( { gravity: G.moon, y: 6000 } ) );
+		const t = run( r, 30, { until: () => - r.d.vy >= 199.9 } );
+		assert.ok( t < 7, `took ${ t.toFixed( 1 ) } s` );
+		assert.ok( Math.abs( freefall( r ) - 200 ) < 0.5 );
 
 	} );
 
@@ -203,15 +203,15 @@ describe( 'the parachute', () => {
 
 	} );
 
-	test( 'on the Earth it opens 112 m up spread out (0.7 s of a 160 m/s fall), and it\'s down within 15 s of opening', () => {
+	test( 'on the Earth it opens 90 m up spread out (0.3 s of a 300 m/s fall), and it\'s down within 8 s of opening', () => {
 
 		const r = dropping( rig( { y: 3000 } ) );
 		let opened = null;
 		run( r, 600, { until: () => r.d.chute.open && ( opened = over( r ) ) } );
-		// (Within a frame of the fall: at 160 m/s a frame is a few metres.)
-		assert.ok( Math.abs( opened - 112 ) < 6, `opened at ${ opened } m` );
+		// (Within a frame of the fall: at 300 m/s a frame is 5 m.)
+		assert.ok( Math.abs( opened - 90 ) < 6, `opened at ${ opened } m` );
 		const down = run( r, 60, { until: () => ! r.plane.on } );
-		assert.ok( down < 15, `${ down.toFixed( 1 ) } s under the parachute` );
+		assert.ok( down < 8, `${ down.toFixed( 1 ) } s under the parachute` );
 
 	} );
 
@@ -230,7 +230,8 @@ describe( 'the parachute', () => {
 		// Rising half a metre for each one north, the way it's going: 25 m/s coming up at it, so
 		// PARACHUTE.lead s of that sooner.
 		const slope = opensAt( ( east, north ) => north * 0.5 );
-		assert.ok( Math.abs( flat - PARACHUTE.lead * dropTerminal( G.mars ) ) < 3, `flat ${ flat }` );
+		// (Within two frames of the fall: it's seen open a frame after it opens, at 225 m/s 4 m a frame.)
+		assert.ok( Math.abs( flat - PARACHUTE.lead * dropTerminal( G.mars ) ) < 2 * dropTerminal( G.mars ) * DT + 1, `flat ${ flat }` );
 		assert.ok( slope > flat + PARACHUTE.lead * 25 * 0.7, JSON.stringify( { flat, slope } ) );
 
 	} );
