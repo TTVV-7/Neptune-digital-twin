@@ -8620,8 +8620,10 @@ test says which it expects). `WORLD_CARDS` has their words ("The real Vesta, fro
   `src/drive-app/<world>-places.js`; for the home page, `drive/index.html`, `places.js` and every
   world's words), so its
   `lastmod` only moves when the page does, which is the only `lastmod` Google trusts ([sitemaps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)).
-  Built from a shallow clone (a build server's may be one), whose oldest commit seems to add every
-  file, there's no `lastmod` at all rather than that commit's date on every page.
+  A shallow clone (Workers Builds' is one), whose oldest commit seems to add every file, first
+  fetches the rest of its history, commits and trees only (`git fetch --unshallow
+  --filter=blob:none`, a few seconds); where that can't be done there's no `lastmod` at all rather
+  than that commit's date on every page. (Until this, every deploy's sitemap had no dates.)
 - **`/robots.txt`** (`drive/public/robots.txt`): everything may be crawled but `/api/`, which only
   the game talks to, and the sitemap's address
   ([robots.txt](https://developers.google.com/search/docs/crawling-indexing/robots/intro)). The game's

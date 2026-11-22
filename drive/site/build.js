@@ -751,15 +751,35 @@ ${ entries.map( ( { path, date } ) => `\t<url>\n\t\t<loc>${ esc( SITE + path ) }
 // The day (YYYY-MM-DD) the last commit touching `files` was made, so a page's date in the sitemap
 // moves when what it says does (Google only trusts lastmod that does) and not on every build.
 // Outside git, or for files never committed, today. In a shallow clone (a build server's, cloned
-// with only the last commits) the oldest commit there seems to add every file, so every page would
-// get that commit's date, moving on every deploy: null instead, and the sitemap gives no date.
+// with only the last commits: Workers Builds') the oldest commit there seems to add every file, so
+// every page would get that commit's date, moving on every deploy. So the first time it's asked, a
+// shallow clone fetches the rest of its history, the commits and trees only (no files' contents: a
+// few seconds and about a megabyte); if that can't be done, null, and the sitemap gives no date.
+let unshallowed = false;
 export function lastChanged( files ) {
 
 	try {
 
-		const shallow = execFileSync( 'git', [ 'rev-parse', '--is-shallow-repository' ], { cwd: ROOT, encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
-		if ( shallow === 'true' ) return null;
-		const date = execFileSync( 'git', [ 'log', '-1', '--format=%cs', '--', ...files ], { cwd: ROOT, encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
+		const git = args => execFileSync( 'git', args, { cwd: ROOT, encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ], timeout: 120000 } ).trim();
+		if ( git( [ 'rev-parse', '--is-shallow-repository' ] ) === 'true' ) {
+
+			if ( unshallowed ) return null;
+			unshallowed = true;
+			try {
+
+				git( [ 'fetch', '--unshallow', '--filter=blob:none', '--quiet' ] );
+
+			} catch {
+
+				return null;
+
+			}
+
+			if ( git( [ 'rev-parse', '--is-shallow-repository' ] ) === 'true' ) return null;
+
+		}
+
+		const date = git( [ 'log', '-1', '--format=%cs', '--', ...files ] );
 		if ( /^\d{4}-\d\d-\d\d$/.test( date ) ) return date;
 
 	} catch {
