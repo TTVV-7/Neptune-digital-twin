@@ -116,8 +116,8 @@
 				     Ceres, made in the page: body.js), and how many are driving there now; it opens the
 				     orrery (#orrery, orrery.js) to pick another (panel.js). -->
 				<button type="button" class="worlds-open" data-world="earth" aria-haspopup="dialog" aria-controls="orrery" aria-label="Change world. On the Earth now"><svg data-icon="earth" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 10h16M10 2c3 3 3 13 0 16M10 2c-3 3-3 13 0 16" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><svg data-icon="moon" hidden viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M13.5 3.2A7.5 7.5 0 1 0 16.8 14 6 6 0 0 1 13.5 3.2z" fill="currentColor"/></svg><svg data-icon="mars" hidden viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="7.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.2 11.4c2.2-1.3 4.6-.4 6.6-1.3 1.6-.7 3-1.9 5-1.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="6.6" r="1.3" fill="currentColor"/></svg><svg data-icon="vesta" hidden viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M4.6 5.6C6.4 3.2 10.6 2.5 13.7 3.5c2.8.9 4.1 3.4 3.6 6.3-.5 2.9-2.3 5.9-5.6 6.5-3.6.7-7.6-.7-8.6-3.8-.7-2.1-.1-4.6 1.5-6.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M6.8 13c1.8 1.4 4.6 1.5 6.4.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8.4" cy="7.4" r="1.2" fill="currentColor"/></svg><svg data-icon="ceres" hidden viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="7.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12.4" cy="7.6" r="1.6" fill="currentColor"/><circle cx="14.6" cy="9.8" r=".8" fill="currentColor"/><path d="M5.2 11.8a3.4 3.4 0 0 0 4.4 1.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="worlds-what"><span class="worlds-name">Earth</span><span class="worlds-count"></span></span><span class="worlds-more">Worlds<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
-				<!-- A daily, a weekly and a monthly challenge on each world (challenges.js, loaded when opened). -->
-				<button type="button" class="challenges-open" hidden><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg> <span><b>Challenges</b> <small>Daily · weekly · monthly, each with its own board</small></span></button>
+				<!-- A weekly and a monthly challenge on each world (challenges.js, loaded when opened). -->
+				<button type="button" class="challenges-open" hidden><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg> <span><b>Challenges</b> <small>Weekly · monthly, each with its own board</small></span></button>
 				<form class="search" role="search">
 					<input type="search" name="q" placeholder="A place, an address, or lat, lon" autocomplete="off" enterkeyhint="search" maxlength="120" aria-label="Search for a place" />
 					<button type="submit">Go</button>
@@ -132,6 +132,7 @@
 				</section>
 				<h2>Your ride</h2>
 				<div class="vehicles" role="radiogroup" aria-label="Your ride"></div>
+				<label class="music-setting small"><input type="checkbox" class="music-toggle" checked /> Music</label>
 				<p class="credit small"></p>
 				<section class="friends" hidden></section>
 				<div class="recent-block" hidden>
@@ -159,7 +160,7 @@
 						<li><b>Discoveries.</b> On the Moon, Mars, Vesta and Ceres, drive to real named places, from the Apollo and rover landing sites to Olympus Mons and Rheasilvia's central peak, to collect each one's card of real facts and its height in the mission data the ground is built from, and fill each world's collection book. Press <kbd>L</kbd> to colour the ground by its real measured height.</li>
 						<li><b>Drive with others.</b> See who's driving nearby as ghost cars, on every world, or invite friends to a party with a link, wherever each of you is. <a href="/multiplayer/">More on driving with friends</a>.</li>
 						<li><b>Levels and the leaderboard.</b> Driving earns XP for 50 levels of cars, paint, boost trails and titles, and your best runs go on the leaderboard.</li>
-						<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on each world, the Earth, the Moon, Mars, Vesta and Ceres: race through checkpoints, collect stars or drive to a landmark against the clock, each with its own board of the best times.</li>
+						<li><b>Challenges.</b> A weekly and a monthly challenge on each world, the Earth, the Moon, Mars, Vesta and Ceres: race through checkpoints, collect stars or drive to a landmark against the clock, each with its own board of the best times.</li>
 						<li><b>Your ride.</b> A pickup, a go-kart or a muscle car to start, and six more cars as you level up, from a golf cart and a tuk-tuk to a formula racer, all painted in the Garage; the optional Supporter Pass adds more.</li>
 					</ul>
 					<h3>How to play</h3>
@@ -275,6 +276,9 @@
 				<div class="settings">
 					<label class="setting"><input type="checkbox" class="pads-toggle" /> Boost pads on the road</label>
 					<label class="setting"><input type="checkbox" class="camera-toggle" checked /> Camera effects</label>
+					<!-- The music (music.js): on or off and how loud, the same as the globe panel's. -->
+					<label class="setting"><input type="checkbox" class="music-toggle" checked /> Music</label>
+					<label class="setting music-volume">Volume <input type="range" class="music-level" min="0" max="100" step="5" value="60" aria-label="Music volume" /></label>
 				</div>
 				<section class="friends" hidden></section>
 				<div class="account" hidden></div>
@@ -284,7 +288,7 @@
 		<section id="splash">
 			<div class="card">
 				<div class="scene" aria-hidden="true"></div>
-				<h1 class="logo">World <b>Drive</b></h1>
+				<p class="logo">World <b>Drive</b></p>
 				<p class="pitch">Drive anywhere on Earth in photorealistic 3D: real cities, bridges and mountain roads, with stunts, boosts and friends. Free, right here in your browser.</p>
 				<p class="status">Warming up the engine...</p>
 				<div class="road" aria-hidden="true"><i></i></div>
@@ -323,7 +327,7 @@
 					'The Moon, Mars, Vesta and Ceres are free, as much as you like.',
 					'On another world, press <kbd>L</kbd> to colour the ground by its real measured height.',
 					'On the other worlds, drive to real named places to collect their discovery cards.',
-					'There\'s a daily, a weekly and a monthly challenge on every world.',
+					'There\'s a weekly and a monthly challenge on every world.',
 					'Invite friends from the globe\'s panel and drive together.',
 					'Olympus Mons on Mars is about two and a half times as tall as Everest.',
 					'You can drive to Tranquility Base, where Apollo 11 landed in 1969.',
@@ -453,7 +457,7 @@
 
 		<section id="notice" hidden role="alert">
 			<div class="card">
-				<h1 class="logo">World <b>Drive</b></h1>
+				<p class="logo">World <b>Drive</b></p>
 				<div class="sunset" aria-hidden="true"><i></i></div>
 				<h2 class="title"></h2>
 				<p class="message"></p>

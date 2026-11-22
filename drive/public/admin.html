@@ -2006,8 +2006,8 @@
 
 	}
 
-	// The periods to choose from: today's, this week's and this month's, and the next of each; or a day
-	// picked beside it.
+	// The periods to choose from: this week's and this month's (and today's, with dailies), and the
+	// next of each; or a day picked beside it.
 	function fillPeriods() {
 
 		const select = $( 'ch-period' );
@@ -2016,6 +2016,11 @@
 			...data.upcoming.filter( c => c.world === 'earth' ).map( c => [ c.key, `${ PERIODS[ c.period ] }, next (${ c.key })` ] ) ];
 		select.innerHTML = keys.map( ( [ key, label ] ) => `<option value="${ esc( key ) }">${ esc( label ) }</option>` ).join( '' ) + '<option value="date">The day picked beside it</option>';
 		if ( [ ...select.options ].some( o => o.value === was ) ) select.value = was;
+		// The kinds of period beside a date: only those with live challenges (no dailies since
+		// 2026-11-22, unless CHALLENGE_PERIODS brings them back: the Worker turns a pick for another away).
+		const kinds = new Set( [ ...data.current, ...data.upcoming ].map( c => c.period ) );
+		for ( const option of $( 'ch-date-kind' ).options ) option.hidden = option.disabled = ! kinds.has( option.value );
+		if ( $( 'ch-date-kind' ).selectedOptions[ 0 ]?.disabled ) $( 'ch-date-kind' ).value = [ ...$( 'ch-date-kind' ).options ].find( o => ! o.disabled )?.value ?? 'week';
 
 	}
 

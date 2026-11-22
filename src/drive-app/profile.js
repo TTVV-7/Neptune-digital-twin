@@ -3,7 +3,7 @@ import { BOOSTS } from './boosts.js';
 import { LEVEL_MAX, LEVEL_XP, REWARDS, TITLES, badgeOf, nextReward, rewardsAt } from './levels.js';
 import { DECALS, FINISHES, FLAMES, GLOWS, HORNS, RIMS, SWATCHES, TRAILS } from './paint.js';
 import { isPro, onProChange } from './pro.js';
-import { ACHIEVEMENTS } from './achievement-rules.js';
+import { shownTo } from './achievement-rules.js';
 import { getFeats, onFeatsChange } from './feats.js';
 
 // What players see of levels (levels.js, progress.js): while driving, a slim XP bar with the
@@ -309,7 +309,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		const coming = nextReward( level, { pro } );
 		profile.querySelector( '.next' ).textContent = coming ? `Next: ${ coming.name } at Lv ${ coming.level }` : 'Every reward is yours';
 		profile.querySelector( '.save-note' ).hidden = ! progress.local || ! canName();
-		profile.querySelector( '.feat-count' ).textContent = `${ feats } / ${ ACHIEVEMENTS.length }`;
+		profile.querySelector( '.feat-count' ).textContent = `${ feats } / ${ shownTo( getFeats() ).length }`;
 		const found = discoveries();
 		profile.querySelector( '.finds-total' ).textContent = found ? `${ found.have } / ${ found.of }` : '';
 

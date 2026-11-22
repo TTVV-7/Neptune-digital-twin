@@ -66,7 +66,8 @@ export const RIDE_IDS = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDE
 
 // The achievements, in the grid's order. count: what it counts; target: how much of it (for a
 // placing, the place on the board at worst, and on which period's boards, any if none); name: as a
-// toast says it ("Achievement: 100 km driven"); goal: the grid's one line.
+// toast says it ("Achievement: 100 km driven"); goal: the grid's one line; retired: none can earn it
+// any more (shownTo shows it only to those who have it, and the count out of is of the rest).
 export const ACHIEVEMENTS = [
 	{ id: 'first-drive', name: 'First drive', goal: 'Drive your first 250 m', count: 'km', target: TALLY_KM },
 	{ id: 'km-10', name: '10 km driven', goal: 'Drive 10 km', count: 'km', target: 10 },
@@ -102,7 +103,10 @@ export const ACHIEVEMENTS = [
 	{ id: 'top-10', name: 'Top 10', goal: 'Finish a challenge in its top 10', count: 'placing', target: 10 },
 	{ id: 'podium', name: 'Podium', goal: 'Finish a challenge in its top 3', count: 'placing', target: 3 },
 	{ id: 'winner', name: 'Winner', goal: 'Finish first on a challenge', count: 'placing', target: 1 },
-	{ id: 'daily-winner', name: 'Daily winner', goal: 'Finish first on a daily challenge', count: 'placing', target: 1, period: 'day' },
+	{ id: 'weekly-winner', name: 'Weekly winner', goal: 'Finish first on a weekly challenge', count: 'placing', target: 1, period: 'week' },
+	// (Retired with the daily challenges on 2026-11-22. Still a placing, so the last daily boards,
+	// finished after that, still give it to their winners.)
+	{ id: 'daily-winner', name: 'Daily winner', goal: 'Finish first on a daily challenge', count: 'placing', target: 1, period: 'day', retired: true },
 	{ id: 'weekly-podium', name: 'Weekly podium', goal: 'Finish a weekly challenge in its top 3', count: 'placing', target: 3, period: 'week' },
 	{ id: 'monthly-top-10', name: 'Monthly top 10', goal: 'Finish a monthly challenge in its top 10', count: 'placing', target: 10, period: 'month' },
 	{ id: 'party-1', name: 'Party time', goal: 'Drive in a party with someone else', count: 'parties', target: 1 },
@@ -116,6 +120,14 @@ export const ACHIEVEMENTS = [
 	{ id: 'streak-30', name: '30 days in a row', goal: 'Drive on 30 days in a row (UTC days)', count: 'streak', target: 30 },
 ];
 export const ACHIEVEMENT_IDS = new Set( ACHIEVEMENTS.map( a => a.id ) );
+
+// The achievements the grid shows a player who has `have` (a Set of ids): every one that can still
+// be earned, and a retired one only to those who earned it. Its length is the count out of.
+export function shownTo( have ) {
+
+	return ACHIEVEMENTS.filter( a => ! a.retired || have.has( a.id ) );
+
+}
 
 // Half of a world's Discoveries, rounded up (a function declaration: ACHIEVEMENTS, above, uses it).
 function half( world ) {

@@ -378,6 +378,12 @@ dialog.finds-book .close {
 	display: none;
 }
 
+/* Hidden under the orrery, as the lens and the world's credit are: it's drawn into the page's own
+   canvas, so the pins (placed for the globe it's showing in place of) would show through it. */
+body[data-orrery='open'] :is( .finds-pins, .finds-pointer ) {
+	display: none;
+}
+
 .finds-pin {
 	position: absolute;
 	top: 0;

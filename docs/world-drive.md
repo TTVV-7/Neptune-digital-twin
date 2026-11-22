@@ -147,7 +147,8 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   of speed, with dust thrown up as you come down: a puff off each rear tyre for a small landing, and
   coming down hard a ring of it spreading over the ground (wider the harder) and a nod of the view
   (on the Moon, grains of regolith in a crown, no billow). On your roof or side it's a **wipeout**,
-  **WIPEOUT!** rolling over in red: slammed down in a ring of dust with sparks skidding off along
+  **WIPEOUT!** rolling over in red (its tumble falling at three times the gravity, `WIPE_FALL`, so it
+  slams back down rather than floating): slammed down in a ring of dust with sparks skidding off along
   the way you slide, dust and sparks off you as you slide on your roof, a short tumble, the tricks
   and the combo are lost, and the vehicle rolls back onto its wheels by itself (or press **R**), in
   a puff of dust and a thin ring.
@@ -173,26 +174,27 @@ under each, a fin rises at the back, and on a model car the wheels fold out flat
 a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
 of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and
 **Shift** comes down. **T** again **bails out** ("Freefall! W dive · A/D steer"): the wings fold away
-and the car falls as fast as a skydiver, 90 m/s spread out on the Earth and 144 m/s head-down with
-**W** (`DROP` and `dropTerminal` in `src/plane.js`). It speeds up at the world's own gravity, but never
-slower than 5 m/s² (`DROP.pull`): there's no air on the Moon, Vesta or Ceres to set a falling speed
-and a real fall there would crawl for minutes, so their cap is a game's, 60 m/s (96 diving), and
-Mars's about 68. What's left of the plane's speed across the ground over the ride's own is shed in a
-couple of seconds (`DROP.shed`), so a bail-out at 3,500 km/h reads as a fall, not a car skimming the
-ground. A **parachute** opens in good time before the ground: 30 m over it, 60 m on the Earth, or 1.2 s
-out at the speed it's coming at the ground, counting ground rising along the way it's going (a ray 1 s
-ahead finds a slope on Mars or Vesta before the car reaches it: `chuteHeight` and `closingSpeed`), so on
-the Earth it opens about 108 m up, 173 m diving. Under it the car comes down slowly, 2.5 m/s on the
-Earth, 1.5 on Mars and 1 m/s on the Moon, Vesta and Ceres (`chuteSink`: the square root of the gravity,
-never under 1 m/s, or the asteroids would hang for minutes), and **S** (or ↓) spills air from the
-canopy to come down twice as fast. **A**/**D** steer it a little, and it rights the car to land on its
-wheels, driving on at the speed it landed with (never more than the booster's). Press **T** while
-falling to be a plane again. Within 12 m of the ground, **T** flies it down by itself instead and folds
-it back into a car on the ground (**T** on the way down flies on). Others driving with you see the
-plane fold away and the car come down, without the parachute. On a touch screen the ✈ button under CAM
-is T, FLY is up and BOOST is down, GAS dives and BRAKE spills air. (Before, it fell at no more than
-55 m/s and sank at 5 m/s under the canopy: now the fall is quicker and the parachute slower, so a
-bail-out feels like a skydive and then a float.)
+and the car drops like a stone, 160 m/s at most spread out on the Earth and 256 m/s head-down with
+**W** (`DROP` and `dropTerminal` in `src/plane.js`). It speeds up at 2.5 times the world's own gravity
+(`DROP.boost`), never slower than 12 m/s² (`DROP.pull`): there's no air on the Moon, Vesta or Ceres
+to set a falling speed and a real fall there would crawl for minutes, so their cap is a game's,
+100 m/s (160 diving), and Mars's about 115. What's left of the plane's speed across the ground over
+the ride's own is shed in a couple of seconds (`DROP.shed`), so a bail-out at 3,500 km/h reads as a
+fall, not a car skimming the ground. A **parachute** opens in good time before the ground: 25 m over
+it, 45 m on the Earth, or 0.7 s out at the speed it's coming at the ground, counting ground rising
+along the way it's going (a ray 1 s ahead finds a slope on Mars or Vesta before the car reaches it:
+`chuteHeight` and `closingSpeed`), so on the Earth it opens about 112 m up, 179 m diving. It slows
+the fall quickly (`PARACHUTE.settle`) and the car comes down at 10 m/s on the Earth, about 6 on
+Mars, 4 on the Moon and 3 on Vesta and Ceres (`chuteSink`: the square root of the gravity, never under
+3 m/s), and **S** (or ↓) spills air from the canopy to come down twice as fast. **A**/**D** steer it a
+little, and it rights the car to land on its wheels, driving on at the speed it landed with (never
+more than the booster's). Press **T** while falling to be a plane again. Within 12 m of the ground,
+**T** flies it down by itself instead and folds it back into a car on the ground (**T** on the way
+down flies on). Others driving with you see the plane fold away and the car come down, without the
+parachute. On a touch screen the ✈ button under CAM is T, FLY is up and BOOST is down, GAS dives and
+BRAKE spills air. (It used to fall at no more than 90 m/s at the world's own gravity and sink at
+2.5 m/s under the canopy, a long float down from 108 m: now the drop is fast and the parachute a few
+seconds, at the owner's asking.)
 
 **Faster the higher you fly.** Just off the ground it goes up to twice the ride's own top speed
 (`CAR_SHARE`: 320 km/h in the pickup), a plane's speed even low down. Higher up the table below
@@ -304,9 +306,9 @@ and rocket dragster) get the wings but keep their wheels as they are.
 **How it's tested**: `npm run test:drive-plane` (`scripts/test-drive-plane.mjs`, node, no browser),
 26 tests: the speeds (3,500 km/h at the ceiling, still 60 km/h off the ground) and the live protocol
 taking a plane flat out with a loop's hump on top while what's sent stays under old pages' 800; the
-drop (90 m/s spread out on the Earth and never faster, 144 diving, 60 m/s on the Moon within 13 s, the
+drop (160 m/s spread out on the Earth and never faster, reached within 7 s, 256 diving, 100 m/s on the Moon within 9 s, the
 speed across the ground down to the car's own within 3 s of a bail-out at 3,500 km/h); the parachute
-(2.5 m/s on the Earth, 1 on the Moon and Vesta, twice that spilling air, opening 108 m up on the Earth
+(10 m/s on the Earth, about 4 on the Moon, 3 on Vesta, twice that spilling air, opening 112 m up on the Earth and down within 15 s,
 and earlier over rising ground) and both flashes; the tricks' rules (whole turns give or take 40°, the
 per-pass caps, halving, the heights' shares, a repeat rounding to nothing, the nose angle, the points
 still drive.js's, the Worker's `TRICK` pattern); and tricks flown on a stand-in driver (Q a barrel
@@ -6121,9 +6123,22 @@ the page's busiest days stop growing at 1,500 places a world).
 ## Challenges
 
 The [play stats](#play-stats) say most visits drop in and drive, and almost everyone leaves after
-about a minute. Challenges give a reason to stay, and to come back: a **daily**, a **weekly** and a
-**monthly** challenge on each world (the Earth, the Moon, Mars, Vesta and Ceres), fifteen live at once, each a place
+about a minute. Challenges give a reason to stay, and to come back: a **weekly** and a **monthly**
+challenge on each world (the Earth, the Moon, Mars, Vesta and Ceres), ten live at once, each a place
 and a route the same for everyone in its period, with its own board of each player's best time.
+
+**No more dailies (2026-11-22).** There was a daily one on each world too, fifteen at once, which
+the owner found too cluttered. `PERIOD_KINDS` in `challenge-rules.js` is now `week` and `month`, the
+Worker's default (`liveKinds`: the `CHALLENGE_PERIODS` setting, a comma-separated list of `day`,
+`week` and `month`, would bring dailies back with `day,week,month`; the Worker's tests run with all
+three, as they were written with them), so none is made from then on and the list, the nudge while driving ("This week's challenge...") and
+the words about them say weekly and monthly. A day is still a period everything knows (`periodOf`,
+`parsePeriod`, its shapes and picks), so the daily boards from before, links to them and times on
+them go on working, and the last one finishes as any other. The owner's page no longer offers a
+day's pick, and the Worker turns one away (400). The **Daily winner** achievement is retired
+(`retired: true`, `shownTo`): those who have it keep it and see it, nobody else sees it or counts it
+in "n / total", and **Weekly winner** (first on a weekly board) is new beside it. The rest of this
+section was written with three a world and says "daily" where it describes how they worked.
 
 ### What players see
 
@@ -8082,6 +8097,43 @@ WHERE c.final_at IS NOT NULL AND t.final_rank IS NOT NULL AND t.final_rank <= p.
 ON CONFLICT DO NOTHING;
 ```
 
+## Music
+
+The owner's own tracks, made in Suno on a paid plan (which lets World Drive use them; a free
+plan's tracks couldn't be), in `drive/public/music/` as AAC at 96 kbps (an iPhone doesn't reliably
+play the Opus Suno exports), each made -16 LUFS with ffmpeg's `loudnorm` so none is louder than
+another: about 28 MB for the twelve, each file asked for only when it's about to play.
+
+`src/drive-app/music.js` has a playlist for each scene (`PLAYLISTS`), each played in turn:
+
+| Scene | Tracks |
+|---|---|
+| The globe (and on through a drop-in, too short for its own) | Warm Analog Pads, Drive Anywhere (the theme song, with words) |
+| Driving on the Earth | Arcade Momentum, Golden Hour Drive, Buant Groove |
+| On the Moon | Moonlit Driver (with words, about driving a grey truck on the Moon), Weightless Pulse |
+| On Mars | Canyon Echoes |
+| On Vesta | Crystalline Waves |
+| On Ceres | Crystalline Pads |
+| A challenge's run (its countdown to its finish) | Countdown Groove |
+| The plane | Gliding Above the Clouds |
+
+The last two take over from the world's while they last (main.js tells it each frame:
+`setActivity`), and the world's is back 4 s after (so hopping out of the plane and in again doesn't
+swap it twice). A playlist of one loops; otherwise a track's end starts the next. Changing scene
+fades one into the next (1.5 s); paused, it plays at 40 %; with the page out of sight (another tab,
+a locked phone) it stops until it's back.
+
+It goes through WebAudio (horns.js's AudioContext): an `<audio>` element a track, each through a
+gain into a master gain, since an iPhone won't let an element's own volume be set. A browser starts
+no sound before a click or a key, so the music starts at the first one. **Music** in the pause menu
+(with its volume) and under the rides in the globe's panel switch it, both the same, kept in this
+browser (`world-drive.music`, `world-drive.music-volume`); off, nothing is fetched.
+
+To add a track: convert it as the others were (`ffmpeg -i in.m4a -map 0:a -vn -map_metadata -1
+-af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 44100 -c:a aac -b:a 96k -movflags +faststart
+drive/public/music/<name>.m4a`), name it in `TRACKS` and put it in a playlist. On the dev server the
+music is off unless a test sets `window.worldDriveMusicTest`, so the other tests fetch nothing.
+
 ## Ads
 
 World Drive can show one Google AdSense display ad, and only on the globe: off until the owner sets
@@ -8618,8 +8670,10 @@ test says which it expects). `WORLD_CARDS` has their words ("The real Vesta, fro
   `src/drive-app/<world>-places.js`; for the home page, `drive/index.html`, `places.js` and every
   world's words), so its
   `lastmod` only moves when the page does, which is the only `lastmod` Google trusts ([sitemaps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)).
-  Built from a shallow clone (a build server's may be one), whose oldest commit seems to add every
-  file, there's no `lastmod` at all rather than that commit's date on every page.
+  A shallow clone (Workers Builds' is one), whose oldest commit seems to add every file, first
+  fetches the rest of its history, commits and trees only (`git fetch --unshallow
+  --filter=blob:none`, a few seconds); where that can't be done there's no `lastmod` at all rather
+  than that commit's date on every page. (Until this, every deploy's sitemap had no dates.)
 - **`/robots.txt`** (`drive/public/robots.txt`): everything may be crawled but `/api/`, which only
   the game talks to, and the sitemap's address
   ([robots.txt](https://developers.google.com/search/docs/crawling-indexing/robots/intro)). The game's

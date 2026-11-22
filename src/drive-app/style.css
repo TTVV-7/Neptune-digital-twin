@@ -961,6 +961,28 @@ body.touch #pause kbd {
 	accent-color: var( --accent );
 }
 
+#pause .setting.music-volume input {
+	width: 110px;
+}
+
+/* The globe panel's music switch (music.js), under the rides. */
+#globe-ui .music-setting {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+	font-weight: 700;
+	color: var( --muted );
+	cursor: pointer;
+}
+
+#globe-ui .music-setting input {
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	accent-color: var( --accent );
+}
+
 #splash .status {
 	margin: 18px 0 14px;
 	color: var( --muted );

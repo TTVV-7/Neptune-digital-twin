@@ -59,17 +59,18 @@ const CAR_SHARE = 2;
 // hanging there), and S held spills air from it for `spill` times that. Its speed across the ground
 // slows at `drag` (1/s), and it turns back upright at `right` (1/s), so it lands on its wheels.
 // `size`: the canopy's radius as a share of the vehicle's width (at least `least` m). On the
-// Earth that's 2.5 m/s, half what it was: a long, slow float down from 108 m.
-export const PARACHUTE = { open: 30, floor: 60, lead: 1.2, sink: 2.5, sinkLeast: 1, settle: 3, spill: 2, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
-// The drop (T, flying): falling at `pull` m/s² at least (in weak gravity a fall would crawl), and at
-// most at a skydiver's speed: `terminal` m/s spread out on the Earth, `least` m/s on the Moon and
+// Earth that's 10 m/s (it was 2.5, a long, slow float): a few seconds down from 45 m.
+export const PARACHUTE = { open: 25, floor: 45, lead: 0.7, sink: 10, sinkLeast: 3, settle: 4, spill: 2, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
+// The drop (T, flying): falling faster at `boost` times the gravity, and at `pull` m/s² at least (in
+// weak gravity a fall would crawl), so it drops like a stone rather than drifting, and at most at
+// `terminal` m/s on the Earth (well past a skydiver's: it's a game), `least` m/s on the Moon and
 // lighter worlds, in between by the gravity, and `dive` times that head-down (W held). Above the
 // ride's own top speed, its speed across the ground is shed at `shed` (1/s, gone in a couple of
 // seconds after a bail-out at 3,500 km/h, so it reads as a fall); turned `steer` °/s with A/D;
 // and under `low` m over the ground, no drop, it lands and folds as before. (There's no air on
 // the Moon, Vesta or Ceres to set a falling speed: `least` is a game's cap there, which keeps the
 // parachute's opening sane and everything far under the live protocol's top speed.)
-export const DROP = { terminal: 90, least: 60, dive: 1.6, pull: 5, shed: 1.5, steer: 30, low: 12 };
+export const DROP = { terminal: 160, least: 100, dive: 1.6, pull: 12, boost: 2.5, shed: 1.5, steer: 30, low: 12 };
 // The gravity (a share of the Earth's) from which a fall is the Earth's, and under which `least`.
 const LIGHT = 0.165;
 
@@ -110,7 +111,7 @@ export function planeClimbRate( height ) {
 }
 
 // The drop's falling speed at most (m/s) in `gravity` (a share of the Earth's), `diving` (W held)
-// or spread out: 90 (144 diving) on the Earth, about 68 on Mars, 60 (96) on the Moon and lighter.
+// or spread out: 160 (256 diving) on the Earth, about 115 on Mars, 100 (160) on the Moon and lighter.
 export function dropTerminal( gravity, diving = false ) {
 
 	const earthly = MathUtils.clamp( ( gravity - LIGHT ) / ( 1 - LIGHT ), 0, 1 );
@@ -118,15 +119,16 @@ export function dropTerminal( gravity, diving = false ) {
 
 }
 
-// How fast (m/s²) the drop falls faster, in `gravity`: its own, but never under DROP.pull.
+// How fast (m/s²) the drop falls faster, in `gravity`: DROP.boost times its own, but never under
+// DROP.pull (24.5 on the Earth, 12 on the Moon and lighter).
 export function dropPull( gravity ) {
 
-	return Math.max( 9.81 * gravity, DROP.pull );
+	return Math.max( 9.81 * gravity * DROP.boost, DROP.pull );
 
 }
 
-// The speed (m/s, down) under the parachute in `gravity`, `spilling` air (S held) or not: 2.5 m/s
-// on the Earth, 1.5 on Mars, 1 on the Moon, Vesta and Ceres; twice that spilling.
+// The speed (m/s, down) under the parachute in `gravity`, `spilling` air (S held) or not: 10 m/s
+// on the Earth, about 6 on Mars, 4 on the Moon, 3 on Vesta and Ceres; twice that spilling.
 export function chuteSink( gravity, spilling = false ) {
 
 	return Math.max( PARACHUTE.sink * Math.sqrt( gravity ), PARACHUTE.sinkLeast ) * ( spilling ? PARACHUTE.spill : 1 );

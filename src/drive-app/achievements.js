@@ -1,5 +1,5 @@
 import './achievements.css';
-import { ACHIEVEMENTS, COUNTS, findCounts, progressLine, ridesOf } from './achievement-rules.js';
+import { COUNTS, shownTo, findCounts, progressLine, ridesOf } from './achievement-rules.js';
 import { postAchievements } from './api.js';
 import { getFeats, onFeatsChange, setFeats } from './feats.js';
 
@@ -126,10 +126,11 @@ function render() {
 	const have = getFeats();
 	const dates = new Map( ( answer && askedFor === me?.id ? answer.achievements : [] ).map( a => [ a.id, a.at ] ) );
 	const now = counts();
-	dialog.querySelector( '.count' ).textContent = `${ ACHIEVEMENTS.filter( a => have.has( a.id ) ).length } / ${ ACHIEVEMENTS.length }`;
+	const shown = shownTo( have );
+	dialog.querySelector( '.count' ).textContent = `${ shown.filter( a => have.has( a.id ) ).length } / ${ shown.length }`;
 	dialog.querySelector( '.lead' ).textContent = 'Badges for what you\'ve done; some unlock construction rides.';
 	dialog.querySelector( '.save' ).hidden = !! me || ! app.worker;
-	dialog.querySelector( '.feats' ).replaceChildren( ...ACHIEVEMENTS.map( feat => {
+	dialog.querySelector( '.feats' ).replaceChildren( ...shown.map( feat => {
 
 		const earned = have.has( feat.id );
 		const item = element( 'li', `feat ${ earned ? 'earned' : 'locked' }` );

@@ -345,7 +345,7 @@ function spacePage() {
 			<li><b>Real places to find.</b> Drive to the Apollo landing sites, Olympus Mons and Valles Marineris, the rovers' landing sites, Vesta's Rheasilvia peak and Ceres's bright salt spots, and collect each one's card of real facts.</li>
 			<li><b>The real heights.</b> Press <kbd>L</kbd> to colour the ground by its measured height, from the spacecraft's own laser and camera data.</li>
 			<li><b>With others.</b> Everyone driving the same area is there with you, as on the Earth, and a party link brings friends to any world. <a href="/multiplayer/">Driving with friends</a>.</li>
-			<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on every world, with a leaderboard and ghosts to race.</li>
+			<li><b>Challenges.</b> A weekly and a monthly challenge on every world, with a leaderboard and ghosts to race.</li>
 		</ul>
 	</section>
 	<section>
@@ -404,7 +404,7 @@ function multiplayerPage() {
 	<section>
 		<h2>Race your friends</h2>
 		<ul>
-			<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on every world: checkpoint sprints, collecting them all, or racing to a landmark, each with its own leaderboard.</li>
+			<li><b>Challenges.</b> A weekly and a monthly challenge on every world: checkpoint sprints, collecting them all, or racing to a landmark, each with its own leaderboard.</li>
 			<li><b>Ghosts.</b> Every run is recorded, so you race a ghost of the best time, or of your own.</li>
 			<li><b>Challenge a friend.</b> Share a link to your best run: it opens the game racing your ghost, so a friend has a time to beat.</li>
 			<li><b>Levels and leaderboards.</b> Driving earns XP for 50 levels of cars, paint, boost trails and titles, and the stunt boards keep the best scores.</li>
@@ -751,15 +751,35 @@ ${ entries.map( ( { path, date } ) => `\t<url>\n\t\t<loc>${ esc( SITE + path ) }
 // The day (YYYY-MM-DD) the last commit touching `files` was made, so a page's date in the sitemap
 // moves when what it says does (Google only trusts lastmod that does) and not on every build.
 // Outside git, or for files never committed, today. In a shallow clone (a build server's, cloned
-// with only the last commits) the oldest commit there seems to add every file, so every page would
-// get that commit's date, moving on every deploy: null instead, and the sitemap gives no date.
+// with only the last commits: Workers Builds') the oldest commit there seems to add every file, so
+// every page would get that commit's date, moving on every deploy. So the first time it's asked, a
+// shallow clone fetches the rest of its history, the commits and trees only (no files' contents: a
+// few seconds and about a megabyte); if that can't be done, null, and the sitemap gives no date.
+let unshallowed = false;
 export function lastChanged( files ) {
 
 	try {
 
-		const shallow = execFileSync( 'git', [ 'rev-parse', '--is-shallow-repository' ], { cwd: ROOT, encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
-		if ( shallow === 'true' ) return null;
-		const date = execFileSync( 'git', [ 'log', '-1', '--format=%cs', '--', ...files ], { cwd: ROOT, encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
+		const git = args => execFileSync( 'git', args, { cwd: ROOT, encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ], timeout: 120000 } ).trim();
+		if ( git( [ 'rev-parse', '--is-shallow-repository' ] ) === 'true' ) {
+
+			if ( unshallowed ) return null;
+			unshallowed = true;
+			try {
+
+				git( [ 'fetch', '--unshallow', '--filter=blob:none', '--quiet' ] );
+
+			} catch {
+
+				return null;
+
+			}
+
+			if ( git( [ 'rev-parse', '--is-shallow-repository' ] ) === 'true' ) return null;
+
+		}
+
+		const date = git( [ 'log', '-1', '--format=%cs', '--', ...files ] );
 		if ( /^\d{4}-\d\d-\d\d$/.test( date ) ) return date;
 
 	} catch {
