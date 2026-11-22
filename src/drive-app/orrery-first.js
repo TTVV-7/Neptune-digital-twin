@@ -14,6 +14,11 @@
 // paying for the Supporter Pass (supporter=thanks: they've just paid for Earth drives, and its toast
 // mustn't land under a modal).
 const NOT_FIRST = [ 'spot', 'at', 'challenge', 'vs', 'party', 'supporter' ];
+// Whether a plain load opens on the orrery at all. It did from 2026-11-20 till 2026-11-22, when the
+// owner had it open on the Earth's globe again, as it used to (a free visit: the globe's, which
+// spends none of the day's Earth drives; one is asked for when it first drives on the Earth). The
+// orrery is a tap away (the panel's Worlds), and ?worlds=1 still opens it. True opens on it again.
+export const ORRERY_FIRST = false;
 // What earthUrl takes out of the address before putting its own target in: a place's link (places.js's
 // LINK_PARAMS) and a challenge's.
 const TARGET_PARAMS = [ 'spot', 'at', 'name', 'region', 'heading', 'world', 'challenge', 'vs' ];
@@ -33,8 +38,10 @@ export function orreryFirstFor( search = '', { path = '/', dev = false, webdrive
 	if ( CHALLENGE_PATH.test( path ) ) return false;
 	const worlds = params.get( 'worlds' );
 	if ( worlds === '0' || worlds === '1' ) return false;
-	if ( dev && webdriver && seam?.first !== true ) return false;
-	return true;
+	// (A test's browser on the dev server: as its seam asks, whatever ORRERY_FIRST says, so the
+	// orrery-first load stays tested for the day it's switched on again.)
+	if ( dev && webdriver ) return seam?.first === true;
+	return ORRERY_FIRST;
 
 }
 

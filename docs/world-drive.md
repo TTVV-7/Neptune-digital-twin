@@ -18,10 +18,11 @@ address, and the construction app is unchanged by it.
 
 ## Playing
 
-1. **Pick a world.** A plain load opens on the Solar System ([the orrery](#picking-a-world-the-orrery)):
-   the Moon, Mars, Vesta, Ceres or the Earth (picking the Earth turns the page to its globe, which
-   spends nothing: one of the day's free Earth drives is used only at the first **Drive here** on the
-   Earth). Closed without a pick, it's the Moon.
+1. **Pick a world.** A plain load opens on the Earth's globe (since 2026-11-22; from 2026-11-20 it
+   opened on the Solar System, [the orrery](#picking-a-world-the-orrery), which `ORRERY_FIRST` in
+   `orrery-first.js` would bring back). The globe spends nothing: one of the day's free Earth drives
+   is used only at the first **Drive here** on the Earth. **Worlds** on the panel opens the orrery,
+   to pick the Moon, Mars, Vesta or Ceres; `?worlds=1` opens a page on it.
    **The globe**: the Earth's opens on the whole Earth, slowly turning, facing your part of the world (going by
    your clock). Drag to spin it, scroll or pinch to zoom, right-drag or two fingers to tilt.
 2. **Pick a place**, any of these ways:
@@ -213,13 +214,13 @@ takes over where it's faster, and climbing and coming down get quicker too (`SPE
 | 0 m | 60 km/h |
 | 30 m | 130 km/h |
 | 150 m | 325 km/h |
-| 600 m | 650 km/h |
-| 2 km | 1,170 km/h |
-| 6 km | 2,340 km/h |
-| 12 km (the ceiling) | 3,500 km/h |
+| 600 m | 700 km/h |
+| 2 km | 1,700 km/h |
+| 6 km | 5,000 km/h |
+| 12 km (the ceiling) | 12,000 km/h |
 
-(Each about 30% faster than it was, 2,700 km/h at the ceiling before, but for the crawl near the
-ground. Faster over the Earth means more of Google's 3D tiles fetched a minute while flying: no more
+(Since 2026-11-22, the owner wanting 10,000 km/h and more for the far places: it was 1,170 km/h at
+2 km, 2,340 at 6 km and 3,500 at the ceiling, and 2,700 before that; low down it's as it was. Faster over the Earth means more of Google's 3D tiles fetched a minute while flying: no more
 on Google's bill, which is by the session (below), but more for the player's device to download and
 draw; if phones struggle, `SPEEDS` is the one place to turn it back.)
 
@@ -228,12 +229,13 @@ never goes below 0.8 m over the ground (a slope is flown up), stops short of a w
 never climbs through a roof or a bridge. Over the ceiling it comes back down to it: where the scene
 stays where you dropped in (the Earth, the Moon, Mars), the world curves away under you, and a long
 level flight would otherwise climb out of reach of the others (on the Moon, after about 250 km at
-the ceiling). Its speed goes to others with it, so a plane at 3,500 km/h is seen flying between
-updates, not jumping 150 m at a time. The room takes up to 1,100 m/s (a plane flat out is 972 m/s,
-and up to 1,087 over the top of a loop), but for now what's sent is held to 790 (`MAX_SPEED` in
+the ceiling). Its speed goes to others with it. The room takes up to 4,000 m/s (`TOP_SPEED` in
+`live-protocol.js`: a plane flat out is 3,333 m/s, and up to 3,727 over the top of a loop; it was
+1,100 till the plane went to 12,000 km/h), but what's sent is held to 790 (`MAX_SPEED` in
 `live.js`): a page still open from before the plane got faster drops anything over its old 800.
-That's still seen as flying, not a jump (`teleported` allows half again the speed sent), and can go
-up to 1,090 once those pages have aged out.
+Up to 1,185 m/s that's still seen as flying (`teleported` allows half again the speed sent);
+faster, others see the plane jump from update to update, a few hundred metres at a time, which at
+that speed is out of their sight in seconds anyway.
 
 **What it scores and what it doesn't.** Its own tricks score (below); everything else is kept apart:
 
@@ -311,7 +313,7 @@ and rocket dragster) get the wings but keep their wheels as they are.
 **Not yet:** flying high enough to come out on the globe and pick somewhere else.
 
 **How it's tested**: `npm run test:drive-plane` (`scripts/test-drive-plane.mjs`, node, no browser),
-26 tests: the speeds (3,500 km/h at the ceiling, still 60 km/h off the ground) and the live protocol
+26 tests: the speeds (12,000 km/h at the ceiling, still 60 km/h off the ground) and the live protocol
 taking a plane flat out with a loop's hump on top while what's sent stays under old pages' 800; the
 drop (300 m/s spread out on the Earth and never faster, reached within 7 s, 480 diving, 200 m/s on the Moon within 7 s, the
 speed across the ground down to the car's own within 3 s of a bail-out at 3,500 km/h); the parachute
@@ -5454,7 +5456,7 @@ answers only with `{ name, lat, lon, type }`, and refuses queries over 120 chara
 anything but letters, numbers and an address's punctuation. The globe's panel shows
 "Search © OpenStreetMap contributors".
 
-**A plain load's visit.** A plain load opens on the orrery and asks for a free visit, so none of the
+**A plain load's visit.** A plain load (when it opened on the orrery: now it's the globe's, also free) opens on the orrery and asks for a free visit, so none of the
 day's Earth drives is spent until someone drives on the Earth (picking it turns the page to our own
 globe of it in place; the first **Drive here** there asks for the Earth's drive, which the caps count
 as always, `fromGlobe`, not counted as a visit again). The `earth` visit stat now counts people who

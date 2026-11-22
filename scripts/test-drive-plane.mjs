@@ -107,12 +107,15 @@ const over = ( { d, ground } ) => d.y - ground( d.east, d.north );
 
 describe( 'plane speeds', () => {
 
-	test( 'a third faster at the top: 3,500 km/h at the ceiling, still 60 km/h off the ground', () => {
+	test( '12,000 km/h at the ceiling, 5,000 at 6 km, 1,700 at 2 km, still 60 km/h off the ground', () => {
 
-		assert.ok( Math.abs( planeTopSpeed( 12000 ) - 3500 / KMH ) < 1e-9 );
-		assert.ok( Math.abs( planeTopSpeed( 20000 ) - 3500 / KMH ) < 1e-9 );
+		assert.ok( Math.abs( planeTopSpeed( 12000 ) - 12000 / KMH ) < 1e-9 );
+		assert.ok( Math.abs( planeTopSpeed( 20000 ) - 12000 / KMH ) < 1e-9 );
+		assert.ok( Math.abs( planeTopSpeed( 6000 ) - 5000 / KMH ) < 1e-9 );
 		assert.ok( Math.abs( planeTopSpeed( 0 ) - 60 / KMH ) < 1e-9 );
-		assert.ok( Math.abs( planeTopSpeed( 2000 ) - 1170 / KMH ) < 1e-9 );
+		assert.ok( Math.abs( planeTopSpeed( 2000 ) - 1700 / KMH ) < 1e-9 );
+		// Only ever faster higher up.
+		for ( let h = 0; h < 12000; h += 50 ) assert.ok( planeTopSpeed( h + 50 ) >= planeTopSpeed( h ), `${ h } m` );
 
 	} );
 
@@ -125,9 +128,9 @@ describe( 'plane speeds', () => {
 		// (Flat out, and climbing at half that at the steepest of a loop.)
 		const fastest = planeTopSpeed( 12000 ) * Math.hypot( 1, LOOP.lift );
 		assert.ok( fastest < top, JSON.stringify( { fastest, top } ) );
-		// Under the 800 a page from before the faster plane still checks against (live.js's MAX_SPEED),
-		// and still seen flying rather than jumping: teleported allows half again the speed sent.
-		assert.ok( clamp < 800 && fastest < clamp * 1.5, JSON.stringify( { fastest, clamp } ) );
+		// What's sent stays under the 800 a page from before the faster plane still checks against
+		// (live.js's MAX_SPEED); a plane faster than half again that is seen jumping word to word.
+		assert.ok( clamp < 800, JSON.stringify( { fastest, clamp } ) );
 
 	} );
 

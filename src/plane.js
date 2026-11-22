@@ -34,13 +34,14 @@ const LIFT = 3;
 const CLEARANCE = 0.8;
 const CEILING = 12000;
 // The fastest it may go (km/h) at each height over the ground (m), and in between, on a log
-// scale of the height: 60 km/h just off the ground, 325 km/h at 150 m, 1,170 km/h at 2 km, and
-// 3,500 km/h (972 m/s) at its ceiling. (Each a third faster than it was, but the crawl near the
-// ground. Faster over the Earth means more of Google's tiles fetched a minute: not more of Google's
+// scale of the height: 60 km/h just off the ground, 325 km/h at 150 m, 1,700 km/h at 2 km, 5,000
+// at 6 km and 12,000 km/h (3,333 m/s) at its ceiling. (Since 2026-11-22, the owner wanting 10,000
+// km/h and more for the far places: it was 1,170 at 2 km, 2,340 at 6 and 3,500 at the ceiling; low
+// down it's as it was. Faster over the Earth means more of Google's tiles fetched a minute: not more of Google's
 // bill, which is by the session (main.js), but more for the device to download, and this table is
 // the one place to turn it back.) The live protocol's top speed is over the last of these
 // (live-protocol.js's TOP_SPEED, live.js's MAX_SPEED): they go up together.
-const SPEEDS = [ [ 0, 60 ], [ 30, 130 ], [ 150, 325 ], [ 600, 650 ], [ 2000, 1170 ], [ 6000, 2340 ], [ 12000, 3500 ] ];
+const SPEEDS = [ [ 0, 60 ], [ 30, 130 ], [ 150, 325 ], [ 600, 700 ], [ 2000, 1700 ], [ 6000, 5000 ], [ 12000, 12000 ] ];
 // Climbing or coming down (m/s): this much, plus this share of the height, up to the most.
 const CLIMB = { base: 6, share: 0.12, most: 250 };
 // Speeding up (m/s²): at least this, or this share of the top speed there a second; slowing down

@@ -5,18 +5,24 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { EARTH_USED_UP, LAST_WORLD, earthTarget, earthUrl, orreryFirstFor, readStored, usedUpToday, utcDay, writeStored } from '../src/drive-app/orrery-first.js';
+import { EARTH_USED_UP, LAST_WORLD, ORRERY_FIRST, earthTarget, earthUrl, orreryFirstFor, readStored, usedUpToday, utcDay, writeStored } from '../src/drive-app/orrery-first.js';
 import { SPOTS } from '../src/drive-app/places.js';
 
 const BASE = 'https://worlddrive.app';
+// A plain address's way to the Earth: with ?worlds=0 only while a plain load opens on the orrery
+// (ORRERY_FIRST), to keep it shut; since 2026-11-22 a plain load is the Earth's anyway.
+const plain = ( path = '/', query = '' ) => ORRERY_FIRST ? `${ path }?${ query ? `${ query }&` : '' }worlds=0` : `${ path }${ query ? `?${ query }` : '' }`;
 
 describe( 'orreryFirstFor: which loads open on the orrery', () => {
 
-	test( 'a plain load does, whatever else is in the address', () => {
+	test( 'a plain load opens on the Earth\'s globe since 2026-11-22 (ORRERY_FIRST off); were it on, a plain load would open on the orrery, whatever else is in the address', () => {
 
-		assert.equal( orreryFirstFor( '' ), true );
-		assert.equal( orreryFirstFor( '?pro=1' ), true );
-		assert.equal( orreryFirstFor( '?feats=1&utm_source=x' ), true );
+		assert.equal( ORRERY_FIRST, false );
+		assert.equal( orreryFirstFor( '' ), false );
+
+		assert.equal( orreryFirstFor( '' ), ORRERY_FIRST );
+		assert.equal( orreryFirstFor( '?pro=1' ), ORRERY_FIRST );
+		assert.equal( orreryFirstFor( '?feats=1&utm_source=x' ), ORRERY_FIRST );
 
 	} );
 
@@ -35,7 +41,7 @@ describe( 'orreryFirstFor: which loads open on the orrery', () => {
 		assert.equal( orreryFirstFor( '', { path: '/c' } ), false );
 		assert.equal( orreryFirstFor( '', { path: '/c/' } ), false );
 		assert.equal( orreryFirstFor( '', { path: '/c/12' } ), false );
-		assert.equal( orreryFirstFor( '', { path: '/cars' } ), true );
+		assert.equal( orreryFirstFor( '', { path: '/cars' } ), ORRERY_FIRST );
 
 	} );
 
@@ -43,7 +49,7 @@ describe( 'orreryFirstFor: which loads open on the orrery', () => {
 
 		assert.equal( orreryFirstFor( '?worlds=0' ), false );
 		assert.equal( orreryFirstFor( '?worlds=1' ), false );
-		assert.equal( orreryFirstFor( '?worlds=2' ), true );
+		assert.equal( orreryFirstFor( '?worlds=2' ), ORRERY_FIRST );
 
 	} );
 
@@ -54,8 +60,8 @@ describe( 'orreryFirstFor: which loads open on the orrery', () => {
 		assert.equal( orreryFirstFor( '', { dev: true, webdriver: true, seam: { first: true } } ), true );
 		assert.equal( orreryFirstFor( '?spot=neptune', { dev: true, webdriver: true, seam: { first: true } } ), false );
 		// A person on the dev server, and any browser on a built page (where webdriver isn't read).
-		assert.equal( orreryFirstFor( '', { dev: true, webdriver: false } ), true );
-		assert.equal( orreryFirstFor( '', { dev: false, webdriver: true } ), true );
+		assert.equal( orreryFirstFor( '', { dev: true, webdriver: false } ), ORRERY_FIRST );
+		assert.equal( orreryFirstFor( '', { dev: false, webdriver: true } ), ORRERY_FIRST );
 
 	} );
 
@@ -65,19 +71,19 @@ describe( 'earthUrl: the Earth from a page that opened on the orrery or another 
 
 	test( 'nothing in particular: ?worlds=0 at /', () => {
 
-		assert.equal( earthUrl( {}, `${ BASE }/` ), '/?worlds=0' );
-		assert.equal( earthUrl( {}, `${ BASE }/?worlds=1` ), '/?worlds=0' );
+		assert.equal( earthUrl( {}, `${ BASE }/` ), plain() );
+		assert.equal( earthUrl( {}, `${ BASE }/?worlds=1` ), plain() );
 
 	} );
 
 	test( 'a link to another world loses its link; a party and anything else stays', () => {
 
-		assert.equal( earthUrl( {}, `${ BASE }/?spot=mars-curiosity` ), '/?worlds=0' );
-		assert.equal( earthUrl( {}, `${ BASE }/?at=1,2&world=vesta&name=X&region=Y&heading=4` ), '/?worlds=0' );
-		assert.equal( earthUrl( {}, `${ BASE }/c?challenge=9&vs=abc` ), '/?worlds=0' );
+		assert.equal( earthUrl( {}, `${ BASE }/?spot=mars-curiosity` ), plain() );
+		assert.equal( earthUrl( {}, `${ BASE }/?at=1,2&world=vesta&name=X&region=Y&heading=4` ), plain() );
+		assert.equal( earthUrl( {}, `${ BASE }/c?challenge=9&vs=abc` ), plain() );
 		// (A party keeps the orrery shut by itself, so no worlds=0.)
 		assert.equal( earthUrl( {}, `${ BASE }/?spot=moon-tycho&party=ABCD` ), '/?party=ABCD' );
-		assert.equal( earthUrl( {}, `${ BASE }/?pro=1` ), '/?pro=1&worlds=0' );
+		assert.equal( earthUrl( {}, `${ BASE }/?pro=1` ), plain( '/', 'pro=1' ) );
 
 	} );
 
@@ -98,14 +104,14 @@ describe( 'earthUrl: the Earth from a page that opened on the orrery or another 
 		assert.equal( earthUrl( { challenge: 42 }, `${ BASE }/` ), '/?challenge=42' );
 		assert.equal( earthUrl( { challenge: 42, vs: 'ab-c' }, `${ BASE }/` ), '/?challenge=42&vs=ab-c' );
 		// Not a challenge's id: nothing opens, the plain Earth.
-		assert.equal( earthUrl( { challenge: 'x' }, `${ BASE }/` ), '/?worlds=0' );
-		assert.equal( earthUrl( { challenge: 0 }, `${ BASE }/` ), '/?worlds=0' );
+		assert.equal( earthUrl( { challenge: 'x' }, `${ BASE }/` ), plain() );
+		assert.equal( earthUrl( { challenge: 0 }, `${ BASE }/` ), plain() );
 
 	} );
 
 	test( 'null: this page as it is, the Earth asked for again (never the orrery)', () => {
 
-		assert.equal( earthUrl( null, `${ BASE }/` ), '/?worlds=0' );
+		assert.equal( earthUrl( null, `${ BASE }/` ), plain() );
 		assert.equal( earthUrl( null, `${ BASE }/?spot=neptune` ), '/?spot=neptune' );
 		assert.equal( earthUrl( null, `${ BASE }/c?challenge=3&vs=q` ), '/c?challenge=3&vs=q' );
 
