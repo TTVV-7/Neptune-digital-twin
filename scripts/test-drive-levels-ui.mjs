@@ -403,7 +403,7 @@ describe( 'World Drive levels in the page', () => {
 		// Each level's XP on one line.
 		const xp = await track.locator( 'li[data-level="30"] .level-head .xp' ).boundingBox();
 		assert.ok( xp.height < 16, `${ xp.height }` );
-		assert.deepEqual( await track.locator( 'li[data-level="25"] .reward' ).allTextContents(), [ 'Copper paintLevels only' ] );
+		assert.deepEqual( await track.locator( 'li[data-level="25"] .reward' ).allTextContents(), [ 'Copper paintLevels only', 'Upgrade:Air control IISpin and flip faster in the air' ] );
 		assert.equal( await track.locator( 'li[data-level="50"] .level-head .level-badge' ).getAttribute( 'data-frame' ), 'legend' );
 		await shot( page, 'levels-5-track' );
 		await track.locator( '.close' ).click();
@@ -636,13 +636,14 @@ describe( 'World Drive levels with the Supporter Pass', () => {
 			const locked = await garage.locator( '.choice.locked' ).evaluateAll( buttons => buttons.map( b => `${ b.closest( 'section' ).dataset.part } ${ b.dataset.id } ${ b.querySelector( '.unlock' ).textContent }` ) );
 			assert.deepEqual( locked, [ 'colour copper Lv 25', 'colour mint Lv 35', 'colour plum Lv 45', 'colour champion Lv 50' ] );
 			await page.locator( '#garage .done' ).click();
-			// What's next is new to a supporter: not the Sunburst paint their pass has.
-			assert.equal( await page.locator( '#globe-ui .profile .next' ).textContent(), 'Next: Joyrider at Lv 4' );
+			// What's next is new to a supporter: not the Sunburst paint their pass has (Engine I, an
+			// upgrade, is the levels' alone).
+			assert.equal( await page.locator( '#globe-ui .profile .next' ).textContent(), 'Next: Engine I at Lv 3' );
 			await page.locator( '#globe-ui .profile .track-open' ).click();
 			const track = page.locator( '#track' );
 			await track.waitFor();
 			assert.deepEqual( await track.locator( 'li[data-level="2"] .reward' ).allTextContents(), [ 'Sunburst paint✓ Pass' ] );
-			assert.deepEqual( await track.locator( 'li[data-level="25"] .reward' ).allTextContents(), [ 'Copper paintLevels only' ] );
+			assert.deepEqual( await track.locator( 'li[data-level="25"] .reward' ).allTextContents(), [ 'Copper paintLevels only', 'Upgrade:Air control IISpin and flip faster in the air' ] );
 			await shot( page, 'levels-pass-track' );
 			await track.locator( '.close' ).click();
 			// The first answer says the Worker counts it ×1.5.
@@ -656,14 +657,15 @@ describe( 'World Drive levels with the Supporter Pass', () => {
 			assert.equal( await card.locator( '.heading' ).textContent(), 'Level 2!' );
 			assert.equal( await card.locator( '.unlocked' ).isVisible(), false );
 			assert.equal( await card.locator( '.had' ).textContent(), 'Already yours with the pass: Sunburst paint' );
-			// One that brings a title too: the title is news.
+			// One that brings a title and an upgrade too: those are news (an upgrade is the levels' alone).
 			await page.evaluate( event => {
 
 				window.drive.profile.hideLevelUp();
 				window.drive.profile.levelUp( event );
 
 			}, { level: 4, from: 2, rewards: rewardsBetween( 2, 4 ), nickname: false } );
-			assert.deepEqual( await card.locator( '.reward' ).allTextContents(), [ 'Title:Joyrider' ] );
+			assert.deepEqual( await card.locator( '.reward' ).allTextContents(), [ 'Upgrade:Engine I', 'Title:Joyrider' ] );
+			assert.equal( await card.locator( '.reward.upgrade' ).getAttribute( 'title' ), 'Faster top speed and acceleration, on every ride (not in challenges)' );
 			assert.equal( await card.locator( '.had' ).textContent(), 'Already yours with the pass: Hearts boost, Red flame' );
 			await page.waitForTimeout( 600 );
 			await shot( page, 'levels-pass-level-up' );

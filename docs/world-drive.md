@@ -3723,9 +3723,31 @@ in the air a lot, about 40 % less.
 | 5 | 1,450 | a first session (about 17 minutes) |
 | 10 | 6,050 | about 80 minutes |
 | 20 | 29,250 | about 6½ hours |
-| 30 | 82,050 | about 20 hours |
+| 30 | 82,050 | about 20 hours; **Upgrade: Springs II** |
 | 40 | 181,150 | about 45 hours |
 | 50 | 346,450 | about 87 hours |
+
+### Upgrades
+
+Since 2026-11-22 the track has **upgrades** too, the levels' alone (never the pass's: they're
+earned by driving), which make every ride better: three tiers each of four parts (`UPGRADES` and
+`tuningAt` in `levels.js`), each tier better by its share than the last.
+
+| Part | Tiers at | Each tier | At level 45 |
+| --- | --- | --- | --- |
+| Engine | 3, 16, 34 | top speed and acceleration +5 % | +15 % |
+| Turbo | 6, 21, 37 | the booster's gauge lasts 20 % longer and refills 20 % faster | 1.6 times |
+| Air control | 9, 25, 41 | turns in the air 10 % faster (spins, flips, rolls: more tricks a jump) | +30 % |
+| Springs | 11, 30, 45 | a ramp, a hop or a hit throws it 12 % higher | +36 % |
+
+The game sets them on the driver every frame (main.js: `driver.setTuning( tuningFor( level ) )`;
+drive.js's `applyTuning` scales the ride's spec, `handling.launch`, `trickRate`, the booster's
+times and the ramp's and hop's climb), and sets none (`NO_TUNING`) through a challenge's countdown
+and run: the challenges' boards are a test of driving, the same car for everyone, and their times'
+checks (`FASTEST` in `challenge-rules.js`) stay as they were. The leaderboard's tricks are helped:
+Air control's best is 1.3 times a kart's turning in the air, under the three times of it the
+leaderboard takes as possible a second (`RATE` in `worker/drive/scores.js`), so nothing there
+changes. On the track each shows its picture, "Upgrade: Engine II" and what it does.
 
 ### The unlock track
 
@@ -3737,29 +3759,29 @@ rewards.
 | --- | --- | --- |
 | 1 | 0 | Title: Rookie; Steel badge |
 | 2 | 200 | Sunburst paint ⭐ |
-| 3 | 500 | Hearts boost ⭐ |
+| 3 | 500 | Hearts boost ⭐; **Upgrade: Engine I** |
 | 4 | 900 | Title: Joyrider; Red flame ⭐ |
 | 5 | 1,450 | **Golf cart** ⭐; Lime paint ⭐ |
-| 6 | 2,100 | White rims ⭐ |
+| 6 | 2,100 | White rims ⭐; **Upgrade: Turbo I** |
 | 7 | 2,900 | Plasma boost ⭐ |
 | 8 | 3,800 | **Tuk-tuk** ⭐; Title: Drifter |
-| 9 | 4,850 | Racing stripes ⭐ |
+| 9 | 4,850 | Racing stripes ⭐; **Upgrade: Air control I** |
 | 10 | 6,050 | Bronze badge; Neon blue underglow ⭐ |
-| 11 | 7,450 | Teal paint ⭐ |
+| 11 | 7,450 | Teal paint ⭐; **Upgrade: Springs I** |
 | 12 | 9,050 | Title: Street Racer; Frost boost ⭐ |
 | 13 | 10,750 | Pixel boost ⭐ |
 | 14 | 12,650 | Blue flame ⭐ |
 | 15 | 14,850 | **Ice-cream van** ⭐; Title: Stunt Ace |
-| 16 | 17,250 | Smoke trail ⭐ |
+| 16 | 17,250 | Smoke trail ⭐; **Upgrade: Engine II** |
 | 17 | 19,850 | Title: Speedster; Sky blue paint ⭐ |
 | 18 | 22,750 | Electric blue paint ⭐ |
 | 19 | 25,850 | Title: Trickster; Gold flame ⭐ |
 | 20 | 29,250 | Silver badge; Lightning bolts ⭐ |
-| 21 | 32,950 | Red rims ⭐ |
+| 21 | 32,950 | Red rims ⭐; **Upgrade: Turbo II** |
 | 22 | 36,950 | **Lawn tractor** ⭐; Title: Explorer |
 | 23 | 41,250 | Glitter boost ⭐ |
 | 24 | 45,950 | Title: Globetrotter; Satin black rims ⭐ |
-| 25 | 50,950 | Copper paint (levels only) |
+| 25 | 50,950 | Copper paint (levels only); **Upgrade: Air control II** |
 | 26 | 56,350 | Number decal ⭐ |
 | 27 | 62,150 | Title: Road Warrior; Spooky boost ⭐ |
 | 28 | 68,350 | Green flame ⭐ |
@@ -3768,18 +3790,18 @@ rewards.
 | 31 | 89,550 | Matte finish ⭐ |
 | 32 | 97,550 | Title: Daredevil; Air horn ⭐ |
 | 33 | 106,050 | Title: Trailblazer; Teal flame ⭐ |
-| 34 | 115,050 | Violet paint ⭐ |
+| 34 | 115,050 | Violet paint ⭐; **Upgrade: Engine III** |
 | 35 | 124,650 | Mint paint (levels only) |
 | 36 | 134,750 | Title: Pathfinder; Candy apple red paint ⭐ |
-| 37 | 145,450 | Blue rims ⭐ |
+| 37 | 145,450 | Blue rims ⭐; **Upgrade: Turbo III** |
 | 38 | 156,750 | Title: Storm Chaser; Neon green underglow ⭐ |
 | 39 | 168,650 | Title: High Flyer; Dragon fire boost ⭐ |
 | 40 | 181,150 | **Formula racer** ⭐; Platinum badge; Purple flame ⭐ |
-| 41 | 194,350 | Title: Thrill Seeker; Camo ⭐ |
+| 41 | 194,350 | Title: Thrill Seeker; Camo ⭐; **Upgrade: Air control III** |
 | 42 | 208,250 | Title: Wheel Wizard; Chrome rims ⭐ |
 | 43 | 222,850 | Title: Night Owl; White-hot flame ⭐ |
 | 44 | 238,150 | Title: Road Captain; Gunmetal paint ⭐ |
-| 45 | 254,250 | Plum paint (levels only) |
+| 45 | 254,250 | Plum paint (levels only); **Upgrade: Springs III** |
 | 46 | 271,050 | Title: Cartographer; Pearl finish ⭐ |
 | 47 | 288,650 | Title: Supersonic; Afterburner boost ⭐ |
 | 48 | 307,050 | Title: World Tourer; Fanfare horn ⭐ |

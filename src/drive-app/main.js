@@ -44,6 +44,7 @@ import { createOnline } from './online.js';
 import { cleanPartyCode, FLAGS } from './live-protocol.js';
 import { send } from './api.js';
 import { createMusic } from './music.js';
+import { NO_TUNING, tuningAt } from './levels.js';
 import { setUpScoring } from './scoring.js';
 import * as screens from './screens.js';
 
@@ -353,6 +354,9 @@ const NUDGE_AFTER = import.meta.env.DEV ? window.worldDriveNudgeTest?.after ?? n
 // The music (music.js). On the dev server only when a test asks for it (window.worldDriveMusicTest),
 // so the other tests' browsers fetch and play nothing.
 const MUSIC = import.meta.env.DEV ? !! window.worldDriveMusicTest : true;
+// The upgrades at a level (levels.js's tuningAt), worked out once a level: asked every frame.
+const tunings = new Map();
+const tuningFor = level => tunings.get( level ) ?? tunings.set( level, tuningAt( level ) ).get( level );
 // The orrery opens on its own on a plain load (boot.js says so: start's orreryFirst, orrery-first.js),
 // and with ?worlds=1 in the address; on the dev server, a test's browser gets the plain Earth load
 // instead unless it asks, { first: true } (boot.js reads that), and { onLoad: true } opens it over
@@ -2935,7 +2939,11 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		challenges?.frame( dt );
 		challengeNudge( dt );
 		const run = challenges?.run;
-		music.setActivity( run && ( run.phase === 'countdown' || run.phase === 'racing' ) ? 'challenge' : driver.aircraft?.on ? 'plane' : null );
+		const running = !! run && ( run.phase === 'countdown' || run.phase === 'racing' );
+		music.setActivity( running ? 'challenge' : driver.aircraft?.on ? 'plane' : null );
+		// The level track's upgrades on every ride, but none in a challenge's run: its boards are a
+		// test of driving, the same car for everyone (levels.js's UPGRADES).
+		driver.setTuning( running ? NO_TUNING : tuningFor( progress.level ) );
 		// The underglow fades as the ground falls away (a jump, flying) and comes back on it.
 		if ( state.entry ) liftGlow( state.entry.pivot, flagsOf( driver, state.mode === 'paused' ), dt );
 		screenFx.update( dt, state.mode === 'driving' || state.mode === 'paused' );
