@@ -12,7 +12,7 @@ import { EARTH, WORLDS, onWorld, OnWorld, WORLD_IDS } from './worlds.js';
 import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from '../geo.js';
 
 // Challenges in the page (docs/world-drive.md, "Challenges"): its own chunk, loaded the first time
-// they're opened (main.js), so nothing of it is in the page's first load. The list of the fifteen live
+// they're opened (main.js), so nothing of it is in the page's first load. The list of the ten live
 // ones (three a world, the current world's first), each with the time it has left (ticking), its board's top
 // three and your best; its board; starting one (a drop-in at its start, on its world); the run: a
 // countdown, the gates or items on the ground the game has (their heights found as it loads: rays
@@ -306,7 +306,7 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// The fifteen, the current world's three first, a heading for each world.
+	// The ten, the current world's two first, a heading for each world.
 	function render() {
 
 		const here = app.world();
@@ -1611,7 +1611,7 @@ export function setUpChallenges( app ) {
 		root.setAttribute( 'aria-labelledby', 'ch-title' );
 		root.innerHTML = `
 			<header class="ch-head"><h2 id="ch-title">${ FLAG } Challenges</h2><button type="button" class="close" aria-label="Close">&times;</button></header>
-			<p class="ch-intro">A daily, a weekly and a monthly one on ${ worldList() }, each with its own board. Your best time counts.</p>
+			<p class="ch-intro">A weekly and a monthly one on ${ worldList() }, each with its own board. Your best time counts.</p>
 			<p class="ch-note" role="status" hidden></p>
 			<p class="ch-status" role="status" hidden></p>
 			<section class="ch-link" aria-label="A friend's challenge" hidden></section>

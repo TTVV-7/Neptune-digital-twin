@@ -345,7 +345,7 @@ function spacePage() {
 			<li><b>Real places to find.</b> Drive to the Apollo landing sites, Olympus Mons and Valles Marineris, the rovers' landing sites, Vesta's Rheasilvia peak and Ceres's bright salt spots, and collect each one's card of real facts.</li>
 			<li><b>The real heights.</b> Press <kbd>L</kbd> to colour the ground by its measured height, from the spacecraft's own laser and camera data.</li>
 			<li><b>With others.</b> Everyone driving the same area is there with you, as on the Earth, and a party link brings friends to any world. <a href="/multiplayer/">Driving with friends</a>.</li>
-			<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on every world, with a leaderboard and ghosts to race.</li>
+			<li><b>Challenges.</b> A weekly and a monthly challenge on every world, with a leaderboard and ghosts to race.</li>
 		</ul>
 	</section>
 	<section>
@@ -404,7 +404,7 @@ function multiplayerPage() {
 	<section>
 		<h2>Race your friends</h2>
 		<ul>
-			<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on every world: checkpoint sprints, collecting them all, or racing to a landmark, each with its own leaderboard.</li>
+			<li><b>Challenges.</b> A weekly and a monthly challenge on every world: checkpoint sprints, collecting them all, or racing to a landmark, each with its own leaderboard.</li>
 			<li><b>Ghosts.</b> Every run is recorded, so you race a ghost of the best time, or of your own.</li>
 			<li><b>Challenge a friend.</b> Share a link to your best run: it opens the game racing your ghost, so a friend has a time to beat.</li>
 			<li><b>Levels and leaderboards.</b> Driving earns XP for 50 levels of cars, paint, boost trails and titles, and the stunt boards keep the best scores.</li>

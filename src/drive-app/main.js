@@ -43,6 +43,7 @@ import { BUDGET_TOAST, budgetToast, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
 import { cleanPartyCode, FLAGS } from './live-protocol.js';
 import { send } from './api.js';
+import { createMusic } from './music.js';
 import { setUpScoring } from './scoring.js';
 import * as screens from './screens.js';
 
@@ -344,11 +345,14 @@ const VISIT_TEST = import.meta.env.DEV ? window.worldDriveVisitTest ?? null : nu
 // their posts itself), so what the page counts can be seen on the test pad.
 const STATS_TEST = import.meta.env.DEV ? window.worldDriveStatsTest ?? null : null;
 // The challenges' word to a visit that's driving (challengeNudge): after this many seconds of a
-// visit's driving (a minute is when most visits end), today's challenge on that world, with a button
+// visit's driving (a minute is when most visits end), this week's challenge on that world, with a button
 // to the challenges. On the dev server only when a test asks for it, { after } (s), as
 // scripts/test-drive-ui.mjs does: the other tests drive longer than that, and look at what the toast
 // says.
 const NUDGE_AFTER = import.meta.env.DEV ? window.worldDriveNudgeTest?.after ?? null : 40;
+// The music (music.js). On the dev server only when a test asks for it (window.worldDriveMusicTest),
+// so the other tests' browsers fetch and play nothing.
+const MUSIC = import.meta.env.DEV ? !! window.worldDriveMusicTest : true;
 // The orrery opens on its own on a plain load (boot.js says so: start's orreryFirst, orrery-first.js),
 // and with ?worlds=1 in the address; on the dev server, a test's browser gets the plain Earth load
 // instead unless it asks, { first: true } (boot.js reads that), and { onLoad: true } opens it over
@@ -612,6 +616,28 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	let recentres = 0;
 	// Boost pads on the ground as you drive (pads.js), never on water, with their switch in the
 	// pause menu.
+	// The music, and its switches (the pause menu's, with its volume, and the globe panel's).
+	const music = createMusic( { enabled: MUSIC } );
+	{
+
+		const toggles = document.querySelectorAll( '.music-toggle' );
+		const level = $( 'pause' ).querySelector( '.music-level' );
+		const show = ( { on, volume } ) => {
+
+			for ( const toggle of toggles ) toggle.checked = on;
+			level.value = String( Math.round( volume * 100 ) );
+			level.disabled = ! on;
+
+		};
+
+		show( music );
+		for ( const toggle of toggles ) toggle.addEventListener( 'change', () => music.setOn( toggle.checked ) );
+		level.addEventListener( 'input', () => music.setVolume( Number( level.value ) / 100 ) );
+		music.onChange( show );
+		if ( import.meta.env.DEV ) window.worldDriveMusic = music;
+
+	}
+
 	const pads = createBoostPads( { scene, driver, ground, water, toggle: $( 'pause' ).querySelector( '.pads-toggle' ), onPad: () => progress.pad() } );
 
 	const panel = setUpPanel( {
@@ -876,7 +902,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	}
 
 	// Challenges (challenges.js, its own chunk, loaded the first time they're opened: nothing of them
-	// is in the page until then): a daily, a weekly and a monthly one on each world, from the globe's
+	// is in the page until then): a weekly and a monthly one on each world, from the globe's
 	// panel and the pause menu. Once loaded, it's told of each drop-in, arrival, pause, resumption and
 	// leaving, and its frame runs after the car's.
 	let challenges = null;
@@ -988,7 +1014,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 
 	// The challenges' word while driving (NUDGE_AFTER): the seconds of driving left before it, or null
 	// once it's had its say (or isn't to have one: no Worker, or the challenges opened already, a run
-	// among them). Not over another toast (a few seconds more, then); then today's challenge on the
+	// among them). Not over another toast (a few seconds more, then); then this week's challenge on the
 	// world being driven, from the Worker's list (its place), with a button to the challenges. Both
 	// counted for the play stats (challenge: nudge, nudge_open), so the owner can see whether it
 	// keeps people longer.
@@ -1004,10 +1030,10 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		const here = world;
 		send( 'GET', '/api/challenges' ).then( answer => {
 
-			const today = answer.ok && answer.body.challenges?.find?.( c => c.world === here && c.period === 'day' );
-			if ( ! today || challenges || state.mode !== 'driving' || ! $( 'toast' ).hidden ) return;
+			const weekly = answer.ok && answer.body.challenges?.find?.( c => c.world === here && c.period === 'week' );
+			if ( ! weekly || challenges || state.mode !== 'driving' || ! $( 'toast' ).hidden ) return;
 			stats.add( 'challenge', 'nudge' );
-			screens.toast( `Today's challenge ${ onWorld( here ) }: ${ today.place }. A timed run with its own board.`, 10000, { label: 'Challenges', onClick: () => {
+			screens.toast( `This week's challenge ${ onWorld( here ) }: ${ weekly.place }. A timed run with its own board.`, 10000, { label: 'Challenges', onClick: () => {
 
 				stats.add( 'challenge', 'nudge_open' );
 				openChallenges();
@@ -1247,6 +1273,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		if ( mode !== 'globe' && orrery?.isOpen ) orrery.close();
 		state.mode = mode;
 		document.body.dataset.mode = mode;
+		music.update( { mode, world } );
 		finds?.setMode( mode );
 		lens?.setMode( mode );
 		// A level-up waiting shows as the drive starts, and one showing goes as it pauses or ends.
@@ -1628,6 +1655,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// The world left lets go of all but its coarsest ground (built again when it's back).
 		body()?.release();
 		world = next;
+		music.update( { mode: state.mode, world } );
 		// The world's Discoveries (its beacons on its ground, its pins on its globe; none on the Earth),
 		// and the data lens's heights for it.
 		finds.setWorld( world );
@@ -2906,6 +2934,8 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// the challenges' word to a visit driving a while.
 		challenges?.frame( dt );
 		challengeNudge( dt );
+		const run = challenges?.run;
+		music.setActivity( run && ( run.phase === 'countdown' || run.phase === 'racing' ) ? 'challenge' : driver.aircraft?.on ? 'plane' : null );
 		// The underglow fades as the ground falls away (a jump, flying) and comes back on it.
 		if ( state.entry ) liftGlow( state.entry.pivot, flagsOf( driver, state.mode === 'paused' ), dt );
 		screenFx.update( dt, state.mode === 'driving' || state.mode === 'paused' );

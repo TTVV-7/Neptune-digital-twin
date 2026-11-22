@@ -30,7 +30,9 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { LEVEL_XP, RIDES, XP, areaOf, levelOf, nextReward, rewardsAt, rewardsBetween } from '../src/drive-app/levels.js';
-import { ACHIEVEMENTS } from '../src/drive-app/achievement-rules.js';
+import { shownTo } from '../src/drive-app/achievement-rules.js';
+// The grid's count out of for a player without the retired Daily winner (shownTo).
+const SHOWN = shownTo( new Set() ).length;
 import { WORKS_RIDES } from '../src/drive-app/catalog.js';
 import { WORKS } from '../src/drive-app/works.js';
 import { makeVisit } from '../worker/drive/visits.js';
@@ -983,7 +985,7 @@ describe( 'World Drive achievements in the page', () => {
 			await shot( page, 'feats-1-garage-locked' );
 			await garage.locator( '.done' ).click();
 			// The grid, from the profile card: three earned with their date, the rest with how far.
-			assert.equal( await page.locator( '#globe-ui .profile .achievements-open .feat-count' ).textContent(), `3 / ${ ACHIEVEMENTS.length }` );
+			assert.equal( await page.locator( '#globe-ui .profile .achievements-open .feat-count' ).textContent(), `3 / ${ SHOWN }` );
 			await page.locator( '#globe-ui .profile .achievements-open' ).click();
 			const grid = page.locator( '#achievements' );
 			await grid.waitFor();
@@ -996,7 +998,8 @@ describe( 'World Drive achievements in the page', () => {
 			assert.equal( await grid.locator( '.feat[data-id="weekly-podium"] .state' ).textContent(), 'On a weekly board' );
 			assert.equal( await grid.locator( '.feat[data-id="weekly-podium"] .reward' ).textContent(), 'Unlocks the vac truck' );
 			assert.equal( await grid.locator( '.feat[data-id="km-10"] button.reward' ).textContent(), 'Drive the skid steer' );
-			assert.equal( await grid.locator( '.feat' ).count(), ACHIEVEMENTS.length );
+			assert.equal( await grid.locator( '.feat' ).count(), SHOWN );
+			assert.equal( await grid.locator( '.feat[data-id="daily-winner"]' ).count(), 0 );
 			assert.equal( await grid.locator( '.feat[data-id="km-100"] .bar i' ).evaluate( i => parseFloat( i.style.width ) ), 10.5 );
 			await shot( page, 'feats-2-grid' );
 			await grid.locator( '.close' ).click();
@@ -1159,7 +1162,7 @@ describe( 'World Drive achievements in the page', () => {
 			assert.equal( overlaps, false, JSON.stringify( { toastBox, resumeBox } ) );
 			await shot( page, 'feats-3-toast' );
 			assert.deepEqual( await page.evaluate( () => window.toastTexts ), [ 'Achievement: 10 km driven', 'Unlocked: Skid steer', 'Achievement: New look' ] );
-			assert.equal( await page.locator( '#globe-ui .profile .feat-count' ).textContent(), `3 / ${ ACHIEVEMENTS.length }` );
+			assert.equal( await page.locator( '#globe-ui .profile .feat-count' ).textContent(), `3 / ${ SHOWN }` );
 			assert.deepEqual( await page.evaluate( () => window.drive.notices ), [] );
 			// In the pause menu, the skid steer is no longer locked: driven from there.
 			await page.locator( '#pause' ).waitFor();

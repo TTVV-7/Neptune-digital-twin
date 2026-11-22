@@ -79,7 +79,7 @@ import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker, stripeSignature 
 import { sessionCookies } from '../worker/sessions.js';
 import { MAX_SCORE, RATE, SCORING, maxRate } from '../worker/drive/scores.js';
 import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from '../src/drive-app/catalog.js';
-import { PLACINGS } from '../src/drive-app/achievement-rules.js';
+import { ACHIEVEMENTS, PLACINGS, shownTo } from '../src/drive-app/achievement-rules.js';
 import { addressOf } from '../worker/drive/settings.js';
 import { purchaseFor, purchaseSettings } from '../worker/drive/supporter.js';
 import { VISIT_HOURS, makeVisit } from '../worker/drive/visits.js';
@@ -91,7 +91,7 @@ import { VISITOR_PREFIX, nameCell, readTowns, topCells, topPlaces, townsFor } fr
 import { createStats } from '../src/drive-app/stats.js';
 import {
 	BOOSTED, FASTEST, GRACE, KINDS, LEG_SLACK, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
-	bearingTo, checkPasses, destination, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, randomFrom, rankText, formatTime,
+	bearingTo, checkPasses, destination, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, PERIODS, PERIOD_KINDS, randomFrom, rankText, formatTime,
 } from '../src/drive-app/challenge-rules.js';
 import { GROUNDS, REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, legFaultsOn, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick, routeFaults, steepOn } from '../worker/drive/challenges.js';
 import { setHeights } from '../src/drive-app/moon-height.js';
@@ -103,7 +103,7 @@ import { OFF_EARTH, WORLD_IDS } from '../src/drive-app/worlds.js';
 import {
 	GHOST_BYTES, GHOST_DENSITY, GHOST_EVERY, GHOST_SAMPLES, GHOST_TEXT, PASS_SLACK, SAMPLE_SLACK, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime,
 } from '../src/drive-app/ghost-rules.js';
-import { HANDLE, escapeHtml, handleOf, linkWords } from '../worker/drive/challenges.js';
+import { HANDLE, escapeHtml, handleOf, linkWords, liveKinds } from '../worker/drive/challenges.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
 const MAPS_KEY = 'test-maps-key-not-real';
@@ -5348,9 +5348,32 @@ describe( 'World Drive challenges: the rules', () => {
 
 	} );
 
+	test( 'no dailies by default (since 2026-11-22): a weekly and a monthly a world, CHALLENGE_PERIODS bringing others back; Daily winner retired, Weekly winner new', () => {
+
+		assert.deepEqual( PERIOD_KINDS, [ 'week', 'month' ] );
+		assert.deepEqual( periodsAt( CHALLENGE_DAY ).map( period => period.key ), [ 'week:2026-11-16', 'month:2026-11' ] );
+		assert.deepEqual( liveKinds( {} ), [ 'week', 'month' ] );
+		assert.deepEqual( liveKinds( { CHALLENGE_PERIODS: '' } ), [ 'week', 'month' ] );
+		assert.deepEqual( liveKinds( { CHALLENGE_PERIODS: 'nonsense, year' } ), [ 'week', 'month' ] );
+		assert.deepEqual( liveKinds( { CHALLENGE_PERIODS: 'month, Day ,week' } ), [ 'day', 'week', 'month' ] );
+		assert.deepEqual( liveKinds( { CHALLENGE_PERIODS: 'month' } ), [ 'month' ] );
+		// A day's period is still one (the daily boards and links from before).
+		assert.equal( parsePeriod( 'day:2026-11-16' ).kind, 'day' );
+		// Daily winner: still given by a daily board's final places (the last ones finish after the
+		// dailies went), shown only to those who have it, and not in the count out of for the others.
+		assert.ok( PLACINGS.some( a => a.id === 'daily-winner' ) );
+		assert.ok( PLACINGS.some( a => a.id === 'weekly-winner' && a.period === 'week' && a.target === 1 ) );
+		const retired = ACHIEVEMENTS.filter( a => a.retired ).map( a => a.id );
+		assert.deepEqual( retired, [ 'daily-winner' ] );
+		assert.equal( shownTo( new Set() ).length, ACHIEVEMENTS.length - 1 );
+		assert.ok( ! shownTo( new Set( [ 'winner' ] ) ).some( a => a.id === 'daily-winner' ) );
+		assert.equal( shownTo( new Set( [ 'daily-winner' ] ) ).length, ACHIEVEMENTS.length );
+
+	} );
+
 	test( 'periods: UTC days, weeks from Monday and calendar months, each ending where the next begins', () => {
 
-		const keys = time => periodsAt( time ).map( period => period.key );
+		const keys = time => periodsAt( time, PERIODS ).map( period => period.key );
 		assert.deepEqual( keys( CHALLENGE_DAY ), [ 'day:2026-11-16', 'week:2026-11-16', 'month:2026-11' ] );
 		// Sunday night, Monday morning: a new day and week, the same month.
 		assert.deepEqual( keys( Date.UTC( 2026, 10, 29, 23, 59, 59, 999 ) ), [ 'day:2026-11-29', 'week:2026-11-23', 'month:2026-11' ] );
@@ -5361,7 +5384,7 @@ describe( 'World Drive challenges: the rules', () => {
 		// A leap year's February, and a year's turn.
 		assert.equal( periodOf( 'month', Date.UTC( 2028, 1, 29, 12 ) ).ends, Date.UTC( 2028, 2, 1 ) );
 		assert.deepEqual( keys( Date.UTC( 2027, 0, 1 ) ), [ 'day:2027-01-01', 'week:2026-12-28', 'month:2027-01' ] );
-		for ( const period of periodsAt( CHALLENGE_DAY ) ) {
+		for ( const period of periodsAt( CHALLENGE_DAY, PERIODS ) ) {
 
 			assert.ok( period.starts <= CHALLENGE_DAY && CHALLENGE_DAY < period.ends );
 			assert.equal( nextPeriod( period ).starts, period.ends );
@@ -5753,7 +5776,7 @@ describe( 'World Drive challenges: the rules', () => {
 			} };
 			// A day no other test asks for the fifteen on (this process keeps the fifteen it has fixed a minute).
 			const now = Date.UTC( 2027, 2, 10, 12 );
-			const env = { DB, TURNSTILE_SECRET: PASS_SECRET };
+			const env = { DB, TURNSTILE_SECRET: PASS_SECRET, CHALLENGE_PERIODS: 'day,week,month' };
 			const ask = async ( handler, path ) => {
 
 				const request = new Request( `https://worlddrive.app${ path }`, { headers: { 'CF-Connecting-IP': '198.51.100.70' } } );
@@ -6530,7 +6553,7 @@ describe( 'World Drive challenges: the rules', () => {
 					if ( i === 40 ) approved = busy.slice( 0, 1 ).concat( busy.slice( 2 ) );
 					if ( i === 200 ) approved = busy;
 					if ( i === 300 ) approved = busy.slice( 1 );
-					const periods = periodsAt( now );
+					const periods = periodsAt( now, PERIODS );
 					const fixed = [ ...periods, ...periods.map( p => periodOf( p.kind, p.starts - 1 ) ) ].map( p => rows.get( p.key ) ).filter( Boolean );
 					for ( const period of [ ...periods ].reverse() ) {
 
@@ -7213,6 +7236,9 @@ describe( 'World Drive challenges', () => {
 				ADMIN_EMAILS: 'boss@example.com, chief@example.com, head@example.com, lead@example.com',
 				// A visitor's times a day, held to fewer than challenges.js's 300 to see it reached.
 				CHALLENGE_TIMES_PER_VISITOR_DAILY: '4',
+				// The dailies too (gone by default since 2026-11-22: liveKinds), as these tests were written
+				// with them, and they test the most periods at once.
+				CHALLENGE_PERIODS: 'day,week,month',
 			},
 			// The towns busy places are named by, and the Moon's, Mars's, Vesta's and Ceres's heights their
 			// routes are checked on, as the site has them.

@@ -1,8 +1,8 @@
 import { metresOn, RADIUS } from './dropin-cells.js';
 import { WORLD_IDS, WORLDS as WORLD_DATA } from './worlds.js';
 
-// Challenges (docs/world-drive.md, "Challenges"): a daily, a weekly and a monthly challenge on each
-// world (worlds.js: the Earth, the Moon, Mars, Vesta and Ceres, fifteen at once), each with its own
+// Challenges (docs/world-drive.md, "Challenges"): a weekly and a monthly challenge on each world
+// (worlds.js: the Earth, the Moon, Mars, Vesta and Ceres, ten at once), each with its own
 // board of the best times. What the page (the challenges' own chunk, challenges.js), the Worker
 // (worker/drive/challenges.js) and the tests share: the periods, the kinds, how a route is laid out
 // from a period's random numbers, and the rules a time is checked against. Plain data and small
@@ -18,7 +18,13 @@ import { WORLD_IDS, WORLDS as WORLD_DATA } from './worlds.js';
 // The worlds with challenges: every one (worlds.js). Each needs its SHAPES below, its places (the
 // Worker's FEATURED) and its radius (dropin-cells.js's RADIUS), or no route can be laid out on it.
 export const WORLDS = WORLD_IDS;
-export const PERIOD_KINDS = [ 'day', 'week', 'month' ];
+// Every kind of period, shortest first (the order lists are sorted in), and those there are
+// challenges for: the Worker's CHALLENGE_PERIODS setting, by default PERIOD_KINDS. There were daily
+// ones too until 2026-11-22 (too many at once, the owner found): 'day' is still a period everything
+// here knows (periodOf, parsePeriod, its SHAPES and PICKS), so the daily boards and links from
+// before go on working, and CHALLENGE_PERIODS "day,week,month" would bring them back.
+export const PERIODS = [ 'day', 'week', 'month' ];
+export const PERIOD_KINDS = [ 'week', 'month' ];
 export const KINDS = [ 'sprint', 'collect', 'landmark' ];
 export const PERIOD_NAMES = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 export const KIND_NAMES = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark' };
@@ -149,10 +155,11 @@ export function periodOf( kind, now ) {
 
 }
 
-// The day's, the week's and the month's periods at `now`.
-export function periodsAt( now ) {
+// The live periods at `now` of the kinds `kinds` (by default PERIOD_KINDS: the week's and the
+// month's), shortest first.
+export function periodsAt( now, kinds = PERIOD_KINDS ) {
 
-	return PERIOD_KINDS.map( kind => periodOf( kind, now ) );
+	return kinds.map( kind => periodOf( kind, now ) );
 
 }
 

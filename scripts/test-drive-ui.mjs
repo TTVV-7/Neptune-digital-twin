@@ -9464,7 +9464,7 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'a visit driving a while is told of today\'s challenge on that world, with a button to the challenges (counted for the play stats)', async () => {
+	test( 'a visit driving a while is told of this week\'s challenge on that world, with a button to the challenges (counted for the play stats)', async () => {
 
 		const page = await challengePage();
 		await page.addInitScript( () => {
@@ -9481,7 +9481,7 @@ describe( 'World Drive challenges', () => {
 		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 90000 } );
 		const toast = page.locator( '#toast' );
 		await toast.locator( 'button', { hasText: 'Challenges' } ).waitFor( { timeout: 60000 } );
-		assert.match( await toast.textContent(), /^Today's challenge on the Earth: Furka Pass\. A timed run with its own board\./ );
+		assert.match( await toast.textContent(), /^This week's challenge on the Earth: Furka Pass\. A timed run with its own board\./ );
 		// Nothing of the challenges' own code loaded till it's pressed.
 		assert.ok( ! page.asked.some( path => path.endsWith( '/src/drive-app/challenges.js' ) ) );
 		await shot( page, 'challenges-10-nudge' );

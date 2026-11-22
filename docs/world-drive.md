@@ -6123,9 +6123,22 @@ the page's busiest days stop growing at 1,500 places a world).
 ## Challenges
 
 The [play stats](#play-stats) say most visits drop in and drive, and almost everyone leaves after
-about a minute. Challenges give a reason to stay, and to come back: a **daily**, a **weekly** and a
-**monthly** challenge on each world (the Earth, the Moon, Mars, Vesta and Ceres), fifteen live at once, each a place
+about a minute. Challenges give a reason to stay, and to come back: a **weekly** and a **monthly**
+challenge on each world (the Earth, the Moon, Mars, Vesta and Ceres), ten live at once, each a place
 and a route the same for everyone in its period, with its own board of each player's best time.
+
+**No more dailies (2026-11-22).** There was a daily one on each world too, fifteen at once, which
+the owner found too cluttered. `PERIOD_KINDS` in `challenge-rules.js` is now `week` and `month`, the
+Worker's default (`liveKinds`: the `CHALLENGE_PERIODS` setting, a comma-separated list of `day`,
+`week` and `month`, would bring dailies back with `day,week,month`; the Worker's tests run with all
+three, as they were written with them), so none is made from then on and the list, the nudge while driving ("This week's challenge...") and
+the words about them say weekly and monthly. A day is still a period everything knows (`periodOf`,
+`parsePeriod`, its shapes and picks), so the daily boards from before, links to them and times on
+them go on working, and the last one finishes as any other. The owner's page no longer offers a
+day's pick, and the Worker turns one away (400). The **Daily winner** achievement is retired
+(`retired: true`, `shownTo`): those who have it keep it and see it, nobody else sees it or counts it
+in "n / total", and **Weekly winner** (first on a weekly board) is new beside it. The rest of this
+section was written with three a world and says "daily" where it describes how they worked.
 
 ### What players see
 
@@ -8083,6 +8096,43 @@ SELECT t.player_id, p.id, c.final_at FROM challenge_times t JOIN challenges c ON
 WHERE c.final_at IS NOT NULL AND t.final_rank IS NOT NULL AND t.final_rank <= p.rank AND ( p.period IS NULL OR c.period LIKE p.period || ':%' )
 ON CONFLICT DO NOTHING;
 ```
+
+## Music
+
+The owner's own tracks, made in Suno on a paid plan (which lets World Drive use them; a free
+plan's tracks couldn't be), in `drive/public/music/` as AAC at 96 kbps (an iPhone doesn't reliably
+play the Opus Suno exports), each made -16 LUFS with ffmpeg's `loudnorm` so none is louder than
+another: about 28 MB for the twelve, each file asked for only when it's about to play.
+
+`src/drive-app/music.js` has a playlist for each scene (`PLAYLISTS`), each played in turn:
+
+| Scene | Tracks |
+|---|---|
+| The globe (and on through a drop-in, too short for its own) | Warm Analog Pads, Drive Anywhere (the theme song, with words) |
+| Driving on the Earth | Arcade Momentum, Golden Hour Drive, Buant Groove |
+| On the Moon | Moonlit Driver (with words, about driving a grey truck on the Moon), Weightless Pulse |
+| On Mars | Canyon Echoes |
+| On Vesta | Crystalline Waves |
+| On Ceres | Crystalline Pads |
+| A challenge's run (its countdown to its finish) | Countdown Groove |
+| The plane | Gliding Above the Clouds |
+
+The last two take over from the world's while they last (main.js tells it each frame:
+`setActivity`), and the world's is back 4 s after (so hopping out of the plane and in again doesn't
+swap it twice). A playlist of one loops; otherwise a track's end starts the next. Changing scene
+fades one into the next (1.5 s); paused, it plays at 40 %; with the page out of sight (another tab,
+a locked phone) it stops until it's back.
+
+It goes through WebAudio (horns.js's AudioContext): an `<audio>` element a track, each through a
+gain into a master gain, since an iPhone won't let an element's own volume be set. A browser starts
+no sound before a click or a key, so the music starts at the first one. **Music** in the pause menu
+(with its volume) and under the rides in the globe's panel switch it, both the same, kept in this
+browser (`world-drive.music`, `world-drive.music-volume`); off, nothing is fetched.
+
+To add a track: convert it as the others were (`ffmpeg -i in.m4a -map 0:a -vn -map_metadata -1
+-af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 44100 -c:a aac -b:a 96k -movflags +faststart
+drive/public/music/<name>.m4a`), name it in `TRACKS` and put it in a playlist. On the dev server the
+music is off unless a test sets `window.worldDriveMusicTest`, so the other tests fetch nothing.
 
 ## Ads
 
