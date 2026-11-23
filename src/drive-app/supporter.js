@@ -691,6 +691,8 @@ function renderBuy( root ) {
 
 	if ( status ) parts.push( statusLine() );
 	if ( ! lifetime ) parts.push( Object.assign( line( purchase.enabled ? ( purchase.monthly ? 'Monthly is a subscription: cancel any time. For good and 24 hours are paid once. ' : 'Pay once: for good, or 24 hours and it simply ends. ' ) + 'Paid securely with Stripe, in any country.' : 'Pay once, keep it for good. Buying opens soon.' ), { className: 'small' } ) );
+	// What buying agrees to, and how to get the money back, before anyone pays (drive/site/legal.js).
+	if ( purchase.enabled && ! lifetime ) parts.push( Object.assign( line( 'By buying you agree to the ', pageLink( '/terms/', 'terms' ), '. Changed your mind? A full refund within 14 days: see ', pageLink( '/refunds/', 'refunds' ), ' · ', pageLink( '/contact/', 'help' ), '.' ), { className: 'small' } ) );
 	root.replaceChildren( ...parts );
 	if ( revealSignIn && ! me.signedIn && root.isConnected ) {
 
@@ -735,6 +737,8 @@ function signInParts() {
 
 	}
 
+	// Google's button makes an account as it signs in: what that agrees to (drive/site/legal.js).
+	if ( clientId ) parts.push( Object.assign( line( 'Signing in makes a free account: you confirm you\'re 13 or older and agree to the ', pageLink( '/terms/', 'terms' ), ' and ', pageLink( '/privacy/', 'privacy policy' ), '.' ), { className: 'supporter-line small' } ) );
 	return parts;
 
 }
@@ -743,6 +747,13 @@ function signInParts() {
 function accountLink() {
 
 	return passwords ? [ linkButton( 'Account', () => openAccount() ), ' · ' ] : [];
+
+}
+
+// A link to one of the site's pages (the terms, refunds...), in a new tab so the game stays open.
+function pageLink( href, words ) {
+
+	return Object.assign( document.createElement( 'a' ), { href, target: '_blank', rel: 'noopener', textContent: words } );
 
 }
 

@@ -175,7 +175,7 @@ function signUpForm() {
 	const username = field( form, 'Username', { name: 'username', autocomplete: 'username', minLength: 3, maxLength: 20, hint: '3 to 20 letters, digits, _ or -. Only you see it: the boards show your nickname.' } );
 	const password = field( form, 'Password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: `At least ${ PASSWORD_MIN } characters. A few words together make a good one.` } );
 	const email = field( form, 'Email (optional)', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'For your receipts if you buy the pass. Never shown, never used for anything else.' } );
-	form.append( Object.assign( paragraph( NO_RECOVERY ), { className: 'account-note' } ), robotSlot(), submit, status );
+	form.append( Object.assign( paragraph( NO_RECOVERY ), { className: 'account-note' } ), agreeing(), robotSlot(), submit, status );
 	form.addEventListener( 'submit', async event => {
 
 		event.preventDefault();
@@ -195,6 +195,17 @@ function signUpForm() {
 
 	} );
 	return form;
+
+}
+
+// What making an account agrees to (drive/site/legal.js), with the pages in a new tab so the game
+// stays open.
+function agreeing() {
+
+	const link = ( href, words ) => Object.assign( document.createElement( 'a' ), { href, target: '_blank', rel: 'noopener', textContent: words } );
+	const p = Object.assign( document.createElement( 'p' ), { className: 'account-note account-terms' } );
+	p.append( 'By creating an account you confirm you\'re 13 or older and agree to the ', link( '/terms/', 'terms' ), ' and the ', link( '/privacy/', 'privacy policy' ), '.' );
+	return p;
 
 }
 

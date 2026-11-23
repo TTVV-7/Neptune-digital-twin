@@ -4081,7 +4081,7 @@ of the bar, level-ups, the profile card, the track and the Garage's locks at 128
 
 ## Supporter Pass (content)
 
-The Supporter Pass is a one-time payment (CA$4.99) towards World Drive's running costs. This part is
+The Supporter Pass (CA$1.99/month, CA$19.99 once and kept for good, or CA$0.99 for 24 hours; prices in `src/drive-app/pass.js`) goes towards World Drive's running costs. This part is
 what it unlocks and the switch that unlocks it; buying it (Google sign-in, Stripe, its webhook and the
 pass kept in D1) is [below](#supporter-pass-buying-it). Without it the free game is exactly as it was.
 
@@ -8465,6 +8465,58 @@ the Cloudflare dashboard (a 301, for everything on `www`, before the Worker or t
 with the page's own script moving a page along too should the rule ever be off. There's no
 `workers.dev` address: the Turnstile widget only works on worlddrive.app, and one address keeps the
 counts simple (and [search engines](#search-engines) see one site).
+
+## Legal pages
+
+Four plain pages beside the places' (made by `drive/site/build.js`, their words in
+`drive/site/legal.js`): the **privacy policy** at `/privacy/`, the **terms of use** at `/terms/`,
+**refunds and cancelling** at `/refunds/` and **contact and support** at `/contact/`. Every site
+page's footer links to them; in the game, the globe panel's footer and About World Drive do, the
+Supporter Pass's buy area says buying agrees to the terms (with a full refund within 14 days), and
+making an account (a username's form, or the line under Google's button) says it confirms 13 or older
+and agrees to the terms and privacy policy. They open in a new tab, so the game stays open.
+
+They're a plain-language starting point written to match what the code keeps (About World Drive's
+words, the D1 tables), **not legal advice**: have a lawyer read them, and change `legal.js` (and its
+`UPDATED` date) whenever what the game keeps or sells changes.
+
+**Who runs it** comes from the environment when the site is built, so a home address and phone number
+are never in the repository: `DRIVE_CONTACT_NAME` (your legal name or the business's),
+`DRIVE_CONTACT_ADDRESS`, `DRIVE_CONTACT_PHONE` and `DRIVE_CONTACT_EMAIL`. Locally put them in
+`.env.local` (see `.env.example`); for the live site add them as **build variables** in the Cloudflare
+dashboard (world-drive Worker → Settings → Build → Variables). While any is missing, `npm run
+build:drive` warns, the contact page shows only what's set and the policies say "its owner, in British
+Columbia, Canada". BC's consumer law (and other provinces') asks for all four before a sale, and Stripe
+checks for them, so set them before turning buying on. A VoIP number that takes voicemail is fine.
+
+**Before taking payments** (the owner's steps):
+
+1. Set the four contact variables above and redeploy.
+2. Set `SUPPORTER_MANAGE_LINK` (Stripe's customer portal login link, see
+   [Supporter Pass (buying it)](#supporter-pass-buying-it)): `/refunds/` tells subscribers to cancel
+   with **Manage your subscription**, which only shows when it's set.
+3. In Stripe's dashboard, **Settings → Business → Public details**: the support phone and email, and
+   `https://worlddrive.app/terms/`, `/privacy/` and `/refunds/` as the terms, privacy and refund
+   policies. On each Payment Link, turn on **Require customers to accept your terms of service**.
+4. On Google's OAuth consent screen (Google Auth Platform → Branding), set the privacy policy and terms
+   links to `/privacy/` and `/terms/`; AdSense asks for a privacy policy on the site too, and it's now
+   linked from every page.
+
+**A request to delete an account** (the privacy policy promises an answer within 30 days): find the
+account by its email (`accounts.email` or `contact_email`) or username (`logins`), then in D1
+(`npx wrangler d1 execute <database> --remote --config wrangler.drive.jsonc --command "..."`):
+
+```sql
+DELETE FROM players WHERE account_id = <id>;  -- its nickname, scores, times, ghosts, XP, finds
+DELETE FROM accounts WHERE id = <id>;         -- its sign-in, sessions and password
+```
+
+The foreign keys take the rest with them. Its `purchases` rows stay, with the account emptied, as the
+payment records tax law asks for (six years in Canada). A player without an account (only a nickname)
+is deleted by its row in `players`, found by `name`; an offensive nickname is removed the same way.
+
+**A refund** (the policy gives a full one within 14 days, no questions asked): refund the payment in
+Stripe's dashboard; its webhook ends the pass (`reversals`).
 
 ## Search engines
 
