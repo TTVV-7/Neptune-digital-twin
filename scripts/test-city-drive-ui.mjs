@@ -67,7 +67,8 @@ async function shot( name ) {
 
 test( 'the city loads with its menu, starts, free rides and credit', async () => {
 
-	await page.goto( `${ BASE }/city/` );
+	// Without the parks' trees: software rendering (no GPU here) is slow enough without them.
+	await page.goto( `${ BASE }/city/?trees=0` );
 	await page.waitForFunction( () => ! document.getElementById( 'menu' ).hidden, null, { timeout: 120000 } );
 	const menu = await page.evaluate( () => ( {
 		cities: [ ...document.querySelectorAll( '#city option' ) ].map( o => o.value ),
@@ -80,7 +81,7 @@ test( 'the city loads with its menu, starts, free rides and credit', async () =>
 	assert.ok( menu.starts.includes( 'Robson Street' ) && menu.starts.includes( 'Stanley Park' ), menu.starts.join() );
 	assert.ok( menu.rides.includes( 'go-kart' ) && menu.rides.includes( 'pickup-truck' ), `the free rides, from the site's root: ${ menu.rides }` );
 	assert.match( menu.credit, /OpenStreetMap contributors/ );
-	assert.equal( menu.url, '?city=vancouver' );
+	assert.equal( menu.url, '?trees=0&city=vancouver' );
 	await shot( 'city-menu' );
 
 } );
@@ -88,19 +89,27 @@ test( 'the city loads with its menu, starts, free rides and credit', async () =>
 test( 'a ride is put down on a street and drives along it', async () => {
 
 	await page.selectOption( '#start', '0' );
-	await page.click( '#go' );
+	await page.evaluate( () => document.getElementById( 'go' ).click() );
 	await page.waitForFunction( () => window.cityDrive.driver.active, null, { timeout: 60000 } );
-	const start = await page.evaluate( () => ( { east: window.cityDrive.driver.east, north: window.cityDrive.driver.north, y: window.cityDrive.driver.y } ) );
-	assert.ok( Math.abs( start.y ) < 0.5, `on the street, not under or over it (${ start.y.toFixed( 2 ) } m)` );
+	const where = () => page.evaluate( () => {
+
+		const { driver, groundAt } = window.cityDrive;
+		return { east: driver.east, north: driver.north, y: driver.y, ground: groundAt( driver.east, driver.north )?.y ?? null, terrain: window.cityDrive.city.heightAt( driver.east, driver.north ) };
+
+	} );
+	const start = await where();
+	assert.ok( Math.abs( start.y - start.ground ) < 0.5, `on the street, not under or over it (${ start.y.toFixed( 2 ) } m, the street at ${ start.ground?.toFixed( 2 ) } m)` );
+	// Robson Street is on the downtown ridge, well above the sea: the ground's heights are in.
+	assert.ok( start.terrain > 15, `the ground has its real height there (${ start.terrain.toFixed( 1 ) } m above sea level)` );
 	// Held down till it's gone 20 m (software rendering can be slow, so by distance, not time).
 	await page.keyboard.down( 'KeyW' );
 	const went = await page.waitForFunction( ( { east, north } ) => Math.hypot( window.cityDrive.driver.east - east, window.cityDrive.driver.north - north ) > 20, start, { timeout: 60000 } ).then( () => true, () => false );
 	await shot( 'city-driving' );
 	await page.keyboard.up( 'KeyW' );
-	const end = await page.evaluate( () => ( { east: window.cityDrive.driver.east, north: window.cityDrive.driver.north, y: window.cityDrive.driver.y } ) );
+	const end = await where();
 	const moved = Math.hypot( end.east - start.east, end.north - start.north );
 	assert.ok( went, `it drove (${ moved.toFixed( 1 ) } m)` );
-	assert.ok( end.y > - 1, `still on the ground, not fallen through (${ end.y.toFixed( 2 ) } m)` );
+	assert.ok( Math.abs( end.y - end.ground ) < 1, `still on the ground, not fallen through (${ end.y.toFixed( 2 ) } m, the ground at ${ end.ground?.toFixed( 2 ) } m)` );
 
 	// Esc: the menu again, with Resume.
 	await page.keyboard.press( 'Escape' );
@@ -128,7 +137,7 @@ test( 'bridges are decks high over the water, found as the ground', async () => 
 	assert.ok( decks.length >= 3 );
 	for ( const { want, got } of decks ) {
 
-		assert.ok( want > 10, `a bridge rises well over the water (${ want } m)` );
+		assert.ok( want > 10, `a bridge rises well over the water (${ want } m above sea level)` );
 		assert.ok( got !== null && Math.abs( got - want ) < 1.5, `its deck is found at ${ got?.toFixed( 1 ) } m, wanted about ${ want } m` );
 
 	}

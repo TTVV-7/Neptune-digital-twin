@@ -5,7 +5,7 @@ export const CITIES = [
 	{
 		id: 'vancouver',
 		name: 'Vancouver',
-		blurb: 'Downtown, Stanley Park and the bridges over False Creek and the Lions Gate',
+		blurb: 'Downtown, Stanley Park, the North Shore to Neptune Terminals, and the bridges, on 1 m lidar terrain',
 		file: '/cities/vancouver.json',
 	},
 ];

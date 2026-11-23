@@ -1,32 +1,42 @@
-"""World Drive's city drives: one city's buildings, streets, bridges, sea and parks, cut from an
-OpenStreetMap extract into a small file the city page builds in the browser (src/drive-app/city).
+"""World Drive's city drives: one city's buildings, streets, bridges, ground, sea and parks, cut
+from an OpenStreetMap extract and an elevation model into two small files the city page builds in
+the browser (src/drive-app/city).
 
-    pip install osmium shapely
+    pip install osmium shapely rasterio
     curl -o vancouver.osm.pbf https://download.bbbike.org/osm/bbbike/Vancouver/Vancouver.osm.pbf
-    python scripts/make-city.py vancouver.osm.pbf --id vancouver --name "Vancouver" \
-        --bbox 49.270,-123.160,49.3155,-123.095 --start "Robson Street:49.2829,-123.1213"
+    python scripts/make-city.py vancouver.osm.pbf --id vancouver --name Vancouver \
+        --bbox 49.270,-123.160,49.335,-123.035 --dem canada --start "Robson Street:49.2846,-123.1225"
 
 OpenStreetMap's data is open (ODbL): free to use, commercially too, crediting
-"(c) OpenStreetMap contributors", which the page shows. Nothing here is anyone's model or photo.
+"(c) OpenStreetMap contributors", which the page shows. The ground is Natural Resources Canada's
+High Resolution Digital Elevation Model (`--dem canada`: the 1 m bare-earth model from lidar, Open
+Government Licence - Canada, also credited), read over the internet for just the box (it's a
+cloud-optimised GeoTIFF); `--dem <file or URL>` takes any other elevation GeoTIFF (USGS 3DEP,
+Copernicus GLO-30). Nothing here is anyone's model or photo.
 
 What's kept, in metres east and north of the box's middle (rounded to a decimetre):
-- buildings (and the parts tall towers are mapped as): footprint, base and top height, colour. A
-  building mapped as parts is drawn as its parts. Its height is its `height`, or its floors at
-  3.2 m each, or a typical one for its kind.
-- roads you can drive (and paths, drawn thinner): centre line, width, and for bridges a height at
-  each point, rising from the ends at a gentle grade to the middle. Tunnels are left out.
-- water: the sea (from the coastline, land to its left) and lakes; and parks, woods and beaches.
+- buildings (and the parts tall towers are mapped as): footprint, base and top height over the
+  ground, colour. A building mapped as parts is drawn as its parts. Its height is its `height`, or
+  its floors at 3.2 m each, or a typical one for its kind.
+- roads you can drive (and paths, drawn thinner): centre line, width, and for bridges the deck's
+  height above sea level at each point, rising from the ground at its ends at a gentle grade to the
+  middle. Tunnels are left out. Other roads follow the ground (the page drapes them).
+- the ground: heights every --spacing metres (default 10) over the box, and what each spot is: land,
+  sea (from the coastline, land to its left), a park or wood, a beach, or a lake. In
+  <id>.ground.bin: Int16 heights in decimetres above sea level, then a Uint8 kind for each, rows
+  from the north, each from the west (ground.kinds names them).
 - start spots: the road nearest each --start, facing along it.
 
-The file is JSON: { id, name, credit, size: [ width, height ], origin: [ lat, lon ], starts,
-buildings: [ [ ring, base, top, colour ], ... ], roads: [ [ line, width, kind, heights? ], ... ],
-land: [ polygon, ... ], water, green, sand } where a ring is [ x0, y0, x1, y1, ... ] in decimetres and a
-polygon is [ outer ring, hole, ... ].
+The JSON: { id, name, credit, size: [ width, height ], origin: [ lat, lon ], starts,
+ground: { file, columns, rows, spacing, west, north, kinds }, buildings: [ [ ring, base, top,
+colour ], ... ], roads: [ [ line, width, kind, deck heights? ], ... ] }, where a ring or line is
+[ x0, y0, x1, y1, ... ] in decimetres.
 """
 
 import argparse
 import json
 import math
+import os
 import re
 import zlib
 from collections import defaultdict
@@ -36,8 +46,19 @@ from shapely import STRtree
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon, box
 from shapely.ops import linemerge, split, unary_union
 
+import numpy as np
+
 R = 6371008.8
 FLOOR = 3.2
+# Natural Resources Canada's 1 m bare-earth mosaic for southern BC and Alberta (the HRDEM, from
+# its STAC catalogue at datacube.services.geo.ca, collection hrdem-mosaic-1m).
+CANADA_DEM = 'https://canelevation-dem.s3.ca-central-1.amazonaws.com/hrdem-mosaic-1m/2_3-mosaic-1m-dtm.tif'
+DEM_CREDIT = { 'canada': 'Elevation: Natural Resources Canada HRDEM, Open Government Licence - Canada' }
+# What each spot of the ground is (ground.bin's kinds).
+KINDS = [ 'land', 'sea', 'green', 'sand', 'lake' ]
+LAND, SEA, GREEN_K, SAND_K, LAKE = range( 5 )
+# The sea bed's height (m) where the elevation model has none, below the water's surface at 0.
+SEA_BED = - 3
 
 # Roads you can drive, and their width (m) when the lanes aren't mapped.
 ROADS = {
@@ -248,9 +269,10 @@ def land_of( coast, frame ):
 	return unary_union( land ) if land else frame
 
 
-def bridge_heights( roads ):
+def bridge_heights( roads, ground_at ):
 
-	"""Heights along bridges: each run of joined bridge ways rises from its ends to the middle."""
+	"""Deck heights over sea level along bridges: each run of joined bridge ways starts from the
+	ground at its ends and rises at a gentle grade to the middle, never below the ground under it."""
 	bridges = [ i for i, r in enumerate( roads ) if r[ 1 ].get( 'bridge' ) not in ( None, 'no' ) ]
 	ends = defaultdict( list )
 	for i in bridges:
@@ -272,8 +294,7 @@ def bridge_heights( roads ):
 			run.append( i )
 			for node in ( roads[ i ][ 3 ], roads[ i ][ 4 ] ):
 				todo += [ j for j in ends[ node ] if j not in seen ]
-		# Its ends: nodes only one way of the run touches. Each point's height goes by how far it is
-		# from the nearest end, in a straight line (a run can fork).
+		# Its ends: nodes only one way of the run touches, with the ground's height there.
 		count = defaultdict( int )
 		for i in run:
 			count[ roads[ i ][ 3 ] ] += 1
@@ -283,17 +304,61 @@ def bridge_heights( roads ):
 			coords = roads[ i ][ 0 ]
 			for node, xy in ( ( roads[ i ][ 3 ], coords[ 0 ] ), ( roads[ i ][ 4 ], coords[ -1 ] ) ):
 				if count[ node ] == 1:
-					points.append( xy )
-		span = max( ( LineString( roads[ i ][ 0 ] ).length for i in run ), default = 0 )
+					points.append( ( xy, max( 0, ground_at( *xy ) ) ) )
 		total = sum( LineString( roads[ i ][ 0 ] ).length for i in run )
 		top = max( 2.5, min( 28, total * 0.045 ) )
 		for i in run:
 			out = []
 			for x, y in roads[ i ][ 0 ]:
-				d = min( ( math.hypot( x - ex, y - ey ) for ex, ey in points ), default = span / 2 )
-				out.append( round( min( top, d * 0.07 ) * 10 ) )
+				# The ground at the two nearest ends, weighted by how near each is, plus the rise.
+				near = sorted( ( math.hypot( x - ex, y - ey ), g ) for ( ex, ey ), g in points )[ :2 ] or [ ( 0, 0 ) ]
+				if len( near ) == 2 and near[ 0 ][ 0 ] + near[ 1 ][ 0 ] > 0:
+					( d0, g0 ), ( d1, g1 ) = near
+					base = ( g0 * d1 + g1 * d0 ) / ( d0 + d1 )
+				else:
+					base = near[ 0 ][ 1 ]
+				rise = min( top, near[ 0 ][ 0 ] * 0.07 )
+				out.append( round( max( base + rise, ground_at( x, y ) + 0.5 ) * 10 ) )
 			heights[ i ] = out
 	return heights
+
+
+def read_ground( dem, frame, lat0, lon0, spacing ):
+
+	"""The elevation model's heights (m) on a grid over the frame, every `spacing` m from its
+	north-west corner, rows from the north; NaN where it has none (mostly the water)."""
+	import os
+	import rasterio
+	from affine import Affine
+	from rasterio.crs import CRS
+	from rasterio.enums import Resampling
+	from rasterio.transform import from_origin
+	from rasterio.warp import reproject, transform_bounds
+	from rasterio.windows import from_bounds
+
+	os.environ.setdefault( 'GDAL_DISABLE_READDIR_ON_OPEN', 'EMPTY_DIR' )
+	url = CANADA_DEM if dem == 'canada' else dem
+	path = f'/vsicurl/{ url }' if url.startswith( 'http' ) else url
+	# This script's own projection (see project in main), so the grid lines up with everything else.
+	local = CRS.from_proj4( f'+proj=eqc +lat_ts={ lat0 } +lat_0={ lat0 } +lon_0={ lon0 } +x_0=0 +y_0=0 +R={ R } +units=m +no_defs' )
+	x0, y0, x1, y1 = frame.bounds
+	columns = int( round( ( x1 - x0 ) / spacing ) ) + 1
+	rows = int( round( ( y1 - y0 ) / spacing ) ) + 1
+	out = np.full( ( rows, columns ), np.nan, dtype = np.float32 )
+	with rasterio.open( path ) as src:
+		# Read only the box (and a margin), at about half the grid's spacing, from the file's overviews.
+		bounds = transform_bounds( local, src.crs, x0 - 4 * spacing, y0 - 4 * spacing, x1 + 4 * spacing, y1 + 4 * spacing )
+		window = from_bounds( *bounds, transform = src.transform ).round_offsets().round_lengths()
+		step = max( 1, spacing / 2 / src.res[ 0 ] )
+		shape = ( max( 1, int( window.height / step ) ), max( 1, int( window.width / step ) ) )
+		data = src.read( 1, window = window, out_shape = shape, resampling = Resampling.average, masked = True ).filled( np.nan ).astype( np.float32 )
+		transform = src.window_transform( window ) * Affine.scale( window.width / shape[ 1 ], window.height / shape[ 0 ] )
+		reproject(
+			data, out, src_transform = transform, src_crs = src.crs, src_nodata = np.nan,
+			dst_transform = from_origin( x0 - spacing / 2, y1 + spacing / 2, spacing, spacing ), dst_crs = local, dst_nodata = np.nan,
+			resampling = Resampling.bilinear,
+		)
+	return out
 
 
 def main():
@@ -304,6 +369,8 @@ def main():
 	parser.add_argument( '--name', required = True )
 	parser.add_argument( '--bbox', required = True, help = 'south,west,north,east' )
 	parser.add_argument( '--start', action = 'append', default = [], help = 'Name:lat,lon' )
+	parser.add_argument( '--dem', help = '"canada" (NRCan HRDEM), or an elevation GeoTIFF file or URL' )
+	parser.add_argument( '--spacing', type = float, default = 10, help = 'metres between ground heights' )
 	parser.add_argument( '--out' )
 	args = parser.parse_args()
 
@@ -340,7 +407,38 @@ def main():
 		for shape in polygon_out( polygon, 0.15 ):
 			buildings.append( [ shape[ 0 ], round( base * 10 ), round( top * 10 ), fill ] )
 
-	heights = bridge_heights( reader.roads )
+	land = land_of( reader.coast, frame )
+	sea = frame.difference( land )
+
+	# The ground: heights from the elevation model (or flat), and what each spot is.
+	spacing = args.spacing
+	x0g, y0g, x1g, y1g = frame.bounds
+	if args.dem:
+		heights_grid = read_ground( args.dem, frame, lat0, lon0, spacing )
+	else:
+		columns = int( round( ( x1g - x0g ) / spacing ) ) + 1
+		heights_grid = np.full( ( int( round( ( y1g - y0g ) / spacing ) ) + 1, columns ), 1.0, dtype = np.float32 )
+	rows, columns = heights_grid.shape
+	kinds = rasterize_kinds( ( rows, columns ), spacing, x0g, y1g, sea = sea, lakes = reader.water, green = reader.green, sand = reader.sand, frame = frame )
+	# Lakes keep the model's height (its water surface), filled where it has none; the sea's bed is
+	# below the water; land is at least a little over it, and has a height everywhere.
+	heights_grid = fill_gaps( heights_grid )
+	heights_grid[ kinds == SEA ] = np.minimum( np.nan_to_num( heights_grid[ kinds == SEA ], nan = SEA_BED ), SEA_BED )
+	on_land = kinds != SEA
+	heights_grid[ on_land ] = np.maximum( heights_grid[ on_land ], 0.4 )
+
+	def ground_at( x, y ):
+
+		c = ( x - x0g ) / spacing
+		r = ( y1g - y ) / spacing
+		c0 = int( min( max( math.floor( c ), 0 ), columns - 2 ) )
+		r0 = int( min( max( math.floor( r ), 0 ), rows - 2 ) )
+		fc = min( max( c - c0, 0 ), 1 )
+		fr = min( max( r - r0, 0 ), 1 )
+		h = heights_grid
+		return float( ( h[ r0, c0 ] * ( 1 - fc ) + h[ r0, c0 + 1 ] * fc ) * ( 1 - fr ) + ( h[ r0 + 1, c0 ] * ( 1 - fc ) + h[ r0 + 1, c0 + 1 ] * fc ) * fr )
+
+	heights = bridge_heights( reader.roads, ground_at )
 	roads = []
 	for i, ( coords, tags, way, a, b ) in enumerate( reader.roads ):
 		kind = tags[ 'highway' ]
@@ -366,12 +464,6 @@ def main():
 				road.append( heights[ i ] )
 			roads.append( road )
 
-	land = land_of( reader.coast, frame )
-	sea = frame.difference( land )
-	water = unary_union( [ sea ] + [ p.intersection( frame ) for p in reader.water ] )
-	green = unary_union( [ p.intersection( frame ) for p in reader.green ] ).difference( water )
-	sand = unary_union( [ p.intersection( frame ) for p in reader.sand ] ).difference( water )
-
 	starts = []
 	for spec in args.start:
 		name, at = spec.rsplit( ':', 1 )
@@ -394,26 +486,57 @@ def main():
 			heading = math.degrees( math.atan2( ahead.x - behind.x, ahead.y - behind.y ) ) % 360
 			starts.append( { 'name': name, 'at': [ round( q.x, 1 ), round( q.y, 1 ) ], 'heading': round( heading ) } )
 
+	dem_credit = DEM_CREDIT.get( args.dem, 'Elevation: open data' if args.dem else None )
+	ground_file = f'{ args.id }.ground.bin'
 	city = {
 		'id': args.id,
 		'name': args.name,
-		'credit': 'Map data (c) OpenStreetMap contributors, ODbL',
+		'credit': 'Map data (c) OpenStreetMap contributors, ODbL' + ( f' | { dem_credit }' if dem_credit else '' ),
 		'origin': [ round( lat0, 6 ), round( lon0, 6 ) ],
 		'size': [ round( x1 - x0 ), round( y1 - y0 ) ],
 		'starts': starts,
+		'ground': { 'file': ground_file, 'columns': columns, 'rows': rows, 'spacing': spacing, 'west': round( x0g, 1 ), 'north': round( y1g, 1 ), 'kinds': KINDS },
 		'buildings': buildings,
 		'roads': roads,
-		# The land; everything else in the box is water (the sea and lakes alike).
-		'land': polygon_out( frame.difference( water ), 1 ),
-		'water': polygon_out( water, 1 ),
-		'green': polygon_out( green, 1 ),
-		'sand': polygon_out( sand, 1 ),
 	}
 	out = args.out or f'drive/public/cities/{ args.id }.json'
 	with open( out, 'w' ) as f:
 		json.dump( city, f, separators = ( ',', ':' ) )
+	with open( os.path.join( os.path.dirname( out ), ground_file ), 'wb' ) as f:
+		f.write( np.round( heights_grid * 10 ).clip( -32000, 32000 ).astype( '<i2' ).tobytes() )
+		f.write( kinds.astype( np.uint8 ).tobytes() )
+	land_cells = heights_grid[ kinds != SEA ]
 	print( f'{ out }: { len( buildings ) } buildings, { len( roads ) } roads ({ len( heights ) } bridge ways), '
-		f'{ len( city[ "water" ] ) } water, { len( city[ "green" ] ) } green, { len( starts ) } starts' )
+		f'ground { columns } x { rows } every { spacing } m, { land_cells.min():.1f} to { land_cells.max():.1f} m, { len( starts ) } starts' )
+
+
+def rasterize_kinds( shape, spacing, west, north, sea, lakes, green, sand, frame ):
+
+	"""What each grid spot is: parks and beaches on the land, lakes, and the sea over everything."""
+	from rasterio.features import rasterize
+	from rasterio.transform import from_origin
+	transform = from_origin( west - spacing / 2, north + spacing / 2, spacing, spacing )
+	shapes = [ ( p.intersection( frame ), GREEN_K ) for p in green ] + [ ( p.intersection( frame ), SAND_K ) for p in sand ]
+	shapes += [ ( p.intersection( frame ), LAKE ) for p in lakes ]
+	shapes += [ ( g, SEA ) for g in ( sea.geoms if hasattr( sea, 'geoms' ) else [ sea ] ) ]
+	shapes = [ ( g, v ) for g, v in shapes if not g.is_empty ]
+	return rasterize( shapes, out_shape = shape, transform = transform, fill = LAND, dtype = 'uint8' )
+
+
+def fill_gaps( grid ):
+
+	"""NaNs filled from their nearest neighbours, spreading inward a ring at a time."""
+	grid = grid.copy()
+	for _ in range( 200 ):
+		gaps = np.isnan( grid )
+		if not gaps.any():
+			break
+		padded = np.pad( grid, 1, constant_values = np.nan )
+		near = np.stack( [ padded[ 1 + dy:padded.shape[ 0 ] - 1 + dy, 1 + dx:padded.shape[ 1 ] - 1 + dx ] for dy in ( -1, 0, 1 ) for dx in ( -1, 0, 1 ) if dy or dx ] )
+		with np.errstate( all = 'ignore' ):
+			mean = np.nanmean( near, axis = 0 )
+		grid[ gaps ] = mean[ gaps ]
+	return np.nan_to_num( grid, nan = 0 )
 
 
 if __name__ == '__main__':
