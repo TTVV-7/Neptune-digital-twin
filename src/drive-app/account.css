@@ -300,3 +300,18 @@ dialog#account .account-out {
 dialog#account .account-section > form + p {
 	margin-top: 12px;
 }
+
+/* "Forgot password?" under the sign-in form, and what it says when opened. */
+dialog#account .account-forgot {
+	margin-top: 10px;
+	font-size: 13px;
+}
+
+dialog#account .account-forgot .account-note {
+	background: rgba( 62, 193, 255, 0.08 );
+}
+
+dialog#account .account-forgot a,
+dialog#account .account-reset a {
+	color: var( --sky );
+}

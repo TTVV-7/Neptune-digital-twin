@@ -13,7 +13,7 @@
 // there instead: a place (spot, at), a challenge (challenge, vs), a party to join, and the way back from
 // paying for the Supporter Pass (supporter=thanks: they've just paid for Earth drives, and its toast
 // mustn't land under a modal).
-const NOT_FIRST = [ 'spot', 'at', 'challenge', 'vs', 'party', 'supporter' ];
+const NOT_FIRST = [ 'spot', 'at', 'challenge', 'vs', 'party', 'supporter', 'reset' ];
 // Whether a plain load opens on the orrery at all. It did from 2026-11-20 till 2026-11-22, when the
 // owner had it open on the Earth's globe again, as it used to (a free visit: the globe's, which
 // spends none of the day's Earth drives; one is asked for when it first drives on the Earth). The

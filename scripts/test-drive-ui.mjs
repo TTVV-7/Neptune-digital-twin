@@ -7496,6 +7496,16 @@ async function accountPage( { me = SIGNED_OUT, clientId = CLIENT, ...options } =
 			return json( route, state.me = { ...me, google: false, name: '', email: '' } );
 
 		}
+		if ( path === 'reset-check' || path === 'reset' ) {
+
+			if ( body.token !== state.resetToken ) return json( route, { error: 'This link has been used or has expired. Email support for a new one', reason: 'reset' }, 410 );
+			if ( path === 'reset-check' ) return json( route, { username: 'Racer_1' } );
+			state.resetToken = null;
+			state.password = body.password;
+			return json( route, state.me = { ...RACER } );
+
+		}
+
 		if ( path === 'sign-out-everywhere' ) {
 
 			state.me = SIGNED_OUT;
@@ -7570,7 +7580,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		const form = account.locator( 'form.account-sign-up' );
 		assert.deepEqual( await fields( form ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ], [ 'email', 'email', 'email', 'Email (optional)' ] ] );
 		assert.equal( await form.locator( 'input[name="username"]' ).getAttribute( 'autocapitalize' ), 'none' );
-		assert.match( await form.textContent(), /The email is only for receipts: nothing is sent to it, so a forgotten password can't be recovered, unless you also link Google\./ );
+		assert.match( await form.textContent(), /Forget your password and you can get back in by emailing support from this address, or with Google if you link it\./ );
 		await shot( page, 'account-1-create-desktop' );
 		// The rules, before anything is sent.
 		await form.locator( 'input[name="username"]' ).fill( 'Racer 1' );
@@ -7640,6 +7650,56 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		assert.equal( page.asked.signOuts, 1 );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
+
+	} );
+
+	test( 'forgot password: how to get back in by email; a reset link opens a new-password form that signs in, taken out of the address; a used one says so', async () => {
+
+		const TOKEN = 'A'.repeat( 43 );
+		const page = await accountPage();
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Or use a username and password' );
+		const forgot = account.locator( '.account-forgot' );
+		await forgot.locator( 'button', { hasText: 'Forgot password?' } ).click();
+		const mail = forgot.locator( 'a[href^="mailto:support@worlddrive.app"]' );
+		await mail.waitFor();
+		assert.match( await forgot.textContent(), /from the email on your account .*and say your username/ );
+		assert.match( await forgot.textContent(), /Sign in with Google above instead/ );
+		await page.context().close();
+
+		// The link: opened on its form, the token gone from the address at once.
+		const linked = await accountPage();
+		linked.state.resetToken = TOKEN;
+		await linked.goto( `${ BASE }/?reset=${ TOKEN }` );
+		await linked.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		const reset = panel( linked ).locator( 'form.account-reset' );
+		await reset.locator( 'p', { hasText: 'A new password for Racer_1.' } ).waitFor();
+		assert.equal( new URL( linked.url() ).searchParams.has( 'reset' ), false );
+		assert.equal( await panel( linked ).locator( '#account-title' ).textContent(), 'New password' );
+		assert.equal( await reset.locator( 'input[name="username"]' ).inputValue(), 'Racer_1' );
+		await reset.locator( 'input[name="password"]' ).fill( 'short' );
+		await reset.locator( 'button[type="submit"]' ).click();
+		await reset.locator( '.account-status', { hasText: /at least/i } ).waitFor();
+		await reset.locator( 'input[name="password"]' ).fill( 'a brand new long password' );
+		await reset.locator( 'button[type="submit"]' ).click();
+		await panel( linked ).waitFor( { state: 'hidden' } );
+		assert.equal( linked.state.password, 'a brand new long password' );
+		await linked.waitForFunction( () => window.drive.supporter.me?.signedIn );
+		const sent = linked.asked.account.filter( ask => ask.path === 'reset' );
+		assert.deepEqual( sent.map( ask => ask.body ), [ { token: TOKEN, password: 'a brand new long password' } ] );
+		assert.deepEqual( linked.errors, [] );
+		await linked.context().close();
+
+		// Used already: said so, with how to get another, and nothing to send.
+		const used = await accountPage();
+		await used.goto( `${ BASE }/?reset=${ TOKEN }` );
+		await used.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		const gone = panel( used ).locator( 'form.account-reset' );
+		await gone.locator( 'p', { hasText: 'This link has been used or has expired.' } ).waitFor();
+		assert.equal( await gone.locator( 'button[type="submit"]' ).isDisabled(), true );
+		await gone.locator( 'a[href="mailto:support@worlddrive.app"]' ).waitFor();
+		await used.context().close();
 
 	} );
 

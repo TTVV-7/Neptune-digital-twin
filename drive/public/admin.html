@@ -137,6 +137,13 @@
 	.ch-form .row label.narrow { flex: 0 1 90px; }
 	.ch-form .row label.day { flex-basis: 120px; }
 	.ch-form [hidden] { display: none; }
+	.reset-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 12px 0; font-size: 14px; }
+	.reset-facts dt { color: var(--muted); }
+	.reset-facts dd { margin: 0; overflow-wrap: anywhere; }
+	.reset-facts .warn { color: #ff9b6b; }
+	.reset-copy { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+	.reset-copy textarea { font: 13px/1.5 ui-monospace, monospace; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); width: 100%; resize: vertical; }
+	.resets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 	.ch-warn { border: 1px solid var(--down); border-radius: 8px; padding: 8px 10px; color: var(--text); }
 	.ch-warn p { margin: 0 0 8px; }
 	.ch-warn b { color: var(--down); }
@@ -206,7 +213,7 @@
 		</div>
 	</header>
 	<nav class="jump" aria-label="Jump to">
-		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#any">Any count</a><a href="#todo">To do</a>
+		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
 	</nav>
 	<div id="out"><p class="muted">Loading...</p></div>
 	<section class="card places" id="places" aria-labelledby="places-title" hidden>
@@ -264,6 +271,15 @@
 		<p class="muted small" id="ach-total"></p>
 		<div id="ach-list"></div>
 		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, drives on the Moon, Mars, Vesta and Ceres, Garage changes, rides tried, Discoveries collected), each held to a day's worth; the Discoveries' counts are the account's players' finds together. A construction ride comes with the achievement beside it.</p>
+	</section>
+	<section class="card resets" id="resets" aria-labelledby="resets-title" hidden>
+		<h2 id="resets-title">Password reset link</h2>
+		<p class="muted small">For a player who's forgotten their password and emailed support. Check the email below is the one that wrote to you, then send them the link. It works once, for 24 hours; making another ends the one before.</p>
+		<form class="ch-form" id="reset-form">
+			<label>Username <input name="username" id="reset-username" autocomplete="off" spellcheck="false" required maxlength="20"></label>
+			<div class="row"><button type="submit">Make a link</button><span class="muted small" id="reset-say" role="status"></span></div>
+		</form>
+		<div id="reset-out"></div>
 	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
@@ -2276,6 +2292,8 @@
 		const answer = await res.json().catch( () => null );
 		if ( ! answer ) return;
 		$( 'achievements' ).hidden = false;
+		// (The password reset card too: only an admin gets this far.)
+		$( 'resets' ).hidden = false;
 		if ( ! res.ok ) {
 
 			$( 'ach-list' ).innerHTML = `<p class="muted">${ res.status === 429 ? 'Asked too often just now: try again in a minute.' : `Something went wrong (${ res.status }).` }</p>`;
@@ -2290,6 +2308,74 @@
 		$( 'ach-list' ).innerHTML = `<table class="bars">${ achievements.map( a => `<tr><td class="name">${ esc( a.name ) }<span class="muted small"> · ${ esc( a.goal ) }${ a.ride ? ` · unlocks the ${ esc( a.ride.toLowerCase() ) }` : '' } · ${ a.checked ? 'checked' : 'trusted' }</span></td><td><div class="bar"><span style="width:${ ( 100 * a.players / top ).toFixed( 1 ) }%"></span></div></td><td class="num">${ a.players.toLocaleString() }</td><td class="share">${ players ? Math.round( 100 * a.players / players ) : 0 }%</td></tr>` ).join( '' ) }</table>`;
 
 	}
+
+} )();
+</script>
+<script>
+( () => {
+
+	// --- Password reset links -----------------------------------------------------------------
+	//
+	// POST /api/admin/reset-link { username }: { username, email, google, link, expiresAt }, a one-time
+	// link to set a new password (worker/drive/logins.js's adminResetLink), for a player who's emailed
+	// support. Shown with the account's email, to check against the one that wrote, and a reply to copy.
+
+	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
+	const $ = id => document.getElementById( id );
+	const form = $( 'reset-form' );
+	const say = text => { $( 'reset-say' ).textContent = text; };
+
+	form.addEventListener( 'submit', async event => {
+
+		event.preventDefault();
+		const username = $( 'reset-username' ).value.trim();
+		if ( ! username ) return;
+		say( 'Making a link...' );
+		$( 'reset-out' ).innerHTML = '';
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/reset-link', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { username } ) } );
+
+		} catch {
+
+			return say( 'Couldn\'t reach World Drive.' );
+
+		}
+
+		const answer = await res.json().catch( () => null );
+		if ( ! res.ok ) return say( answer?.error ?? `Something went wrong (${ res.status }).` );
+		say( '' );
+		const until = new Date( answer.expiresAt ).toLocaleString( [], { dateStyle: 'medium', timeStyle: 'short' } );
+		const reply = `Hi ${ answer.username },\n\nHere's your link to set a new password for World Drive. It works once, until ${ until }:\n\n${ answer.link }\n\nIf you didn't ask for this, you can ignore it: your password stays as it is.\n\nTom, World Drive`;
+		$( 'reset-out' ).innerHTML = `
+			<dl class="reset-facts">
+				<dt>Username</dt><dd>${ esc( answer.username ) }</dd>
+				<dt>Email on the account</dt><dd>${ answer.email ? `<b>${ esc( answer.email ) }</b>` : '<b class="warn">none</b>: check another way it\'s theirs (what they bought, when) before sending' }</dd>
+				<dt>Google linked</dt><dd>${ answer.google ? 'yes: they can sign in with Google instead' : 'no' }</dd>
+				<dt>Works until</dt><dd>${ esc( until ) }</dd>
+			</dl>
+			<label class="reset-copy">Reply to send <textarea id="reset-reply" rows="9" readonly>${ esc( reply ) }</textarea></label>
+			<div class="row"><button type="button" id="reset-copy">Copy reply</button><button type="button" id="reset-copy-link">Copy link only</button></div>`;
+		const copy = async ( text, words ) => {
+
+			try {
+
+				await navigator.clipboard.writeText( text );
+				say( words );
+
+			} catch {
+
+				$( 'reset-reply' ).select();
+				say( 'Select and copy it by hand.' );
+
+			}
+
+		};
+		$( 'reset-copy' ).addEventListener( 'click', () => copy( reply, 'Reply copied.' ) );
+		$( 'reset-copy-link' ).addEventListener( 'click', () => copy( answer.link, 'Link copied.' ) );
+
+	} );
 
 } )();
 </script>

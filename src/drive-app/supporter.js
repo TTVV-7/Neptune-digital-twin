@@ -27,6 +27,8 @@ import { toast } from './screens.js';
 
 const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
 const THANKS_PARAM = 'supporter';
+// A link to set a new password: /?reset=<token> (logins.js's adminResetLink).
+const RESET_PARAM = 'reset';
 // The webhook usually arrives before the buyer is back from Stripe, but not always: ask a few more
 // times, this far apart (ms).
 const RECHECK_DELAY = 3000;
@@ -110,6 +112,10 @@ export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn
 	passwords = !! worker && passwordsOn === true;
 	siteKey = typeof turnstileSiteKey === 'string' ? turnstileSiteKey : '';
 	const thanks = takeThanks();
+	// A link to set a new password (/?reset=..., made on the admin page): the account panel on its
+	// form, once the page is up.
+	const reset = takeReset();
+	if ( reset && passwords ) openAccount( { reset } );
 	if ( accountsOn() ) {
 
 		const first = refresh();
@@ -395,6 +401,19 @@ function takeThanks() {
 
 }
 
+// A reset link's token, taken out of the address (so a reload or a shared screenshot doesn't keep
+// it), or null.
+function takeReset() {
+
+	const url = new URL( window.location.href );
+	const token = url.searchParams.get( RESET_PARAM );
+	if ( token === null ) return null;
+	url.searchParams.delete( RESET_PARAM );
+	window.history.replaceState( window.history.state, '', url.href );
+	return /^[A-Za-z0-9_-]{43}$/.test( token ) ? token : null;
+
+}
+
 async function welcomeBack() {
 
 	for ( let i = 0; i <= RECHECKS; i ++ ) {
@@ -474,7 +493,7 @@ function who( { email = false } = {} ) {
 // The account panel (account.js, its own chunk, loaded the first time it's opened), with what it
 // needs from here.
 let panel = null;
-export function openAccount() {
+export function openAccount( options ) {
 
 	panel ??= import( './account.js' ).catch( err => {
 
@@ -482,7 +501,7 @@ export function openAccount() {
 		throw err;
 
 	} );
-	panel.then( module => module.openAccount( hooks ) ).catch( () => toast( UNREACHABLE ) );
+	panel.then( module => module.openAccount( hooks, options ) ).catch( () => toast( UNREACHABLE ) );
 
 }
 

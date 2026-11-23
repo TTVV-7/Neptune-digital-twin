@@ -1,9 +1,9 @@
 import { verifyIdToken } from '../google.js';
-import { HttpError, base64url, fromBase64url, isObject, json, noContent, randomToken, readJson } from '../http.js';
+import { HttpError, base64url, fromBase64url, isObject, json, noContent, randomToken, readJson, sha256Hex } from '../http.js';
 import { profileFrom, testCertsUrl } from '../sessions.js';
 import { cleanUsername, passwordProblem, passwordText, usernameKey } from '../../src/drive-app/password-rules.js';
 import { SIGN_INS_DAILY, accountById, currentAccount, meFor, sessionHash, signedIn, signedOutCookie } from './accounts.js';
-import { isAdmin } from './admin.js';
+import { adminAccount, isAdmin } from './admin.js';
 import { lookKey } from './challenges.js';
 import { nameAllowed } from './names.js';
 import { database, takeTurn } from './players.js';
@@ -15,8 +15,10 @@ import { MAX_TOKEN, verifyTurnstile } from './turnstile.js';
 // with them, getting the same session (accounts.js) to the same kind of account: the Supporter Pass,
 // the player's level, times and ghosts, nickname and Garage are the account's, whichever way you
 // signed in. A Google account can add a username and password, and a username's account can link a
-// Google account, and then either signs in. There's no email, so a forgotten password can't be
-// reset, unless Google is linked too.
+// Google account, and then either signs in. A forgotten password is reset by hand: the player
+// emails support from the email on their account (contact_email), and the owner makes a one-time
+// link for it on the admin page (POST /api/admin/reset-link, below, "Forgotten passwords"); or,
+// with Google linked, they sign in with Google.
 //
 // Passwords are hashed with PBKDF2-SHA-256 (WebCrypto, crypto.subtle) with a random salt of 16 bytes
 // an account, at ITERATIONS, the most the Workers runtime allows (it refuses more than 100,000):
@@ -682,5 +684,101 @@ export async function signOutEverywhere( context ) {
 		db.prepare( 'DELETE FROM player_keys WHERE account_id = ?' ).bind( account.id ),
 	] );
 	return noContent( { 'Set-Cookie': signedOutCookie( url ) } );
+
+}
+
+// --- Forgotten passwords (docs/world-drive.md, "Forgotten passwords") ---
+//
+// Nothing is emailed by the game: a player who's forgotten their password emails support from the
+// email on their account, and the owner, signed in on the admin page, makes a one-time link for that
+// username (adminResetLink), checks the email it shows is the one that wrote, and sends the link
+// back. The link (/?reset=<token>) opens the game on a form for a new password (the page asks
+// resetCheck for whose it is, then sends resetPassword). The token is 32 random bytes, kept only as
+// its SHA-256, works once and for RESET_HOURS, and making another for the account ends the one
+// before. Setting the password signs the account out everywhere else and in here.
+
+export const RESET_HOURS = 24;
+const RESET_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
+// POST /api/admin/reset-link { username }, the owner only (admin.js's adminAccount): a new one-time
+// link for that username's account: { username, email (the account's email for receipts, or its
+// Google email; '' for none), google (whether Google is linked: they could sign in with that),
+// link, expiresAt }. 404 for a username nobody has.
+export async function adminResetLink( context ) {
+
+	const { request, env, url, now } = context;
+	await adminAccount( context );
+	const db = checkOn( env );
+	const sent = await body( request );
+	const username = cleanUsername( sent.username );
+	if ( ! username ) throw new HttpError( 400, 'Type the username' );
+	const row = await db.prepare( `SELECT logins.account_id AS id, logins.username AS username, accounts.email AS email, accounts.contact_email AS contact,
+		accounts.google_sub AS sub FROM logins JOIN accounts ON accounts.id = logins.account_id WHERE logins.username_key = ?` ).bind( usernameKey( username ) ).first();
+	if ( ! row ) throw new HttpError( 404, 'No account has that username' );
+	const token = randomToken( 32 );
+	const expiresAt = now + RESET_HOURS * 60 * 60 * 1000;
+	await db.batch( [
+		db.prepare( 'DELETE FROM password_resets WHERE account_id = ? OR expires_at <= ?' ).bind( row.id, now ),
+		db.prepare( 'INSERT INTO password_resets ( token_hash, account_id, created_at, expires_at ) VALUES ( ?, ?, ?, ? )' ).bind( await sha256Hex( token ), row.id, now, expiresAt ),
+	] );
+	const google = ! String( row.sub ).startsWith( NO_GOOGLE );
+	return json( { username: row.username, email: row.contact || ( google ? row.email : '' ), google, link: `${ url.origin }/?reset=${ token }`, expiresAt } );
+
+}
+
+// The reset that `token` is, still good: { account_id, username }, or a 410 (reason 'reset') for a
+// link that's used, expired or made up. One of the visitor's PASSWORD_TRIES first (tryGate).
+async function resetFor( context, token ) {
+
+	const { env, now } = context;
+	await tryGate( context );
+	if ( typeof token !== 'string' || ! RESET_TOKEN.test( token ) ) throw resetGone();
+	const row = await database( env ).prepare( `SELECT password_resets.account_id AS account_id, logins.username AS username FROM password_resets
+		JOIN logins ON logins.account_id = password_resets.account_id WHERE password_resets.token_hash = ? AND password_resets.expires_at > ?` ).bind( await sha256Hex( token ), now ).first();
+	if ( ! row ) throw resetGone();
+	return row;
+
+}
+
+function resetGone() {
+
+	return new HttpError( 410, 'This link has been used or has expired. Email support for a new one', { reason: 'reset' } );
+
+}
+
+// POST /api/account/reset-check { token }: whose the link is, { username }, for the page's form (and
+// a password manager's), or a 410.
+export async function resetCheck( context ) {
+
+	checkOn( context.env );
+	const sent = await body( context.request );
+	const { username } = await resetFor( context, sent.token );
+	return json( { username } );
+
+}
+
+// POST /api/account/reset { token, password }: the account's new password (the rules as ever), the
+// link used up, every session and player key of the account's signed out (as signing out everywhere
+// does), and this browser signed in: /api/me's body, with its cookie.
+export async function resetPassword( context ) {
+
+	const { request, env, now } = context;
+	const db = checkOn( env );
+	const sent = await body( request );
+	const reset = await resetFor( context, sent.token );
+	const password = newPassword( sent.password, reset.username );
+	await aChange( context );
+	const hash = await newHash( env, password );
+	// The link taken first, on its own: of two sends of one link at once, only the one that took it
+	// goes on to change the password and sign in.
+	const used = await db.prepare( 'DELETE FROM password_resets WHERE token_hash = ? AND expires_at > ? RETURNING account_id' ).bind( await sha256Hex( sent.token ), now ).all();
+	if ( ! used.results?.length ) throw resetGone();
+	await db.batch( [
+		db.prepare( 'UPDATE logins SET password_hash = ?, salt = ?, iterations = ?, changed_at = ? WHERE account_id = ?' ).bind( hash.password_hash, hash.salt, hash.iterations, now, reset.account_id ),
+		db.prepare( 'DELETE FROM sessions WHERE account_id = ?' ).bind( reset.account_id ),
+		db.prepare( 'DELETE FROM player_keys WHERE account_id = ?' ).bind( reset.account_id ),
+		db.prepare( 'DELETE FROM password_resets WHERE account_id = ?' ).bind( reset.account_id ),
+	] );
+	return signedIn( context, reset.account_id );
 
 }

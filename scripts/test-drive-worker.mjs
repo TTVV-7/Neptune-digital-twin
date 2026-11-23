@@ -1269,7 +1269,7 @@ function checkout( id, { type = 'checkout.session.completed', reference = null, 
 
 function refund( id, { full = true, live = false } = {} ) {
 
-	return { id: `evt_refund_${ id }`, object: 'event', type: 'charge.refunded', livemode: live, data: { object: { id: `ch_${ id }`, object: 'charge', payment_intent: `pi_${ id }`, refunded: full, amount_refunded: full ? 499 : 100 } } };
+	return { id: `evt_refund_${ id }`, object: 'event', type: 'charge.refunded', livemode: live, data: { object: { id: `ch_${ id }`, object: 'charge', payment_intent: `pi_${ id }`, refunded: full, amount_refunded: full ? 1999 : 100 } } };
 
 }
 
@@ -3953,6 +3953,55 @@ describe( 'World Drive username and password accounts', () => {
 		}
 
 		console.log( `# password off / Google unlinked at once: ${ outcomes.join( ', ' ) }` );
+
+	} );
+
+	test( 'a forgotten password: the owner makes a one-time link (showing the account\'s email), which sets a new password once, signs out everywhere and signs in', async () => {
+
+		const boss = await google( { sub: '3990', email: 'boss@example.com', name: 'Boss' } );
+		const res = await send( 'POST', '/api/account/sign-up', { username: 'Forgetful_1', password: 'the old passphrase', email: 'Forget@Example.com', token: TOKEN } );
+		const elsewhere = cookieOf( res );
+		assert.equal( ( await me( elsewhere ) ).json.signedIn, true );
+
+		// Only the owner makes links; a username nobody has is a 404.
+		assert.equal( ( await send( 'POST', '/api/admin/reset-link', { username: 'Forgetful_1' } ) ).status, 401 );
+		assert.equal( ( await send( 'POST', '/api/admin/reset-link', { username: 'Forgetful_1' }, { cookie: elsewhere } ) ).status, 403 );
+		assert.equal( ( await send( 'POST', '/api/admin/reset-link', { username: 'Nobody_Here' }, { cookie: boss.cookie } ) ).status, 404 );
+		const first = await send( 'POST', '/api/admin/reset-link', { username: 'forgetful_1' }, { cookie: boss.cookie } );
+		assert.equal( first.status, 200, first.text );
+		assert.deepEqual( { ...first.json, link: undefined }, { username: 'Forgetful_1', email: 'forget@example.com', google: false, link: undefined, expiresAt: ACCOUNT_DAY + 24 * HOUR } );
+		const tokenOf = link => new URL( link ).searchParams.get( 'reset' );
+		assert.match( first.json.link, /^http:\/\/[^/]+\/\?reset=[A-Za-z0-9_-]{43}$/ );
+		// Only the token's hash is kept; a second link ends the first.
+		const old = tokenOf( first.json.link );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM password_resets' )[ 0 ].n, 1 );
+		assert.ok( ! JSON.stringify( server.d1( 'SELECT * FROM password_resets' ) ).includes( old ) );
+		const second = await send( 'POST', '/api/admin/reset-link', { username: 'Forgetful_1' }, { cookie: boss.cookie } );
+		const token = tokenOf( second.json.link );
+		assert.equal( ( await send( 'POST', '/api/account/reset-check', { token: old } ) ).status, 410 );
+
+		// Whose it is; a made-up or malformed one is gone too.
+		const check = await send( 'POST', '/api/account/reset-check', { token } );
+		assert.deepEqual( [ check.status, check.json ], [ 200, { username: 'Forgetful_1' } ] );
+		for ( const bad of [ 'x'.repeat( 43 ), 'short', 42, null ] ) assert.equal( ( await send( 'POST', '/api/account/reset-check', { token: bad } ) ).status, 410, String( bad ) );
+
+		// The password's rules as ever; then set, signed in here and out everywhere else.
+		const weak = await send( 'POST', '/api/account/reset', { token, password: 'short' } );
+		assert.equal( weak.status, 400 );
+		const done = await send( 'POST', '/api/account/reset', { token, password: 'a brand new passphrase' } );
+		assert.equal( done.status, 200, done.text );
+		assert.equal( done.json.username, 'Forgetful_1' );
+		assert.equal( ( await me( cookieOf( done ) ) ).json.signedIn, true );
+		assert.equal( ( await me( elsewhere ) ).json.signedIn, false );
+		assert.equal( ( await signIn( 'Forgetful_1', 'the old passphrase' ) ).status, 401 );
+		assert.equal( ( await signIn( 'Forgetful_1', 'a brand new passphrase' ) ).status, 200 );
+		// Once only.
+		assert.equal( ( await send( 'POST', '/api/account/reset', { token, password: 'yet another passphrase' } ) ).status, 410 );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM password_resets' )[ 0 ].n, 0 );
+
+		// And not after a day.
+		const late = tokenOf( ( await send( 'POST', '/api/admin/reset-link', { username: 'Forgetful_1' }, { cookie: boss.cookie } ) ).json.link );
+		assert.equal( ( await send( 'POST', '/api/account/reset', { token: late, password: 'a late passphrase' }, { time: ACCOUNT_DAY + 24 * HOUR + 1 } ) ).status, 410 );
 
 	} );
 

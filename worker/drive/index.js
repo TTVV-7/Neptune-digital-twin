@@ -7,7 +7,7 @@ import { postProgress, setTitle } from './progress.js';
 import { addressOf, adsense, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
 import { accountPlayer, currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
-import { linkGoogle, passwordSignIn, passwordsOn, removePassword, setContactEmail, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
+import { adminResetLink, linkGoogle, passwordSignIn, passwordsOn, removePassword, resetCheck, resetPassword, setContactEmail, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
@@ -142,10 +142,13 @@ const ROUTES = [
 	{ method: 'DELETE', path: '/api/account/google', handler: unlinkGoogle },
 	{ method: 'POST', path: '/api/account/sign-out-everywhere', handler: signOutEverywhere },
 	{ method: 'POST', path: '/api/account/email', handler: setContactEmail },
+	{ method: 'POST', path: '/api/account/reset-check', handler: resetCheck },
+	{ method: 'POST', path: '/api/account/reset', handler: resetPassword },
 	{ method: 'GET', path: '/api/live', handler: live },
 	{ method: 'GET', path: '/api/online', handler: online },
 	{ method: 'POST', path: '/api/stats', handler: postStats },
 	{ method: 'GET', path: '/api/admin/stats', handler: adminStats },
+	{ method: 'POST', path: '/api/admin/reset-link', handler: adminResetLink },
 	{ method: 'GET', path: '/api/admin/dropins', handler: adminDropins },
 	{ method: 'GET', path: '/api/admin/achievements', handler: adminAchievements },
 	{ method: 'GET', path: '/api/challenges', handler: listChallenges },
