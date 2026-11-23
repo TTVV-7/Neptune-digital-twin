@@ -84,7 +84,8 @@ export function createWorldHardware( { bodyOf, toast = () => {} } ) {
 		const radius = WORLDS[ world ].radius;
 		for ( const site of SITES ) {
 
-			if ( site.world !== world ) continue;
+			// (A site with nothing set down, a rover still driving whose place now isn't known: left out.)
+			if ( site.world !== world || ! site.pieces?.length ) continue;
 			const d = distance( car, site, radius );
 			if ( d < NEAR && ! built.has( site.id ) ) build( site, body );
 			else if ( d > FAR && built.has( site.id ) ) drop( site.id );
