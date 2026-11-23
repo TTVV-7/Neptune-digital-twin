@@ -1339,6 +1339,8 @@ describe( 'World Drive Supporter Pass', () => {
 				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
 				SUPPORTER_EMAILS: ' Friend@Example.com, ',
 				ADMIN_EMAILS: 'nobody@example.com, Boss@Example.com , chief@example.com',
+				// Not wrangler.drive.jsonc's real Stripe portal link: /api/me as it is without one.
+				SUPPORTER_MANAGE_LINK: '',
 				// Where people drop in, held to fewer than wrangler.drive.jsonc's (dropins.js's) to see
 				// each limit reached.
 				DROPIN_PLACES_PER_VISIT: '4',
@@ -4287,6 +4289,41 @@ describe( 'DriveLimits\' drop-in places by itself', () => {
 		assert.deepEqual( db.prepare( 'SELECT world, count FROM place_totals ORDER BY world' ).all().map( row => ( { ...row } ) ), [ { world: 'earth', count: 1 }, { world: 'mars', count: 2 } ] );
 		// A world that isn't one: never counted.
 		assert.deepEqual( ( await ask( [ 'pluto:1:1' ], 'D'.repeat( 22 ) ) ).cells, [] );
+
+	} );
+
+} );
+
+describe( 'DriveLimits\' Earth visits by themselves', () => {
+
+	test( 'a supporter\'s visits are counted by their account alone: the day\'s cap for everyone neither holds them nor counts them, even with the school\'s address used up', async () => {
+
+		await loadWorker();
+		const { DriveLimits } = await import( '../worker/drive/limits.js' );
+		const db = new DatabaseSync( ':memory:' );
+		const sql = { exec: ( query, ...values ) => {
+
+			const rows = db.prepare( query ).all( ...values ).map( row => ( { ...row } ) );
+			return { toArray: () => rows, one: () => rows[ 0 ] };
+
+		} };
+		const limits = new DriveLimits( { storage: { sql, transactionSync: run => run() } }, { TURNSTILE_SECRET: PASS_SECRET } );
+		const now = Date.UTC( 2026, 10, 23, 12 );
+		const free = ip => limits.visit( ip, { now, daily: 3, perVisitor: 1 } );
+		const supporter = id => limits.visit( `account:${ id }`, { now, daily: null, perVisitor: 2 } );
+		// The school's address has had its free drive, and the day's three are all gone.
+		assert.equal( ( await free( '203.0.113.9' ) ).ok, true );
+		assert.equal( ( await free( '203.0.113.9' ) ).reason, 'visitor' );
+		assert.equal( ( await free( '198.51.100.1' ) ).ok, true );
+		assert.equal( ( await free( '198.51.100.2' ) ).ok, true );
+		assert.equal( ( await free( '198.51.100.3' ) ).reason, 'daily' );
+		// Supporters at that school still drive, each to their own account's count.
+		assert.deepEqual( await supporter( 7 ), { ok: true, left: 1 } );
+		assert.deepEqual( await supporter( 7 ), { ok: true, left: 0 } );
+		assert.equal( ( await supporter( 7 ) ).reason, 'visitor' );
+		assert.deepEqual( await supporter( 8 ), { ok: true, left: 1 } );
+		// And none of theirs counted towards the day's cap: still the three free ones.
+		assert.equal( db.prepare( 'SELECT visits FROM days' ).get().visits, 3 );
 
 	} );
 

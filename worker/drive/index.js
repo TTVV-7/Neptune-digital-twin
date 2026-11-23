@@ -47,7 +47,8 @@ export { DriveRoom } from './live.js';
 //                         secret named Google_maps_api, in any case, works as well: see mapsKey)
 //   TURNSTILE_SECRET      secret: the Turnstile widget's secret key
 //   TURNSTILE_SITE_KEY    the widget's site key (public)
-//   DAILY_VISITS          visits a day for everyone together (300 if unset); 0 closes for the day
+//   DAILY_VISITS          visits a day for everyone together (500 if unset); 0 closes for the day. A
+//                         supporter's are neither held by it nor counted towards it
 //   PER_VISITOR_DAILY     Earth visits a day per visitor (1 if unset); past it, the page opens on the Moon
 //   NAMES_PER_VISITOR_DAILY, SCORES_PER_VISITOR_DAILY   the leaderboard's new names and renames
 //                         (20 if unset) and scores (1500) a day per visitor
@@ -360,11 +361,13 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 
 	}
 
-	// A supporter (a lifetime pass or a day pass) has paid for their drives, so the day's cap for
-	// everyone doesn't turn them away (their drives still count towards it, for everyone else).
+	// A supporter (a lifetime, monthly or day pass) has paid for their drives: counted by their account,
+	// never by the address they're at (a school's, shared by hundreds), and outside the day's cap for
+	// everyone, which neither turns them away nor counts their drives, so they never use up the free
+	// players' share.
 	const outcome = await limits.visit( supporter ? `account:${ supporter.id }` : addressOf( request ), {
 		now,
-		daily: supporter ? Number.MAX_SAFE_INTEGER : setting( env.DAILY_VISITS, 300 ),
+		daily: supporter ? null : setting( env.DAILY_VISITS, 500 ),
 		perVisitor: supporter ? setting( env.PER_VISITOR_DAILY_SUPPORTER, 30 ) : setting( env.PER_VISITOR_DAILY, 1 ),
 	} );
 	if ( ! outcome.ok ) {
