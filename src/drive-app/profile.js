@@ -45,7 +45,7 @@ const ICONS = {
 // whether a nickname can be picked now (a Worker and a visit). onGarage( reward ): open the
 // Garage (on a ride reward's ride); onNickname(): show where a nickname is picked; onTitle(): a new
 // title was picked. mode(): main.js's mode ('driving', 'globe'...).
-export function setUpProfile( { progress, player, canName = () => false, onGarage = () => {}, onNickname = () => {}, onTitle = () => {}, onAchievements = () => {}, onDiscoveries = () => {}, discoveries = () => null, mode = () => 'globe' } ) {
+export function setUpProfile( { progress, player, canName = () => false, onGarage = () => {}, onNickname = () => {}, onTitle = () => {}, onAchievements = () => {}, onDiscoveries = () => {}, onMap = () => {}, discoveries = () => null, mode = () => 'globe' } ) {
 
 	// --- driving: the bar and the pop-ups ---
 
@@ -204,12 +204,15 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		<p class="title-status small" role="status" hidden></p>
 		<p class="save-note small" hidden>Your progress is kept in this browser. <button type="button" class="link">Pick a nickname</button> to save it.</p>
 		<button type="button" class="achievements-open"><span aria-hidden="true">🏅</span> Achievements <span class="feat-count small"></span></button>
-		<button type="button" class="discoveries-open"><span aria-hidden="true">🔭</span> Discoveries <span class="finds-total small"></span></button>`;
+		<button type="button" class="discoveries-open"><span aria-hidden="true">🔭</span> Discoveries <span class="finds-total small"></span></button>
+		<button type="button" class="map-open"><span aria-hidden="true">🗺️</span> Your map <span class="map-total small">Where you've driven</span></button>`;
 	panel.querySelector( '.osm' ).after( profile );
 	profile.querySelector( '.track-open' ).addEventListener( 'click', () => openTrack() );
 	profile.querySelector( '.achievements-open' ).addEventListener( 'click', () => onAchievements() );
 	// The Discoveries' books (finds.js): real named places on the other worlds, collected by driving there.
 	profile.querySelector( '.discoveries-open' ).addEventListener( 'click', () => onDiscoveries() );
+	// Your map (my-map.js): the Earth's areas and start spots driven.
+	profile.querySelector( '.map-open' ).addEventListener( 'click', () => onMap() );
 	profile.querySelector( '.save-note button' ).addEventListener( 'click', () => onNickname() );
 	const select = profile.querySelector( 'select' );
 	const titleStatus = profile.querySelector( '.title-status' );

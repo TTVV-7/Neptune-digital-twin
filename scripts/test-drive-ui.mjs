@@ -7720,6 +7720,17 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		assert.deepEqual( [ await manage.getAttribute( 'href' ), await manage.getAttribute( 'target' ) ], [ MANAGE, '_blank' ] );
 		assert.deepEqual( await pass.locator( 'a:not(.account-manage)' ).evaluateAll( links => links.map( a => a.getAttribute( 'href' ) ) ), [ '/refunds/', '/contact/' ] );
 		await shot( page, 'account-pass-monthly' );
+		// Request a feature: folded at the bottom, sent to the Worker, thanked.
+		await page.route( `${ BASE }/api/requests`, route => route.fulfill( { contentType: 'application/json', body: '{"ok":true}' } ) );
+		const request = await unfold( account, 'Request a feature' );
+		await request.locator( 'textarea' ).fill( 'A monster truck, please' );
+		assert.equal( await request.locator( '.account-hint' ).textContent(), '23 / 1000' );
+		const sentRequest = page.waitForRequest( req => req.url().endsWith( '/api/requests' ) );
+		await request.locator( 'button[type="submit"]' ).click();
+		assert.deepEqual( ( await sentRequest ).postDataJSON(), { text: 'A monster truck, please' } );
+		await request.locator( '.account-status', { hasText: 'Sent. Thanks!' } ).waitFor();
+		assert.equal( await request.locator( 'textarea' ).inputValue(), '' );
+		await shot( page, 'account-request' );
 		// The pass's sheet says it too.
 		await page.keyboard.press( 'Escape' );
 		await sheet( page ).locator( 'a', { hasText: 'Manage your subscription' } ).waitFor();
@@ -7979,7 +7990,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 
 			}
 
-			assert.deepEqual( await account.locator( 'details.account-section > summary' ).allTextContents(), [ 'Change password', 'Unlink Google', 'Remove username and password' ] );
+			assert.deepEqual( await account.locator( 'details.account-section > summary' ).allTextContents(), [ 'Change password', 'Unlink Google', 'Remove username and password', 'Request a feature' ] );
 			assert.equal( await account.locator( 'details.account-section[open]' ).count(), 0 );
 			assert.equal( await account.locator( 'input:visible' ).count(), 0, 'a password field shown before it was asked for' );
 			assert.equal( await account.locator( '.stub-google' ).count(), 0, 'Google\'s buttons drawn while folded away' );

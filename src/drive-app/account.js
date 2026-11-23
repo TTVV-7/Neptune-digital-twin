@@ -350,6 +350,7 @@ function signedIn( me ) {
 	parts.push( me.username ? changeForm( me ) : addForm() );
 	parts.push( googlePart( me ) );
 	if ( me.username && me.google ) parts.push( removeForm( me ) );
+	parts.push( requestForm() );
 	return parts;
 
 }
@@ -405,6 +406,42 @@ function linksLine( ...parts ) {
 	const p = Object.assign( document.createElement( 'p' ), { className: 'account-note' } );
 	p.append( ...parts.filter( part => part !== '' ).map( part => Array.isArray( part ) ? pageLink( ...part ) : part ) );
 	return p;
+
+}
+
+// "Request a feature": what the player would like, sent to the owner's admin page (POST /api/requests,
+// worker/drive/requests.js), a few a day.
+const REQUEST_MOST = 1000;
+function requestForm() {
+
+	const { form, status, submit } = makeForm( 'account-request', 'Send' );
+	const id = `account-field-${ ++ ids }`;
+	const label = Object.assign( document.createElement( 'label' ), { htmlFor: id, textContent: 'What would make World Drive better?' } );
+	const text = Object.assign( document.createElement( 'textarea' ), { id, name: 'request', rows: 4, maxLength: REQUEST_MOST, placeholder: 'A car, a place, a world, a way to play...' } );
+	const count = Object.assign( document.createElement( 'p' ), { className: 'account-hint' } );
+	const counted = () => {
+
+		count.textContent = `${ text.value.length } / ${ REQUEST_MOST }`;
+
+	};
+	counted();
+	text.addEventListener( 'input', counted );
+	form.append( label, text, count, submit, status );
+	form.addEventListener( 'submit', async event => {
+
+		event.preventDefault();
+		if ( ! text.value.trim() ) return say( status, 'Write what you\'d like first.' );
+		busy( form, true );
+		say( status, 'Sending...' );
+		const answer = await send( 'POST', '/api/requests', { text: text.value } );
+		busy( form, false );
+		if ( ! answer.ok ) return say( status, problem( answer ) );
+		text.value = '';
+		counted();
+		say( status, 'Sent. Thanks! Every request is read.' );
+
+	} );
+	return section( 'Request a feature', paragraph( 'Ideas for rides, places, worlds or anything else go straight to the person who makes World Drive.' ), form );
 
 }
 

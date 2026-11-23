@@ -810,7 +810,8 @@ dialog#leaderboard .lvl {
 
 /* The profile card's way to the achievements' grid (achievements.js, its own chunk). */
 #globe-ui .profile .achievements-open,
-#globe-ui .profile .discoveries-open {
+#globe-ui .profile .discoveries-open,
+#globe-ui .profile .map-open {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -826,17 +827,20 @@ dialog#leaderboard .lvl {
 }
 
 #globe-ui .profile .achievements-open:hover,
-#globe-ui .profile .discoveries-open:hover {
+#globe-ui .profile .discoveries-open:hover,
+#globe-ui .profile .map-open:hover {
 	background: var( --chip-hover );
 }
 
 #globe-ui .profile .achievements-open .feat-count,
-#globe-ui .profile .discoveries-open .finds-total {
+#globe-ui .profile .discoveries-open .finds-total,
+#globe-ui .profile .map-open .map-total {
 	margin-left: auto;
 	color: var( --muted );
 }
 
-#globe-ui .profile .discoveries-open {
+#globe-ui .profile .discoveries-open,
+#globe-ui .profile .map-open {
 	margin-top: 6px;
 }
 

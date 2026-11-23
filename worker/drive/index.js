@@ -3,10 +3,11 @@ import { MAX_TOKEN, verifyTurnstile } from './turnstile.js';
 import { search } from './search.js';
 import { createPlayer, renamePlayer } from './players.js';
 import { leaderboard, postScore } from './scores.js';
-import { postProgress, setTitle } from './progress.js';
+import { postProgress, progressPlaces, setTitle } from './progress.js';
 import { addressOf, adsense, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
 import { accountPlayer, currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
+import { adminRequestChange, adminRequests, sendRequest } from './requests.js';
 import { adminResetLink, linkGoogle, passwordSignIn, passwordsOn, removePassword, resetCheck, resetPassword, setContactEmail, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
@@ -145,11 +146,15 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/account/email', handler: setContactEmail },
 	{ method: 'POST', path: '/api/account/reset-check', handler: resetCheck },
 	{ method: 'POST', path: '/api/account/reset', handler: resetPassword },
+	{ method: 'POST', path: '/api/requests', handler: sendRequest },
+	{ method: 'POST', path: '/api/progress/places', handler: progressPlaces },
 	{ method: 'GET', path: '/api/live', handler: live },
 	{ method: 'GET', path: '/api/online', handler: online },
 	{ method: 'POST', path: '/api/stats', handler: postStats },
 	{ method: 'GET', path: '/api/admin/stats', handler: adminStats },
 	{ method: 'POST', path: '/api/admin/reset-link', handler: adminResetLink },
+	{ method: 'GET', path: '/api/admin/requests', handler: adminRequests },
+	{ method: 'POST', path: '/api/admin/requests', handler: adminRequestChange },
 	{ method: 'GET', path: '/api/admin/dropins', handler: adminDropins },
 	{ method: 'GET', path: '/api/admin/achievements', handler: adminAchievements },
 	{ method: 'GET', path: '/api/challenges', handler: listChallenges },
