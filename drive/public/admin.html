@@ -420,32 +420,41 @@
 		// Each day's value of a metric (or one of its keys), and a share of two of them, for the tiles' lines.
 		const dailyKey = ( metric, key ) => days.map( d => keyDay.get( `${ metric }:${ key }` )?.get( d ) ?? 0 );
 		const ratio = ( parts, wholes ) => parts.map( ( p, i ) => wholes[ i ] ? p / wholes[ i ] : 0 );
-		// What the Earth's drives cost Google's Map Tiles API: each is one billed 3D tiles session (a
-		// free player's, a supporter's or the owner's), MAPS_PER_1000 US dollars a thousand after the
-		// month's MAPS_FREE_MONTHLY. This month so far from the days shown (when they reach back to the
-		// 1st), and the month's pace at the days so far. An estimate: Google's bill is what counts.
+		// What the Earth's drives cost Google's Map Tiles API (the 3D Earth): each is one billed 3D tiles
+		// session (a free player's, a supporter's or the owner's), MAPS_PER_1000 US dollars a thousand
+		// after the month's MAPS_FREE_MONTHLY (none: the bill shows none taken off). Days from before the
+		// visits were told apart by kind (visit_kind began on 2026-11-18) count every visit, since every
+		// page then opened on Google's 3D globe. This month from the days shown (when they reach back to
+		// the 1st), and the month at that pace. An estimate: Google's bill is what counts.
 		const mapsCost = () => {
 
 			const kinds = [ [ 'free', 'earth' ], [ 'supporters', 'earth_supporter' ], [ 'you', 'owner' ] ];
-			const sessions = sum( kinds.map( ( [ , kind ] ) => total( 'visit_kind', kind ) ) );
+			const told = d => ( byDay.get( 'visit_kind' )?.get( d ) ?? 0 ) > 0;
+			const sessionsOn = d => told( d ) ? sum( kinds.map( ( [ , kind ] ) => keyDay.get( `visit_kind:${ kind }` )?.get( d ) ?? 0 ) ) : keyDay.get( 'visit:all' )?.get( d ) ?? 0;
+			const sessions = sum( days.map( sessionsOn ) );
+			const untold = sum( days.filter( d => ! told( d ) ).map( sessionsOn ) );
 			const usd = n => new Intl.NumberFormat( undefined, { style: 'currency', currency: 'USD' } ).format( n );
 			const billed = n => Math.max( 0, n - MAPS_FREE_MONTHLY ) * MAPS_PER_1000 / 1000;
 			const monthStart = `${ to.slice( 0, 7 ) }-01`;
 			const daysInMonth = new Date( Date.UTC( Number( to.slice( 0, 4 ) ), Number( to.slice( 5, 7 ) ), 0 ) ).getUTCDate();
 			const dayOfMonth = Number( to.slice( 8, 10 ) );
-			const sessionsOn = d => sum( kinds.map( ( [ , kind ] ) => keyDay.get( `visit_kind:${ kind }` )?.get( d ) ?? 0 ) );
 			const covered = days.includes( monthStart );
 			const month = covered ? sum( days.filter( d => d >= monthStart ).map( sessionsOn ) ) : null;
-			const pace = month === null ? null : Math.round( month / dayOfMonth * daysInMonth );
+			// The last 7 days' rate (not the month's, whose first days were quieter) for the days left.
+			const recent = days.slice( - 7 );
+			const perDay = recent.length ? sum( recent.map( sessionsOn ) ) / recent.length : 0;
+			const pace = month === null ? null : Math.round( month + perDay * ( daysInMonth - dayOfMonth ) );
+			const split = kinds.map( ( [ label, kind ] ) => `${ label } ${ num( total( 'visit_kind', kind ) ) }` ).join( ' · ' ) + ( untold ? ` · before ${ num( untold ) }` : '' );
 			return facts( [
-				[ 'Earth drives', num( sessions ), kinds.map( ( [ label, kind ] ) => `${ label } ${ num( total( 'visit_kind', kind ) ) }` ).join( ' · ' ) ],
-				[ 'Full price', usd( sessions * MAPS_PER_1000 / 1000 ), 'these days, no free ones' ],
+				[ 'Earth sessions', num( sessions ), split ],
+				[ 'These days', usd( billed( sessions ) ), `${ num( days.length ) } days` ],
+				[ 'A day lately', usd( perDay * MAPS_PER_1000 / 1000 ), `about ${ num( Math.round( perDay ) ) } a day, last 7 days` ],
 				...( month === null ? [] : [
-					[ 'This month', usd( billed( month ) ), `${ num( month ) } so far, ${ num( MAPS_FREE_MONTHLY ) } free` ],
-					[ 'Month at this pace', usd( billed( pace ) ), `about ${ num( pace ) }` ],
+					[ 'This month', usd( billed( month ) ), `${ num( month ) } so far` ],
+					[ 'Month at this pace', usd( billed( pace ) ), `about ${ num( pace ) }, at the last 7 days' rate` ],
 				] ),
 				[ 'Most a month', usd( billed( MAPS_DAILY_CAP * 30 ) ), `cap: ${ num( MAPS_DAILY_CAP ) } a day, + supporters` ],
-			] ) + `<p class="note">Each Earth drive is one billed 3D tiles session; flying about in it costs no more. At US$${ MAPS_PER_1000 } a thousand after ${ num( MAPS_FREE_MONTHLY ) } free a month (Google's price list as of ${ esc( MAPS_PRICE_CHECKED ) }): check it on <a href="https://developers.google.com/maps/billing-and-pricing/pricing">Google's pricing page</a>, and the real bill in Google Cloud's Billing.${ covered ? '' : ' Pick a period that reaches back to the 1st for this month\'s total.' }</p>`;
+			] ) + `<p class="note">Each Earth drive is one billed 3D tiles session (Google's Map Tiles API); flying about in it costs no more. At US$${ MAPS_PER_1000 } a thousand${ MAPS_FREE_MONTHLY ? ` after ${ num( MAPS_FREE_MONTHLY ) } free a month` : ', with no free ones taken off, as the bill shows' }. "Before": days from before visits were counted by kind, when every page opened on Google's 3D globe, so every visit counts. Check the real bill in Google Cloud's Billing.${ covered ? '' : ' Pick a period that reaches back to the 1st for this month\'s total.' }</p>`;
 
 		};
 		// [ group, [ label, value, change, fewerIsBetter, days' values, what it means ] ]: change is
@@ -841,10 +850,11 @@
 
 	// Money by currency (in its smallest unit, as Stripe has it) as text: "CA$39.98", or several.
 	// Google's Map Tiles API price for Photorealistic 3D Tiles sessions (root tileset requests), US
-	// dollars a thousand at the first tier, and the free ones each month; and wrangler.drive.jsonc's
-	// DAILY_VISITS: the admin page's cost estimate. Change them here when either changes.
+	// dollars a thousand at the first tier, and the free ones each month (none: November 2026's bill,
+	// about US$14 for about 2,400 sessions, had none taken off); and wrangler.drive.jsonc's
+	// DAILY_VISITS: the admin page's cost estimate. Change them here when any changes.
 	const MAPS_PER_1000 = 6;
-	const MAPS_FREE_MONTHLY = 1000;
+	const MAPS_FREE_MONTHLY = 0;
 	const MAPS_PRICE_CHECKED = 'November 2026';
 	const MAPS_DAILY_CAP = 500;
 
