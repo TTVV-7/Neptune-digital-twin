@@ -62,10 +62,10 @@ export const SETS = [
 	},
 	{
 		id: 'set-shotcrete',
-		name: 'Shotcrete (line pump, mixer truck, compressor, nozzle crew)',
+		name: 'Shotcrete (line pump, small trailer pump, mixer truck, compressor, nozzle crew)',
 		keywords: 'shotcrete gunite spray concrete line pump compressor',
 		members: [
-			{ item: 'shotcrete-sprayer', right: - 7, forward: 3, turn: 0 },
+			{ item: 'concrete-trailer-pump-small', right: - 7, forward: 2, turn: 0 },
 			{ item: 'concrete-line-pump-trailer', right: 0, forward: 0, turn: 0 },
 			// Discharging into the pump's hopper at its back.
 			{ item: 'concrete-mixer-truck', right: 0, forward: - 11, turn: 180 },
@@ -116,13 +116,16 @@ export const SETS = [
 	},
 	{
 		id: 'set-trucks',
-		name: 'Trucking line-up (tandem, tridem, truck and transfer, tri-tri)',
-		keywords: 'trucks tandem tridem transfer pup tri-tri trailer haul gravel',
+		name: 'Trucking line-up (tandem dump, tractor and tanker, tractor and flatbed)',
+		keywords: 'trucks tandem dump semi tractor trailer tanker flatbed haul highway',
 		members: [
-			{ item: 'dump-truck-tandem', right: - 10.5, forward: 0, turn: 0 },
-			{ item: 'dump-truck-tridem', right: - 3.5, forward: 0, turn: 0 },
-			{ item: 'truck-and-transfer', right: 3.5, forward: - 4, turn: 0 },
-			{ item: 'tri-tri', right: 10.5, forward: - 4, turn: 0 },
+			{ item: 'dump-truck-tandem', right: - 8, forward: 0, turn: 0 },
+			// Each tractor with its trailer hooked up behind: the kingpin just ahead of the
+			// tractor's rear axles.
+			{ item: 'semi-tractor-t800', right: 0, forward: 4, turn: 0 },
+			{ item: 'tanker-trailer', right: 0, forward: - 4.3, turn: 0 },
+			{ item: 'semi-tractor-w900', right: 8, forward: 4, turn: 0 },
+			{ item: 'flatbed-trailer', right: 8, forward: - 5.6, turn: 0 },
 		],
 	},
 	{

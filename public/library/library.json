@@ -276,6 +276,32 @@
 		"own": "Weave-Trial: construction_site/Water_Filled_Barrier_6ft.glb"
 	},
 	{
+		"id": "concrete-trailer-pump-small",
+		"name": "Concrete / shotcrete trailer pump (small, Turbosol Mini)",
+		"category": "Concrete & batching",
+		"file": "concrete-trailer-pump-small.glb",
+		"thumb": "thumbs/concrete-trailer-pump-small.webp",
+		"front": "+x",
+		"scale": 0.0000689804,
+		"dimensions": {
+			"length": 4.8,
+			"width": 3.01,
+			"height": 1.93
+		},
+		"triangles": 109738,
+		"sizeKB": 780,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8e883fffc1b14e089304c41c5d9b484a",
+			"url": "https://sketchfab.com/3d-models/concrete-pump-8e883fffc1b14e089304c41c5d9b484a",
+			"title": "Concrete Pump",
+			"author": "RhymOne",
+			"authorUrl": "https://sketchfab.com/rhymone",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "concrete-boom-pump-38m",
 		"name": "Concrete boom pump truck (38 m, stowed)",
 		"category": "Concrete & batching",
@@ -501,23 +527,6 @@
 		}
 	},
 	{
-		"id": "scissor-lift-26ft-raised",
-		"name": "Scissor lift, raised (26 ft, electric)",
-		"category": "Cranes & lifts",
-		"file": "scissor-lift-26ft-raised.glb",
-		"thumb": "thumbs/scissor-lift-26ft-raised.webp",
-		"front": "+x",
-		"scale": 1,
-		"dimensions": {
-			"length": 2.99,
-			"width": 1.21,
-			"height": 5.04
-		},
-		"triangles": 57396,
-		"sizeKB": 402,
-		"own": "Weave-Trial: construction_site/Electric_Scissor_Lift_26ft.glb"
-	},
-	{
 		"id": "scissor-lift-32ft",
 		"name": "Scissor lift (32 ft, electric)",
 		"category": "Cranes & lifts",
@@ -549,6 +558,23 @@
 			"brake": 2,
 			"reverse": 3.5
 		}
+	},
+	{
+		"id": "scissor-lift-26ft-raised",
+		"name": "Scissor lift, raised (26 ft, electric)",
+		"category": "Cranes & lifts",
+		"file": "scissor-lift-26ft-raised.glb",
+		"thumb": "thumbs/scissor-lift-26ft-raised.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.99,
+			"width": 1.21,
+			"height": 5.04
+		},
+		"triangles": 57396,
+		"sizeKB": 402,
+		"own": "Weave-Trial: construction_site/Electric_Scissor_Lift_26ft.glb"
 	},
 	{
 		"id": "backhoe-loader",
@@ -598,6 +624,32 @@
 		"triangles": 94524,
 		"sizeKB": 687,
 		"own": "Weave-Trial: construction_site/Backhoe_Loader.glb"
+	},
+	{
+		"id": "compact-track-loader",
+		"name": "Compact track loader (CAT 289D3 class)",
+		"category": "Heavy equipment",
+		"file": "compact-track-loader.glb",
+		"thumb": "thumbs/compact-track-loader.webp",
+		"front": "+z",
+		"scale": 1.02878,
+		"dimensions": {
+			"length": 3.74,
+			"width": 1.77,
+			"height": 2.1
+		},
+		"triangles": 57895,
+		"sizeKB": 586,
+		"source": {
+			"site": "Sketchfab",
+			"id": "99fc4fa98ec041a2be97c63040d1d15b",
+			"url": "https://sketchfab.com/3d-models/cat-289d3-hw6-karpychev-99fc4fa98ec041a2be97c63040d1d15b",
+			"title": "CAT_289D3_HW6_Karpychev",
+			"author": "Anamnezis",
+			"authorUrl": "https://sketchfab.com/Anamnezis",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "crawler-dozer-d6",
@@ -686,6 +738,110 @@
 		}
 	},
 	{
+		"id": "excavator-40t",
+		"name": "Excavator, large (45 t class, Volvo EC480)",
+		"category": "Heavy equipment",
+		"file": "excavator-40t.glb",
+		"thumb": "thumbs/excavator-40t.webp",
+		"front": "-x",
+		"scale": 0.000189841,
+		"dimensions": {
+			"length": 11.7,
+			"width": 3.98,
+			"height": 3.69
+		},
+		"triangles": 78763,
+		"sizeKB": 612,
+		"source": {
+			"site": "Sketchfab",
+			"id": "97cab7938a32467a92f58fc5bb866b13",
+			"url": "https://sketchfab.com/3d-models/2010-volvo-ec480-dl-97cab7938a32467a92f58fc5bb866b13",
+			"title": "2010 Volvo EC480 DL",
+			"author": "tonielpro520",
+			"authorUrl": "https://sketchfab.com/tonielpro520",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "excavator-midi-10t",
+		"name": "Excavator, midi (10 t, Yanmar SV100)",
+		"category": "Heavy equipment",
+		"file": "excavator-midi-10t.glb",
+		"thumb": "thumbs/excavator-midi-10t.webp",
+		"front": "+z",
+		"scale": 1.08604,
+		"dimensions": {
+			"length": 7,
+			"width": 2.59,
+			"height": 3.1
+		},
+		"triangles": 103926,
+		"sizeKB": 927,
+		"source": {
+			"site": "Sketchfab",
+			"id": "53ac2876a78b4a7bb56b5b7cad33c45b",
+			"url": "https://sketchfab.com/3d-models/day-94-yanmar-sv100-excavator-53ac2876a78b4a7bb56b5b7cad33c45b",
+			"title": "Day 94: Yanmar SV100 Excavator",
+			"author": "alexdelker",
+			"authorUrl": "https://sketchfab.com/alexdelker",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "excavator-short-tail-22t",
+		"name": "Excavator, short tail swing (22 t class, Hitachi)",
+		"category": "Heavy equipment",
+		"file": "excavator-short-tail-22t.glb",
+		"thumb": "thumbs/excavator-short-tail-22t.webp",
+		"front": "+z",
+		"scale": 0.830045,
+		"dimensions": {
+			"length": 8.5,
+			"width": 3.64,
+			"height": 4.87
+		},
+		"triangles": 89982,
+		"sizeKB": 1741,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3dde2c846cc54a4d9fabcc821c9b9caa",
+			"url": "https://sketchfab.com/3d-models/hitachi-excavator-3dde2c846cc54a4d9fabcc821c9b9caa",
+			"title": "Hitachi excavator",
+			"author": "Lassi Kaukonen",
+			"authorUrl": "https://sketchfab.com/thesidekick",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "excavator-wheeled-13t",
+		"name": "Excavator, wheeled (13 t)",
+		"category": "Heavy equipment",
+		"file": "excavator-wheeled-13t.glb",
+		"thumb": "thumbs/excavator-wheeled-13t.webp",
+		"front": "+x",
+		"scale": 0.889775,
+		"dimensions": {
+			"length": 7.5,
+			"width": 2.56,
+			"height": 3.44
+		},
+		"triangles": 83262,
+		"sizeKB": 1014,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8274c995d6fb4d15a5a16a01b5505f39",
+			"url": "https://sketchfab.com/3d-models/eo-3323a-8274c995d6fb4d15a5a16a01b5505f39",
+			"title": "EO-3323A",
+			"author": "hans1240",
+			"authorUrl": "https://sketchfab.com/hans1240",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "mini-excavator-cad",
 		"name": "Mini excavator, CAD model (3.5 t)",
 		"category": "Heavy equipment",
@@ -764,6 +920,32 @@
 			"accel": 1.8,
 			"brake": 5,
 			"reverse": 25
+		}
+	},
+	{
+		"id": "broom-sweeper-broce",
+		"name": "Pickup broom / road broom (Broce RJ350)",
+		"category": "Heavy equipment",
+		"file": "broom-sweeper-broce.glb",
+		"thumb": "thumbs/broom-sweeper-broce.webp",
+		"front": "+x",
+		"scale": 1.11046,
+		"dimensions": {
+			"length": 4.9,
+			"width": 3.03,
+			"height": 3.02
+		},
+		"triangles": 93977,
+		"sizeKB": 817,
+		"source": {
+			"site": "Sketchfab",
+			"id": "2f9fde6102434605942714c127854f31",
+			"url": "https://sketchfab.com/3d-models/day-74-broce-rj350-street-sweeper-2f9fde6102434605942714c127854f31",
+			"title": "Day 74: Broce RJ350 Street Sweeper",
+			"author": "alexdelker",
+			"authorUrl": "https://sketchfab.com/alexdelker",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
 	},
 	{
@@ -1035,6 +1217,32 @@
 			"accel": 2.5,
 			"brake": 6,
 			"reverse": 15
+		}
+	},
+	{
+		"id": "mobile-jaw-crusher",
+		"name": "Mobile jaw crusher, tracked (Lokotrack LT96 class)",
+		"category": "Material handling",
+		"file": "mobile-jaw-crusher.glb",
+		"thumb": "thumbs/mobile-jaw-crusher.webp",
+		"front": "+z",
+		"scale": 1.01409,
+		"dimensions": {
+			"length": 12.5,
+			"width": 3.37,
+			"height": 3.98
+		},
+		"triangles": 90553,
+		"sizeKB": 1884,
+		"source": {
+			"site": "Sketchfab",
+			"id": "69fd0f808dc14239a944631ff1986617",
+			"url": "https://sketchfab.com/3d-models/mobile-jaw-crusher-69fd0f808dc14239a944631ff1986617",
+			"title": "Mobile jaw crusher",
+			"author": "Lassi Kaukonen",
+			"authorUrl": "https://sketchfab.com/thesidekick",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
 	},
 	{
@@ -2054,6 +2262,58 @@
 				"right": -0.35,
 				"up": 2.42
 			}
+		}
+	},
+	{
+		"id": "semi-tractor-t800",
+		"name": "Semi tractor, day cab (Kenworth T800, tandem)",
+		"category": "Vehicles",
+		"file": "semi-tractor-t800.glb",
+		"thumb": "thumbs/semi-tractor-t800.webp",
+		"front": "+z",
+		"scale": 0.915025,
+		"dimensions": {
+			"length": 8.6,
+			"width": 2.45,
+			"height": 3.84
+		},
+		"triangles": 108070,
+		"sizeKB": 1763,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5216fffb7dee428c8c61b7b0e19d1a4d",
+			"url": "https://sketchfab.com/3d-models/kenworth-t-800-5216fffb7dee428c8c61b7b0e19d1a4d",
+			"title": "Kenworth T 800",
+			"author": "gelber",
+			"authorUrl": "https://sketchfab.com/liebherr996litronic",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tanker-trailer",
+		"name": "Tanker trailer, tri-axle (36,000 L fuel)",
+		"category": "Vehicles",
+		"file": "tanker-trailer.glb",
+		"thumb": "thumbs/tanker-trailer.webp",
+		"front": "+z",
+		"scale": 1.0716,
+		"dimensions": {
+			"length": 11.8,
+			"width": 2.67,
+			"height": 3.56
+		},
+		"triangles": 61838,
+		"sizeKB": 826,
+		"source": {
+			"site": "Sketchfab",
+			"id": "dca0c3dcbca64e1ca72ed8c7f9c376ee",
+			"url": "https://sketchfab.com/3d-models/cistern-tank-trailer-dca0c3dcbca64e1ca72ed8c7f9c376ee",
+			"title": "Cistern Tank Trailer",
+			"author": "Gerhald",
+			"authorUrl": "https://sketchfab.com/Gerhald",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
 	},
 	{
