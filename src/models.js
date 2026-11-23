@@ -453,7 +453,16 @@ export class ModelManager extends EventDispatcher {
 
 		const { pivot } = entry;
 		const hidden = this.isHidden( entry );
-		pivot.visible = ! hidden && ( ! getKind( entry.kind )?.buildOnly || this.buildMode );
+		const kind = getKind( entry.kind );
+		// A buildOnly kind can keep part of itself in view outside build mode (a flatten area's
+		// gravel): then only its parts marked userData.buildOnly (the red box) come and go.
+		const partly = !! kind?.buildOnly && !! kind.shownOutsideBuild?.( entry.params );
+		pivot.visible = ! hidden && ( ! kind?.buildOnly || this.buildMode || partly );
+		if ( kind?.buildOnly ) pivot.traverse( o => {
+
+			if ( o.userData.buildOnly ) o.visible = this.buildMode || ! partly;
+
+		} );
 		if ( !! pivot.userData.hidden === hidden ) return false;
 		pivot.userData.hidden = hidden;
 		this.hiddenCount += hidden ? 1 : - 1;

@@ -540,6 +540,20 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
   boxes while the library is open (the Show panel hides them); select one to move, turn, resize or
   delete it, which brings the original back, and **B** shows the original everywhere for a moment.
   It only changes what this app draws; Google's data isn't touched.
+  - **Surface:** a flattened area is laid with **gravel** to start, so it reads as a finished pad
+    instead of Google's photo of what stood there, pressed flat. Its P panel (and the selection's
+    Size editor) switches it to **asphalt**, **concrete** or **none (just flatten)**, and the next
+    area you draw takes the surface you chose last. The surface stays in view when the library is
+    closed; the red box doesn't. Areas saved before surfaces existed stay bare.
+- **Sets** (after the tools): a few items that go together, placed in one go and laid out as
+  they'd usually stand: a site office compound (office, lunchroom, washroom, toilets, pickups,
+  people), a small site office, a concrete pour (boom pump with mixers backed up to it), shotcrete,
+  bulk excavation, mass haul, grading and paving, a trucking line-up and a lane closure. A set
+  follows the pointer like an item, **R** turns it about its middle, a click puts it down and
+  Shift+click puts down another. Each piece is then its own item, to move, swap or delete. Sets are
+  listed in `src/sets.js`; a piece whose item isn't in the library is left out.
+- **Search** matches every word you type anywhere in an item's name or category (or a set's
+  pieces), so `tridem dump` or `office people` find what you mean.
 
 Three kinds of items:
 

@@ -39,6 +39,7 @@
     "test:site-items-ui": "node --test scripts/test-site-items-ui.mjs",
     "test:plant-ui": "node --test scripts/test-plant-ui.mjs",
     "test:own-models-ui": "node --test scripts/test-own-models-ui.mjs",
+    "test:sets-flatten-ui": "node --test scripts/test-sets-flatten-ui.mjs",
     "test:drive-worker": "node --test scripts/test-drive-worker.mjs",
     "test:drive-ui": "node --test scripts/test-drive-ui.mjs",
     "test:drive-pro-ui": "node --test scripts/test-drive-pro-ui.mjs",

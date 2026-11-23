@@ -415,6 +415,22 @@ kbd {
 	background: #2a3844;
 }
 
+/* A set's card (sets.js): up to four of its pieces' pictures in a square. */
+#library .card .set-thumbs {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 2px;
+	width: 100%;
+	aspect-ratio: 1;
+	border-radius: 4px;
+	overflow: hidden;
+	background: #2a3844;
+}
+
+#library .card .set-thumbs img {
+	border-radius: 0;
+}
+
 #library .card .name {
 	font-size: 12px;
 	line-height: 1.3;
