@@ -548,7 +548,8 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
 - **Sets** (after the tools): a few items that go together, placed in one go and laid out as
   they'd usually stand: a site office compound (office, lunchroom, washroom, toilets, pickups,
   people), a small site office, a concrete pour (boom pump with mixers backed up to it), shotcrete,
-  bulk excavation, mass haul, grading and paving, a trucking line-up and a lane closure. A set
+  bulk excavation, mass haul, grading and paving, gravel trucks (tandem to tri-tri), semi
+  trailers with their tractors, and a lane closure. A set
   follows the pointer like an item, **R** turns it about its middle, a click puts it down and
   Shift+click puts down another. Each piece is then its own item, to move, swap or delete. Sets are
   listed in `src/sets.js`; a piece whose item isn't in the library is left out.
@@ -562,7 +563,9 @@ Three kinds of items:
   to 24 x 60 ft, 20/40 yd roll-offs, fabric shelters, a frac tank, workers. Add more there. Plant with
   no clean download is built in code too, at the size of a common machine of its class: generators,
   compressors and a fuel tank (`src/power-models.js`), mobile cranes and telehandlers
-  (`src/crane-models.js`) and the tower crane (`src/tower-crane.js`).
+  (`src/crane-models.js`), the tower crane (`src/tower-crane.js`), and gravel trucks and trailers
+  (`src/truck-models.js`: a tridem dump truck, tandem and tridem pups, a transfer trailer, truck and
+  pup, truck and transfer, tri-tri, and end dump, belly dump and lowboy trailers for a semi).
 - **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
   their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
 - **Our own** (`public/library/` too, marked `own` in `library.json`): 61 models we drew in CAD in the

@@ -208,7 +208,9 @@ test( 'Esc while a set is following the pointer leaves nothing behind', async ()
 	await page.waitForFunction( () => window.twin.models.entries.some( e => e.placing ), null, { timeout: 30000 } );
 	await page.waitForTimeout( 500 );
 	await page.keyboard.press( 'Escape' );
-	await page.waitForTimeout( 300 );
+	// Pieces still loading when Esc came are removed as they arrive.
+	await page.waitForFunction( () => window.twin.models.entries.length === 0, null, { timeout: 15000 } );
+	await page.waitForTimeout( 1000 );
 	assert.equal( await page.evaluate( () => window.twin.models.entries.length ), 0 );
 	await library( false );
 

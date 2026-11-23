@@ -116,16 +116,32 @@ export const SETS = [
 	},
 	{
 		id: 'set-trucks',
-		name: 'Trucking line-up (tandem dump, tractor and tanker, tractor and flatbed)',
-		keywords: 'trucks tandem dump semi tractor trailer tanker flatbed haul highway',
+		name: 'Gravel trucks (tandem, tridem, truck and pup, truck and transfer, tri-tri)',
+		keywords: 'trucks gravel aggregate dump tandem tridem pup transfer tri-tri haul',
+		// Side by side with their fronts lined up, the longer ones reaching further back.
 		members: [
-			{ item: 'dump-truck-tandem', right: - 8, forward: 0, turn: 0 },
-			// Each tractor with its trailer hooked up behind: the kingpin just ahead of the
-			// tractor's rear axles.
-			{ item: 'semi-tractor-t800', right: 0, forward: 4, turn: 0 },
-			{ item: 'tanker-trailer', right: 0, forward: - 4.3, turn: 0 },
-			{ item: 'semi-tractor-w900', right: 8, forward: 4, turn: 0 },
-			{ item: 'flatbed-trailer', right: 8, forward: - 5.6, turn: 0 },
+			{ item: 'dump-truck-tandem', right: - 9, forward: 1.3, turn: 0 },
+			{ item: 'dump-truck-tridem', right: - 4.5, forward: 0.4, turn: 0 },
+			{ item: 'truck-and-pup', right: 0, forward: - 3.9, turn: 0 },
+			{ item: 'truck-and-transfer', right: 4.5, forward: - 5.1, turn: 0 },
+			{ item: 'tri-tri', right: 9, forward: - 5.1, turn: 0 },
+		],
+	},
+	{
+		id: 'set-semi-trailers',
+		name: 'Semi trailers (end dump, belly dump, lowboy, tanker, with tractors)',
+		keywords: 'trucks semi tractor trailer end dump belly dump lowboy lowbed tanker haul highway',
+		// Each tractor with its trailer hooked up behind: the trailer's front 2.4 m behind the
+		// tractor's middle, so its kingpin sits just ahead of the tractor's rear axles.
+		members: [
+			{ item: 'semi-tractor-t800', right: - 6.75, forward: 4, turn: 0 },
+			{ item: 'end-dump-trailer', right: - 6.75, forward: - 4.35, turn: 0 },
+			{ item: 'semi-tractor-w900', right: - 2.25, forward: 4, turn: 0 },
+			{ item: 'belly-dump-trailer', right: - 2.25, forward: - 4.55, turn: 0 },
+			{ item: 'semi-tractor-t800', right: 2.25, forward: 4, turn: 0 },
+			{ item: 'lowboy-trailer', right: 2.25, forward: - 6.5, turn: 0 },
+			{ item: 'semi-tractor-w900', right: 6.75, forward: 4, turn: 0 },
+			{ item: 'tanker-trailer', right: 6.75, forward: - 4.3, turn: 0 },
 		],
 	},
 	{
