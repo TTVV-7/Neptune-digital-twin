@@ -17,21 +17,29 @@ import { toast } from './screens.js';
 // only ever sent to the Worker's account routes.
 
 const UNREACHABLE = 'Couldn\'t reach World Drive. Check your connection and try again.';
-const NO_RECOVERY = 'The email is only for receipts: nothing is sent to it, so a forgotten password can\'t be recovered, unless you also link Google. Keep it in a password manager.';
+// Where a player who's forgotten their password writes (drive/site/legal.js's contact email).
+const SUPPORT_EMAIL = 'support@worlddrive.app';
+const NO_RECOVERY = 'Forget your password and you can get back in by emailing support from this address, or with Google if you link it. Without an email or Google, a forgotten password can\'t be recovered.';
 
 let hooks = null;
 let dialog = null;
 // 'sign-in' or 'sign-up': which the signed-out form does.
 let mode = 'sign-in';
+// A reset link's token (/?reset=..., supporter.js's takeReset) while the panel shows its form for a
+// new password, signed in or out; null otherwise.
+let resetToken = null;
+// Whether the sign-in form shows how to get back in after a forgotten password.
+let forgotOpen = false;
 // What the panel was last drawn for, so it's drawn again only when that changes (not as the user
 // types, whenever /api/me is asked again).
 let drawnFor = '';
 let ids = 0;
 
 // Opens the panel (made the first time), with supporter.js's hooks.
-export function openAccount( from ) {
+export function openAccount( from, { reset = null } = {} ) {
 
 	hooks = from;
+	if ( reset ) resetToken = reset;
 	if ( ! dialog ) {
 
 		dialog = document.createElement( 'dialog' );
@@ -71,6 +79,7 @@ export function openAccount( from ) {
 
 function stateOf( me ) {
 
+	if ( resetToken ) return `reset:${ resetToken }`;
 	return me?.signedIn ? `in:${ me.username ?? '' }:${ me.google ? 1 : 0 }:${ me.email }:${ me.contactEmail ?? '' }:${ passState( me ) }` : `out:${ mode }`;
 
 }
@@ -83,7 +92,7 @@ function draw( always = false ) {
 	drawnFor = state;
 	const close = Object.assign( button( '×', () => dialog.close() ), { className: 'close' } );
 	close.setAttribute( 'aria-label', 'Close' );
-	const title = Object.assign( document.createElement( 'h2' ), { id: 'account-title', textContent: me?.signedIn ? 'Your account' : mode === 'sign-up' ? 'Create account' : 'Sign in' } );
+	const title = Object.assign( document.createElement( 'h2' ), { id: 'account-title', textContent: resetToken ? 'New password' : me?.signedIn ? 'Your account' : mode === 'sign-up' ? 'Create account' : 'Sign in' } );
 	const header = document.createElement( 'header' );
 	header.append( title, close );
 	// Drawn again with the focus in it (a tab pressed, a form sent), the focus stays in it: on the
@@ -92,7 +101,7 @@ function draw( always = false ) {
 	const focused = dialog.contains( document.activeElement ) ? focusKey( document.activeElement ) : null;
 	// The folded section that was open stays open, if it's still there.
 	const opened = dialog.querySelector( 'details[open] > summary' )?.textContent;
-	dialog.replaceChildren( header, ...( me?.signedIn ? signedIn( me ) : signedOut() ) );
+	dialog.replaceChildren( header, ...( resetToken ? [ resetForm() ] : me?.signedIn ? signedIn( me ) : signedOut() ) );
 	if ( opened ) for ( const summary of dialog.querySelectorAll( 'details > summary' ) ) if ( summary.textContent === opened ) summary.parentElement.open = true;
 	if ( focused !== null && dialog.open ) {
 
@@ -151,7 +160,7 @@ function signInForm() {
 	const { form, status, submit } = makeForm( 'account-sign-in', 'Sign in' );
 	const username = field( form, 'Username', { name: 'username', autocomplete: 'username' } );
 	const password = field( form, 'Password', { name: 'password', type: 'password', autocomplete: 'current-password' } );
-	form.append( submit, status );
+	form.append( submit, status, forgotPart() );
 	form.addEventListener( 'submit', async event => {
 
 		event.preventDefault();
@@ -169,12 +178,41 @@ function signInForm() {
 
 }
 
+// "Forgot password?": how to get back in. No email is sent by the game: the player writes to
+// support from the email on their account, and gets a link back (the owner makes it on the admin
+// page: logins.js's adminResetLink), or signs in with Google if it's linked.
+function forgotPart() {
+
+	const box = document.createElement( 'div' );
+	box.className = 'account-forgot';
+	const toggle = Object.assign( button( 'Forgot password?', () => {
+
+		forgotOpen = ! forgotOpen;
+		draw( true );
+
+	} ), { className: 'link account-forgot-open' } );
+	toggle.setAttribute( 'aria-expanded', String( forgotOpen ) );
+	box.append( toggle );
+	if ( forgotOpen ) {
+
+		const mail = `mailto:${ SUPPORT_EMAIL }?subject=${ encodeURIComponent( 'World Drive: forgot my password' ) }&body=${ encodeURIComponent( 'My username is: \n' ) }`;
+		box.append(
+			linksLine( 'Email ', [ mail, SUPPORT_EMAIL ], ' from the email on your account (the one your receipts go to) and say your username. You\'ll get a link back to set a new password, usually within a day.' ),
+			Object.assign( paragraph( hooks.google ? 'Linked Google to the account? Sign in with Google above instead.' : 'No email on the account? Write anyway with your username and what you bought, if anything, and we\'ll see what can be done.' ), { className: 'account-hint' } ),
+		);
+
+	}
+
+	return box;
+
+}
+
 function signUpForm() {
 
 	const { form, status, submit } = makeForm( 'account-sign-up', 'Create account' );
 	const username = field( form, 'Username', { name: 'username', autocomplete: 'username', minLength: 3, maxLength: 20, hint: '3 to 20 letters, digits, _ or -. Only you see it: the boards show your nickname.' } );
 	const password = field( form, 'Password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: `At least ${ PASSWORD_MIN } characters. A few words together make a good one.` } );
-	const email = field( form, 'Email (optional)', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'For your receipts if you buy the pass. Never shown, never used for anything else.' } );
+	const email = field( form, 'Email (optional)', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'For your receipts, and to get back in if you forget your password. Never shown, never sent anything else.' } );
 	form.append( Object.assign( paragraph( NO_RECOVERY ), { className: 'account-note' } ), agreeing(), robotSlot(), submit, status );
 	form.addEventListener( 'submit', async event => {
 
@@ -205,6 +243,61 @@ function agreeing() {
 	const p = linksLine( 'By creating an account you confirm you\'re 13 or older and agree to the ', [ '/terms/', 'terms' ], ' and the ', [ '/privacy/', 'privacy policy' ], '.' );
 	p.classList.add( 'account-terms' );
 	return p;
+
+}
+
+// --- a reset link ---
+
+// The form a reset link opens on (/?reset=...): whose it is (asked of the Worker, so a password
+// manager saves the new password under the right username), the new password, and signed in once
+// it's set. A link used or out of date says so, and how to get a new one.
+function resetForm() {
+
+	const { form, status, submit } = makeForm( 'account-reset', 'Set password and sign in' );
+	const token = resetToken;
+	const who = Object.assign( paragraph( 'Checking the link...' ), { className: 'account-label' } );
+	const username = Object.assign( document.createElement( 'input' ), { type: 'text', name: 'username', autocomplete: 'username', hidden: true } );
+	const password = field( form, 'New password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: `At least ${ PASSWORD_MIN } characters. A few words together make a good one.` } );
+	form.prepend( who, username );
+	form.append( submit, status );
+	submit.disabled = true;
+	const gone = text => {
+
+		who.textContent = text;
+		password.disabled = true;
+		submit.disabled = true;
+		form.append( linksLine( 'Email ', [ `mailto:${ SUPPORT_EMAIL }`, SUPPORT_EMAIL ], ' for a new link.' ) );
+
+	};
+	send( 'POST', '/api/account/reset-check', { token } ).then( answer => {
+
+		if ( token !== resetToken ) return;
+		if ( ! answer.ok ) return gone( answer.status === 410 ? 'This link has been used or has expired.' : problem( answer ) );
+		username.value = answer.body.username;
+		who.textContent = `A new password for ${ answer.body.username }.`;
+		submit.disabled = false;
+		password.focus();
+
+	} );
+	form.addEventListener( 'submit', async event => {
+
+		event.preventDefault();
+		const wrong = passwordProblem( password.value, username.value );
+		if ( wrong ) return say( status, `${ wrong }.` );
+		busy( form, true );
+		say( status, 'Setting your password...' );
+		const answer = await send( 'POST', '/api/account/reset', { token, password: password.value } );
+		busy( form, false );
+		if ( ! answer.ok ) return answer.status === 410 ? gone( 'This link has been used or has expired.' ) : say( status, problem( answer ) );
+		resetToken = null;
+		forgotOpen = false;
+		mode = 'sign-in';
+		hooks.update( answer.body );
+		toast( `New password set: signed in as ${ answer.body.username ?? hooks.who() }` );
+		dialog.close();
+
+	} );
+	return form;
 
 }
 

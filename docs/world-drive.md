@@ -4945,12 +4945,14 @@ either signs in to the one account. Driving and the leaderboard still never need
   the pause menu by its name; an account with no Google account by its username.
 - **Creating an account**: Username ("3 to 20 letters, digits, _ or -. Only you see it: the boards
   show your nickname."), Password ("At least 8 characters. A few words together make a good
-  one.") and **Email (optional)** ("For your receipts if you buy the pass. Never shown, never used
-  for anything else."), then, in a box: "The email is only for receipts: nothing is sent to it, so a
-  forgotten password can't be recovered, unless you also link Google. Keep it in a password
-  manager." The email (`contact_email`, `0013_contact_email.sql`) is never checked, so it's kept
-  apart from a Google account's `email` and only ever put on the Stripe checkout
-  (`prefilled_email`): it never makes a purchase the account's. Signed in without Google, the panel
+  one.") and **Email (optional)** ("For your receipts, and to get back in if you forget your
+  password. Never shown, never sent anything else."), then, in a box: "Forget your password and you
+  can get back in by emailing support from this address, or with Google if you link it. Without an
+  email or Google, a forgotten password can't be recovered." (see [Forgotten
+  passwords](#forgotten-passwords)), and that making an account confirms 13 or older and agrees to the
+  terms and privacy policy. The sign-in form has **Forgot password?** under it. The email (`contact_email`, `0013_contact_email.sql`) is never checked, so it's kept
+  apart from a Google account's `email`: it's put on the Stripe checkout (`prefilled_email`) and
+  shown to the owner making a reset link, and never makes a purchase the account's. Signed in without Google, the panel
   has **Email for receipts** to add, change or clear it (`POST /api/account/email`). The rules are checked in the page
   before anything is sent (the same code as the Worker's, `password-rules.js`), then the robot
   check (Turnstile, usually without a click), then the account is made and signed in.
@@ -5322,6 +5324,29 @@ time; a tap on its padding keeping what's typed, and one outside closing it; its
 following the tab; the panel on a phone held upright and without Google's sign-in; and the admin page's
 accounts by kind. Pictures: `account-1-create-desktop` to `account-11-sign-out-failed-phone` with
 `TEST_SCREENSHOTS`.
+
+## Forgotten passwords
+
+A username's account whose owner forgets the password gets back in by email, by hand: World Drive
+sends no email itself (Cloudflare's Email Sending needs Workers Paid; the owner chose not to).
+
+- **The player**: the sign-in form's **Forgot password?** says to email support@worlddrive.app from the
+  email on the account (its email for receipts, `accounts.contact_email`) with the username, or to sign
+  in with Google if it's linked. Making an account and its email field say the email is for that too.
+- **The owner**: on `/admin.html`, **Password reset link**: type the username and **Make a link**
+  (`POST /api/admin/reset-link`, `logins.js`'s `adminResetLink`, admins only). It shows the account's
+  email (check it's the one that wrote: if there's none, check another way, such as what they bought
+  and when, before sending), whether Google is linked, and a reply with the link to copy and send.
+- **The link** (`https://worlddrive.app/?reset=<token>`) works once, for `RESET_HOURS` (24); making
+  another for the account ends the one before. The token is 32 random bytes kept only as its SHA-256
+  (`password_resets`, migration `0014_password_resets.sql`). The page takes it out of the address
+  (`supporter.js`'s `takeReset`) and opens the account panel on **New password**: it asks whose it is
+  (`POST /api/account/reset-check`, for the heading and a password manager), then `POST
+  /api/account/reset` sets the password (the usual rules), signs the account out everywhere (sessions
+  and player keys, as **Sign out everywhere** does) and signs this browser in. A used, expired or
+  made-up link answers 410 and the panel says to email for a new one. Both routes take one of the
+  visitor's `PASSWORD_TRIES` first, and setting the password one of its day's changes. The link is
+  taken before anything changes, so of two sends of one link only one sets a password.
 
 ## What a visit costs, and how it's capped
 
@@ -8958,12 +8983,15 @@ Keep World Drive's key apart from the construction app's, so its limits and its 
      `https://www.worlddrive.app/*`. (A copied key then doesn't work from other sites.)
    - API restrictions: **Restrict key** → **Map Tiles API** only.
 4. **A daily quota cap.** APIs & Services → Map Tiles API → **Quotas & system limits**: lower the
-   per-day limit on 3D Tiles root tileset requests (the sessions) to a little over `DAILY_VISITS`,
-   e.g. 350, and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
+   per-day limit on 3D Tiles root tileset requests (the sessions) to well over `DAILY_VISITS`,
+   which supporters' drives aren't counted in (e.g. 1,000 with `DAILY_VISITS` at 500), and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
    loads a few thousand tiles). The console's names for these change now and then: look for the
    per-day ones. It's the backstop if the key is copied and used from somewhere the referrer check
    doesn't stop; once a limit is reached, tiles stop loading until midnight Pacific time rather than
    costing more.
+   The admin page's **Google Maps cost** card estimates the bill from the Earth drives counted
+   (`MAPS_PER_1000`, `MAPS_FREE_MONTHLY` and `MAPS_DAILY_CAP` in `drive/public/admin.html`: change
+   them when Google's price or `DAILY_VISITS` does).
 5. **Budget alerts.** Billing → Budgets & alerts → Create budget for the World Drive project, with
    email alerts at, say, 50 %, 90 % and 100 % of what you're happy to spend a month. Check Google's
    current [Map Tiles API pricing](https://developers.google.com/maps/billing-and-pricing/pricing)

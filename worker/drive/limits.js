@@ -96,7 +96,8 @@ export class DriveLimits extends DurableObject {
 	// Count a visit from `ip` at `now` (ms) unless today's visits have reached `daily` or this
 	// visitor's have reached `perVisitor`. Answers { ok: true, left } with the visits this visitor
 	// has left today, or { ok: false, reason: 'daily' or 'visitor', retryAfter } with the seconds
-	// until the counts start again.
+	// until the counts start again. `daily` null: a visit outside the day's cap for everyone (a
+	// supporter's, who has paid for theirs), neither held by it nor counted towards it.
 	async visit( ip, { now, daily, perVisitor } ) {
 
 		const day = dayOf( now );
@@ -106,12 +107,12 @@ export class DriveLimits extends DurableObject {
 
 			const retryAfter = untilMidnight( now );
 			const total = this.sql.exec( 'SELECT visits FROM days WHERE day = ?', day ).toArray()[ 0 ]?.visits ?? 0;
-			if ( total >= daily ) return { ok: false, reason: 'daily', retryAfter };
+			if ( daily !== null && total >= daily ) return { ok: false, reason: 'daily', retryAfter };
 			const mine = this.sql.exec( 'SELECT visits FROM visitors WHERE day = ? AND visitor = ?', day, visitor ).toArray()[ 0 ]?.visits ?? 0;
 			if ( mine >= perVisitor ) return { ok: false, reason: 'visitor', retryAfter };
 
 			// (An upsert, in case a call from just after midnight started the next day while this one hashed.)
-			this.sql.exec( 'INSERT INTO days ( day, salt, visits ) VALUES ( ?, ?, 1 ) ON CONFLICT ( day ) DO UPDATE SET visits = visits + 1', day, salt );
+			if ( daily !== null ) this.sql.exec( 'INSERT INTO days ( day, salt, visits ) VALUES ( ?, ?, 1 ) ON CONFLICT ( day ) DO UPDATE SET visits = visits + 1', day, salt );
 			this.sql.exec( 'INSERT INTO visitors ( day, visitor, visits ) VALUES ( ?, ?, 1 ) ON CONFLICT ( day, visitor ) DO UPDATE SET visits = visits + 1', day, visitor );
 			return { ok: true, left: perVisitor - mine - 1 };
 

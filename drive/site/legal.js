@@ -113,7 +113,7 @@ function privacy( contact ) {
 	<p>An account is only needed for the Supporter Pass and to keep your progress on every device.</p>
 	<ul>
 		<li><b>Signed in with Google:</b> your Google account's name and email address, and an ID Google gives for it.</li>
-		<li><b>With a username:</b> the username and a salted hash of your password (never the password itself), and an email for receipts only if you give one.</li>
+		<li><b>With a username:</b> the username and a salted hash of your password (never the password itself), and an email only if you give one: for your receipts, and so a forgotten password can be reset when you write from it. Nothing else is sent to it.</li>
 		<li><b>The Supporter Pass:</b> what you bought, when, the amount, and Stripe's reference for it. World Drive never sees your card: payments are made with Stripe.</li>
 	</ul>
 	<h2>Why</h2>
@@ -205,6 +205,7 @@ function contactPage( contact ) {
 	<ul>
 		<li><b>The pass didn't unlock?</b> Sign in with the same account you bought it with, open the Supporter Pass and press <b>Restore purchases</b>.</li>
 		<li><b>Cancel the monthly pass:</b> the Supporter Pass in the game, then <b>Manage your subscription</b>. See <a href="/refunds/">refunds and cancelling</a>.</li>
+		<li><b>Forgot your password?</b> Email us from the email on your account and say your username: you'll get a link to set a new one. Linked Google? Sign in with Google instead.</li>
 		<li><b>Delete your account or see your data:</b> see the <a href="/privacy/">privacy policy</a>.</li>
 	</ul>
 	<p>Read the <a href="/terms/">terms of use</a>, the <a href="/privacy/">privacy policy</a> and <a href="/refunds/">refunds and cancelling</a>.</p>`;

@@ -1269,7 +1269,7 @@ function checkout( id, { type = 'checkout.session.completed', reference = null, 
 
 function refund( id, { full = true, live = false } = {} ) {
 
-	return { id: `evt_refund_${ id }`, object: 'event', type: 'charge.refunded', livemode: live, data: { object: { id: `ch_${ id }`, object: 'charge', payment_intent: `pi_${ id }`, refunded: full, amount_refunded: full ? 499 : 100 } } };
+	return { id: `evt_refund_${ id }`, object: 'event', type: 'charge.refunded', livemode: live, data: { object: { id: `ch_${ id }`, object: 'charge', payment_intent: `pi_${ id }`, refunded: full, amount_refunded: full ? 1999 : 100 } } };
 
 }
 
@@ -1339,6 +1339,8 @@ describe( 'World Drive Supporter Pass', () => {
 				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
 				SUPPORTER_EMAILS: ' Friend@Example.com, ',
 				ADMIN_EMAILS: 'nobody@example.com, Boss@Example.com , chief@example.com',
+				// Not wrangler.drive.jsonc's real Stripe portal link: /api/me as it is without one.
+				SUPPORTER_MANAGE_LINK: '',
 				// Where people drop in, held to fewer than wrangler.drive.jsonc's (dropins.js's) to see
 				// each limit reached.
 				DROPIN_PLACES_PER_VISIT: '4',
@@ -3956,6 +3958,55 @@ describe( 'World Drive username and password accounts', () => {
 
 	} );
 
+	test( 'a forgotten password: the owner makes a one-time link (showing the account\'s email), which sets a new password once, signs out everywhere and signs in', async () => {
+
+		const boss = await google( { sub: '3990', email: 'boss@example.com', name: 'Boss' } );
+		const res = await send( 'POST', '/api/account/sign-up', { username: 'Forgetful_1', password: 'the old passphrase', email: 'Forget@Example.com', token: TOKEN } );
+		const elsewhere = cookieOf( res );
+		assert.equal( ( await me( elsewhere ) ).json.signedIn, true );
+
+		// Only the owner makes links; a username nobody has is a 404.
+		assert.equal( ( await send( 'POST', '/api/admin/reset-link', { username: 'Forgetful_1' } ) ).status, 401 );
+		assert.equal( ( await send( 'POST', '/api/admin/reset-link', { username: 'Forgetful_1' }, { cookie: elsewhere } ) ).status, 403 );
+		assert.equal( ( await send( 'POST', '/api/admin/reset-link', { username: 'Nobody_Here' }, { cookie: boss.cookie } ) ).status, 404 );
+		const first = await send( 'POST', '/api/admin/reset-link', { username: 'forgetful_1' }, { cookie: boss.cookie } );
+		assert.equal( first.status, 200, first.text );
+		assert.deepEqual( { ...first.json, link: undefined }, { username: 'Forgetful_1', email: 'forget@example.com', google: false, link: undefined, expiresAt: ACCOUNT_DAY + 24 * HOUR } );
+		const tokenOf = link => new URL( link ).searchParams.get( 'reset' );
+		assert.match( first.json.link, /^http:\/\/[^/]+\/\?reset=[A-Za-z0-9_-]{43}$/ );
+		// Only the token's hash is kept; a second link ends the first.
+		const old = tokenOf( first.json.link );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM password_resets' )[ 0 ].n, 1 );
+		assert.ok( ! JSON.stringify( server.d1( 'SELECT * FROM password_resets' ) ).includes( old ) );
+		const second = await send( 'POST', '/api/admin/reset-link', { username: 'Forgetful_1' }, { cookie: boss.cookie } );
+		const token = tokenOf( second.json.link );
+		assert.equal( ( await send( 'POST', '/api/account/reset-check', { token: old } ) ).status, 410 );
+
+		// Whose it is; a made-up or malformed one is gone too.
+		const check = await send( 'POST', '/api/account/reset-check', { token } );
+		assert.deepEqual( [ check.status, check.json ], [ 200, { username: 'Forgetful_1' } ] );
+		for ( const bad of [ 'x'.repeat( 43 ), 'short', 42, null ] ) assert.equal( ( await send( 'POST', '/api/account/reset-check', { token: bad } ) ).status, 410, String( bad ) );
+
+		// The password's rules as ever; then set, signed in here and out everywhere else.
+		const weak = await send( 'POST', '/api/account/reset', { token, password: 'short' } );
+		assert.equal( weak.status, 400 );
+		const done = await send( 'POST', '/api/account/reset', { token, password: 'a brand new passphrase' } );
+		assert.equal( done.status, 200, done.text );
+		assert.equal( done.json.username, 'Forgetful_1' );
+		assert.equal( ( await me( cookieOf( done ) ) ).json.signedIn, true );
+		assert.equal( ( await me( elsewhere ) ).json.signedIn, false );
+		assert.equal( ( await signIn( 'Forgetful_1', 'the old passphrase' ) ).status, 401 );
+		assert.equal( ( await signIn( 'Forgetful_1', 'a brand new passphrase' ) ).status, 200 );
+		// Once only.
+		assert.equal( ( await send( 'POST', '/api/account/reset', { token, password: 'yet another passphrase' } ) ).status, 410 );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM password_resets' )[ 0 ].n, 0 );
+
+		// And not after a day.
+		const late = tokenOf( ( await send( 'POST', '/api/admin/reset-link', { username: 'Forgetful_1' }, { cookie: boss.cookie } ) ).json.link );
+		assert.equal( ( await send( 'POST', '/api/account/reset', { token: late, password: 'a late passphrase' }, { time: ACCOUNT_DAY + 24 * HOUR + 1 } ) ).status, 410 );
+
+	} );
+
 	test( 'the owner\'s Google account (ADMIN_EMAILS) never gets a password, and an account with one never reaches the admin page', async () => {
 
 		const credential = await makeToken( googleKey, { sub: '3998', email: 'BOSS@example.com', name: 'Boss' } );
@@ -4238,6 +4289,41 @@ describe( 'DriveLimits\' drop-in places by itself', () => {
 		assert.deepEqual( db.prepare( 'SELECT world, count FROM place_totals ORDER BY world' ).all().map( row => ( { ...row } ) ), [ { world: 'earth', count: 1 }, { world: 'mars', count: 2 } ] );
 		// A world that isn't one: never counted.
 		assert.deepEqual( ( await ask( [ 'pluto:1:1' ], 'D'.repeat( 22 ) ) ).cells, [] );
+
+	} );
+
+} );
+
+describe( 'DriveLimits\' Earth visits by themselves', () => {
+
+	test( 'a supporter\'s visits are counted by their account alone: the day\'s cap for everyone neither holds them nor counts them, even with the school\'s address used up', async () => {
+
+		await loadWorker();
+		const { DriveLimits } = await import( '../worker/drive/limits.js' );
+		const db = new DatabaseSync( ':memory:' );
+		const sql = { exec: ( query, ...values ) => {
+
+			const rows = db.prepare( query ).all( ...values ).map( row => ( { ...row } ) );
+			return { toArray: () => rows, one: () => rows[ 0 ] };
+
+		} };
+		const limits = new DriveLimits( { storage: { sql, transactionSync: run => run() } }, { TURNSTILE_SECRET: PASS_SECRET } );
+		const now = Date.UTC( 2026, 10, 23, 12 );
+		const free = ip => limits.visit( ip, { now, daily: 3, perVisitor: 1 } );
+		const supporter = id => limits.visit( `account:${ id }`, { now, daily: null, perVisitor: 2 } );
+		// The school's address has had its free drive, and the day's three are all gone.
+		assert.equal( ( await free( '203.0.113.9' ) ).ok, true );
+		assert.equal( ( await free( '203.0.113.9' ) ).reason, 'visitor' );
+		assert.equal( ( await free( '198.51.100.1' ) ).ok, true );
+		assert.equal( ( await free( '198.51.100.2' ) ).ok, true );
+		assert.equal( ( await free( '198.51.100.3' ) ).reason, 'daily' );
+		// Supporters at that school still drive, each to their own account's count.
+		assert.deepEqual( await supporter( 7 ), { ok: true, left: 1 } );
+		assert.deepEqual( await supporter( 7 ), { ok: true, left: 0 } );
+		assert.equal( ( await supporter( 7 ) ).reason, 'visitor' );
+		assert.deepEqual( await supporter( 8 ), { ok: true, left: 1 } );
+		// And none of theirs counted towards the day's cap: still the three free ones.
+		assert.equal( db.prepare( 'SELECT visits FROM days' ).get().visits, 3 );
 
 	} );
 
