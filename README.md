@@ -888,6 +888,32 @@ Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderb
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
 posted with the visit's signed token and checked against what the game can score.
 
+**City Drive** (`/city/`, `drive/city/index.html`, `src/drive-app/city/`): a standalone page
+where you pick a city, a start spot and a ride and drive a whole city built from **OpenStreetMap**
+(open data, ODbL, credited on the page) instead of Google's tiles, so it costs nothing per visit
+and has no daily cap. The first is **Vancouver**: downtown, Coal Harbour, Stanley Park with its
+causeway and trees, and the Lions Gate, Burrard, Granville and Cambie bridges, which rise over the
+water as decks you drive across. Buildings stand at their mapped heights (or floors × 3.2 m), with
+windows; streets have their widths and centre lines; the sea is driven on as in World Drive. The
+driving is World Drive's own (`drive.js`): boost, drift, stunts, **R** back on the road, **T** to
+fly, **Esc** to the menu; rides locked in World Drive stay locked. A city is made once, offline:
+
+```bash
+pip install osmium shapely
+```
+
+```bash
+curl -o vancouver.osm.pbf https://download.bbbike.org/osm/bbbike/Vancouver/Vancouver.osm.pbf
+```
+
+```bash
+python scripts/make-city.py vancouver.osm.pbf --id vancouver --name Vancouver --bbox 49.270,-123.160,49.3155,-123.095 --start "Robson Street:49.2846,-123.1225" --start "Stanley Park:49.2985,-123.1395" --start "Coal Harbour:49.2895,-123.1235" --start "False Creek:49.2730,-123.1150"
+```
+
+That writes `drive/public/cities/vancouver.json` (1.2 MB, 430 kB compressed); list the city in
+`src/drive-app/city/cities.js`. Any city works the same way, from a BBBike or Geofabrik extract
+that covers its box. `npm run test:city-drive-ui` drives it in a browser.
+
 **Driving with others**: everyone else driving the same area (about 11 km across) shows up live as a
 ghost car you pass straight through, with their nickname, ride and Garage look (underglow too);
 **Invite friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere, on any world,

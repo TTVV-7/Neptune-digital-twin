@@ -166,8 +166,10 @@ export function driveSite() {
 
 	return {
 		name: 'world-drive-site',
-		transformIndexHtml( html ) {
+		transformIndexHtml( html, { path } = {} ) {
 
+			// Only the game's page has the lists (not City Drive's, /city/).
+			if ( path?.startsWith( '/city/' ) ) return html;
 			const lists = [ [ '<!-- places -->', placesList ], ...OFF_EARTH.map( id => [ `<!-- ${ id } places -->`, () => worldPlacesList( id ) ] ) ];
 			for ( const [ list ] of lists ) if ( ! html.includes( list ) ) throw new Error( `drive/index.html has lost its ${ list } list` );
 			return lists.reduce( ( text, [ list, make ] ) => text.replace( list, make() ), html );
