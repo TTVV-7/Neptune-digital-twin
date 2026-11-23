@@ -2476,6 +2476,25 @@ token, world: 'mars' }`), on Mars at once, "On Mars" first and the Earth's sayin
 drive**, its gate on Mars's own heights within a metre, driven through and posted with the visit. It
 takes 3 to 4 minutes in Chromium's software renderer.
 
+## Hardware on the worlds
+
+The landers, rovers and crash sites people have left on the Moon and Mars are in the game, set
+down where they really are: `src/drive-app/hardware-sites.js` lists each site (its name, country,
+year, kind, where it is as published from orbit, LROC's and HiRISE's positions, with sources, and one
+checked fact) and its pieces (a model, metres east and north of the site, a heading); the models are
+built in code at their real size from published dimensions and photographs (`hardware.js` for the
+Moon's, `hardware-mars.js` for Mars's: simplified shapes that read right at driving distance, no
+downloads and no licences to track); and `world-hardware.js` puts them in the game. Only the sites
+within 25 km of the car are built (let go past 35 km), each piece on the ground at its own place,
+upright to the ground there and facing its heading, a few centimetres sunk; each piece but the flat
+ones (crash scars, debris, a parachute) has an invisible box round it that main.js adds to what the
+Driver raycasts (`grounds()`), so the car bounces off a lander as off a wall, and can land on top.
+Driving within 90 m of a site says what it is ("Apollo 11 · USA, 1969. ..."), once a visit. Rovers
+that drove on are where they ended, or for those still driving where they were last reported (the
+site's `asOf`). Vesta and Ceres have no hardware: nothing has landed on either (Dawn orbited both,
+and is still in orbit round Ceres). `scripts/preview-hardware.mjs <folder> [model:distance,height,turn]`
+photographs any model or site on a lunar surface (`scripts/preview-hardware.html`) to judge it.
+
 ## Vesta and Ceres
 
 **Vesta** and **Ceres**, picked in the orrery (**Worlds**, on the globe's panel), turn the globe to the two biggest bodies of the

@@ -58,7 +58,7 @@ const WORLD_CHECKS = {
 	moon: {
 		title: 'Drive on the Moon in 3D, Free in Your Browser – World Drive',
 		coordinates: 'selenographic latitude and longitude',
-		honest: /no landers, flags or rover tracks/,
+		honest: /set down where they really are, as simplified models built for the game/,
 		credit: 'https://svs.gsfc.nasa.gov/4720/',
 		phrases: [ 'LOLA', 'LROC', 'public domain', 'made up', 'a sixth of the gravity', 'two and a half times as long', 'The Earth in the sky', 'No water', 'With others', 'bring friends in a party' ],
 		files: { '/moon/height.bin': 2073600, '/moon/colour.webp': 674590 },
@@ -66,7 +66,7 @@ const WORLD_CHECKS = {
 	mars: {
 		title: 'Drive on Mars in 3D, Free in Your Browser – World Drive',
 		coordinates: 'areocentric latitude and longitude',
-		honest: /no landers, rovers or tracks/,
+		honest: /set down where they really are .*as simplified models built for the game/,
 		credit: 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m',
 		phrases: [ 'MOLA', 'Mars Global Surveyor', 'Viking', 'USGS', 'areoid', 'public domain', 'made up', '38% of the gravity', 'about 1.6 times as long', 'butterscotch sky', 'Phobos', 'No water', 'With others', 'Mars\'s own rooms' ],
 		files: { '/mars/height.bin': 8294400, '/mars/colour.webp': 1050320 },

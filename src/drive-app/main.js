@@ -15,6 +15,7 @@ import { EARTH, FALLBACK, MOON, OFF_EARTH, isWorld, listOf, onWorld, TheWorld, W
 import { SPOTS_ON, worldSpot } from './world-places.js';
 import { earthUrl } from './orrery-first.js';
 import { createFinds } from './finds.js';
+import { createWorldHardware } from './world-hardware.js';
 import { FINDS_ON } from './finds-data.js';
 import { createLens } from './lens.js';
 import { loadVehicle, loadVehicles, lookOf, specOf } from './vehicles.js';
@@ -539,7 +540,9 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	// surface where it's round the vehicle, unless that's left out for a moment (`bare`: underSea).
 	let bare = false;
 	// (On the Earth before its tiles, with no test pad either, nothing: nothing's driven there then.)
-	const grounds = () => offEarth() ? [ body().terrain ] : [ tiles ? tiles.group : pad, ...sea.shown && ! bare ? [ sea.mesh ] : [] ].filter( Boolean );
+	// (On the worlds made in the page, the landers and rovers people left there are hit too: hardware's
+	// boxes, world-hardware.js.)
+	const grounds = () => offEarth() ? [ body().terrain, ...hardware ? [ hardware.colliders ] : [] ] : [ tiles ? tiles.group : pad, ...sea.shown && ! bare ? [ sea.mesh ] : [] ].filter( Boolean );
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
 	// The globe as each world has it (GlobeView.setBody): the Earth's, and each other world's, its
@@ -711,6 +714,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	let profile = null;
 	// Discoveries (finds.js): made just below, once progress is (it sends what's collected).
 	let finds = null;
+	let hardware = null;
 	const progress = createProgress( {
 		worker,
 		visit: () => visit,
@@ -757,6 +761,10 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		pause: () => pauseDrive(),
 	} );
 	finds.setWorld( world );
+	// The hardware people left on these worlds (world-hardware.js): landers, rovers and crash sites, set
+	// down where they are, near the car.
+	hardware = createWorldHardware( { bodyOf: id => bodies[ id ] ?? null, toast: ( text, ms ) => screens.toast( text, ms ) } );
+	hardware.setWorld( offEarth() ? world : null );
 	profile = setUpProfile( {
 		progress,
 		player: () => board.player,
@@ -1670,6 +1678,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// The world's Discoveries (its beacons on its ground, its pins on its globe; none on the Earth),
 		// and the data lens's heights for it.
 		finds.setWorld( world );
+		hardware?.setWorld( offEarth() ? world : null );
 		lens.setWorld( world, body() );
 		if ( offEarth() ) stats.add( 'world', world );
 		for ( const [ id, other ] of Object.entries( bodies ) ) other.group.visible = id === world;
@@ -2971,6 +2980,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// a parachute) the reach is wider and has a ceiling; in a challenge's run the card is small.
 		const onWorld = state.mode === 'driving' && driver.active ? carOnWorld() : null;
 		finds.update( dt, onWorld && { ...onWorld, flying: !! driver.flying || ! driver.grounded, compact: document.body.classList.contains( 'ch-running' ) } );
+		hardware?.update( dt, onWorld );
 
 		live?.update( car() );
 		pads.update( dt );
@@ -3176,7 +3186,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 
 		},
 		models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx, stats,
+		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx, stats, hardware,
 		get mode() {
 
 			return state.mode;

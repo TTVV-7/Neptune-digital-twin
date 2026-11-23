@@ -8,7 +8,8 @@
 //
 // They're honest about the game too: World Drive's Mars has the real Mars's big shapes (MOLA's
 // heights, an eighth of a degree apart, about 7.4 km) and colours (the Viking orbiters' pictures),
-// but everything smaller is made up, and there are no landers, rovers or tracks in it. Nothing here
+// but everything smaller is made up. Its landers, rovers and crash sites are set down where they are
+// (world-hardware.js), as simplified models (hardware-mars.js); there are no tracks. Nothing here
 // says you can see what's narrower than those heights can show: Jezero's delta, Eagle crater, the
 // rocks the rovers studied. Olympus Mons's cliffs are steep slopes in the game, not sheer ones.
 //
@@ -255,7 +256,7 @@ export const MARS_PAGES = [
 // What every Mars page says about how World Drive's Mars is made, and what's made up.
 export const MARS_MADE = [
 	'World Drive\'s Mars is the real Mars\'s shape: its heights are from the laser altimeter (MOLA) on NASA\'s Mars Global Surveyor, every eighth of a degree (7.4 km apart at the equator), measured from the areoid, Mars\'s "sea level", so the volcanoes, canyons, basins and big craters are where they are; and its colours are from the Viking orbiters\' photographs of the whole planet, as the USGS\'s colour mosaic has them. Both are in the public domain.',
-	'Everything smaller than that is made up: the craters you drive among, from about 13 km across down to a few metres (fewer than on the Moon, most of them worn soft, the fresh ones darker than the dust round them), and the gentle rolls of the ground, the same on every visit. There are no landers, rovers or tracks in it.',
+	'Everything smaller than that is made up: the craters you drive among, from about 13 km across down to a few metres (fewer than on the Moon, most of them worn soft, the fresh ones darker than the dust round them), and the gentle rolls of the ground, the same on every visit. The landers, rovers and crash sites people sent there are set down where they really are (the rovers that drove on, where they ended up or were last reported), as simplified models built for the game; there are no tracks.',
 ];
 
 // Driving there, as a list on each Mars page and Mars's own page.

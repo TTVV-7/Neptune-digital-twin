@@ -707,3 +707,67 @@ describe( 'World Drive challenges on the Moon', () => {
 	} );
 
 } );
+
+describe( 'World Drive: the hardware on the Moon and Mars', () => {
+
+	test( 'driving up to Apollo 11: its descent stage, flag and experiments set down where they are, solid, and said once', async () => {
+
+		const page = await newPage( { viewport: { width: 1280, height: 720 } } );
+		await openGlobe( page );
+		await toMoon( page );
+		// 45 m south of the descent stage, facing it (a place without an id: dropped on, not 2.5 km out).
+		await page.evaluate( () => window.drive.dropIn( { name: 'By Apollo 11', world: 'moon', lat: 0.67416 - 45 / 1737400 * 180 / Math.PI, lon: 23.47314, heading: 0 } ) );
+		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 120000 } );
+		await page.waitForFunction( () => window.drive.hardware.built.includes( 'apollo-11' ), null, { timeout: 30000 } );
+		const pieces = await page.evaluate( () => window.drive.scene.getObjectByName( 'hardware' ).children.filter( o => o.name.startsWith( 'hardware-apollo-11-' ) ).map( o => o.name ) );
+		assert.deepEqual( pieces.sort(), [ 'hardware-apollo-11-alsep', 'hardware-apollo-11-apolloDescentStage', 'hardware-apollo-11-laserReflector', 'hardware-apollo-11-usFlag' ] );
+		// Solid: each but the flat ones has a box the Driver hits.
+		assert.ok( await page.evaluate( () => window.drive.hardware.colliders.children.some( box => box.name === 'hardware-apollo-11-apolloDescentStage-box' ) ) );
+		// Said as the car arrives (it's within 90 m).
+		await page.locator( '#toast', { hasText: 'Tranquility Base · USA, 1969.' } ).waitFor( { timeout: 15000 } );
+		// The descent stage stands on the ground there: its feet within a metre of the ground under it.
+		const above = await page.evaluate( () => {
+
+			const stage = window.drive.scene.getObjectByName( 'hardware-apollo-11-apolloDescentStage' );
+			const body = window.drive.scene.getObjectByName( 'moon' );
+			body.updateMatrixWorld( true );
+			const at = stage.position.clone();
+			const carto = window.drive.bodies?.moon?.ellipsoid?.getPositionToCartographic?.( at, {} );
+			return carto ? carto.height - window.drive.bodies.moon.heightAt( carto.lat * 180 / Math.PI, carto.lon * 180 / Math.PI ) : null;
+
+		} );
+		if ( above !== null ) assert.ok( Math.abs( above ) < 1, `the stage is ${ above } m off the ground` );
+		await shot( page, 'hardware-apollo-11' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	// A site on each world, for pictures: dropped 22 m south of it, facing it.
+	for ( const [ world, id, lat, lon, radius, model ] of [
+		[ 'moon', 'change-4', - 45.4446, 177.5991, 1737400, 'change3Lander' ],
+		[ 'mars', 'insight', 4.5024, 135.6234, 3389500, 'insight' ],
+		[ 'mars', 'pathfinder', 19.086, - 33.237, 3389500, 'pathfinder' ],
+	] ) {
+
+		test( `${ id } on ${ world }: set down where it is, near the car`, async () => {
+
+			const page = await newPage( { viewport: { width: 1280, height: 720 } } );
+			await openGlobe( page );
+			await pickWorld( page, world );
+			await page.waitForFunction( w => window.drive.world === w, world, { timeout: 60000 } );
+			await flown( page );
+			await page.evaluate( ( [ world, lat, lon, radius ] ) => window.drive.dropIn( { name: 'Test', world, lat: lat - 22 / radius * 180 / Math.PI, lon, heading: 0 } ), [ world, lat, lon, radius ] );
+			await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 120000 } );
+			await page.waitForFunction( i => window.drive.hardware.built.includes( i ), id, { timeout: 30000 } );
+			assert.ok( await page.evaluate( name => !! window.drive.scene.getObjectByName( name ), `hardware-${ id }-${ model }` ) );
+			await page.waitForTimeout( 1500 );
+			await shot( page, `hardware-${ id }` );
+			assert.deepEqual( page.errors, [] );
+			await page.context().close();
+
+		} );
+
+	}
+
+} );
