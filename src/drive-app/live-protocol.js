@@ -395,10 +395,11 @@ export const PLACE_HEIGHTS = Object.freeze( {
 	vesta: Object.freeze( [ - 52000, 32000 ] ),
 	ceres: Object.freeze( [ - 29000, 18500 ] ),
 } );
-// Faster than any ride goes, booster and all, and a plane at its ceiling (3,500 km/h, 972 m/s:
+// Faster than any ride goes, booster and all, and a plane at its ceiling (12,000 km/h, 3,333 m/s:
 // src/plane.js) with a loop's hump on top (up to half its speed again, straight up, at the top
-// of a loop: src/plane-tricks.js's LOOP.lift, 1,087 m/s in all) and the rounding (m/s).
-const TOP_SPEED = 1100;
+// of a loop: src/plane-tricks.js's LOOP.lift, 3,727 m/s in all) and the rounding (m/s). (1,100
+// till the plane went to 12,000 km/h, 2026-11-22.)
+const TOP_SPEED = 4000;
 
 const round = ( value, places ) => Math.round( value * 10 ** places ) / 10 ** places;
 

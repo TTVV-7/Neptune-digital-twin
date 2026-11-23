@@ -24,7 +24,7 @@ import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
 import { DRIVE_CARS, PASS_RIDES } from '../src/drive-app/catalog.js';
 import {
-	CAPS, CLAIM_DAYS, DISCOVERIES_MAX, LEVEL_MAX, LEVEL_XP, REWARDS, RIDES, SUPPORTER_XP, TITLES, TRICK, XP,
+	CAPS, CLAIM_DAYS, DISCOVERIES_MAX, LEVEL_MAX, LEVEL_XP, NO_TUNING, REWARDS, RIDES, SUPPORTER_XP, TITLES, TRICK, UPGRADES, XP, tuningAt,
 	areaOf, badgeOf, capReport, checkReport, dailyXp, dayBefore, dayOf, drivingXp, levelOf, nextReward, progressOf, rewardsAt, rewardsBetween, rideLevel, rideLocked, rideUnlock, titleOf, trickXp, unlockLevel,
 } from '../src/drive-app/levels.js';
 import { CARS } from '../src/drive-app/cars.js';
@@ -154,15 +154,45 @@ describe( 'Levels: the curve and the unlock track', () => {
 		assert.equal( titleOf( 3, 'drifter' ).id, 'rookie' );
 		assert.equal( titleOf( 9, '' ).id, 'drifter' );
 		assert.equal( titleOf( 9, 'joyrider' ).id, 'joyrider' );
-		assert.deepEqual( rewardsBetween( 1, 3 ).map( r => r.id ), [ 'sunburst', 'hearts' ] );
+		assert.deepEqual( rewardsBetween( 1, 3 ).map( r => r.id ), [ 'sunburst', 'hearts', 'engine-1' ] );
 		// What's next: for a supporter, whose pass has the track's pass looks, the next that's new.
 		assert.equal( nextReward( 1 ).id, 'sunburst' );
-		assert.equal( nextReward( 1, { pro: true } ).id, 'joyrider' );
-		assert.equal( nextReward( 8, { pro: true } ).id, 'bronze' );
+		// (The upgrades are the levels' alone: Engine I at 3 is new for a supporter too.)
+		assert.equal( nextReward( 1, { pro: true } ).id, 'engine-1' );
+		assert.equal( nextReward( 3, { pro: true } ).id, 'joyrider' );
+		assert.equal( nextReward( 8, { pro: true } ).id, 'air-1' );
 		assert.equal( nextReward( 50, { pro: true } ), null );
 		// A level's car is next like anything else, and a supporter has it already.
 		assert.equal( nextReward( 4 ).id, 'golf-cart' );
-		assert.equal( nextReward( 4, { pro: true } ).id, 'drifter' );
+		assert.equal( nextReward( 4, { pro: true } ).id, 'turbo-1' );
+
+	} );
+
+	test( 'the upgrades: three tiers each of engine, turbo, air control and springs, spread over the track, the levels\' alone; what they make of a ride at a level', () => {
+
+		const tiers = REWARDS.filter( r => r.kind === 'upgrade' );
+		assert.deepEqual( tiers.map( r => [ r.level, r.id ] ), [
+			[ 3, 'engine-1' ], [ 6, 'turbo-1' ], [ 9, 'air-1' ], [ 11, 'springs-1' ], [ 16, 'engine-2' ], [ 21, 'turbo-2' ],
+			[ 25, 'air-2' ], [ 30, 'springs-2' ], [ 34, 'engine-3' ], [ 37, 'turbo-3' ], [ 41, 'air-3' ], [ 45, 'springs-3' ],
+		] );
+		for ( const r of tiers ) {
+
+			assert.ok( r.part in UPGRADES && ! r.pass, r.id );
+			assert.equal( r.name, `${ UPGRADES[ r.part ].name } ${ [ 'I', 'II', 'III' ][ r.tier - 1 ] }` );
+
+		}
+
+		assert.deepEqual( tuningAt( 1 ), NO_TUNING );
+		assert.deepEqual( tuningAt( 2 ), NO_TUNING );
+		assert.deepEqual( tuningAt( 3 ), { ...NO_TUNING, engine: 1.05 } );
+		const top = tuningAt( LEVEL_MAX );
+		const near = ( a, b ) => Math.abs( a - b ) < 1e-9;
+		assert.ok( near( top.engine, 1.15 ) && near( top.turbo, 1.6 ) && near( top.air, 1.3 ) && near( top.springs, 1.36 ), JSON.stringify( top ) );
+		// Each part only ever better a level on.
+		for ( let n = 2; n <= LEVEL_MAX; n ++ ) for ( const part of Object.keys( UPGRADES ) ) assert.ok( tuningAt( n )[ part ] >= tuningAt( n - 1 )[ part ] );
+		// Air control at its best keeps the leaderboard's tricks under what it takes as possible a second
+		// (three times a kart flat out: worker/drive/scores.js's RATE).
+		assert.ok( top.air < 3 );
 
 	} );
 
@@ -200,7 +230,7 @@ describe( 'Levels: the curve and the unlock track', () => {
 		const rides = new Set( [ ...PASS_RIDES, ...DRIVE_CARS ] );
 		for ( const reward of REWARDS ) {
 
-			assert.ok( [ 'look', 'ride', 'title', 'badge' ].includes( reward.kind ), reward.kind );
+			assert.ok( [ 'look', 'ride', 'title', 'badge', 'upgrade' ].includes( reward.kind ), reward.kind );
 			if ( reward.kind !== 'ride' ) assert.ok( ! rides.has( reward.id ), reward.id );
 			else {
 
@@ -1484,7 +1514,7 @@ describe( 'Achievements: the rules', () => {
 		assert.deepEqual( ACHIEVEMENTS.filter( a => a.count === 'ceres' ).map( a => [ a.goal, a.target ] ), [ [ 'Drive on Ceres', 1 ], [ 'Drive on Ceres 10 times', 10 ], [ 'Drive on Ceres 50 times', 50 ] ] );
 		for ( const world of [ 'vesta', 'ceres' ] ) assert.deepEqual( [ COUNTS[ world ], TALLY_DAY[ world ], CLAIM_TALLY[ world ] ], [ 'trusted', TALLY_DAY.moon, CLAIM_TALLY.moon ], world );
 		assert.deepEqual( ACHIEVEMENTS.filter( a => a.count === 'streak' ).map( a => a.target ), [ 3, 7, 30 ] );
-		assert.deepEqual( PLACINGS.map( a => [ a.target, a.period ?? 'any' ] ), [ [ 10, 'any' ], [ 3, 'any' ], [ 1, 'any' ], [ 1, 'day' ], [ 3, 'week' ], [ 10, 'month' ] ] );
+		assert.deepEqual( PLACINGS.map( a => [ a.target, a.period ?? 'any' ] ), [ [ 10, 'any' ], [ 3, 'any' ], [ 1, 'any' ], [ 1, 'week' ], [ 1, 'day' ], [ 3, 'week' ], [ 10, 'month' ] ] );
 		assert.deepEqual( Object.keys( RIDE_FEATS ).sort(), [ ...WORKS_RIDES ].sort() );
 		for ( const id of WORKS_RIDES ) assert.ok( ACHIEVEMENTS.some( a => a.id === RIDE_FEATS[ id ].feat ), id );
 		assert.equal( RIDE_FEATS[ 'hydrovac-truck' ].feat, 'weekly-podium' );

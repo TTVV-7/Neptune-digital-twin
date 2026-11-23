@@ -43,6 +43,11 @@ const JUMP_SPEED = 10;
 // the Earth's gravity, 200 m by that would be 8 km, over four minutes of falling with nothing
 // under it.
 const REACH_DOWN = 400;
+// No upgrades (see setTuning).
+const NO_TUNING = Object.freeze( { engine: 1, turbo: 1, air: 1, springs: 1 } );
+// How far over itself (m) a vehicle with no ground under it looks for ground it has ended up under
+// (a finer tile's road come in over the coarse one it stood on: see update).
+const SKIN_LOOK = 40;
 const FALL_RESET = 200;
 const FALL_MOST = 1500;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
@@ -332,6 +337,11 @@ export class Driver {
 		this.camera = camera;
 		this.models = models;
 		this.controls = controls;
+		// The level track's upgrades (World Drive's levels.js: tuningAt), as multipliers: none till
+		// setTuning says otherwise.
+		this.tuning = NO_TUNING;
+		this.turbo = 1;
+		this.springs = 1;
 		this.getColliders = getColliders;
 		this.hud = hud;
 		this.onStop = onStop;
@@ -544,6 +554,33 @@ export class Driver {
 
 	}
 
+	// The level track's upgrades (World Drive's levels.js: tuningAt; NO_TUNING in a challenge's run),
+	// { engine, turbo, air, springs }, each a multiplier: engine the top speed and acceleration, turbo
+	// how long the booster's gauge lasts and how fast it refills, air how fast it turns in the air
+	// (trickRate: so past a kart's 1, up to 1.3), springs how hard a ramp, a hop or a hit throws it
+	// up. Set every frame; only a change does anything.
+	setTuning( tuning ) {
+
+		const next = tuning ?? NO_TUNING;
+		const was = this.tuning;
+		if ( was.engine === next.engine && was.turbo === next.turbo && was.air === next.air && was.springs === next.springs ) return;
+		this.tuning = next;
+		if ( this.baseSpec ) this.applyTuning();
+
+	}
+
+	applyTuning() {
+
+		const { engine, turbo, air, springs } = this.tuning;
+		const base = this.baseSpec;
+		this.spec = engine === 1 ? base : { ...base, topSpeed: base.topSpeed * engine, accel: base.accel * engine };
+		this.handling.launch = this.baseLaunch * springs;
+		this.trickRate = this.baseTrickRate * air;
+		this.turbo = turbo;
+		this.springs = springs;
+
+	}
+
 	start( entry, spec ) {
 
 		if ( this.active ) this.stop();
@@ -586,9 +623,15 @@ export class Driver {
 		this.centre = this.ownBox.getCenter( new Vector3() ).multiplyScalar( this.scale );
 		this.half = this.ownBox.getSize( new Vector3() ).multiplyScalar( this.scale / 2 );
 		// A big vehicle turns more slowly in the air: a kart at the full rate, a pickup at 0.86 of it.
-		// Handling can quicken that, but never past a kart's: the leaderboard takes that as the most
-		// any vehicle can score a second (SCORING in worker/drive/scores.js).
+		// Handling can quicken that, but never past a kart's: the leaderboard works out the most any
+		// vehicle can score a second from it (SCORING in worker/drive/scores.js). The Air control
+		// upgrade (applyTuning) then takes it up to 1.3 times that, inside the three times RATE allows.
 		this.trickRate = Math.min( 1, MathUtils.clamp( Math.sqrt( 4 / this.length ), 0.55, 1 ) * handling.air );
+		// What the upgrades make better start from these (applyTuning).
+		this.baseSpec = spec;
+		this.baseLaunch = handling.launch;
+		this.baseTrickRate = this.trickRate;
+		this.applyTuning();
 
 		this.east = state.east;
 		this.north = state.north;
@@ -981,10 +1024,26 @@ export class Driver {
 
 		} else if ( heights.length === 0 ) {
 
-			// Off the edge of the world: put it back where it last stood.
-			if ( this.y < this.lastSafe.y - this.fallReset ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
-			this.vy -= this.fall * dt;
-			this.y += this.vy * dt;
+			// Nothing under it: under the ground's skin, or off the edge of the world. Under the skin is
+			// where it is when the ground came up over it: Google's tiles get finer as they stream in, and
+			// the finer one's road can be metres over the coarse one it landed on (dropping out of a plane
+			// from high up, the ground under it is coarse when it lands), or it was put down under it. It
+			// stands on that ground, looked for from well over it (SKIN_LOOK); off the edge, it falls, and
+			// is put back where it last stood.
+			const over = this.groundAt( this.east, this.north, this.y + SKIN_LOOK );
+			if ( over !== null && over > this.y ) {
+
+				this.y = over;
+				this.vy = 0;
+				this.lastSafe = { east: this.east, north: this.north, y: this.y };
+
+			} else {
+
+				if ( this.y < this.lastSafe.y - this.fallReset ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
+				this.vy -= this.fall * dt;
+				this.y += this.vy * dt;
+
+			}
 
 		} else {
 
@@ -1003,7 +1062,7 @@ export class Driver {
 				// down it keeps its speed down the slope, which leap would have slowed, sailing it off
 				// any slope steep enough to leave: on Vesta a 20° one at 119 m/s, falling at 6.8 m/s
 				// rather than 43, came down two and a half minutes later.)
-				if ( this.launch && this.vy > 0 ) this.vy = Math.min( this.vy * this.leap, LAUNCH.max * this.handling.launch * this.leap );
+				if ( this.launch && this.vy > 0 ) this.vy = Math.min( this.vy * this.leap * this.springs, LAUNCH.max * this.handling.launch * this.leap );
 				if ( this.launch && ! this.driftHop && ! this.drifting ) this.enterAir();
 
 			}
@@ -1190,7 +1249,7 @@ export class Driver {
 
 		} else {
 
-			this.vy = Math.max( this.vy, 0 ) + JUMP_SPEED * this.leap;
+			this.vy = Math.max( this.vy, 0 ) + JUMP_SPEED * this.leap * this.springs;
 			this.driftHop = false;
 
 		}
@@ -1373,7 +1432,7 @@ export class Driver {
 		const base = this.spec.topSpeed / KMH;
 		if ( this.firing ) {
 
-			this.gauge = Math.max( 0, this.gauge - dt / BOOST_TIME );
+			this.gauge = Math.max( 0, this.gauge - dt / ( BOOST_TIME * this.turbo ) );
 			if ( this.gauge === 0 ) {
 
 				// Run dry: the flame coughs out, and the exhaust glows on and cools.
@@ -1387,7 +1446,7 @@ export class Driver {
 
 		} else {
 
-			this.gauge = Math.min( 1, this.gauge + dt / BOOST_RECHARGE );
+			this.gauge = Math.min( 1, this.gauge + dt / BOOST_RECHARGE * this.turbo );
 
 		}
 

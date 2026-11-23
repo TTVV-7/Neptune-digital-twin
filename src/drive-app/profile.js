@@ -1,6 +1,6 @@
 import './levels.css';
 import { BOOSTS } from './boosts.js';
-import { LEVEL_MAX, LEVEL_XP, REWARDS, TITLES, badgeOf, nextReward, rewardsAt } from './levels.js';
+import { LEVEL_MAX, LEVEL_XP, REWARDS, TITLES, UPGRADES, badgeOf, nextReward, rewardsAt } from './levels.js';
 import { DECALS, FINISHES, FLAMES, GLOWS, HORNS, RIMS, SWATCHES, TRAILS } from './paint.js';
 import { isPro, onProChange } from './pro.js';
 import { shownTo } from './achievement-rules.js';
@@ -33,6 +33,11 @@ const ICONS = {
 	smoke: svg( '<circle cx="8" cy="15" r="5" fill="#c9d1db"/><circle cx="14" cy="10" r="6" fill="#e8edf2"/><circle cx="18" cy="16" r="3.6" fill="#aeb8c4"/>' ),
 	bolts: svg( '<rect x="3" y="3" width="18" height="18" rx="4" fill="#2440c9"/><path d="M13.5 4 7 13h4.2L9.5 20l7.5-9.5h-4.3z" fill="#ffe14a" stroke="#1e1004" stroke-width="0.8" stroke-linejoin="round"/>' ),
 	camo: svg( '<rect x="3" y="3" width="18" height="18" rx="4" fill="#69703f"/><path d="M4 8c3-2 5 1 8-1s5 2 8 0v4c-3 2-5-1-8 1s-5-1-8 1zM6 17c2-2 4 0 6-1s3 1 5 0v3H6z" fill="#3f4a26"/><circle cx="16" cy="6.5" r="2" fill="#a3935f"/><circle cx="8" cy="14" r="1.8" fill="#23241c"/>' ),
+	// The upgrades (levels.js's UPGRADES): a piston, a turbo's flame, a curling arrow, a spring.
+	engine: svg( '<rect x="7" y="3" width="10" height="9" rx="2" fill="#ffd23f"/><path d="M9 6h6M9 9h6" stroke="#7a5a00" stroke-width="1.4"/><rect x="10.5" y="12" width="3" height="5" fill="#c9d1db"/><circle cx="12" cy="19" r="2.4" fill="none" stroke="#c9d1db" stroke-width="1.6"/>' ),
+	turbo: svg( '<path d="M12 2c3 4 6 6.5 6 11a6 6 0 0 1-12 0c0-2.6 1.2-4.2 2.6-5.6.2 2 1 3 2.2 3.4C10.4 8 11 5 12 2z" fill="#ff7a2e"/><path d="M12 11c1.6 2 2.8 3.3 2.8 5.2a2.8 2.8 0 0 1-5.6 0c0-1.4.8-2.4 1.6-3.1.3.9.8 1.3 1.2 1.4z" fill="#ffd23f"/>' ),
+	air: svg( '<path d="M18.5 9A7 7 0 1 0 19 15" fill="none" stroke="#3ec1ff" stroke-width="2.4" stroke-linecap="round"/><path d="M15.5 9.2h3.6V5.6" fill="none" stroke="#3ec1ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>' ),
+	springs: svg( '<path d="M7 4h10M7 20h10" stroke="#c9d1db" stroke-width="2" stroke-linecap="round"/><path d="M8 7l8 2-8 2 8 2-8 2 8 2" fill="none" stroke="#3de08a" stroke-width="1.9" stroke-linejoin="round"/>' ),
 	horn: svg( '<path d="M4 9.5h3.5L14 5v14l-6.5-4.5H4z" fill="#ffd23f"/><path d="M16.5 9a4 4 0 0 1 0 6M18.8 6.8a7.2 7.2 0 0 1 0 10.4" fill="none" stroke="#ffd23f" stroke-width="1.8" stroke-linecap="round"/>' ),
 };
 
@@ -147,6 +152,8 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 				}
 
 				item.append( icon( reward ), ...label( reward ) );
+				// An upgrade says what it does ("Engine II: faster top speed and acceleration").
+				if ( reward.kind === 'upgrade' ) item.title = `${ UPGRADES[ reward.part ].does }, on every ride (not in challenges)`;
 				unlocked.append( item );
 
 			}
@@ -267,6 +274,12 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 				const item = element( 'span', `reward ${ reward.kind }${ reward.pass ? ' pass' : '' }${ pro && reward.pass ? ' owned' : '' }` );
 				item.append( icon( reward ), ...label( reward ) );
 				if ( reward.kind === 'look' || reward.kind === 'ride' ) item.append( element( 'i', 'tag', reward.pass ? pro ? '✓ Pass' : 'or ⭐ Pass' : 'Levels only' ) );
+				if ( reward.kind === 'upgrade' ) {
+
+					item.title = `${ UPGRADES[ reward.part ].does }, on every ride (not in challenges)`;
+					item.append( element( 'i', 'tag', UPGRADES[ reward.part ].does ) );
+
+				}
 				rewards.append( item );
 
 			}
@@ -369,6 +382,7 @@ export function icon( reward ) {
 	const holder = element( 'span', 'icon' );
 	holder.setAttribute( 'aria-hidden', 'true' );
 	if ( reward.kind === 'title' ) holder.innerHTML = ICONS.title;
+	else if ( reward.kind === 'upgrade' ) holder.innerHTML = ICONS[ reward.part ] ?? '';
 	else if ( reward.kind === 'ride' ) holder.append( Object.assign( document.createElement( 'img' ), { className: 'ride-thumb', src: new URL( `cars/thumbs/${ reward.id }.webp`, document.baseURI ).href, alt: '', loading: 'lazy' } ) );
 	else if ( reward.kind === 'badge' ) {
 
@@ -397,7 +411,7 @@ export function icon( reward ) {
 // A reward's name, a title's and a ride's said to be one ("Title: Joyrider", "Ride: Tuk-tuk").
 function label( reward ) {
 
-	const kind = { title: 'Title:', ride: 'Ride:' }[ reward.kind ];
+	const kind = { title: 'Title:', ride: 'Ride:', upgrade: 'Upgrade:' }[ reward.kind ];
 	return kind ? [ element( 'span', 'kind', kind ), element( 'span', '', reward.name ) ] : [ element( 'span', '', reward.name ) ];
 
 }

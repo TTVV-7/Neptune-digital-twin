@@ -18,10 +18,11 @@ address, and the construction app is unchanged by it.
 
 ## Playing
 
-1. **Pick a world.** A plain load opens on the Solar System ([the orrery](#picking-a-world-the-orrery)):
-   the Moon, Mars, Vesta, Ceres or the Earth (picking the Earth turns the page to its globe, which
-   spends nothing: one of the day's free Earth drives is used only at the first **Drive here** on the
-   Earth). Closed without a pick, it's the Moon.
+1. **Pick a world.** A plain load opens on the Earth's globe (since 2026-11-22; from 2026-11-20 it
+   opened on the Solar System, [the orrery](#picking-a-world-the-orrery), which `ORRERY_FIRST` in
+   `orrery-first.js` would bring back). The globe spends nothing: one of the day's free Earth drives
+   is used only at the first **Drive here** on the Earth. **Worlds** on the panel opens the orrery,
+   to pick the Moon, Mars, Vesta or Ceres; `?worlds=1` opens a page on it.
    **The globe**: the Earth's opens on the whole Earth, slowly turning, facing your part of the world (going by
    your clock). Drag to spin it, scroll or pinch to zoom, right-drag or two fingers to tilt.
 2. **Pick a place**, any of these ways:
@@ -174,21 +175,32 @@ under each, a fin rises at the back, and on a model car the wheels fold out flat
 a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
 of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and
 **Shift** comes down. **T** again **bails out** ("Freefall! W dive · A/D steer"): the wings fold away
-and the car drops like a stone, 160 m/s at most spread out on the Earth and 256 m/s head-down with
-**W** (`DROP` and `dropTerminal` in `src/plane.js`). It speeds up at 2.5 times the world's own gravity
-(`DROP.boost`), never slower than 12 m/s² (`DROP.pull`): there's no air on the Moon, Vesta or Ceres
+and the car drops like a stone, 700 m/s at most spread out on the Earth and 1,120 m/s head-down with
+**W** (`DROP` and `dropTerminal` in `src/plane.js`), about 20 s down from the 12 km ceiling (13
+diving). It speeds up at 10 times the world's own gravity (`DROP.boost`), never slower than 60 m/s²
+(`DROP.pull`): there's no air on the Moon, Vesta or Ceres
 to set a falling speed and a real fall there would crawl for minutes, so their cap is a game's,
-100 m/s (160 diving), and Mars's about 115. What's left of the plane's speed across the ground over
+450 m/s (720 diving), and Mars's about 514. (Until 2026-11-22 it was 160 m/s on the Earth at 2.5
+times the gravity, 100 on the Moon, which the owner found far too slow; then 300 and 200, still
+too slow from the plane's new 12 km ceiling.) What's left of the plane's speed across the ground over
 the ride's own is shed in a couple of seconds (`DROP.shed`), so a bail-out at 3,500 km/h reads as a
 fall, not a car skimming the ground. A **parachute** opens in good time before the ground: 25 m over
-it, 45 m on the Earth, or 0.7 s out at the speed it's coming at the ground, counting ground rising
+it, 45 m on the Earth, or as high as it takes to slow from the speed it's coming at the ground to its
+sink and then come down 2 s at that (`PARACHUTE.lead`), counting ground rising
 along the way it's going (a ray 1 s ahead finds a slope on Mars or Vesta before the car reaches it:
-`chuteHeight` and `closingSpeed`), so on the Earth it opens about 112 m up, 179 m diving. It slows
-the fall quickly (`PARACHUTE.settle`) and the car comes down at 10 m/s on the Earth, about 6 on
+`chuteHeight` and `closingSpeed`), so on the Earth it opens about 135 m up, 205 m diving (it was a fixed share of a second of the
+fall out, which from a low drop at the faster fall left too little to slow in). It slows
+the fall hard (`PARACHUTE.settle`, 6 a second), so it still lands at its sink, about 5 s after opening on the Earth, and the car comes down at 10 m/s on the Earth, about 6 on
 Mars, 4 on the Moon and 3 on Vesta and Ceres (`chuteSink`: the square root of the gravity, never under
 3 m/s), and **S** (or ↓) spills air from the canopy to come down twice as fast. **A**/**D** steer it a
 little, and it rights the car to land on its wheels, driving on at the speed it landed with (never
-more than the booster's). Press **T** while falling to be a plane again. Within 12 m of the ground,
+more than the booster's). Press **T** while falling to be a plane again. Where it lands is found from over where it was
+before each frame's fall, not from where it is after it (`fall`): falling metres a frame, the ray
+from under the road found nothing (the map is a skin seen only from above) and it landed on the
+ground found the frame before, under the road, standing half in it. And a car with nothing under
+it looks again from 40 m over itself (`SKIN_LOOK` in `drive.js`) and stands on what it finds there:
+dropped from high up, it lands on the coarse tiles a fast plane makes do with (`PLANE_TILE_ERROR`,
+below), and the finer ones that stream in after can bring the road up over it. Within 12 m of the ground,
 **T** flies it down by itself instead and folds it back into a car on the ground (**T** on the way
 down flies on). Others driving with you see the plane fold away and the car come down, without the
 parachute. On a touch screen the ✈ button under CAM is T, FLY is up and BOOST is down, GAS dives and
@@ -206,13 +218,13 @@ takes over where it's faster, and climbing and coming down get quicker too (`SPE
 | 0 m | 60 km/h |
 | 30 m | 130 km/h |
 | 150 m | 325 km/h |
-| 600 m | 650 km/h |
-| 2 km | 1,170 km/h |
-| 6 km | 2,340 km/h |
-| 12 km (the ceiling) | 3,500 km/h |
+| 600 m | 700 km/h |
+| 2 km | 1,700 km/h |
+| 6 km | 5,000 km/h |
+| 12 km (the ceiling) | 12,000 km/h |
 
-(Each about 30% faster than it was, 2,700 km/h at the ceiling before, but for the crawl near the
-ground. Faster over the Earth means more of Google's 3D tiles fetched a minute while flying: no more
+(Since 2026-11-22, the owner wanting 10,000 km/h and more for the far places: it was 1,170 km/h at
+2 km, 2,340 at 6 km and 3,500 at the ceiling, and 2,700 before that; low down it's as it was. Faster over the Earth means more of Google's 3D tiles fetched a minute while flying: no more
 on Google's bill, which is by the session (below), but more for the player's device to download and
 draw; if phones struggle, `SPEEDS` is the one place to turn it back.)
 
@@ -221,12 +233,13 @@ never goes below 0.8 m over the ground (a slope is flown up), stops short of a w
 never climbs through a roof or a bridge. Over the ceiling it comes back down to it: where the scene
 stays where you dropped in (the Earth, the Moon, Mars), the world curves away under you, and a long
 level flight would otherwise climb out of reach of the others (on the Moon, after about 250 km at
-the ceiling). Its speed goes to others with it, so a plane at 3,500 km/h is seen flying between
-updates, not jumping 150 m at a time. The room takes up to 1,100 m/s (a plane flat out is 972 m/s,
-and up to 1,087 over the top of a loop), but for now what's sent is held to 790 (`MAX_SPEED` in
+the ceiling). Its speed goes to others with it. The room takes up to 4,000 m/s (`TOP_SPEED` in
+`live-protocol.js`: a plane flat out is 3,333 m/s, and up to 3,727 over the top of a loop; it was
+1,100 till the plane went to 12,000 km/h), but what's sent is held to 790 (`MAX_SPEED` in
 `live.js`): a page still open from before the plane got faster drops anything over its old 800.
-That's still seen as flying, not a jump (`teleported` allows half again the speed sent), and can go
-up to 1,090 once those pages have aged out.
+Up to 1,185 m/s that's still seen as flying (`teleported` allows half again the speed sent);
+faster, others see the plane jump from update to update, a few hundred metres at a time, which at
+that speed is out of their sight in seconds anyway.
 
 **What it scores and what it doesn't.** Its own tricks score (below); everything else is kept apart:
 
@@ -304,11 +317,11 @@ and rocket dragster) get the wings but keep their wheels as they are.
 **Not yet:** flying high enough to come out on the globe and pick somewhere else.
 
 **How it's tested**: `npm run test:drive-plane` (`scripts/test-drive-plane.mjs`, node, no browser),
-26 tests: the speeds (3,500 km/h at the ceiling, still 60 km/h off the ground) and the live protocol
+26 tests: the speeds (12,000 km/h at the ceiling, still 60 km/h off the ground) and the live protocol
 taking a plane flat out with a loop's hump on top while what's sent stays under old pages' 800; the
-drop (160 m/s spread out on the Earth and never faster, reached within 7 s, 256 diving, 100 m/s on the Moon within 9 s, the
+drop (700 m/s spread out on the Earth and never faster, reached within 8 s and the parachute about 20 s from the ceiling, 1,120 diving, 450 m/s on the Moon within 8 s, the
 speed across the ground down to the car's own within 3 s of a bail-out at 3,500 km/h); the parachute
-(10 m/s on the Earth, about 4 on the Moon, 3 on Vesta, twice that spilling air, opening 112 m up on the Earth and down within 15 s,
+(10 m/s on the Earth, about 4 on the Moon, 3 on Vesta, twice that spilling air, opening 135 m up on the Earth and down within 6 s,
 and earlier over rising ground) and both flashes; the tricks' rules (whole turns give or take 40°, the
 per-pass caps, halving, the heights' shares, a repeat rounding to nothing, the nose angle, the points
 still drive.js's, the Worker's `TRICK` pattern); and tricks flown on a stand-in driver (Q a barrel
@@ -3716,9 +3729,31 @@ in the air a lot, about 40 % less.
 | 5 | 1,450 | a first session (about 17 minutes) |
 | 10 | 6,050 | about 80 minutes |
 | 20 | 29,250 | about 6½ hours |
-| 30 | 82,050 | about 20 hours |
+| 30 | 82,050 | about 20 hours; **Upgrade: Springs II** |
 | 40 | 181,150 | about 45 hours |
 | 50 | 346,450 | about 87 hours |
+
+### Upgrades
+
+Since 2026-11-22 the track has **upgrades** too, the levels' alone (never the pass's: they're
+earned by driving), which make every ride better: three tiers each of four parts (`UPGRADES` and
+`tuningAt` in `levels.js`), each tier better by its share than the last.
+
+| Part | Tiers at | Each tier | At level 45 |
+| --- | --- | --- | --- |
+| Engine | 3, 16, 34 | top speed and acceleration +5 % | +15 % |
+| Turbo | 6, 21, 37 | the booster's gauge lasts 20 % longer and refills 20 % faster | 1.6 times |
+| Air control | 9, 25, 41 | turns in the air 10 % faster (spins, flips, rolls: more tricks a jump) | +30 % |
+| Springs | 11, 30, 45 | a ramp, a hop or a hit throws it 12 % higher | +36 % |
+
+The game sets them on the driver every frame (main.js: `driver.setTuning( tuningFor( level ) )`;
+drive.js's `applyTuning` scales the ride's spec, `handling.launch`, `trickRate`, the booster's
+times and the ramp's and hop's climb), and sets none (`NO_TUNING`) through a challenge's countdown
+and run: the challenges' boards are a test of driving, the same car for everyone, and their times'
+checks (`FASTEST` in `challenge-rules.js`) stay as they were. The leaderboard's tricks are helped:
+Air control's best is 1.3 times a kart's turning in the air, under the three times of it the
+leaderboard takes as possible a second (`RATE` in `worker/drive/scores.js`), so nothing there
+changes. On the track each shows its picture, "Upgrade: Engine II" and what it does.
 
 ### The unlock track
 
@@ -3730,29 +3765,29 @@ rewards.
 | --- | --- | --- |
 | 1 | 0 | Title: Rookie; Steel badge |
 | 2 | 200 | Sunburst paint ⭐ |
-| 3 | 500 | Hearts boost ⭐ |
+| 3 | 500 | Hearts boost ⭐; **Upgrade: Engine I** |
 | 4 | 900 | Title: Joyrider; Red flame ⭐ |
 | 5 | 1,450 | **Golf cart** ⭐; Lime paint ⭐ |
-| 6 | 2,100 | White rims ⭐ |
+| 6 | 2,100 | White rims ⭐; **Upgrade: Turbo I** |
 | 7 | 2,900 | Plasma boost ⭐ |
 | 8 | 3,800 | **Tuk-tuk** ⭐; Title: Drifter |
-| 9 | 4,850 | Racing stripes ⭐ |
+| 9 | 4,850 | Racing stripes ⭐; **Upgrade: Air control I** |
 | 10 | 6,050 | Bronze badge; Neon blue underglow ⭐ |
-| 11 | 7,450 | Teal paint ⭐ |
+| 11 | 7,450 | Teal paint ⭐; **Upgrade: Springs I** |
 | 12 | 9,050 | Title: Street Racer; Frost boost ⭐ |
 | 13 | 10,750 | Pixel boost ⭐ |
 | 14 | 12,650 | Blue flame ⭐ |
 | 15 | 14,850 | **Ice-cream van** ⭐; Title: Stunt Ace |
-| 16 | 17,250 | Smoke trail ⭐ |
+| 16 | 17,250 | Smoke trail ⭐; **Upgrade: Engine II** |
 | 17 | 19,850 | Title: Speedster; Sky blue paint ⭐ |
 | 18 | 22,750 | Electric blue paint ⭐ |
 | 19 | 25,850 | Title: Trickster; Gold flame ⭐ |
 | 20 | 29,250 | Silver badge; Lightning bolts ⭐ |
-| 21 | 32,950 | Red rims ⭐ |
+| 21 | 32,950 | Red rims ⭐; **Upgrade: Turbo II** |
 | 22 | 36,950 | **Lawn tractor** ⭐; Title: Explorer |
 | 23 | 41,250 | Glitter boost ⭐ |
 | 24 | 45,950 | Title: Globetrotter; Satin black rims ⭐ |
-| 25 | 50,950 | Copper paint (levels only) |
+| 25 | 50,950 | Copper paint (levels only); **Upgrade: Air control II** |
 | 26 | 56,350 | Number decal ⭐ |
 | 27 | 62,150 | Title: Road Warrior; Spooky boost ⭐ |
 | 28 | 68,350 | Green flame ⭐ |
@@ -3761,18 +3796,18 @@ rewards.
 | 31 | 89,550 | Matte finish ⭐ |
 | 32 | 97,550 | Title: Daredevil; Air horn ⭐ |
 | 33 | 106,050 | Title: Trailblazer; Teal flame ⭐ |
-| 34 | 115,050 | Violet paint ⭐ |
+| 34 | 115,050 | Violet paint ⭐; **Upgrade: Engine III** |
 | 35 | 124,650 | Mint paint (levels only) |
 | 36 | 134,750 | Title: Pathfinder; Candy apple red paint ⭐ |
-| 37 | 145,450 | Blue rims ⭐ |
+| 37 | 145,450 | Blue rims ⭐; **Upgrade: Turbo III** |
 | 38 | 156,750 | Title: Storm Chaser; Neon green underglow ⭐ |
 | 39 | 168,650 | Title: High Flyer; Dragon fire boost ⭐ |
 | 40 | 181,150 | **Formula racer** ⭐; Platinum badge; Purple flame ⭐ |
-| 41 | 194,350 | Title: Thrill Seeker; Camo ⭐ |
+| 41 | 194,350 | Title: Thrill Seeker; Camo ⭐; **Upgrade: Air control III** |
 | 42 | 208,250 | Title: Wheel Wizard; Chrome rims ⭐ |
 | 43 | 222,850 | Title: Night Owl; White-hot flame ⭐ |
 | 44 | 238,150 | Title: Road Captain; Gunmetal paint ⭐ |
-| 45 | 254,250 | Plum paint (levels only) |
+| 45 | 254,250 | Plum paint (levels only); **Upgrade: Springs III** |
 | 46 | 271,050 | Title: Cartographer; Pearl finish ⭐ |
 | 47 | 288,650 | Title: Supersonic; Afterburner boost ⭐ |
 | 48 | 307,050 | Title: World Tourer; Fanfare horn ⭐ |
@@ -5425,7 +5460,7 @@ answers only with `{ name, lat, lon, type }`, and refuses queries over 120 chara
 anything but letters, numbers and an address's punctuation. The globe's panel shows
 "Search © OpenStreetMap contributors".
 
-**A plain load's visit.** A plain load opens on the orrery and asks for a free visit, so none of the
+**A plain load's visit.** A plain load (when it opened on the orrery: now it's the globe's, also free) opens on the orrery and asks for a free visit, so none of the
 day's Earth drives is spent until someone drives on the Earth (picking it turns the page to our own
 globe of it in place; the first **Drive here** there asks for the Earth's drive, which the caps count
 as always, `fromGlobe`, not counted as a visit again). The `earth` visit stat now counts people who
@@ -8123,8 +8158,14 @@ swap it twice). A playlist of one loops; otherwise a track's end starts the next
 fades one into the next (1.5 s); paused, it plays at 40 %; with the page out of sight (another tab,
 a locked phone) it stops until it's back.
 
-It goes through WebAudio (horns.js's AudioContext): an `<audio>` element a track, each through a
-gain into a master gain, since an iPhone won't let an element's own volume be set. A browser starts
+It goes through WebAudio (horns.js's AudioContext): two `<audio>` elements (decks), each through a
+gain into a master gain, since an iPhone won't let an element's own volume be set; the track
+playing on one, the one before fading out on the other, each given every track's file in turn. At
+first it was an element a track, and on an iPhone only the globe's and the plane's were ever heard:
+Safari lets an element start playing only in a tap or a moment after it, and the globe's started in
+the first tap and the plane's just after the ✈, while a world's comes after the drop-in's wait. So
+both decks are played (on 0.1 s of silence) in the first tap, which lets them play whatever they're
+given later; and every tap after that starts the scene's track again if it was turned away. A browser starts
 no sound before a click or a key, so the music starts at the first one. **Music** in the pause menu
 (with its volume) and under the rides in the globe's panel switch it, both the same, kept in this
 browser (`world-drive.music`, `world-drive.music-volume`); off, nothing is fetched.

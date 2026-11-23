@@ -134,30 +134,48 @@ export function progressOf( xp ) {
 // paint.js and boosts.js), with pass: true when the Supporter Pass gives it too (the pass's looks
 // on the track) and pass: false when only the level does (the level-only colours, in paint.js's
 // SWATCHES with levelOnly); 'ride' a car to drive (id as in cars.js and catalog.js's DRIVE_CARS),
-// which the pass gives too; 'title' a title for your nametag; 'badge' the level badge's frame.
-// Every level from 2 to 50 has something.
+// which the pass gives too; 'title' a title for your nametag; 'badge' the level badge's frame;
+// 'upgrade' a tier of one of UPGRADES' parts, which makes every ride better (levels only, never the
+// pass: they're earned by driving). Every level from 2 to 50 has something.
 const look = ( level, part, id, name, pass = true ) => ( { level, kind: 'look', part, id, name, pass } );
 const ride = ( level, id, name ) => ( { level, kind: 'ride', id, name, pass: true } );
 const title = ( level, id, name ) => ( { level, kind: 'title', id, name } );
 const badge = ( level, id, name ) => ( { level, kind: 'badge', id, name } );
+const upgrade = ( level, part, tier ) => ( { level, kind: 'upgrade', part, tier, id: `${ part }-${ tier }`, name: `${ UPGRADES[ part ].name } ${ [ 'I', 'II', 'III' ][ tier - 1 ] }` } );
+
+// The upgrades (since 2026-11-22): three tiers each on the track, each tier making every ride `per`
+// better than the last at what `does` says (tuningAt). Off in a challenge's run (main.js), so its
+// boards stay a test of driving; the leaderboard's tricks are helped, within what it allows a
+// second (Air control's 1.3 times a kart's turning in the air, under the three times
+// worker/drive/scores.js's RATE allows).
+export const UPGRADES = {
+	engine: { name: 'Engine', does: 'Faster top speed and acceleration', per: 0.05 },
+	turbo: { name: 'Turbo', does: 'Boost lasts longer and refills faster', per: 0.2 },
+	air: { name: 'Air control', does: 'Spin and flip faster in the air', per: 0.1 },
+	springs: { name: 'Springs', does: 'Jumps launch higher', per: 0.12 },
+};
 
 export const REWARDS = [
 	title( 1, 'rookie', 'Rookie' ),
 	badge( 1, 'steel', 'Steel badge' ),
 	look( 2, 'colour', 'sunburst', 'Sunburst paint' ),
 	look( 3, 'boost', 'hearts', 'Hearts boost' ),
+	upgrade( 3, 'engine', 1 ),
 	title( 4, 'joyrider', 'Joyrider' ),
 	look( 4, 'flame', 'red', 'Red flame' ),
 	ride( 5, 'golf-cart', 'Golf cart' ),
 	look( 5, 'colour', 'lime', 'Lime paint' ),
 	look( 6, 'rim', 'white', 'White rims' ),
+	upgrade( 6, 'turbo', 1 ),
 	look( 7, 'boost', 'plasma', 'Plasma boost' ),
 	ride( 8, 'tuk-tuk', 'Tuk-tuk' ),
 	title( 8, 'drifter', 'Drifter' ),
 	look( 9, 'decal', 'stripes', 'Racing stripes' ),
+	upgrade( 9, 'air', 1 ),
 	badge( 10, 'bronze', 'Bronze badge' ),
 	look( 10, 'glow', 'blue', 'Neon blue underglow' ),
 	look( 11, 'colour', 'teal', 'Teal paint' ),
+	upgrade( 11, 'springs', 1 ),
 	title( 12, 'street-racer', 'Street Racer' ),
 	look( 12, 'boost', 'frost', 'Frost boost' ),
 	look( 13, 'boost', 'pixel', 'Pixel boost' ),
@@ -165,6 +183,7 @@ export const REWARDS = [
 	ride( 15, 'ice-cream-van', 'Ice-cream van' ),
 	title( 15, 'stunt-ace', 'Stunt Ace' ),
 	look( 16, 'trail', 'smoke', 'Smoke trail' ),
+	upgrade( 16, 'engine', 2 ),
 	title( 17, 'speedster', 'Speedster' ),
 	look( 17, 'colour', 'sky', 'Sky blue paint' ),
 	look( 18, 'colour', 'electric', 'Electric blue paint' ),
@@ -173,12 +192,14 @@ export const REWARDS = [
 	badge( 20, 'silver', 'Silver badge' ),
 	look( 20, 'decal', 'bolts', 'Lightning bolts' ),
 	look( 21, 'rim', 'red', 'Red rims' ),
+	upgrade( 21, 'turbo', 2 ),
 	ride( 22, 'lawn-tractor', 'Lawn tractor' ),
 	title( 22, 'explorer', 'Explorer' ),
 	look( 23, 'boost', 'glitter', 'Glitter boost' ),
 	title( 24, 'globetrotter', 'Globetrotter' ),
 	look( 24, 'rim', 'black', 'Satin black rims' ),
 	look( 25, 'colour', 'copper', 'Copper paint', false ),
+	upgrade( 25, 'air', 2 ),
 	look( 26, 'decal', 'number', 'Number decal' ),
 	title( 27, 'road-warrior', 'Road Warrior' ),
 	look( 27, 'boost', 'spooky', 'Spooky boost' ),
@@ -187,16 +208,19 @@ export const REWARDS = [
 	look( 29, 'finish', 'satin', 'Satin finish' ),
 	ride( 30, 'retro-wedge', 'Retro wedge' ),
 	badge( 30, 'gold', 'Gold badge' ),
+	upgrade( 30, 'springs', 2 ),
 	look( 31, 'finish', 'matte', 'Matte finish' ),
 	title( 32, 'daredevil', 'Daredevil' ),
 	look( 32, 'horn', 'air', 'Air horn' ),
 	title( 33, 'trailblazer', 'Trailblazer' ),
 	look( 33, 'flame', 'teal', 'Teal flame' ),
 	look( 34, 'colour', 'violet', 'Violet paint' ),
+	upgrade( 34, 'engine', 3 ),
 	look( 35, 'colour', 'mint', 'Mint paint', false ),
 	title( 36, 'pathfinder', 'Pathfinder' ),
 	look( 36, 'colour', 'candy', 'Candy apple red paint' ),
 	look( 37, 'rim', 'blue', 'Blue rims' ),
+	upgrade( 37, 'turbo', 3 ),
 	title( 38, 'storm-chaser', 'Storm Chaser' ),
 	look( 38, 'glow', 'green', 'Neon green underglow' ),
 	title( 39, 'high-flyer', 'High Flyer' ),
@@ -206,6 +230,7 @@ export const REWARDS = [
 	look( 40, 'flame', 'purple', 'Purple flame' ),
 	title( 41, 'thrill-seeker', 'Thrill Seeker' ),
 	look( 41, 'decal', 'camo', 'Camo' ),
+	upgrade( 41, 'air', 3 ),
 	title( 42, 'wheel-wizard', 'Wheel Wizard' ),
 	look( 42, 'rim', 'chrome', 'Chrome rims' ),
 	title( 43, 'night-owl', 'Night Owl' ),
@@ -213,6 +238,7 @@ export const REWARDS = [
 	title( 44, 'road-captain', 'Road Captain' ),
 	look( 44, 'colour', 'gunmetal', 'Gunmetal paint' ),
 	look( 45, 'colour', 'plum', 'Plum paint', false ),
+	upgrade( 45, 'springs', 3 ),
 	title( 46, 'cartographer', 'Cartographer' ),
 	look( 46, 'finish', 'pearl', 'Pearl finish' ),
 	title( 47, 'supersonic', 'Supersonic' ),
@@ -229,6 +255,18 @@ export const REWARDS = [
 export const TITLES = REWARDS.filter( reward => reward.kind === 'title' );
 export const BADGES = REWARDS.filter( reward => reward.kind === 'badge' );
 export const RIDES = REWARDS.filter( reward => reward.kind === 'ride' );
+export const UPGRADE_TIERS = REWARDS.filter( reward => reward.kind === 'upgrade' );
+
+// What the upgrades make of every ride at `level`: for each part, 1 and its `per` for each tier
+// reached ({ engine: 1.1, turbo: 1.2, air: 1, springs: 1 } at level 16). NO_TUNING with none.
+export const NO_TUNING = Object.freeze( { engine: 1, turbo: 1, air: 1, springs: 1 } );
+export function tuningAt( level ) {
+
+	const tuning = { ...NO_TUNING };
+	for ( const reward of UPGRADE_TIERS ) if ( reward.level <= level ) tuning[ reward.part ] = Math.max( tuning[ reward.part ], 1 + UPGRADES[ reward.part ].per * reward.tier );
+	return tuning;
+
+}
 
 // What reaching `level` gives.
 export function rewardsAt( level ) {

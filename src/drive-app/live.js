@@ -57,8 +57,9 @@ const BUDGET = { rate: 14, burst: 24 };
 // faster checks what it's sent against the old top speed, 800, and drops a car going faster, so
 // what's sent stays a little under 800 for now (790, for the rounding). Others still see it fly
 // rather than jump: teleported allows half again the speed sent between two words (790 × 1.5 is
-// more than 1,087), and the next word puts it right. Once those pages have gone (a few weeks), this
-// can go up to 1,090.
+// 1,185), and the next word puts it right. A plane faster than that (up to 3,333 m/s at its
+// ceiling since 2026-11-22: src/plane.js) is seen jumping from word to word, a few hundred metres
+// at a time, which at that speed is out of sight in seconds anyway.
 const MAX_SPEED = 790;
 // How often (ms) the car's area is worked out again.
 const FOLLOW_MS = 500;

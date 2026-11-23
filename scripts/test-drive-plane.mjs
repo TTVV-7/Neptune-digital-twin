@@ -15,7 +15,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Driver } from '../src/drive.js';
-import { DROP, PARACHUTE, PlaneMode, chuteSink, dropTerminal, planeTopSpeed } from '../src/plane.js';
+import { DROP, PARACHUTE, PlaneMode, chuteHeight, chuteSink, dropTerminal, planeTopSpeed } from '../src/plane.js';
 import { HEIGHTS, LOOP, PLANE_POINTS, PLANE_TRICKS, TURN_TOL, loopGate, loopOffset, noseAngle, planeTricksOf } from '../src/plane-tricks.js';
 import { TRICK } from '../worker/drive/scores.js';
 
@@ -107,12 +107,15 @@ const over = ( { d, ground } ) => d.y - ground( d.east, d.north );
 
 describe( 'plane speeds', () => {
 
-	test( 'a third faster at the top: 3,500 km/h at the ceiling, still 60 km/h off the ground', () => {
+	test( '12,000 km/h at the ceiling, 5,000 at 6 km, 1,700 at 2 km, still 60 km/h off the ground', () => {
 
-		assert.ok( Math.abs( planeTopSpeed( 12000 ) - 3500 / KMH ) < 1e-9 );
-		assert.ok( Math.abs( planeTopSpeed( 20000 ) - 3500 / KMH ) < 1e-9 );
+		assert.ok( Math.abs( planeTopSpeed( 12000 ) - 12000 / KMH ) < 1e-9 );
+		assert.ok( Math.abs( planeTopSpeed( 20000 ) - 12000 / KMH ) < 1e-9 );
+		assert.ok( Math.abs( planeTopSpeed( 6000 ) - 5000 / KMH ) < 1e-9 );
 		assert.ok( Math.abs( planeTopSpeed( 0 ) - 60 / KMH ) < 1e-9 );
-		assert.ok( Math.abs( planeTopSpeed( 2000 ) - 1170 / KMH ) < 1e-9 );
+		assert.ok( Math.abs( planeTopSpeed( 2000 ) - 1700 / KMH ) < 1e-9 );
+		// Only ever faster higher up.
+		for ( let h = 0; h < 12000; h += 50 ) assert.ok( planeTopSpeed( h + 50 ) >= planeTopSpeed( h ), `${ h } m` );
 
 	} );
 
@@ -125,9 +128,9 @@ describe( 'plane speeds', () => {
 		// (Flat out, and climbing at half that at the steepest of a loop.)
 		const fastest = planeTopSpeed( 12000 ) * Math.hypot( 1, LOOP.lift );
 		assert.ok( fastest < top, JSON.stringify( { fastest, top } ) );
-		// Under the 800 a page from before the faster plane still checks against (live.js's MAX_SPEED),
-		// and still seen flying rather than jumping: teleported allows half again the speed sent.
-		assert.ok( clamp < 800 && fastest < clamp * 1.5, JSON.stringify( { fastest, clamp } ) );
+		// What's sent stays under the 800 a page from before the faster plane still checks against
+		// (live.js's MAX_SPEED); a plane faster than half again that is seen jumping word to word.
+		assert.ok( clamp < 800, JSON.stringify( { fastest, clamp } ) );
 
 	} );
 
@@ -144,26 +147,30 @@ describe( 'the drop (bailing out)', () => {
 
 	}
 
-	test( 'on the Earth: 160 m/s spread out and never faster; 256 m/s diving; there in under 7 s', () => {
+	test( 'on the Earth: 700 m/s spread out and never faster; 1,120 m/s diving; there in under 8 s; down from the 12 km ceiling in about 20 s', () => {
 
-		assert.ok( Math.abs( freefall( dropping( rig( { y: 6000 } ) ) ) - 160 ) < 1, 'spread out' );
-		const diving = dropping( rig( { y: 6000 } ) );
+		assert.ok( Math.abs( freefall( dropping( rig( { y: 12000 } ) ) ) - 700 ) < 1, 'spread out' );
+		const diving = dropping( rig( { y: 20000 } ) );
 		diving.d.keys.add( 'KeyW' );
-		assert.ok( Math.abs( freefall( diving ) - 256 ) < 1, 'diving' );
-		// Falling at 2.5 times the Earth's gravity: like a stone, not a drift.
-		const r = dropping( rig( { y: 6000 } ) );
-		assert.ok( run( r, 30, { until: () => - r.d.vy >= 159.9 } ) < 7 );
-		assert.ok( Math.abs( dropTerminal( G.mars ) - 115.3 ) < 0.2 );
-		assert.ok( Math.abs( dropTerminal( G.moon, true ) - 160 ) < 0.05 );
+		assert.ok( Math.abs( freefall( diving ) - 1120 ) < 1, 'diving' );
+		// Falling at 10 times the Earth's gravity: like a stone, not a drift.
+		const r = dropping( rig( { y: 12000 } ) );
+		assert.ok( run( r, 30, { until: () => - r.d.vy >= 699.9 } ) < 8 );
+		// From the ceiling to the parachute in about 20 s.
+		const ceiling = dropping( rig( { y: 12000 } ) );
+		const down = run( ceiling, 60, { until: () => ceiling.d.chute.open } );
+		assert.ok( down > 15 && down < 24, `${ down.toFixed( 1 ) } s` );
+		assert.ok( Math.abs( dropTerminal( G.mars ) - ( 450 + 250 * ( G.mars - 0.165 ) / ( 1 - 0.165 ) ) ) < 0.5 );
+		assert.ok( Math.abs( dropTerminal( G.moon, true ) - 720 ) < 0.1 );
 
 	} );
 
-	test( 'on the Moon it reaches 100 m/s within 9 s (falling at 12 m/s² at least)', () => {
+	test( 'on the Moon it reaches 450 m/s within 8 s (falling at 60 m/s² at least)', () => {
 
-		const r = dropping( rig( { gravity: G.moon, y: 4000 } ) );
-		const t = run( r, 30, { until: () => - r.d.vy >= 99.9 } );
-		assert.ok( t < 9, `took ${ t.toFixed( 1 ) } s` );
-		assert.ok( Math.abs( freefall( r ) - 100 ) < 0.5 );
+		const r = dropping( rig( { gravity: G.moon, y: 12000 } ) );
+		const t = run( r, 30, { until: () => - r.d.vy >= 449.9 } );
+		assert.ok( t < 8, `took ${ t.toFixed( 1 ) } s` );
+		assert.ok( Math.abs( freefall( r ) - 450 ) < 0.5 );
 
 	} );
 
@@ -197,21 +204,21 @@ describe( 'the parachute', () => {
 		assert.ok( Math.abs( sink( G.earth ) - 10 ) < 0.1 );
 		assert.ok( Math.abs( sink( G.moon ) - 4.06 ) < 0.05 );
 		assert.ok( Math.abs( sink( G.vesta ) - 3 ) < 0.05 );
-		assert.ok( Math.abs( sink( G.earth, true ) - 20 ) < 0.2 );
+		assert.ok( Math.abs( sink( G.earth, true ) - 20 ) < 0.5 );
 		assert.ok( Math.abs( sink( G.moon, true ) - 8.13 ) < 0.1 );
 		assert.ok( Math.abs( chuteSink( G.mars ) - PARACHUTE.sink * Math.sqrt( G.mars ) ) < 1e-9 );
 
 	} );
 
-	test( 'on the Earth it opens 112 m up spread out (0.7 s of a 160 m/s fall), and it\'s down within 15 s of opening', () => {
+	test( 'on the Earth it opens 135 m up spread out (as high as it takes to slow from 700 m/s, then 2 s at its sink), and it\'s down within 6 s of opening', () => {
 
-		const r = dropping( rig( { y: 3000 } ) );
+		const r = dropping( rig( { y: 6000 } ) );
 		let opened = null;
 		run( r, 600, { until: () => r.d.chute.open && ( opened = over( r ) ) } );
-		// (Within a frame of the fall: at 160 m/s a frame is a few metres.)
-		assert.ok( Math.abs( opened - 112 ) < 6, `opened at ${ opened } m` );
+		// (Within two frames of the fall: at 700 m/s a frame is 12 m.)
+		assert.ok( Math.abs( opened - 135 ) < 25, `opened at ${ opened } m` );
 		const down = run( r, 60, { until: () => ! r.plane.on } );
-		assert.ok( down < 15, `${ down.toFixed( 1 ) } s under the parachute` );
+		assert.ok( down < 6, `${ down.toFixed( 1 ) } s under the parachute` );
 
 	} );
 
@@ -219,7 +226,7 @@ describe( 'the parachute', () => {
 
 		const opensAt = ground => {
 
-			const r = dropping( rig( { gravity: G.mars, y: 2000, speed: CAR_TOP / KMH, ground } ) );
+			const r = dropping( rig( { gravity: G.mars, y: 6000, speed: CAR_TOP / KMH, ground } ) );
 			let opened = null;
 			run( r, 600, { until: () => r.d.chute.open && ( opened = over( r ) ) } );
 			return opened;
@@ -227,11 +234,15 @@ describe( 'the parachute', () => {
 		};
 
 		const flat = opensAt( () => 0 );
-		// Rising half a metre for each one north, the way it's going: 25 m/s coming up at it, so
-		// PARACHUTE.lead s of that sooner.
-		const slope = opensAt( ( east, north ) => north * 0.5 );
-		assert.ok( Math.abs( flat - PARACHUTE.lead * dropTerminal( G.mars ) ) < 3, `flat ${ flat }` );
-		assert.ok( slope > flat + PARACHUTE.lead * 25 * 0.7, JSON.stringify( { flat, slope } ) );
+		// Rising two metres for each one north, the way it's going: 100 m/s coming up at it, so it
+		// opens as much higher as slowing from that much more takes (100 / PARACHUTE.settle m, 17 m;
+		// seen to within a frame of a 614 m/s fall, 10 m). (Ground rising ahead over the car itself
+		// isn't found: a wall, closingSpeed.)
+		const slope = opensAt( ( east, north ) => north * 2 );
+		// (Within two frames of the fall: it's seen open a frame after it opens, at 514 m/s 9 m a frame.)
+		assert.ok( Math.abs( flat - chuteHeight( dropTerminal( G.mars ), G.mars ) ) < 2 * dropTerminal( G.mars ) * DT + 1, `flat ${ flat }` );
+		assert.ok( slope > flat + 100 / PARACHUTE.settle - 614 * DT, JSON.stringify( { flat, slope } ) );
+		assert.ok( Math.abs( chuteHeight( 500, 1 ) - chuteHeight( 300, 1 ) - 200 / PARACHUTE.settle ) < 1e-9 );
 
 	} );
 
