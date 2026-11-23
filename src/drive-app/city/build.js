@@ -19,16 +19,22 @@ import {
 	Vector2,
 } from 'three';
 
-// A city drive's city (scripts/make-city.py's file) built in the page: land and water, parks and
-// beaches, streets with their lines and bridges you drive over, buildings with windows, and trees
-// in the parks. Everything of a kind is one mesh, so a city of a few thousand buildings is a dozen
-// draw calls. In the scene's frame: x is west (-east), y up, z north, as models.js places things.
+// A city drive's city (scripts/make-city.py's files) built in the page: the ground from its
+// elevation grid, coloured by what each spot is (land, park, beach, lake, the sea's bed), the sea at
+// sea level, streets draped over the ground with their lines, bridges you drive over, buildings
+// standing on the ground with windows, and trees in the parks. Everything of a kind is one mesh, so a
+// city of thousands of buildings is a dozen draw calls. In the scene's frame: x is west (-east), y up
+// (metres above sea level), z north, as models.js places things.
 //
 // What's driven on and crashed into is `colliders` (the ground, roads, bridges, buildings and the
 // water, which every ride drives on as in World Drive); the lines and trees are only drawn.
 
-const WATER_LEVEL = - 1.5;
-const LIFT = { sand: 0.02, green: 0.03, path: 0.04, minor: 0.07, major: 0.1 };
+// Over the ground (m): the ground is drawn as flat triangles between its grid's points, and the
+// streets follow it more finely, so they sit a little clear of it.
+const LIFT = { path: 0.12, minor: 0.18, major: 0.24 };
+// Streets are draped over the ground at least this often (m).
+const DRAPE = 5;
+const KIND_COLOURS = { land: 0xb7b2a6, sea: 0x4f6f7c, green: 0x7fa86a, sand: 0xe3d3a6, lake: 0x4d86ab };
 const FLOOR = 3.2;
 const BAY = 3.6;
 
@@ -161,6 +167,45 @@ const asphaltTexture = () => canvasTexture( 128, ( ctx, n ) => {
 
 // --- the city ------------------------------------------------------------------------------
 
+// The city's two files: its JSON, and its ground (heights and kinds, see make-city.py).
+export async function loadCity( url ) {
+
+	const res = await fetch( url );
+	if ( ! res.ok ) throw new Error( `the city answered ${ res.status }` );
+	const city = await res.json();
+	const file = new URL( city.ground.file, new URL( url, location.href ) );
+	const ground = await fetch( file );
+	if ( ! ground.ok ) throw new Error( `its ground answered ${ ground.status }` );
+	// The file as it is, or as base64 text where only text can be served (encoding: 'base64').
+	const buffer = city.ground.encoding === 'base64' ? Uint8Array.from( atob( ( await ground.text() ).trim() ), c => c.charCodeAt( 0 ) ).buffer : await ground.arrayBuffer();
+	// (The JSON's `kinds` names them; the file's are each point's, by those names' places.)
+	city.ground = { ...city.ground, kinds_names: city.ground.kinds, ...readGround( city.ground, buffer ) };
+	return city;
+
+}
+
+function readGround( { columns, rows }, buffer ) {
+
+	const n = columns * rows;
+	const raw = new Int16Array( buffer, 0, n );
+	const heights = new Float32Array( n );
+	for ( let i = 0; i < n; i ++ ) heights[ i ] = raw[ i ] / 10;
+	return { heights, kinds: new Uint8Array( buffer, n * 2, n ) };
+
+}
+
+// The ground's height (m above sea level) at (east, north), between its grid's points.
+export function groundHeight( ground, east, north ) {
+
+	const { columns, rows, spacing, west, north: top, heights } = ground;
+	const c = Math.min( Math.max( ( east - west ) / spacing, 0 ), columns - 1.001 );
+	const r = Math.min( Math.max( ( top - north ) / spacing, 0 ), rows - 1.001 );
+	const c0 = Math.floor( c ), r0 = Math.floor( r ), fc = c - c0, fr = r - r0;
+	const i = r0 * columns + c0;
+	return ( heights[ i ] * ( 1 - fc ) + heights[ i + 1 ] * fc ) * ( 1 - fr ) + ( heights[ i + columns ] * ( 1 - fc ) + heights[ i + columns + 1 ] * fc ) * fr;
+
+}
+
 export function buildCity( city, { trees = true } = {} ) {
 
 	const group = new Group();
@@ -168,54 +213,71 @@ export function buildCity( city, { trees = true } = {} ) {
 	const colliders = new Group();
 	colliders.name = 'ground';
 	group.add( colliders );
+	const ground = city.ground;
+	const at = ( east, north ) => groundHeight( ground, east, north );
 
-	// Water everywhere, well past the city's edge, a step below the land.
+	// The sea at sea level, well past the city's edge.
 	const [ width, height ] = city.size;
 	const reach = Math.max( width, height ) * 4;
-	const water = new Mesh( new PlaneGeometry( reach, reach ).rotateX( - Math.PI / 2 ), new MeshStandardMaterial( { color: 0x3f7392, roughness: 0.25, metalness: 0.1 } ) );
-	water.position.y = WATER_LEVEL;
+	const water = new Mesh( new PlaneGeometry( reach, reach ).rotateX( - Math.PI / 2 ), new MeshStandardMaterial( { color: 0x3f7392, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 } ) );
 	water.name = 'water';
 	colliders.add( water );
 
-	// The land, with a sea wall down to the water round it.
-	const land = new Builder();
-	for ( const polygon of city.land ) {
+	colliders.add( buildGround( ground ) );
+	buildRoads( city, colliders, group, at );
+	buildBuildings( city, colliders, at );
+	if ( trees ) group.add( buildTrees( city, at ) );
 
-		land.flat( polygon, 0 );
-		for ( const ring of polygon ) {
+	return { group, colliders, heightAt: at };
 
-			const p = points( ring );
-			for ( let i = 0; i < p.length; i ++ ) {
+}
 
-				const a = p[ i ], b = p[ ( i + 1 ) % p.length ];
-				land.quad( [ - a.x, 0, a.y ], [ - b.x, 0, b.y ], [ - b.x, WATER_LEVEL - 0.5, b.y ], [ - a.x, WATER_LEVEL - 0.5, a.y ] );
+// The ground: one triangle pair per grid square, coloured by what each point is, leaving out
+// squares that are all sea bed (the sea's surface covers them).
+function buildGround( ground ) {
 
-			}
+	const { columns, rows, spacing, west, north, heights, kinds } = ground;
+	const names = ground.kinds_names ?? [ 'land', 'sea', 'green', 'sand', 'lake' ];
+	const palette = names.map( name => new Color( KIND_COLOURS[ name ] ?? KIND_COLOURS.land ) );
+	const sea = names.indexOf( 'sea' );
+	const position = new Float32Array( columns * rows * 3 );
+	const colour = new Float32Array( columns * rows * 3 );
+	for ( let r = 0; r < rows; r ++ ) for ( let c = 0; c < columns; c ++ ) {
 
-		}
+		const i = r * columns + c;
+		position[ i * 3 ] = - ( west + c * spacing );
+		position[ i * 3 + 1 ] = heights[ i ];
+		position[ i * 3 + 2 ] = north - r * spacing;
+		const tint = palette[ kinds[ i ] ] ?? palette[ 0 ];
+		colour[ i * 3 ] = tint.r; colour[ i * 3 + 1 ] = tint.g; colour[ i * 3 + 2 ] = tint.b;
 
 	}
 
-	colliders.add( Object.assign( land.mesh( new MeshLambertMaterial( { color: 0xb7b2a6, side: DoubleSide } ) ), { name: 'land' } ) );
+	const index = [];
+	for ( let r = 0; r < rows - 1; r ++ ) for ( let c = 0; c < columns - 1; c ++ ) {
 
-	const green = new Builder();
-	for ( const polygon of city.green ) green.flat( polygon, LIFT.green );
-	colliders.add( green.mesh( new MeshLambertMaterial( { color: 0x7fa86a, side: DoubleSide } ) ) );
-	const sand = new Builder();
-	for ( const polygon of city.sand ) sand.flat( polygon, LIFT.sand );
-	colliders.add( sand.mesh( new MeshLambertMaterial( { color: 0xe3d3a6, side: DoubleSide } ) ) );
+		const a = r * columns + c, b = a + 1, d = a + columns, e = d + 1;
+		if ( kinds[ a ] === sea && kinds[ b ] === sea && kinds[ d ] === sea && kinds[ e ] === sea ) continue;
+		index.push( a, d, b, b, d, e );
 
-	buildRoads( city, colliders, group );
-	buildBuildings( city, colliders );
-	if ( trees ) group.add( buildTrees( city ) );
+	}
 
-	return { group, colliders };
+	const geometry = new BufferGeometry();
+	geometry.setAttribute( 'position', new BufferAttribute( position, 3 ) );
+	geometry.setAttribute( 'color', new BufferAttribute( colour, 3 ) );
+	geometry.setIndex( index );
+	geometry.computeVertexNormals();
+	geometry.computeBoundingBox();
+	geometry.computeBoundingSphere();
+	const mesh = new Mesh( geometry, new MeshLambertMaterial( { vertexColors: true, side: DoubleSide } ) );
+	mesh.name = 'land';
+	return mesh;
 
 }
 
 // Streets: a strip each, mitred at the bends, at its kind's lift (bridges at their heights, with a
 // deck under them), and lines down the middle of the wider ones.
-function buildRoads( city, colliders, group ) {
+function buildRoads( city, colliders, group, at ) {
 
 	const roads = new Builder( { uv: true } );
 	const paths = new Builder();
@@ -223,10 +285,12 @@ function buildRoads( city, colliders, group ) {
 	const lines = { yellow: new Builder(), white: new Builder() };
 	for ( const [ line, width, kind, heights ] of city.roads ) {
 
-		const p = points( line );
+		// Bridges at their decks' heights; the rest every DRAPE m along, over the ground there.
+		const p = heights ? points( line ) : drape( points( line ) );
 		if ( p.length < 2 ) continue;
 		const lift = LIFT[ kind ] ?? LIFT.minor;
-		const h = i => ( heights ? dm( heights[ i ] ) : 0 ) + lift;
+		const level = heights ? heights.map( dm ) : p.map( v => at( v.x, v.y ) );
+		const h = i => level[ i ] + lift;
 		const half = width / 2;
 		// Each point's sideways offset: the average of its two segments' normals, lengthened at a bend.
 		const sides = p.map( ( v, i ) => {
@@ -298,9 +362,25 @@ function buildRoads( city, colliders, group ) {
 
 }
 
+// Points along a line at most DRAPE m apart.
+function drape( p ) {
+
+	const out = [ p[ 0 ] ];
+	for ( let i = 1; i < p.length; i ++ ) {
+
+		const steps = Math.ceil( p[ i - 1 ].distanceTo( p[ i ] ) / DRAPE );
+		for ( let s = 1; s <= steps; s ++ ) out.push( p[ i - 1 ].clone().lerp( p[ i ], s / steps ) );
+
+	}
+
+	return out;
+
+}
+
 // Buildings: walls with a window every bay and floor, tinted their colour, and a flat roof a
-// shade darker.
-function buildBuildings( city, colliders ) {
+// shade darker. Each stands on the lowest ground round its footprint (its heights are from there),
+// its walls reaching a little below so a slope never shows under it.
+function buildBuildings( city, colliders, at ) {
 
 	const walls = new Builder( { uv: true, colour: true } );
 	const roofs = new Builder( { colour: true } );
@@ -310,7 +390,8 @@ function buildBuildings( city, colliders ) {
 
 		const p = points( ring );
 		if ( p.length < 3 ) continue;
-		const base = dm( base10 ), top = dm( top10 );
+		const foot = Math.min( ...p.map( v => at( v.x, v.y ) ) );
+		const base = foot + ( base10 > 0 ? dm( base10 ) : - 1.5 ), top = foot + dm( top10 );
 		tint.set( colour );
 		roofTint.copy( tint ).multiplyScalar( 0.72 );
 		let along = 0;
@@ -326,7 +407,7 @@ function buildBuildings( city, colliders ) {
 		}
 
 		roofs.flat( [ ring ], top, roofTint );
-		if ( base > 0 ) roofs.flat( [ ring ], base, roofTint );
+		if ( base10 > 0 ) roofs.flat( [ ring ], base, roofTint );
 
 	}
 
@@ -336,44 +417,38 @@ function buildBuildings( city, colliders ) {
 
 }
 
-// Trees scattered over the parks, about one per 120 m², as two instanced meshes (trunks and
-// crowns). Not collided with: driven through, as in an arcade game.
-function buildTrees( city ) {
+// Trees scattered over the parks and woods (the ground's green points), about one per 200 m², as
+// two instanced meshes (trunks and crowns). Not collided with: driven through, as in an arcade game.
+function buildTrees( city, at ) {
 
 	const group = new Group();
 	group.name = 'trees';
+	const { columns, rows, spacing, west, north, kinds } = city.ground;
+	const green = ( city.ground.kinds_names ?? [ 'land', 'sea', 'green' ] ).indexOf( 'green' );
 	const spots = [];
 	let seed = 99;
 	const random = () => ( seed = ( seed * 16807 ) % 2147483647 ) / 2147483647;
 	const roadsNear = roadGrid( city );
-	for ( const polygon of city.green ) {
+	const each = spacing * spacing / 200;
+	for ( let r = 0; r < rows && spots.length < 60000; r ++ ) for ( let c = 0; c < columns; c ++ ) {
 
-		const [ outer, ...holes ] = polygon.map( points );
-		let minX = Infinity, maxX = - Infinity, minY = Infinity, maxY = - Infinity;
-		for ( const v of outer ) {
+		if ( kinds[ r * columns + c ] !== green ) continue;
+		for ( let n = each; n > 0; n -- ) {
 
-			minX = Math.min( minX, v.x ); maxX = Math.max( maxX, v.x ); minY = Math.min( minY, v.y ); maxY = Math.max( maxY, v.y );
-
-		}
-
-		const area = ( maxX - minX ) * ( maxY - minY );
-		const count = Math.min( 20000, Math.round( area / 120 ) );
-		for ( let i = 0; i < count && spots.length < 40000; i ++ ) {
-
-			const x = minX + random() * ( maxX - minX ), y = minY + random() * ( maxY - minY );
-			if ( ! inside( outer, x, y ) || holes.some( h => inside( h, x, y ) ) || roadsNear( x, y ) ) continue;
-			spots.push( [ x, y, 0.7 + random() * 0.6 ] );
+			if ( n < 1 && random() > n ) break;
+			const x = west + ( c + random() - 0.5 ) * spacing, y = north - ( r + random() - 0.5 ) * spacing;
+			if ( ! roadsNear( x, y ) ) spots.push( [ x, y, 0.7 + random() * 0.6 ] );
 
 		}
 
 	}
 
-	const trunk = new InstancedMesh( new CylinderGeometry( 0.18, 0.25, 2.4, 6 ).translate( 0, 1.2, 0 ), new MeshLambertMaterial( { color: 0x5a4632 } ), spots.length );
-	const crown = new InstancedMesh( new ConeGeometry( 2.2, 7, 7 ).translate( 0, 5.5, 0 ), new MeshLambertMaterial( { color: 0x3f6b3a } ), spots.length );
+	const trunk = new InstancedMesh( new CylinderGeometry( 0.18, 0.25, 2.4, 4 ).translate( 0, 1.2, 0 ), new MeshLambertMaterial( { color: 0x5a4632 } ), spots.length );
+	const crown = new InstancedMesh( new ConeGeometry( 2.4, 7, 6 ).translate( 0, 5.5, 0 ), new MeshLambertMaterial( { color: 0x3f6b3a } ), spots.length );
 	const m = new Matrix4();
 	spots.forEach( ( [ x, y, s ], i ) => {
 
-		m.makeScale( s, s, s ).setPosition( - x, LIFT.green, y );
+		m.makeScale( s, s, s ).setPosition( - x, at( x, y ) - 0.2, y );
 		trunk.setMatrixAt( i, m );
 		crown.setMatrixAt( i, m );
 
@@ -406,19 +481,5 @@ function roadGrid( city ) {
 	}
 
 	return ( x, y ) => cells.has( key( x, y ) );
-
-}
-
-function inside( ring, x, y ) {
-
-	let hit = false;
-	for ( let i = 0, j = ring.length - 1; i < ring.length; j = i ++ ) {
-
-		const a = ring[ i ], b = ring[ j ];
-		if ( ( a.y > y ) !== ( b.y > y ) && x < ( b.x - a.x ) * ( y - a.y ) / ( b.y - a.y ) + a.x ) hit = ! hit;
-
-	}
-
-	return hit;
 
 }
