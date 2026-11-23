@@ -233,7 +233,7 @@
 				<div><dt><kbd>F</kbd> <kbd>T</kbd></dt><dd><b>Plane</b>: <kbd>W</kbd> <kbd>S</kbd> thrust, <kbd>Space</kbd> up, <kbd>Shift</kbd> down; at least twice a car's speed, faster the higher you fly. <kbd>F</kbd> or <kbd>T</kbd> again to bail out: a fast free fall (<kbd>W</kbd> dives), then a slow parachute (<kbd>S</kbd> drops faster); low down, it lands</dd></div>
 				<div><dt><kbd>Q</kbd> <kbd>E</kbd> <kbd>Z</kbd> <kbd>X</kbd></dt><dd><b>Plane tricks</b>: <kbd>Q</kbd> <kbd>E</kbd> roll, <kbd>Z</kbd> loop, <kbd>X</kbd> outside loop (<kbd>R</kbd> a quick roll); they score like the car's, best low down</dd></div>
 				<div><dt>In the air</dt><dd><kbd>A</kbd> <kbd>D</kbd> spin · <kbd>W</kbd> <kbd>S</kbd> flip · <kbd>Q</kbd> <kbd>E</kbd> roll</dd></div>
-				<div><dt>Stunts</dt><dd>Hit things to launch; land on your wheels to score. <button type="button" class="link scoring-open">How scoring works</button></dd></div>
+				<div><dt>Stunts</dt><dd>Jump off ramps and crests, spin and flip, land on your wheels to score; walls slide you along them (Trick mode, in the pause menu: hit things to launch). <button type="button" class="link scoring-open">How scoring works</button></dd></div>
 				<div><dt><kbd>R</kbd></dt><dd>Back on the road</dd></div>
 				<div><dt><kbd>C</kbd></dt><dd>Camera</dd></div>
 				<div><dt><kbd>L</kbd></dt><dd>On the Moon, Mars, Vesta and Ceres: colour the ground by its real measured height</dd></div>
@@ -274,6 +274,9 @@
 					<button type="button" class="to-globe">Back to the globe <kbd>M</kbd></button>
 				</div>
 				<div class="settings">
+					<!-- Trick mode (main.js): bounce off walls and get thrown into the air, for stunts; off, the
+					     car slides along walls (jumps, spins and flips still score). -->
+					<label class="setting"><input type="checkbox" class="tricks-toggle" /> Trick mode: bounce off walls</label>
 					<label class="setting"><input type="checkbox" class="pads-toggle" /> Boost pads on the road</label>
 					<label class="setting"><input type="checkbox" class="camera-toggle" checked /> Camera effects</label>
 					<!-- The music (music.js): on or off and how loud, the same as the globe panel's. -->

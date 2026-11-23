@@ -341,6 +341,8 @@ async function drawWorld( world, which ) {
 
 				localStorage.setItem( 'world-drive.vehicle', ride );
 				localStorage.setItem( 'world-drive.pads', 'off' );
+		// Trick mode on (walls bounce the car off), as the stunt tests were written for; slide mode's own test turns it off.
+		if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
 
 			}, shot?.vehicle ?? 'go-kart' );
 			const page = await context.newPage();

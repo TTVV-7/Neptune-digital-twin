@@ -154,6 +154,21 @@ async function newPage( { viewport = { width: 1280, height: 800 }, touch = false
 
 	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch, reducedMotion } );
 	await pickRide( context, ride );
+	// Trick mode on (walls bounce the car off), as the stunt tests were written for; slide mode's own
+	// test switches the Driver to it.
+	await context.addInitScript( () => {
+
+		try {
+
+			if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
+
+		} catch {
+
+			// Storage blocked: slide mode, the default.
+
+		}
+
+	} );
 	const page = await context.newPage();
 	page.searches = [];
 	page.outside = [];
@@ -352,6 +367,81 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await page.evaluate( () => Number( document.querySelector( '#hud .dhud-number' ).textContent ) ) > 0 );
 		await shot( page, 'drive-5-driving' );
 		assert.equal( await page.evaluate( () => performance.getEntriesByType( 'navigation' ).length ), navigations );
+
+	} );
+
+	test( 'slide mode (Trick mode off): a wall met at an angle turns the kart along it, still driving, never thrown up; met square on it stops; the switch is kept', async () => {
+
+		const result = await page.evaluate( () => {
+
+			const { driver: d, ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const step = ( seconds, each ) => {
+
+				for ( let i = 0; i < Math.round( seconds * 60 ); i ++ ) {
+
+					d.update( 1 / 60 );
+					if ( each?.() === false ) return;
+
+				}
+
+			};
+			const reset = ( kmh, heading ) => {
+
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading, course: heading, view: heading, speed: kmh / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, drifting: 0, driftHop: false, boost: null } );
+				d.update( 1 / 60 );
+
+			};
+			const land = pad.children.find( child => child.isMesh );
+			const wall = land.clone();
+			wall.material = land.material.clone();
+			wall.material.side = 2;
+			wall.rotation.set( 0, 0, 0 );
+			wall.scale.set( 200 / 4000, 6 / 2000, 1 );
+			wall.position.set( 0, 3, 30 );
+			pad.add( wall );
+			wall.updateMatrixWorld();
+			const was = d.walls;
+			d.walls = 'slide';
+			const out = {};
+			// At 90 km/h, 35° off the wall's line: along it, grounded, not through.
+			reset( 90, 55 );
+			d.press( 'KeyW' );
+			let air = false, maxY = 0;
+			step( 3, () => {
+
+				air ||= !! d.air || ! d.grounded;
+				maxY = Math.max( maxY, d.y );
+
+			} );
+			d.release( 'KeyW' );
+			out.glancing = { air, maxY, north: d.north, speed: d.speed * 3.6, heading: ( ( d.heading % 360 ) + 360 ) % 360 };
+			// Square on: it stops against it.
+			reset( 90, 0 );
+			let flown = false;
+			step( 2, () => {
+
+				flown ||= !! d.air;
+
+			} );
+			out.square = { flown, north: d.north, speed: Math.abs( d.speed ) * 3.6 };
+			d.walls = was;
+			pad.remove( wall );
+			return out;
+
+		} );
+		// Slid along: on the ground all the way, under 0.5 m up, still going, turned to run along it (east).
+		assert.equal( result.glancing.air, false, JSON.stringify( result.glancing ) );
+		assert.ok( result.glancing.maxY < 0.5, JSON.stringify( result.glancing ) );
+		assert.ok( result.glancing.north < 30, JSON.stringify( result.glancing ) );
+		assert.ok( result.glancing.speed > 30, JSON.stringify( result.glancing ) );
+		assert.ok( Math.abs( result.glancing.heading - 90 ) < 20, JSON.stringify( result.glancing ) );
+		// Square on: stopped at it, never thrown up.
+		assert.equal( result.square.flown, false, JSON.stringify( result.square ) );
+		assert.ok( result.square.north < 30 && result.square.speed < 5, JSON.stringify( result.square ) );
+		// The pause menu's switch: off (slide) unless chosen, and kept.
+		assert.equal( await page.evaluate( () => document.querySelector( '#pause .tricks-toggle' ) !== null ), true );
 
 	} );
 
@@ -8683,6 +8773,8 @@ describe( 'World Drive challenges', () => {
 
 			window.worldDriveVisitTest = { visit };
 			localStorage.setItem( 'world-drive.pads', 'off' );
+		// Trick mode on (walls bounce the car off), as the stunt tests were written for; slide mode's own test turns it off.
+		if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
 			if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
 			for ( const [ key, value ] of Object.entries( storage ) ) localStorage.setItem( key, value );
 
@@ -10635,6 +10727,69 @@ describe( 'World Drive challenges', () => {
 		await section.scrollIntoViewIfNeeded();
 		await shot( page, 'challenges-admin-3-phone' );
 		await context.close();
+
+	} );
+
+} );
+
+describe( 'World Drive: clean roads under the map (?hybrid, Vancouver)', () => {
+
+	test( 'in Vancouver the car drives on the city built from OpenStreetMap, lined up with the map under it (the test pad standing in for Google\'s), and keeps to its streets', async () => {
+
+		const page = await newPage();
+		await page.goto( `${ BASE }/?hybrid=show` );
+		// (The notice offering the test pad, as there's no key here, or the globe already.)
+		await page.waitForFunction( () => window.drive?.mode === 'globe' || [ ...document.querySelectorAll( '#notice button' ) ].some( b => /test pad/.test( b.textContent ) && b.offsetParent ), null, { timeout: 30000 } );
+		if ( await page.evaluate( () => window.drive?.mode !== 'globe' ) ) await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+		// Robson Street, heading south-east along it.
+		await page.evaluate( () => window.drive.dropIn( { name: 'Robson Street', lat: 49.28457, lon: - 123.12245, heading: 135 } ) );
+		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+		await page.waitForFunction( () => window.drive.hybrid.city && window.drive.hybrid.offset !== null, null, { timeout: 30000 } );
+		const state = await page.evaluate( () => {
+
+			const { hybrid, driver, ground } = window.drive;
+			return { offset: hybrid.offset, on: hybrid.active( { east: driver.east, north: driver.north } ), grounds: ground.getColliders().map( g => g.name ) };
+
+		} );
+		// Measured (on the pad, the city lowered by the street's own height), and driven on.
+		assert.ok( Number.isFinite( state.offset ), JSON.stringify( state ) );
+		assert.equal( state.on, true, JSON.stringify( state ) );
+		assert.ok( state.grounds.includes( 'ground' ), JSON.stringify( state ) );
+		// Driven along the street for 4 s: on its surface all the way, never falling through or flung up.
+		const run = await page.evaluate( () => {
+
+			const { driver: d, hybrid } = window.drive;
+			const surface = () => {
+
+				const ray = new d.raycaster.constructor( new d.camera.position.constructor( - d.east, d.y + 50, d.north ), new d.camera.position.constructor( 0, - 1, 0 ) );
+				return ray.intersectObject( hybrid.colliders, true )[ 0 ]?.point.y ?? null;
+
+			};
+			// (Its first second it settles from where it was put down, on the map, onto the city's street.)
+			for ( let i = 0; i < 60; i ++ ) d.update( 1 / 60 );
+			d.press( 'KeyW' );
+			let worst = 0, air = 0;
+			for ( let i = 0; i < 240; i ++ ) {
+
+				d.update( 1 / 60 );
+				const s = surface();
+				if ( s !== null && d.grounded ) worst = Math.max( worst, Math.abs( d.y - s ) );
+				if ( ! d.grounded ) air ++;
+
+			}
+
+			d.release( 'KeyW' );
+			return { worst, air, speed: d.speed * 3.6 };
+
+		} );
+		assert.ok( run.worst < 0.6, JSON.stringify( run ) );
+		assert.ok( run.air < 10, JSON.stringify( run ) );
+		assert.ok( run.speed > 20, JSON.stringify( run ) );
+		await page.waitForTimeout( 500 );
+		await shot( page, 'hybrid-vancouver' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
 
 	} );
 

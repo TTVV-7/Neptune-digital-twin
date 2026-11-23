@@ -7,6 +7,7 @@ import { createDriveHud } from '../../drive-hud.js';
 import { loadVehicle, loadVehicles, rideLocked, specOf } from '../vehicles.js';
 import { buildCity } from './build.js';
 import { CITIES } from './cities.js';
+import { drape, loadTerrain } from './terrain.js';
 
 // City Drive (/city/, drive/city/index.html): World Drive's cars in a whole city built from
 // OpenStreetMap (build.js, scripts/make-city.py) instead of Google's tiles: nothing to pay per
@@ -94,9 +95,13 @@ async function openCity( id ) {
 		}
 
 		const built = buildCity( data );
+		// Over its real hills, where it has its ground (scripts/make-city-terrain.py): before the
+		// raycasting structures are made, as they're made from the points.
+		const terrain = spec.terrain ? await loadTerrain( spec.terrain ) : null;
+		if ( terrain ) drape( built.group, terrain );
 		useFastRaycast( built.colliders );
 		scene.add( built.group );
-		city = { spec, data, ...built };
+		city = { spec, data, terrain, ...built };
 		fill( $( 'start' ), data.starts.map( ( s, i ) => [ i, s.name ] ) );
 		$( 'blurb' ).textContent = spec.blurb;
 		$( 'credit' ).textContent = data.credit.replace( '(c)', '©' );

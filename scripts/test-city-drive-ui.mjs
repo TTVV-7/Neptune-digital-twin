@@ -90,8 +90,14 @@ test( 'a ride is put down on a street and drives along it', async () => {
 	await page.selectOption( '#start', '0' );
 	await page.click( '#go' );
 	await page.waitForFunction( () => window.cityDrive.driver.active, null, { timeout: 60000 } );
-	const start = await page.evaluate( () => ( { east: window.cityDrive.driver.east, north: window.cityDrive.driver.north, y: window.cityDrive.driver.y } ) );
-	assert.ok( Math.abs( start.y ) < 0.5, `on the street, not under or over it (${ start.y.toFixed( 2 ) } m)` );
+	const start = await page.evaluate( () => {
+
+		const { driver, city } = window.cityDrive;
+		// The street's own height there: the city is laid over its real hills (terrain.js).
+		return { east: driver.east, north: driver.north, y: driver.y - ( city.terrain?.heightAt( driver.east, driver.north ) ?? 0 ) };
+
+	} );
+	assert.ok( Math.abs( start.y ) < 0.5, `on the street, not under or over it (${ start.y.toFixed( 2 ) } m over its ground)` );
 	// Held down till it's gone 20 m (software rendering can be slow, so by distance, not time).
 	await page.keyboard.down( 'KeyW' );
 	const went = await page.waitForFunction( ( { east, north } ) => Math.hypot( window.cityDrive.driver.east - east, window.cityDrive.driver.north - north ) > 20, start, { timeout: 60000 } ).then( () => true, () => false );
@@ -119,8 +125,10 @@ test( 'bridges are decks high over the water, found as the ground', async () => 
 		return bridges.map( ( [ line, , , heights ] ) => {
 
 			const i = heights.indexOf( Math.max( ...heights ) );
-			const hit = groundAt( line[ i * 2 ] / 10, line[ i * 2 + 1 ] / 10 );
-			return { want: heights[ i ] / 10, got: hit?.y ?? null, what: hit?.what };
+			const [ east, north ] = [ line[ i * 2 ] / 10, line[ i * 2 + 1 ] / 10 ];
+			const hit = groundAt( east, north );
+			// Over the ground there (laid over the hills: terrain.js), the deck at its mapped height.
+			return { want: heights[ i ] / 10, got: hit ? hit.y - ( city.terrain?.heightAt( east, north ) ?? 0 ) : null, what: hit?.what };
 
 		} );
 

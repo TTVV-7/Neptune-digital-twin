@@ -169,6 +169,11 @@ const STUCK_SPEED = 0.3;
 // against it over and over, a "Wall bounce" each time.) Only a hit of BOUNCE_SCORE m/s or more
 // (BOING! and WHAM!) scores as a wall bounce.
 const SCRAPE_ANGLE = 15;
+// walls: 'slide' (stunts on, but walls don't throw it about: see slide). Met at under SLIDE_STOP°
+// (from along it) a wall turns the vehicle along it, losing SLIDE_LOSS times the speed into it;
+// more square on than that, it stops against it as with crash: 'stop'.
+const SLIDE_STOP = 65;
+const SLIDE_LOSS = 0.5;
 const SCRAPE_LOSS = 0.25;
 const BUMP_MIN = 3;
 const LAUNCH_MIN = 6;
@@ -332,7 +337,7 @@ export class Driver {
 	// over y: { level }, the water's surface height there (null where it isn't water). gravity: the
 	// world's, as a share of the Earth's (World Drive's Moon: 0.165), which an app may change between
 	// drives (see leap).
-	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null, effects = null, gravity = 1, plane = false, canPlane = null, onPlane = null } ) {
+	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', walls = 'bounce', water = null, effects = null, gravity = 1, plane = false, canPlane = null, onPlane = null } ) {
 
 		this.camera = camera;
 		this.models = models;
@@ -350,6 +355,9 @@ export class Driver {
 		this.booster = booster;
 		this.drift = drift;
 		this.launch = crash === 'launch';
+		// With stunts: 'bounce' off walls (and from the ground into the air), or 'slide' along them (the
+		// tricks off ramps and jumps all the same). Changed at any time (main.js's trick mode).
+		this.walls = walls;
 		this.water = water;
 		this.gravity = gravity;
 		// The colour of the dust a landing throws up (drive-fx.js), or null for the usual grey-beige:
@@ -1986,12 +1994,14 @@ export class Driver {
 
 		const into = - ( ve * wall.east + vn * wall.north );
 		if ( into <= 0 ) return;
-		if ( this.launch ) {
+		if ( this.launch && this.walls !== 'slide' ) {
 
 			this.bounce( ve, vn, wall, into );
 			return;
 
 		}
+
+		if ( this.launch && this.slide( ve, vn, wall, into ) ) return;
 
 		this.speed = 0;
 		this.course = this.heading;
@@ -2006,6 +2016,34 @@ export class Driver {
 			this.hud.flash( 'Crash!', 'crash' );
 
 		}
+
+	}
+
+	// walls: 'slide'. Hit a wall at ( ve, vn ) m/s east and north, `into` of that into it: met at less
+	// than SLIDE_STOP° it turns along it and slides on, a little slower, in sparks; in the air it's
+	// turned along it and drops. True if it slid; false (more square on, on the ground) to stop
+	// against it as crash: 'stop' does.
+	slide( ve, vn, wall, into ) {
+
+		const speed = Math.hypot( ve, vn );
+		const angle = Math.asin( MathUtils.clamp( into / speed, 0, 1 ) );
+		const inAir = !! this.air && ! this.air.flight;
+		if ( angle > SLIDE_STOP * MathUtils.DEG2RAD && ! inAir && ! this.flying ) return false;
+		const te = ve + wall.east * into;
+		const tn = vn + wall.north * into;
+		const along = Math.hypot( te, tn );
+		if ( this.drifting ) this.endDrift( false );
+		const keep = along > 0 ? Math.max( 0, along - SLIDE_LOSS * into ) / along : 0;
+		// Turned to follow the wall, so it carries on beside it rather than grinding into it.
+		if ( ! inAir && along > 0.1 ) this.heading += Math.sign( vn * te - ve * tn ) * angle * MathUtils.RAD2DEG;
+		this.setVelocity( te * keep + wall.east * Math.min( into, 2 ) * 0.1, tn * keep + wall.north * Math.min( into, 2 ) * 0.1 );
+		const contact = this.contact( wall );
+		this.scraping = 0.15;
+		this.scrapeAt.at.copy( contact.point );
+		this.scrapeAt.normal.set( - wall.east, 0, wall.north );
+		this.scrapeAt.speed = along;
+		if ( this.motion ) this.shake = Math.max( this.shake, ( 0.02 + 0.003 * into ) * this.handling.shake );
+		return true;
 
 	}
 
