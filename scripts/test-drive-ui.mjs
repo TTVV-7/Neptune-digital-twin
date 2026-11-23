@@ -6660,7 +6660,7 @@ const CLIENT = 'test-client.apps.googleusercontent.com';
 const PASS_LINK = 'https://buy.stripe.com/test_madeUpLink000';
 const DAY_LINK = 'https://buy.stripe.com/test_madeUpDayLink000';
 const MONTH_LINK = 'https://buy.stripe.com/test_madeUpMonthLink000';
-const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', monthly: { link: MONTH_LINK, price: 'CA$1.79/month' }, day: { link: DAY_LINK, price: 'CA$0.89' } } };
+const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$19.99', monthly: { link: MONTH_LINK, price: 'CA$1.79/month' }, day: { link: DAY_LINK, price: 'CA$0.89' } } };
 const ALICE = { signedIn: true, name: 'Alice Example', email: 'alice@example.com', supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '42' } };
 const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' };
 
@@ -6765,10 +6765,10 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		// Both ways to buy, with their prices, for everyone; the ways to sign in (and Google's script)
 		// only once one's picked.
 		await area.locator( '.buy-life' ).waitFor();
-		assert.equal( await area.locator( '.buy-life' ).textContent(), 'For good: CA$4.99' );
+		assert.equal( await area.locator( '.buy-life' ).textContent(), 'For good: CA$19.99' );
 		assert.equal( await area.locator( '.buy-day' ).textContent(), '24 hours: CA$0.89' );
 		assert.equal( await area.locator( '.buy-month.primary' ).textContent(), 'Monthly: CA$1.79/month' );
-		assert.deepEqual( await area.locator( '.buy-options button' ).allTextContents(), [ '24 hours: CA$0.89', 'Monthly: CA$1.79/month', 'For good: CA$4.99' ] );
+		assert.deepEqual( await area.locator( '.buy-options button' ).allTextContents(), [ '24 hours: CA$0.89', 'Monthly: CA$1.79/month', 'For good: CA$19.99' ] );
 		assert.match( await area.textContent(), /Have the pass already\? Sign in[\s\S]*Monthly is a subscription: cancel any time\./ );
 		assert.equal( await area.locator( '.stub-google' ).count(), 0 );
 		assert.equal( page.google, 0 );
@@ -6877,7 +6877,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await openPass( page );
 		const area = sheet( page );
 		await area.locator( '.supporter-thanks', { hasText: 'Your 24-hour pass has 14 h left.' } ).waitFor();
-		assert.equal( await area.locator( '.buy-life' ).textContent(), 'Keep it for good: CA$4.99' );
+		assert.equal( await area.locator( '.buy-life' ).textContent(), 'Keep it for good: CA$19.99' );
 		assert.equal( await area.locator( '.buy-day' ).count(), 0 );
 		await area.locator( '.buy-life' ).click();
 		assert.equal( new URL( ( await page.evaluate( () => window.opened ) )[ 0 ][ 0 ] ).pathname, new URL( PASS_LINK ).pathname );
@@ -7638,6 +7638,47 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
 		await sheet( page ).locator( '.supporter-passwords' ).waitFor();
 		assert.equal( page.asked.signOuts, 1 );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a supporter\'s panel says which pass it is; a monthly one\'s has Manage subscription (Stripe\'s portal) at once, or without it how to ask', async () => {
+
+		const MANAGE = 'https://billing.stripe.com/p/login/test_portal';
+		const monthly = { ...RACER, supporter: true, subscribed: true, purchase: { ...RACER.purchase, manage: MANAGE } };
+		const page = await accountPage( { me: monthly } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Account' );
+		const pass = account.locator( '.account-pass' );
+		// Not folded away: seen as the panel opens.
+		assert.equal( await pass.isVisible(), true );
+		assert.match( await pass.textContent(), /Monthly subscription\. Cancel any time/ );
+		const manage = pass.locator( 'a.account-manage' );
+		assert.equal( await manage.textContent(), 'Manage subscription' );
+		assert.deepEqual( [ await manage.getAttribute( 'href' ), await manage.getAttribute( 'target' ) ], [ MANAGE, '_blank' ] );
+		assert.deepEqual( await pass.locator( 'a:not(.account-manage)' ).evaluateAll( links => links.map( a => a.getAttribute( 'href' ) ) ), [ '/refunds/', '/contact/' ] );
+		await shot( page, 'account-pass-monthly' );
+		// The pass's sheet says it too.
+		await page.keyboard.press( 'Escape' );
+		await sheet( page ).locator( 'a', { hasText: 'Manage your subscription' } ).waitFor();
+
+		// Stripe's link not set: how to ask for it instead, never no way at all.
+		page.state.me = { ...monthly, purchase: RACER.purchase };
+		await page.evaluate( () => window.drive.supporter.refresh?.() );
+		await page.waitForFunction( () => ! window.drive.supporter.me?.purchase?.manage );
+		await openAccountPanel( page, 'Account' );
+		assert.equal( await pass.locator( 'a.account-manage' ).count(), 0 );
+		assert.match( await pass.textContent(), /To cancel or change your card, get in touch/ );
+
+		// Paid once: nothing to cancel.
+		await page.keyboard.press( 'Escape' );
+		page.state.me = { ...RACER, supporter: true };
+		await page.evaluate( () => window.drive.supporter.refresh?.() );
+		await page.waitForFunction( () => ! window.drive.supporter.me?.subscribed );
+		await openAccountPanel( page, 'Account' );
+		assert.match( await pass.textContent(), /Yours for good\. Paid once: nothing to cancel\./ );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 

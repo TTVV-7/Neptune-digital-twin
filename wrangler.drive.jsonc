@@ -54,6 +54,9 @@
 		"DAY_PASS_PAYMENT_LINK": "https://buy.stripe.com/28E14mgX21bFf5U1gGfrW03",
 		"DAY_PASS_PAYMENT_LINK_ID": "plink_1UdfbbCEvam6zTiEHMlUr66T",
 		"DAY_PASS_PRICE": "CA$0.99",
+		// Stripe's customer portal login link: where a monthly supporter cancels, changes their card or
+		// sees receipts (the Account panel's and the pass sheet's Manage subscription).
+		"SUPPORTER_MANAGE_LINK": "https://billing.stripe.com/p/login/9B6bJ0fSYaMf3nc0cCfrW00",
 		// Driving with others (worker/drive/live.js): "off" is the kill switch. New connections are
 		// turned away, those already in a room are closed as they next say anything (or at the room's
 		// next alarm) once the room runs the new version (a busy one can take up to 5 minutes to; see

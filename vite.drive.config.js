@@ -5,6 +5,7 @@ import { defineConfig, loadEnv } from 'vite';
 import { GOOGLE_KEY_NAMES } from './vite.config.js';
 import { LIBRARY_VEHICLES, WORKS_RIDES } from './src/drive-app/catalog.js';
 import { driveSite } from './drive/site/build.js';
+import { CONTACT_VARS } from './drive/site/legal.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): its own page, drive/index.html with
 // src/drive-app/boot.js (which loads main.js), sharing src/ with the construction app, and its
@@ -27,6 +28,9 @@ export default defineConfig( ( { command, mode } ) => {
 	const byName = new Map( Object.entries( env ).map( ( [ name, value ] ) => [ name.toLowerCase(), value ] ) );
 	const envKey = GOOGLE_KEY_NAMES.map( name => byName.get( name.toLowerCase() ) ).find( Boolean ) ?? '';
 	const api = env.DRIVE_API;
+	// Who runs World Drive, for the contact page and policies (drive/site/legal.js), from .env files
+	// too, not only the shell's environment.
+	for ( const name of Object.values( CONTACT_VARS ) ) if ( env[ name ] && ! process.env[ name ] ) process.env[ name ] = env[ name ];
 
 	return {
 		root: join( ROOT, 'drive' ),

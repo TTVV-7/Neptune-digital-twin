@@ -1255,7 +1255,7 @@ function checkout( id, { type = 'checkout.session.completed', reference = null, 
 			object: 'checkout.session',
 			mode: 'payment',
 			payment_status: paid ? 'paid' : 'unpaid',
-			amount_total: 499,
+			amount_total: 1999,
 			currency: 'cad',
 			client_reference_id: reference,
 			customer_details: { email },
@@ -1277,7 +1277,7 @@ function refund( id, { full = true, live = false } = {} ) {
 function dispute( id, funds ) {
 
 	const status = funds === 'withdrawn' ? 'needs_response' : 'won';
-	return { id: `evt_dispute_${ funds }_${ id }`, object: 'event', type: `charge.dispute.funds_${ funds }`, livemode: false, data: { object: { id: `dp_${ id }`, object: 'dispute', charge: `ch_${ id }`, payment_intent: `pi_${ id }`, amount: 499, status } } };
+	return { id: `evt_dispute_${ funds }_${ id }`, object: 'event', type: `charge.dispute.funds_${ funds }`, livemode: false, data: { object: { id: `dp_${ id }`, object: 'dispute', charge: `ch_${ id }`, payment_intent: `pi_${ id }`, amount: 1999, status } } };
 
 }
 
@@ -1569,7 +1569,7 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await webhook( server, event ) ).status, 200 );
 		assert.equal( ( await webhook( server, { ...event, id: 'evt_alice_again', type: 'checkout.session.async_payment_succeeded' } ) ).status, 200 );
 		assert.deepEqual( server.d1( 'SELECT checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at FROM purchases' ), [
-			{ checkout_session: 'cs_test_alice', account_id: alice.id, email: 'alice@example.com', amount: 499, currency: 'cad', payment_intent: 'pi_alice', status: 'paid', created_at: PASS_DAY, refunded_at: null },
+			{ checkout_session: 'cs_test_alice', account_id: alice.id, email: 'alice@example.com', amount: 1999, currency: 'cad', payment_intent: 'pi_alice', status: 'paid', created_at: PASS_DAY, refunded_at: null },
 		] );
 
 	} );
@@ -2131,9 +2131,9 @@ describe( 'World Drive Supporter Pass', () => {
 		// Passes: two bought today (one by an email nobody has signed in with), one refunded, one given
 		// by hand (to Oto's email), and one bought in US dollars in the week before.
 		server.d1( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at ) VALUES
-			( 'cs_admin_1', ${ account( '1201' ) }, 'nia@example.com', 499, 'cad', 'pi_admin_1', 'paid', ${ ADMIN_DAY - HOUR }, NULL ),
-			( 'cs_admin_2', NULL, 'zed.admin@example.com', 499, 'cad', 'pi_admin_2', 'paid', ${ ADMIN_DAY - HOUR }, NULL ),
-			( 'cs_admin_3', ${ account( '1202' ) }, 'oto@example.com', 499, 'cad', 'pi_admin_3', 'refunded', ${ ADMIN_DAY - 2 * DAY }, ${ ADMIN_DAY - DAY } ),
+			( 'cs_admin_1', ${ account( '1201' ) }, 'nia@example.com', 1999, 'cad', 'pi_admin_1', 'paid', ${ ADMIN_DAY - HOUR }, NULL ),
+			( 'cs_admin_2', NULL, 'zed.admin@example.com', 1999, 'cad', 'pi_admin_2', 'paid', ${ ADMIN_DAY - HOUR }, NULL ),
+			( 'cs_admin_3', ${ account( '1202' ) }, 'oto@example.com', 1999, 'cad', 'pi_admin_3', 'refunded', ${ ADMIN_DAY - 2 * DAY }, ${ ADMIN_DAY - DAY } ),
 			( 'granted-admin', NULL, 'oto@example.com', NULL, NULL, NULL, 'granted', ${ ADMIN_DAY - 2 * DAY }, NULL ),
 			( 'cs_admin_4', ${ account( '1203' ) }, 'pia@example.com', 999, 'usd', 'pi_admin_4', 'paid', ${ ADMIN_DAY - 10 * DAY }, NULL )` );
 		// And the page's counts: today's, two days of the week before, and older ones (one older than
@@ -2152,7 +2152,7 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.deepEqual( sorted( rows ), sorted( [
 			[ today, 'funnel', 'globe', 3 ], [ today, 'players', 'new', 2 ], [ today, 'scores', 'new_best', 2 ], [ dayAt( ADMIN_DAY - DAY ), 'scores', 'new_best', 1 ],
 			[ today, 'accounts', 'new', 1 ], [ dayAt( ADMIN_DAY - 3 * DAY ), 'accounts', 'new', 1 ],
-			[ today, 'purchases', 'paid', 2 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'purchases', 'granted', 1 ], [ today, 'revenue', 'cad', 998 ],
+			[ today, 'purchases', 'paid', 2 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'purchases', 'granted', 1 ], [ today, 'revenue', 'cad', 3998 ],
 		] ) );
 		assert.deepEqual( rows.map( ( [ day ] ) => day ), rows.map( ( [ day ] ) => day ).sort() );
 		// The week before, added up by metric and key.
@@ -4088,12 +4088,12 @@ function limitsRows( server ) {
 
 describe( 'The Supporter Pass\'s settings', () => {
 
-	const full = { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, SUPPORTER_PRICE: ' CA$4.99 ' };
+	const full = { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, SUPPORTER_PRICE: ' CA$19.99 ' };
 
 	test( 'buying is on only with the client id, an https link and a whsec_ secret (and a plink_ id, if any)', () => {
 
-		assert.deepEqual( purchaseSettings( full ), { link: PASS_LINK, price: 'CA$4.99' } );
-		assert.deepEqual( purchaseSettings( { ...full, SUPPORTER_PAYMENT_LINK_ID: PASS_LINK_ID } ), { link: PASS_LINK, price: 'CA$4.99' } );
+		assert.deepEqual( purchaseSettings( full ), { link: PASS_LINK, price: 'CA$19.99' } );
+		assert.deepEqual( purchaseSettings( { ...full, SUPPORTER_PAYMENT_LINK_ID: PASS_LINK_ID } ), { link: PASS_LINK, price: 'CA$19.99' } );
 		const off = {
 			'no client id': { GOOGLE_CLIENT_ID: ' ' },
 			'no link': { SUPPORTER_PAYMENT_LINK: '' },
@@ -4105,7 +4105,7 @@ describe( 'The Supporter Pass\'s settings', () => {
 		};
 		for ( const [ why, change ] of Object.entries( off ) ) assert.equal( purchaseSettings( { ...full, ...change } ), null, why );
 		assert.deepEqual( purchaseFor( { ...full, STRIPE_WEBHOOK_SECRET: '' }, { id: 7 } ), { enabled: false } );
-		assert.deepEqual( purchaseFor( full, { id: 7 } ), { enabled: true, link: PASS_LINK, price: 'CA$4.99', clientReferenceId: '7' } );
+		assert.deepEqual( purchaseFor( full, { id: 7 } ), { enabled: true, link: PASS_LINK, price: 'CA$19.99', clientReferenceId: '7' } );
 
 	} );
 

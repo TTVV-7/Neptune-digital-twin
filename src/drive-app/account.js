@@ -71,7 +71,7 @@ export function openAccount( from ) {
 
 function stateOf( me ) {
 
-	return me?.signedIn ? `in:${ me.username ?? '' }:${ me.google ? 1 : 0 }:${ me.email }:${ me.contactEmail ?? '' }` : `out:${ mode }`;
+	return me?.signedIn ? `in:${ me.username ?? '' }:${ me.google ? 1 : 0 }:${ me.email }:${ me.contactEmail ?? '' }:${ passState( me ) }` : `out:${ mode }`;
 
 }
 
@@ -175,7 +175,7 @@ function signUpForm() {
 	const username = field( form, 'Username', { name: 'username', autocomplete: 'username', minLength: 3, maxLength: 20, hint: '3 to 20 letters, digits, _ or -. Only you see it: the boards show your nickname.' } );
 	const password = field( form, 'Password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: `At least ${ PASSWORD_MIN } characters. A few words together make a good one.` } );
 	const email = field( form, 'Email (optional)', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'For your receipts if you buy the pass. Never shown, never used for anything else.' } );
-	form.append( Object.assign( paragraph( NO_RECOVERY ), { className: 'account-note' } ), robotSlot(), submit, status );
+	form.append( Object.assign( paragraph( NO_RECOVERY ), { className: 'account-note' } ), agreeing(), robotSlot(), submit, status );
 	form.addEventListener( 'submit', async event => {
 
 		event.preventDefault();
@@ -195,6 +195,16 @@ function signUpForm() {
 
 	} );
 	return form;
+
+}
+
+// What making an account agrees to (drive/site/legal.js), with the pages in a new tab so the game
+// stays open.
+function agreeing() {
+
+	const p = linksLine( 'By creating an account you confirm you\'re 13 or older and agree to the ', [ '/terms/', 'terms' ], ' and the ', [ '/privacy/', 'privacy policy' ], '.' );
+	p.classList.add( 'account-terms' );
+	return p;
 
 }
 
@@ -222,7 +232,7 @@ function signedIn( me ) {
 		item( 'Username', me.username ?? 'none' ),
 	);
 	parts.push( Object.assign( paragraph( 'You sign in with:' ), { className: 'account-label' } ), list );
-	if ( me.supporter ) parts.push( Object.assign( paragraph( '⭐ Supporter Pass' ), { className: 'account-pass' } ) );
+	if ( me.supporter ) parts.push( passPart( me ) );
 
 	// Signing out here or everywhere: both buttons off while it's sent (a second tap doesn't send it
 	// again), and what went wrong said just under them (the pass's sheet, which says it too, is
@@ -248,6 +258,60 @@ function signedIn( me ) {
 	parts.push( googlePart( me ) );
 	if ( me.username && me.google ) parts.push( removeForm( me ) );
 	return parts;
+
+}
+
+// The pass, for a supporter: which kind it is, and for a monthly one where to cancel it or change the
+// card (Stripe's customer portal, SUPPORTER_MANAGE_LINK) or, without that link, to ask. Never folded
+// away: someone paying every month finds how to stop at once (drive/site/legal.js's /refunds/).
+function passPart( me ) {
+
+	const box = document.createElement( 'div' );
+	box.className = 'account-pass';
+	const manage = me.purchase?.manage;
+	const lines = [ Object.assign( paragraph( '⭐ Supporter Pass' ), { className: 'account-pass-title' } ) ];
+	if ( me.subscribed ) {
+
+		lines.push( paragraph( 'Monthly subscription. Cancel any time: you won\'t be charged again, and the pass stays until the end of the month you\'ve paid for.' ) );
+		if ( manage ) lines.push( Object.assign( pageLink( manage, 'Manage subscription' ), { className: 'account-manage' } ), Object.assign( paragraph( 'Cancel, change your card or see your receipts on Stripe, with the email you paid with.' ), { className: 'account-note' } ) );
+		else lines.push( linksLine( 'To cancel or change your card, ', [ '/contact/', 'get in touch' ], ' and it\'s done for you.' ) );
+
+	} else if ( me.dayPassUntil ) {
+
+		lines.push( paragraph( '24-hour pass. Paid once: it simply ends, nothing to cancel.' ) );
+
+	} else {
+
+		lines.push( paragraph( 'Yours for good. Paid once: nothing to cancel.' ) );
+
+	}
+
+	lines.push( linksLine( '', [ '/refunds/', 'Refunds' ], ' · ', [ '/contact/', 'Help' ] ) );
+	box.append( ...lines );
+	return box;
+
+}
+
+// What the pass part shows, so the panel is drawn again when it changes.
+function passState( me ) {
+
+	return me.supporter ? `${ me.subscribed ? 'month' : me.dayPassUntil ? 'day' : 'life' }:${ me.purchase?.manage ?? '' }` : 'none';
+
+}
+
+// A link to a page, in a new tab so the game stays open.
+function pageLink( href, words ) {
+
+	return Object.assign( document.createElement( 'a' ), { href, target: '_blank', rel: 'noopener', textContent: words } );
+
+}
+
+// A line of words and links: each [ href, words ] a link.
+function linksLine( ...parts ) {
+
+	const p = Object.assign( document.createElement( 'p' ), { className: 'account-note' } );
+	p.append( ...parts.filter( part => part !== '' ).map( part => Array.isArray( part ) ? pageLink( ...part ) : part ) );
+	return p;
 
 }
 
