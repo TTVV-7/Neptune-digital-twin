@@ -8983,12 +8983,15 @@ Keep World Drive's key apart from the construction app's, so its limits and its 
      `https://www.worlddrive.app/*`. (A copied key then doesn't work from other sites.)
    - API restrictions: **Restrict key** → **Map Tiles API** only.
 4. **A daily quota cap.** APIs & Services → Map Tiles API → **Quotas & system limits**: lower the
-   per-day limit on 3D Tiles root tileset requests (the sessions) to a little over `DAILY_VISITS`,
-   e.g. 350, and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
+   per-day limit on 3D Tiles root tileset requests (the sessions) to well over `DAILY_VISITS`,
+   which supporters' drives aren't counted in (e.g. 1,000 with `DAILY_VISITS` at 500), and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
    loads a few thousand tiles). The console's names for these change now and then: look for the
    per-day ones. It's the backstop if the key is copied and used from somewhere the referrer check
    doesn't stop; once a limit is reached, tiles stop loading until midnight Pacific time rather than
    costing more.
+   The admin page's **Google Maps cost** card estimates the bill from the Earth drives counted
+   (`MAPS_PER_1000`, `MAPS_FREE_MONTHLY` and `MAPS_DAILY_CAP` in `drive/public/admin.html`: change
+   them when Google's price or `DAILY_VISITS` does).
 5. **Budget alerts.** Billing → Budgets & alerts → Create budget for the World Drive project, with
    email alerts at, say, 50 %, 90 % and 100 % of what you're happy to spend a month. Check Google's
    current [Map Tiles API pricing](https://developers.google.com/maps/billing-and-pricing/pricing)

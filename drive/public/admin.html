@@ -213,7 +213,7 @@
 		</div>
 	</header>
 	<nav class="jump" aria-label="Jump to">
-		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
+		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#maps-cost">Maps cost</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
 	</nav>
 	<div id="out"><p class="muted">Loading...</p></div>
 	<section class="card places" id="places" aria-labelledby="places-title" hidden>
@@ -420,6 +420,34 @@
 		// Each day's value of a metric (or one of its keys), and a share of two of them, for the tiles' lines.
 		const dailyKey = ( metric, key ) => days.map( d => keyDay.get( `${ metric }:${ key }` )?.get( d ) ?? 0 );
 		const ratio = ( parts, wholes ) => parts.map( ( p, i ) => wholes[ i ] ? p / wholes[ i ] : 0 );
+		// What the Earth's drives cost Google's Map Tiles API: each is one billed 3D tiles session (a
+		// free player's, a supporter's or the owner's), MAPS_PER_1000 US dollars a thousand after the
+		// month's MAPS_FREE_MONTHLY. This month so far from the days shown (when they reach back to the
+		// 1st), and the month's pace at the days so far. An estimate: Google's bill is what counts.
+		const mapsCost = () => {
+
+			const kinds = [ [ 'free', 'earth' ], [ 'supporters', 'earth_supporter' ], [ 'you', 'owner' ] ];
+			const sessions = sum( kinds.map( ( [ , kind ] ) => total( 'visit_kind', kind ) ) );
+			const usd = n => new Intl.NumberFormat( undefined, { style: 'currency', currency: 'USD' } ).format( n );
+			const billed = n => Math.max( 0, n - MAPS_FREE_MONTHLY ) * MAPS_PER_1000 / 1000;
+			const monthStart = `${ to.slice( 0, 7 ) }-01`;
+			const daysInMonth = new Date( Date.UTC( Number( to.slice( 0, 4 ) ), Number( to.slice( 5, 7 ) ), 0 ) ).getUTCDate();
+			const dayOfMonth = Number( to.slice( 8, 10 ) );
+			const sessionsOn = d => sum( kinds.map( ( [ , kind ] ) => keyDay.get( `visit_kind:${ kind }` )?.get( d ) ?? 0 ) );
+			const covered = days.includes( monthStart );
+			const month = covered ? sum( days.filter( d => d >= monthStart ).map( sessionsOn ) ) : null;
+			const pace = month === null ? null : Math.round( month / dayOfMonth * daysInMonth );
+			return facts( [
+				[ 'Earth drives', num( sessions ), kinds.map( ( [ label, kind ] ) => `${ label } ${ num( total( 'visit_kind', kind ) ) }` ).join( ' · ' ) ],
+				[ 'Full price', usd( sessions * MAPS_PER_1000 / 1000 ), 'these days, no free ones' ],
+				...( month === null ? [] : [
+					[ 'This month', usd( billed( month ) ), `${ num( month ) } so far, ${ num( MAPS_FREE_MONTHLY ) } free` ],
+					[ 'Month at this pace', usd( billed( pace ) ), `about ${ num( pace ) }` ],
+				] ),
+				[ 'Most a month', usd( billed( MAPS_DAILY_CAP * 30 ) ), `cap: ${ num( MAPS_DAILY_CAP ) } a day, + supporters` ],
+			] ) + `<p class="note">Each Earth drive is one billed 3D tiles session; flying about in it costs no more. At US$${ MAPS_PER_1000 } a thousand after ${ num( MAPS_FREE_MONTHLY ) } free a month (Google's price list as of ${ esc( MAPS_PRICE_CHECKED ) }): check it on <a href="https://developers.google.com/maps/billing-and-pricing/pricing">Google's pricing page</a>, and the real bill in Google Cloud's Billing.${ covered ? '' : ' Pick a period that reaches back to the 1st for this month\'s total.' }</p>`;
+
+		};
 		// [ group, [ label, value, change, fewerIsBetter, days' values, what it means ] ]: change is
 		// [ now, before ] compared as a change in per cent, or for a share [ now, before, 'points' ] as
 		// the difference in points.
@@ -545,6 +573,7 @@
 					[ 'Passes nobody has signed in for yet', num( totals.unclaimed ?? 0 ), '' ],
 				] ) }
 				<p class="note">Counted from the Worker's own tables as you ask. Purchases refunded or charged back are left out, and players the owner removed. New bests are runs that beat a player's best on a board, from the scores log, which keeps only the last ${ esc( scoresKept ) } days${ scoresPartial ? ': this period\'s count is partial' : scoresKept < 2 * days.length ? ': too few for the period before, so no comparison' : '' }.</p></div>
+				<div class="card" id="maps-cost"><h2>Google Maps cost <span class="muted">(estimate)</span></h2>${ mapsCost() }</div>
 				<div class="card"><h2>When people load in <span class="muted">(your time)</span></h2>${ hourChart( byHour, offset ) }</div>
 				<div class="card"><h2>Where they come from</h2>${ bars( keys( 'load' ), num, 10 ) }</div>
 				<div class="card wide" id="rides"><h2>Rides compared</h2>${ ridesTable }</div>
@@ -811,6 +840,14 @@
 	}
 
 	// Money by currency (in its smallest unit, as Stripe has it) as text: "CA$39.98", or several.
+	// Google's Map Tiles API price for Photorealistic 3D Tiles sessions (root tileset requests), US
+	// dollars a thousand at the first tier, and the free ones each month; and wrangler.drive.jsonc's
+	// DAILY_VISITS: the admin page's cost estimate. Change them here when either changes.
+	const MAPS_PER_1000 = 6;
+	const MAPS_FREE_MONTHLY = 1000;
+	const MAPS_PRICE_CHECKED = 'November 2026';
+	const MAPS_DAILY_CAP = 500;
+
 	function money( byCurrency ) {
 
 		const parts = [ ...byCurrency ].filter( ( [ , n ] ) => n ).map( ( [ currency, n ] ) => {
