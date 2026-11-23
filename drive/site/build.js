@@ -212,7 +212,7 @@ export function driveSite() {
 		buildStart() {
 
 			// Consumer law and Stripe both ask for who runs the shop and how to reach them before anyone
-			// pays: say so while any of it is missing (legal.js).
+			// pays: say so if the environment blanks either out (legal.js).
 			const missing = missingContact( contactDetails() );
 			if ( missing.length ) this.warn( `World Drive's contact page and policies are missing ${ missing.join( ', ' ) }: set them before taking payments (docs/world-drive.md, "Legal pages").` );
 

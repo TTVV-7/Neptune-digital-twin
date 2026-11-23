@@ -31,6 +31,7 @@ import { startVite } from './worker-harness.mjs';
 import { WORKS_RIDES } from '../src/drive-app/catalog.js';
 import { PLACES } from '../drive/site/places.js';
 import { sitePages, WORLD_SITES } from '../drive/site/build.js';
+import { contactDetails } from '../drive/site/legal.js';
 import { linkedPlace, SPOTS } from '../src/drive-app/places.js';
 import { SPOTS_ON } from '../src/drive-app/world-places.js';
 import { OFF_EARTH, onWorld, OnWorld, TheWorld } from '../src/drive-app/worlds.js';
@@ -519,6 +520,13 @@ describe( 'what search engines read', () => {
 		assert.match( html, /<a href="tel:\+16045550100">\+1 \(604\) 555-0100<\/a>/ );
 		assert.match( html, /1 Main St, Vancouver BC/ );
 		assert.match( contactPage( { name: '<b>', address: '', phone: '', email: '' } ), /&lt;b&gt;/ );
+		// Unless the environment says otherwise: Tom at support@worlddrive.app, no address or phone,
+		// only where it's run from; and so the built page.
+		assert.deepEqual( contactDetails( {} ), { name: 'Tom', address: '', phone: '', email: 'support@worlddrive.app' } );
+		assert.equal( contactDetails( { DRIVE_CONTACT_EMAIL: ' help@example.com ' } ).email, 'help@example.com' );
+		const built = pages.find( page => page.path === '/contact/' ).html;
+		assert.match( built, /<dt>Run by<\/dt><dd>Tom<\/dd><dt>Email<\/dt><dd><a href="mailto:support@worlddrive\.app">support@worlddrive\.app<\/a><\/dd><dt>Based in<\/dt><dd>Vancouver, British Columbia, Canada<\/dd>/ );
+		assert.ok( ! /tel:/.test( built ) );
 
 	} );
 

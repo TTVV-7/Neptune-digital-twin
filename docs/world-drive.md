@@ -4632,8 +4632,8 @@ The pass is bought three ways, each through a Stripe Payment Link of its own in 
 Stripe account: **monthly** (`SUPPORTER_MONTHLY_PRICE`, CA$1.99/month, a subscription kept while it
 runs: the first one was bought on 20 November 2026, so it stays and leads), **once and kept for
 good** (`SUPPORTER_PRICE`, CA$19.99), or for **24 hours** (a **day pass**, `DAY_PASS_PRICE`,
-CA$0.99: the same pass for a day, then it simply ends). One-time CA$4.99 passes from before keep
-working for good. It comes with what's [above](#supporter-pass-content) (seven cars of its own, the
+CA$0.99: the same pass for a day, then it simply ends). Passes bought once before the
+subscription keep working for good. It comes with what's [above](#supporter-pass-content) (seven cars of its own, the
 six levels bring, the seven rides and every Garage look at once), **+50% XP** for [levels](#levels),
 a **⭐ by your name on the leaderboard**, and **30 Earth drives a day** instead of 1, which the day's
 cap for everyone never turns away: they've paid for them.
@@ -4841,7 +4841,7 @@ offers buying just then.
    (or `npx wrangler secret put STRIPE_WEBHOOK_SECRET -c wrangler.drive.jsonc`). It takes effect at
    once, and buying opens. Optionally add `SUPPORTER_EMAILS` the same way.
 5. **Try it for real.** The link is live, so a test is a real purchase: open worlddrive.app, open the
-   pass, sign in, **Buy for CA$4.99** and pay with your own card. Stripe brings you back and the page
+   pass, sign in, **For good: CA$19.99** (or the day pass, CA$0.99, for a cheaper test) and pay with your own card. Stripe brings you back and the page
    says *Thanks! Supporter Pass unlocked*; the webhook's page in Stripe lists the delivery with our
    answer (200). Then refund it in full (Stripe Dashboard → **Payments** → the payment → **Refund**):
    the pass locks again at your next visit. Stripe keeps its fee on a refunded payment, so the test
@@ -8480,21 +8480,26 @@ They're a plain-language starting point written to match what the code keeps (Ab
 words, the D1 tables), **not legal advice**: have a lawyer read them, and change `legal.js` (and its
 `UPDATED` date) whenever what the game keeps or sells changes.
 
-**Who runs it** comes from the environment when the site is built, so a home address and phone number
-are never in the repository: `DRIVE_CONTACT_NAME` (your legal name or the business's),
-`DRIVE_CONTACT_ADDRESS`, `DRIVE_CONTACT_PHONE` and `DRIVE_CONTACT_EMAIL`. Locally put them in
-`.env.local` (see `.env.example`); for the live site add them as **build variables** in the Cloudflare
-dashboard (world-drive Worker → Settings → Build → Variables). While any is missing, `npm run
-build:drive` warns, the contact page shows only what's set and the policies say "its owner, in British
-Columbia, Canada". BC's consumer law (and other provinces') asks for all four before a sale, and Stripe
-checks for them, so set them before turning buying on. A VoIP number that takes voicemail is fine.
+**Who runs it**: Tom, at **support@worlddrive.app**, in Vancouver (`CONTACT_DEFAULTS` and `LOCATION`
+in `legal.js`). The address is passed on to your own inbox by Cloudflare Email Routing (Cloudflare
+dashboard → worlddrive.app → **Email** → **Email Routing**: turn it on, let it add its DNS records,
+then add a custom address `support` that forwards to your inbox and confirm it from there). To answer
+*from* support@worlddrive.app rather than your own address, add it in Gmail as a "Send mail as"
+address. The build environment can change the name or email (`DRIVE_CONTACT_NAME`,
+`DRIVE_CONTACT_EMAIL`) and add what's kept out of the repository on purpose: a mailing address
+(`DRIVE_CONTACT_ADDRESS`, a PO box or a mailbox service rather than a home) and a phone
+(`DRIVE_CONTACT_PHONE`). Locally they go in `.env.local` (see `.env.example`), for the live site as
+build variables (world-drive Worker → Settings → Build → Variables). Without an address the pages say
+"Based in Vancouver, British Columbia, Canada". BC's consumer law asks a seller online for a business
+address and phone too, so a PO box and a VoIP number are worth adding when you can.
 
 **Before taking payments** (the owner's steps):
 
-1. Set the four contact variables above and redeploy.
+1. Turn on Email Routing for support@worlddrive.app (above), and send it a test.
 2. Set `SUPPORTER_MANAGE_LINK` (Stripe's customer portal login link, see
-   [Supporter Pass (buying it)](#supporter-pass-buying-it)): `/refunds/` tells subscribers to cancel
-   with **Manage your subscription**, which only shows when it's set.
+   [Supporter Pass (buying it)](#supporter-pass-buying-it)): a subscriber's **Account** panel and the
+   pass's sheet show **Manage subscription** (Stripe's page to cancel or change the card) only when
+   it's set; until then they say to get in touch, and you cancel it in Stripe's dashboard.
 3. In Stripe's dashboard, **Settings → Business → Public details**: the support phone and email, and
    `https://worlddrive.app/terms/`, `/privacy/` and `/refunds/` as the terms, privacy and refund
    policies. On each Payment Link, turn on **Require customers to accept your terms of service**.

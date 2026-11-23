@@ -2,11 +2,12 @@
 // /privacy/, the terms at /terms/, refunds and cancelling at /refunds/ and how to reach the owner at
 // /contact/. build.js makes them into pages like the others'.
 //
-// Who runs World Drive and how to reach them come from the environment when the site is built, so a
-// home address and phone number are never in the repository (see contactDetails): DRIVE_CONTACT_NAME
-// (the owner's legal name, or the business's), DRIVE_CONTACT_ADDRESS, DRIVE_CONTACT_PHONE and
-// DRIVE_CONTACT_EMAIL. Consumer law in BC and the other provinces asks for all four to be shown before
-// anyone pays, and Stripe checks for them, so the build warns while any is missing.
+// Who runs World Drive and how to reach them (see contactDetails): Tom, at support@worlddrive.app
+// (Cloudflare Email Routing passes it on to the owner's own inbox), in Vancouver. The environment can
+// change any of them when the site is built (DRIVE_CONTACT_NAME, DRIVE_CONTACT_EMAIL), and add what's
+// kept out of the repository on purpose: a mailing address (DRIVE_CONTACT_ADDRESS, a PO box or a
+// mailbox service rather than a home) and a phone (DRIVE_CONTACT_PHONE). Without an address the pages
+// say where World Drive is run from (LOCATION).
 //
 // These are a plain-language starting point, written to match what the code actually does (what
 // drive/index.html's About World Drive says is kept, worker/drive/). They aren't legal advice: have a
@@ -16,24 +17,28 @@ import { esc } from './build.js';
 
 export const UPDATED = '23 November 2026';
 export const CONTACT_VARS = { name: 'DRIVE_CONTACT_NAME', address: 'DRIVE_CONTACT_ADDRESS', phone: 'DRIVE_CONTACT_PHONE', email: 'DRIVE_CONTACT_EMAIL' };
+// What's shown unless the environment says otherwise: no address or phone in the repository.
+export const CONTACT_DEFAULTS = { name: 'Tom', address: '', phone: '', email: 'support@worlddrive.app' };
+export const LOCATION = 'Vancouver, British Columbia, Canada';
 
-// { name, address, phone, email }, each '' when it isn't set.
+// { name, address, phone, email }: the environment's, else the defaults ('' for none).
 export function contactDetails( env = process.env ) {
 
-	return Object.fromEntries( Object.entries( CONTACT_VARS ).map( ( [ key, name ] ) => [ key, String( env[ name ] ?? '' ).trim() ] ) );
+	return Object.fromEntries( Object.entries( CONTACT_VARS ).map( ( [ key, name ] ) => [ key, String( env[ name ] ?? '' ).trim() || CONTACT_DEFAULTS[ key ] ] ) );
 
 }
 
+// The ones the pages can't do without: who runs it and how to reach them.
 export function missingContact( contact ) {
 
-	return Object.entries( CONTACT_VARS ).filter( ( [ key ] ) => ! contact[ key ] ).map( ( [ , name ] ) => name );
+	return [ 'name', 'email' ].filter( key => ! contact[ key ] ).map( key => CONTACT_VARS[ key ] );
 
 }
 
 // Who runs World Drive: the name, or (until it's set) a description.
 function owner( contact ) {
 
-	return contact.name ? esc( contact.name ) : 'its owner, in British Columbia, Canada';
+	return `${ contact.name ? esc( contact.name ) : 'its owner' }, in ${ LOCATION }`;
 
 }
 
@@ -44,7 +49,7 @@ function contactBlock( contact ) {
 	if ( contact.name ) rows.push( `<dt>Run by</dt><dd>${ esc( contact.name ) }</dd>` );
 	if ( contact.email ) rows.push( `<dt>Email</dt><dd><a href="mailto:${ esc( contact.email ) }">${ esc( contact.email ) }</a></dd>` );
 	if ( contact.phone ) rows.push( `<dt>Phone</dt><dd><a href="tel:${ esc( contact.phone.replace( /[^+\d]/g, '' ) ) }">${ esc( contact.phone ) }</a></dd>` );
-	if ( contact.address ) rows.push( `<dt>Mail</dt><dd>${ esc( contact.address ) }</dd>` );
+	rows.push( contact.address ? `<dt>Mail</dt><dd>${ esc( contact.address ) }</dd>` : `<dt>Based in</dt><dd>${ LOCATION }</dd>` );
 	return rows.length ? `<dl class="contact">${ rows.join( '' ) }</dl>` : '<p>Contact details are being added.</p>';
 
 }

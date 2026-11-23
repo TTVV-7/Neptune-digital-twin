@@ -631,7 +631,8 @@ function renderBuy( root ) {
 
 		parts.push( Object.assign( line( lifetime ? '⭐ You have the Supporter Pass. Thanks for helping keep World Drive on the road!' : `⭐ Your 24-hour pass has ${ timeLeft( me.dayPassUntil ) } left. Thanks for helping keep World Drive on the road!` ), { className: 'supporter-thanks' } ) );
 		// A running subscription's (from when the pass was one): where to cancel it or change the card.
-		if ( me.subscribed && purchase.manage ) parts.push( line( Object.assign( document.createElement( 'a' ), { href: purchase.manage, target: '_blank', rel: 'noopener', textContent: 'Manage your subscription' } ) ) );
+		// Without Stripe's portal link, how to ask for it to be done instead: a monthly pass always shows a way to stop.
+		if ( me.subscribed ) parts.push( purchase.manage ? line( pageLink( purchase.manage, 'Manage your subscription' ), ' (cancel or change your card)' ) : line( 'To cancel the monthly pass, ', pageLink( '/contact/', 'get in touch' ), '.' ) );
 
 	}
 

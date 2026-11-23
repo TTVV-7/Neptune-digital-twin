@@ -794,7 +794,7 @@
 
 	}
 
-	// Money by currency (in its smallest unit, as Stripe has it) as text: "CA$9.98", or several.
+	// Money by currency (in its smallest unit, as Stripe has it) as text: "CA$39.98", or several.
 	function money( byCurrency ) {
 
 		const parts = [ ...byCurrency ].filter( ( [ , n ] ) => n ).map( ( [ currency, n ] ) => {
