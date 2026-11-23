@@ -20,6 +20,9 @@ const ARRIVE = 90;
 const LOOK = 1;
 // Pieces too flat or small to drive into: no box.
 const NO_BOX = new Set( [ 'impact', 'schiaparelli', 'backshell', 'soraQ' ] );
+// Those flat ones lie on the ground's bumps, which can rise a few tens of centimetres across them:
+// lifted this much (m), so a scar or a parachute isn't half buried.
+const FLAT_LIFT = 0.15;
 const MODELS = { ...MOON_MODELS, ...MARS_MODELS };
 const RAD = Math.PI / 180;
 const hidden = new MeshBasicMaterial( { visible: false } );
@@ -114,7 +117,7 @@ export function createWorldHardware( { bodyOf, toast = () => {} } ) {
 			// Where this piece is: its offset east and north of the site, on the ground there.
 			const lat = site.lat + ( piece.north ?? 0 ) / radius / RAD;
 			const lon = site.lon + ( piece.east ?? 0 ) / ( radius * Math.cos( site.lat * RAD ) ) / RAD;
-			placeOn( body, object, lat, lon, piece.heading ?? 0 );
+			placeOn( body, object, lat, lon, piece.heading ?? 0, NO_BOX.has( piece.model ) ? FLAT_LIFT : - 0.05 );
 			object.name = `hardware-${ site.id }-${ piece.model }`;
 			group.add( object );
 			pieces.push( object );
@@ -172,14 +175,14 @@ export function createWorldHardware( { bodyOf, toast = () => {} } ) {
 }
 
 // Puts `object` (standing on y = 0, its front −Z) on `body`'s ground at lat, lon (degrees), upright
-// to the ground's up there, facing `heading` degrees clockwise from north; a few centimetres sunk, so
-// no foot floats over a dip the grid smooths.
-function placeOn( body, object, lat, lon, heading ) {
+// to the ground's up there, facing `heading` degrees clockwise from north, `lift` m over the ground
+// (a few centimetres sunk for what stands on feet, so none floats over a dip the grid smooths).
+function placeOn( body, object, lat, lon, heading, lift ) {
 
-	const ground = body.heightAt( lat, lon ) ?? 0;
-	body.ellipsoid.getCartographicToPosition( lat * RAD, lon * RAD, ground - 0.05, _p );
+	const ground = ( body.heightAt( lat, lon ) ?? 0 ) + lift;
+	body.ellipsoid.getCartographicToPosition( lat * RAD, lon * RAD, ground, _p );
 	body.ellipsoid.getCartographicToPosition( lat * RAD, lon * RAD, ground + 1, _up ).sub( _p ).normalize();
-	body.ellipsoid.getCartographicToPosition( ( lat + 0.001 ) * RAD, lon * RAD, ground - 0.05, _north ).sub( _p );
+	body.ellipsoid.getCartographicToPosition( ( lat + 0.001 ) * RAD, lon * RAD, ground, _north ).sub( _p );
 	_north.addScaledVector( _up, - _north.dot( _up ) ).normalize();
 	_east.crossVectors( _north, _up ).normalize();
 	_south.copy( _north ).negate();

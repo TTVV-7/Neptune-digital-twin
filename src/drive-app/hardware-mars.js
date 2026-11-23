@@ -23,19 +23,18 @@ import { box, cylinder, foilTexture, materials, panel, strut, wheel, leg } from 
 // from photographs and published dimensions. The placement data (HARDWARE) comes from elsewhere.
 
 export const HARDWARE = [];
-const DEBUG_LIFT = 0.25;
 
 // --- materials -------------------------------------------------------------------------------------
 
-// Solar cells in a lighter blue (Zhurong's), as hardware.js's cells but brighter.
-function blueCellsTexture() {
+// Solar cells in a grid of `line` on `base`: Zhurong's lighter blue, InSight's dusted over.
+function cellsTexture( base, line ) {
 
 	const canvas = document.createElement( 'canvas' );
 	canvas.width = canvas.height = 128;
 	const ctx = canvas.getContext( '2d' );
-	ctx.fillStyle = '#2b4fa8';
+	ctx.fillStyle = base;
 	ctx.fillRect( 0, 0, 128, 128 );
-	ctx.strokeStyle = '#9fb4e8';
+	ctx.strokeStyle = line;
 	ctx.lineWidth = 1;
 	for ( let i = 0; i <= 128; i += 16 ) {
 
@@ -91,7 +90,7 @@ function marsMaterials() {
 	shared = {
 		// Deflated airbag cloth (Vectran): pale and creased.
 		bag: new MeshStandardMaterial( { color: 0xffffff, map: foilTexture( '#d9d2c2', '#f3eee2', '#a49c88' ), metalness: 0, roughness: 0.95 } ),
-		blueCells: new MeshStandardMaterial( { color: 0xffffff, map: blueCellsTexture(), metalness: 0.1, roughness: 0.35, side: DoubleSide } ),
+		blueCells: new MeshStandardMaterial( { color: 0xffffff, map: cellsTexture( '#2b4fa8', '#9fb4e8' ), metalness: 0.1, roughness: 0.35, side: DoubleSide } ),
 		// Dishes and shells, seen from inside and out.
 		whiteBoth: new MeshStandardMaterial( { color: 0xe4e4df, metalness: 0, roughness: 0.6, side: DoubleSide } ),
 		inside: new MeshStandardMaterial( { color: 0x6e6a64, metalness: 0.1, roughness: 0.8, side: BackSide } ),
@@ -99,6 +98,8 @@ function marsMaterials() {
 		// Schiaparelli's scar: the dark ejecta, darker in the middle. Drawn in front of the ground it lies on.
 		scar: new MeshStandardMaterial( { color: 0x2c2420, roughness: 1, polygonOffset: true, polygonOffsetFactor: - 2, polygonOffsetUnits: - 2 } ),
 		halo: new MeshStandardMaterial( { color: 0x4a3a30, roughness: 1, polygonOffset: true, polygonOffsetFactor: - 1, polygonOffsetUnits: - 1 } ),
+		// InSight's arrays, dusty.
+		dustyCells: new MeshStandardMaterial( { color: 0xffffff, map: cellsTexture( '#4a4450', '#a89880' ), metalness: 0.1, roughness: 0.6 } ),
 		charred: new MeshStandardMaterial( { color: 0x3a3632, metalness: 0.1, roughness: 0.8 } ),
 	};
 	return shared;
@@ -443,8 +444,8 @@ export function merLander() {
 
 	const { group, v, tips, m, mm } = petalLander( 1.55, { base: 0.2, petalMaterial: materials().white, cells: false, bagSize: 0.6, seed: 23 } );
 	// The cradle the rover stood on, and its lift.
-	for ( const [ x, z ] of v ) group.add( strut( [ x * 0.6, 0.2, z * 0.6 ], [ 0, 0.45, 0 ], 0.025, m.silver ) );
-	group.add( box( 0.5, 0.06, 0.5, m.gold, 0, 0.46, 0 ) );
+	group.add( box( 0.6, 0.18, 0.4, m.gold, 0, 0.29, 0.05 ) );
+	for ( const [ x, z ] of v ) group.add( strut( [ x * 0.75, 0.2, z * 0.75 ], [ x * 0.3, 0.42, z * 0.3 ], 0.02, m.silver ) );
 	// The egress ramps: cloth stretched out from each petal's outer edges down to the ground.
 	for ( let k = 0; k < 3; k ++ ) {
 
@@ -461,7 +462,7 @@ export function merLander() {
 			if ( nx * mx + nz * mz < 0 ) [ nx, nz ] = [ - nx, - nz ];
 			const cloth = [ [ ax * 0.8 + bx * 0.2, az * 0.8 + bz * 0.2 ], [ ax * 0.2 + bx * 0.8, az * 0.2 + bz * 0.8 ], [ ax * 0.3 + bx * 0.7 + nx * 0.55, az * 0.3 + bz * 0.7 + nz * 0.55 ], [ ax * 0.7 + bx * 0.3 + nx * 0.55, az * 0.7 + bz * 0.3 + nz * 0.55 ] ];
 			const mesh = slab( cloth, 0.012, mm.bag );
-			mesh.position.y = 0.005;
+			mesh.position.y = 0.02;
 			group.add( mesh );
 
 		}
@@ -472,6 +473,34 @@ export function merLander() {
 
 }
 
+// The deck, legs and decagonal arrays Phoenix and InSight share: a deck of radius `deck` about a metre
+// up on three legs, the arrays of radius `array` either side, cells of `cells`.
+function phoenixBase( group, m, deck, array, cells ) {
+
+	const top = cylinder( deck, deck, 0.12, m.white, 10 );
+	top.position.y = 1.0;
+	const belly = cylinder( deck * 0.8, deck * 0.67, 0.35, m.gold, 10 );
+	belly.position.y = 0.77;
+	group.add( top, belly );
+	for ( let k = 0; k < 3; k ++ ) {
+
+		const a = Math.PI / 2 + k * Math.PI * 2 / 3;
+		const c = Math.cos( a );
+		const s = Math.sin( a );
+		simpleLeg( group, [ deck * 0.73 * c, 0.85, deck * 0.73 * s ], [ deck * 1.4 * c, 0.08, deck * 1.4 * s ], 0.14, [ deck * 0.47 * c + 0.25 * s, 0.62, deck * 0.47 * s - 0.25 * c ], m.silver, m );
+
+	}
+
+	for ( const side of [ - 1, 1 ] ) {
+
+		const panel = new Mesh( new CylinderGeometry( array, array, 0.03, 10 ), [ m.silver, cells, m.silver ] );
+		panel.position.set( side * ( deck + array + 0.07 ), 1.04, 0 );
+		group.add( panel, box( 0.16, 0.06, 0.12, m.grey, side * ( deck + 0.05 ), 1.04, 0 ) );
+
+	}
+
+}
+
 // Phoenix (2008), in the arctic: a deck 1.5 m across on three legs about 1 m up, its two decagonal
 // solar arrays 1.8 m across either side (5.5 m tip to tip), the 2.35 m robotic arm reaching down to
 // dig in front, the stereo camera on its 2 m mast and the meteorology mast at the back.
@@ -479,28 +508,7 @@ export function phoenix() {
 
 	const m = materials();
 	const group = new Group();
-	const deck = cylinder( 0.75, 0.75, 0.12, m.white, 10 );
-	deck.position.y = 1.0;
-	const belly = cylinder( 0.6, 0.5, 0.35, m.gold, 10 );
-	belly.position.y = 0.77;
-	group.add( deck, belly );
-	for ( let k = 0; k < 3; k ++ ) {
-
-		const a = Math.PI / 2 + k * Math.PI * 2 / 3;
-		const c = Math.cos( a );
-		const s = Math.sin( a );
-		simpleLeg( group, [ 0.55 * c, 0.85, 0.55 * s ], [ 1.05 * c, 0.08, 1.05 * s ], 0.14, [ 0.35 * c + 0.25 * s, 0.62, 0.35 * s - 0.25 * c ], m.silver, m );
-
-	}
-
-	// The two solar arrays: decagons of cells, either side.
-	for ( const side of [ - 1, 1 ] ) {
-
-		const array = new Mesh( new CylinderGeometry( 0.9, 0.9, 0.03, 10 ), [ m.silver, m.cells, m.silver ] );
-		array.position.set( side * 1.72, 1.04, 0 );
-		group.add( array, box( 0.16, 0.06, 0.12, m.grey, side * 0.8, 1.04, 0 ) );
-
-	}
+	phoenixBase( group, m, 0.75, 0.9, m.cells );
 
 	// Instruments on the deck: TEGA's ovens and MECA.
 	group.add( box( 0.45, 0.18, 0.2, m.silver, - 0.15, 1.15, - 0.35 ) );
@@ -520,6 +528,45 @@ export function phoenix() {
 	const scoop = box( 0.12, 0.08, 0.2, m.silver, 0.5, 0.25, - 2.0 );
 	scoop.rotation.x = 0.4;
 	group.add( scoop );
+	return group;
+
+}
+
+// InSight (2018): Phoenix's design again, a deck about 1.56 m across on three legs with two
+// decagonal solar arrays 2.2 m across either side (6 m tip to tip, dusty), the robotic arm raised
+// over the front, and what it set down on the ground about 1.5 m in front: the seismometer SEIS
+// under its domed wind and thermal shield, and the heat probe HP3's box beside it, both tethered back.
+export function insight() {
+
+	const m = materials();
+	const mm = marsMaterials();
+	const group = new Group();
+	phoenixBase( group, m, 0.78, 1.1, mm.dustyCells );
+	// On the deck: the electronics boxes, the UHF antennas, the weather sensors' booms.
+	group.add( box( 0.5, 0.2, 0.3, m.silver, 0.1, 1.16, 0.3 ) );
+	group.add( box( 0.25, 0.15, 0.25, m.gold, - 0.35, 1.13, 0.1 ) );
+	for ( const x of [ - 0.45, 0.45 ] ) group.add( strut( [ x, 1.06, 0.35 ], [ x * 1.2, 1.45, 0.45 ], 0.012, m.silver ), box( 0.12, 0.03, 0.06, m.white, x * 1.2, 1.46, 0.45 ) );
+	// The arm: from the front of the deck, raised, its grapple and camera hanging over the front.
+	const shoulder = [ - 0.35, 1.1, - 0.55 ];
+	const elbow = [ - 0.45, 1.75, - 1.05 ];
+	const wrist = [ - 0.5, 1.35, - 1.6 ];
+	group.add( strut( shoulder, elbow, 0.04, m.white ), strut( elbow, wrist, 0.035, m.white ) );
+	group.add( box( 0.1, 0.1, 0.1, m.grey, ...elbow ), box( 0.12, 0.16, 0.1, m.grey, wrist[ 0 ], wrist[ 1 ] - 0.08, wrist[ 2 ] ) );
+	// SEIS under its shield: a dome with a skirt, 0.9 m across.
+	const dome = new Mesh( new SphereGeometry( 0.42, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2 ), m.white );
+	dome.scale.y = 0.85;
+	dome.position.set( 0.1, 0.06, - 2.2 );
+	const skirt = cylinder( 0.42, 0.5, 0.08, m.gold, 20 );
+	skirt.position.set( 0.1, 0.04, - 2.2 );
+	const cap = cylinder( 0.08, 0.08, 0.04, m.grey, 12 );
+	cap.position.set( 0.1, 0.44, - 2.2 );
+	group.add( dome, skirt, cap );
+	// HP3: its support box to the right, its mole hammered into the ground below it.
+	const hp3 = box( 0.26, 0.4, 0.3, m.white, 1.0, 0.2, - 2.0 );
+	hp3.rotation.y = 0.3;
+	group.add( hp3 );
+	// The tethers, lying on the ground back to the lander.
+	group.add( strut( [ 0.1, 0.02, - 1.75 ], [ 0.2, 0.02, - 0.9 ], 0.012, m.grey ), strut( [ 0.95, 0.02, - 1.82 ], [ 0.55, 0.02, - 0.9 ], 0.012, m.grey ) );
 	return group;
 
 }
@@ -859,7 +906,6 @@ export function mars3() {
 export function beagle2() {
 
 	const m = materials();
-	const mm = marsMaterials();
 	const group = new Group();
 	const base = cylinder( 0.45, 0.45, 0.16, m.gold, 24 );
 	base.position.y = 0.08;
@@ -869,8 +915,7 @@ export function beagle2() {
 	// The lid, opened over onto the ground at the right, with a folded panel still on it.
 	const disc = ( x, y, z, tilt = 0, axis = null ) => {
 
-		const plate = new Mesh( new CylinderGeometry( 0.42, 0.42, 0.03, 20 ), [ m.silver, mm.blueCells, m.silver ] );
-		plate.material[ 1 ] = m.cells;
+		const plate = new Mesh( new CylinderGeometry( 0.42, 0.42, 0.03, 20 ), [ m.silver, m.cells, m.silver ] );
 		plate.position.set( x, y, z );
 		if ( axis ) plate.rotation[ axis ] = tilt;
 		group.add( plate );
@@ -878,11 +923,11 @@ export function beagle2() {
 
 	};
 
-	disc( 0.88, 0.05, 0 );
-	disc( 0.88, 0.085, 0 );
+	disc( 0.88, 0.07, 0 );
+	disc( 0.88, 0.105, 0 );
 	// The two panels that came out, fanned round the lid.
-	disc( 0.88 + 0.84 * Math.cos( 0.9 ), 0.03, - 0.84 * Math.sin( 0.9 ) );
-	disc( 0.88 + 0.84, 0.03, 0 );
+	disc( 0.88 + 0.84 * Math.cos( 0.9 ), 0.05, - 0.84 * Math.sin( 0.9 ) );
+	disc( 0.88 + 0.84, 0.05, 0 );
 	// The third, half up on its hinge.
 	const hinge = new Group();
 	hinge.position.set( 0.88 + 0.42 * Math.cos( 0.9 ), 0.1, 0.42 * Math.sin( 0.9 ) );
@@ -907,16 +952,16 @@ export function schiaparelli() {
 	const group = new Group();
 	const rand = random( 5 );
 	// The scar: an irregular dark patch inside a fainter halo of thrown-out dust.
-	for ( const [ radius, material, y ] of [ [ 3.2, mm.halo, 0.012 + DEBUG_LIFT ], [ 1.3, mm.scar, 0.02 + DEBUG_LIFT ] ] ) {
+	for ( const [ radius, material, y ] of [ [ 2.4, mm.halo, 0.012 ], [ 1.3, mm.scar, 0.02 ] ] ) {
 
-		const ring = new RingGeometry( 0.01, 1, 32, 1 );
+		const ring = new RingGeometry( 0.01, 1, 48, 1 );
 		const position = ring.attributes.position;
 		for ( let i = 0; i < position.count; i ++ ) {
 
 			const x = position.getX( i );
 			const z = position.getY( i );
 			const a = Math.atan2( z, x );
-			const k = radius * ( 0.8 + 0.2 * Math.sin( a * 3 + 1 ) + 0.12 * Math.sin( a * 7 ) + rand() * 0.1 );
+			const k = radius * ( 0.85 + 0.1 * Math.sin( a * 2 + 1 ) + 0.07 * Math.sin( a * 5 + radius ) + rand() * 0.08 );
 			position.setXY( i, x * k, z * k );
 
 		}
@@ -930,7 +975,7 @@ export function schiaparelli() {
 	}
 
 	// Pieces: a crumpled block of the lander, a torn panel, a tank, bent struts, a heat-shield shard.
-	const block = box( 0.7, 0.35, 0.55, mm.charred, 0.2, 0.12, 0.1 );
+	const block = box( 0.7, 0.35, 0.55, m.silver, 0.2, 0.12, 0.1 );
 	block.rotation.set( 0.3, 0.6, 0.2 );
 	const plate = box( 0.9, 0.03, 0.6, m.silver, 2.4, 0.08, - 1.5 );
 	plate.rotation.set( 0.15, 0.9, - 0.1 );
@@ -940,7 +985,9 @@ export function schiaparelli() {
 	const shard = new Mesh( new SphereGeometry( 1.2, 12, 4, 0, 1.2, 0, 0.5 ), mm.whiteBoth );
 	shard.rotation.set( Math.PI - 0.15, 0, 0.1 );
 	shard.position.set( - 3.5, 1.22, - 2.5 );
-	group.add( block, plate, tank, shard );
+	const blanket = box( 0.5, 0.04, 0.4, m.gold, - 0.5, 0.08, - 0.4 );
+	blanket.rotation.set( 0.2, - 0.4, 0.15 );
+	group.add( block, plate, tank, shard, blanket );
 	for ( let i = 0; i < 4; i ++ ) {
 
 		const a = rand() * Math.PI * 2;
@@ -948,7 +995,7 @@ export function schiaparelli() {
 		const x = Math.cos( a ) * d;
 		const z = Math.sin( a ) * d;
 		group.add( strut( [ x, 0.03, z ], [ x + ( rand() - 0.5 ) * 0.8, 0.06 + rand() * 0.15, z + ( rand() - 0.5 ) * 0.8 ], 0.02, i % 2 ? m.silver : mm.charred ) );
-		const bit = box( 0.12 + rand() * 0.15, 0.05, 0.1 + rand() * 0.1, i % 2 ? m.gold : m.white, - x * 1.4, 0.03, z * 1.3 );
+		const bit = box( 0.2 + rand() * 0.2, 0.06, 0.15 + rand() * 0.15, i % 2 ? m.gold : m.white, - x * 1.4, 0.03, z * 1.3 );
 		bit.rotation.y = rand() * 3;
 		group.add( bit );
 
@@ -1001,7 +1048,7 @@ export function backshell() {
 	ring.computeVertexNormals();
 	const canopy = new Mesh( ring, mm.canopy );
 	canopy.rotation.x = - Math.PI / 2;
-	canopy.position.set( 1.2, DEBUG_LIFT, 7.2 );
+	canopy.position.set( 1.2, 0, 7.2 );
 	group.add( canopy );
 	// A few suspension lines from the canopy's near edge to the backshell.
 	for ( const dx of [ - 2, - 0.7, 0.6, 1.9 ] ) group.add( strut( [ 0.3, 0.02, 1.2 ], [ 1.2 + dx, 0.02, 4.1 ], 0.006, m.white ) );
