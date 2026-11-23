@@ -22,7 +22,7 @@ import {
 // --- materials -------------------------------------------------------------------------------------
 
 // Crinkled foil: a canvas of soft blotches so the light breaks up as it does on the real thing.
-function foilTexture( base, light, dark ) {
+export function foilTexture( base, light, dark ) {
 
 	const canvas = document.createElement( 'canvas' );
 	canvas.width = canvas.height = 128;
@@ -80,7 +80,7 @@ function cellsTexture() {
 }
 
 let shared = null;
-function materials() {
+export function materials() {
 
 	if ( shared ) return shared;
 	shared = {
@@ -101,7 +101,7 @@ function materials() {
 
 // --- helpers ---------------------------------------------------------------------------------------
 
-function box( w, h, d, material, x = 0, y = 0, z = 0 ) {
+export function box( w, h, d, material, x = 0, y = 0, z = 0 ) {
 
 	const mesh = new Mesh( new BoxGeometry( w, h, d ), material );
 	mesh.position.set( x, y, z );
@@ -109,14 +109,14 @@ function box( w, h, d, material, x = 0, y = 0, z = 0 ) {
 
 }
 
-function cylinder( rTop, rBottom, h, material, sides = 16 ) {
+export function cylinder( rTop, rBottom, h, material, sides = 16 ) {
 
 	return new Mesh( new CylinderGeometry( rTop, rBottom, h, sides ), material );
 
 }
 
 // A strut from point a to point b ([x, y, z]), radius r.
-function strut( a, b, r, material ) {
+export function strut( a, b, r, material ) {
 
 	const dx = b[ 0 ] - a[ 0 ];
 	const dy = b[ 1 ] - a[ 1 ];
@@ -131,7 +131,7 @@ function strut( a, b, r, material ) {
 }
 
 // A landing leg: a main strut from the body's corner out and down to a round pad, with two braces.
-function leg( group, corner, foot, padRadius, m ) {
+export function leg( group, corner, foot, padRadius, m ) {
 
 	group.add( strut( corner, foot, 0.06, m.gold ) );
 	const pad = cylinder( padRadius, padRadius * 0.9, 0.12, m.silver, 20 );
@@ -150,7 +150,7 @@ function leg( group, corner, foot, padRadius, m ) {
 }
 
 // A wheel of radius r and width w, its axle along X, centred at (x, r, z).
-function wheel( r, w, material, x, z, spokes = false ) {
+export function wheel( r, w, material, x, z, spokes = false ) {
 
 	const tyre = cylinder( r, r, w, material, 18 );
 	tyre.rotation.z = Math.PI / 2;
@@ -167,7 +167,7 @@ function wheel( r, w, material, x, z, spokes = false ) {
 }
 
 // A flat solar panel w × h, its cells facing +Y, centred at the origin.
-function panel( w, d, m ) {
+export function panel( w, d, m ) {
 
 	const group = new Group();
 	const cells = new Mesh( new PlaneGeometry( w, d ), m.cells );
@@ -180,7 +180,7 @@ function panel( w, d, m ) {
 
 // A flag on a pole with a crossbar along its top (as the Apollo flags had, so they'd show without
 // air), `w` × `h` metres, drawn by `paint( ctx, width, height )`.
-function flag( paint, { w = 1.52, h = 0.91, pole = 2.3 } = {} ) {
+export function flag( paint, { w = 1.52, h = 0.91, pole = 2.3 } = {} ) {
 
 	const m = materials();
 	const group = new Group();
@@ -206,7 +206,7 @@ function flag( paint, { w = 1.52, h = 0.91, pole = 2.3 } = {} ) {
 
 }
 
-function usFlag( ctx, w, h ) {
+function paintUsFlag( ctx, w, h ) {
 
 	for ( let i = 0; i < 13; i ++ ) {
 
@@ -292,7 +292,7 @@ export function apollo11Site() {
 	const m = materials();
 	const group = new Group();
 	group.add( apolloDescentStage() );
-	const stars = flag( usFlag );
+	const stars = flag( paintUsFlag );
 	stars.position.set( - 2.5, 0, - 7 );
 	stars.rotation.y = 0.5;
 	group.add( stars );
@@ -492,6 +492,336 @@ export function soraQ() {
 
 }
 
+// --- more of the Moon's hardware -------------------------------------------------------------------
+
+// The US flag on its pole and crossbar, as each Apollo crew planted one (the paint is long bleached by
+// the sun, but it's shown as it was).
+export function usFlag() {
+
+	return flag( paintUsFlag );
+
+}
+
+// The Apollo Lunar Surface Experiments Package (ALSEP): a central station box with its antenna, the
+// radioisotope generator, and a couple of instruments on the ground nearby.
+export function alsep() {
+
+	const m = materials();
+	const group = new Group();
+	group.add( box( 0.6, 0.3, 0.5, m.silver, 0, 0.3, 0 ) );
+	group.add( box( 0.7, 0.03, 0.6, m.white, 0, 0.47, 0 ) );
+	const mast = cylinder( 0.015, 0.015, 0.6, m.silver, 6 );
+	mast.position.set( 0.15, 0.8, 0 );
+	const dish = new Mesh( new ConeGeometry( 0.12, 0.25, 12, 1, true ), m.white );
+	dish.position.set( 0.15, 1.15, 0 );
+	dish.rotation.x = - 0.6;
+	for ( const [ x, z ] of [ [ - 0.28, - 0.22 ], [ 0.28, - 0.22 ], [ - 0.28, 0.22 ], [ 0.28, 0.22 ] ] ) group.add( strut( [ x, 0, z ], [ x, 0.18, z ], 0.012, m.silver ) );
+	// The generator a few metres off, its fins round a drum.
+	const rtg = cylinder( 0.2, 0.2, 0.45, m.black, 12 );
+	rtg.position.set( 2.6, 0.32, 1.2 );
+	for ( let i = 0; i < 8; i ++ ) {
+
+		const fin = box( 0.02, 0.45, 0.14, m.black );
+		const a = i / 8 * Math.PI * 2;
+		fin.position.set( 2.6 + Math.cos( a ) * 0.25, 0.32, 1.2 + Math.sin( a ) * 0.25 );
+		fin.rotation.y = - a;
+		group.add( fin );
+
+	}
+
+	// The seismometer under its skirt of foil.
+	const seismo = cylinder( 0.15, 0.4, 0.3, m.gold, 16 );
+	seismo.position.set( - 3, 0.15, - 2 );
+	group.add( mast, dish, rtg, seismo );
+	return group;
+
+}
+
+// The Laser Ranging Retroreflector: a panel of corner cubes tilted to the Earth on its stand, about
+// 46 cm across (Apollo 11 and 14; Apollo 15's was three times the size).
+export function laserReflector() {
+
+	const m = materials();
+	const group = new Group();
+	const face = box( 0.46, 0.05, 0.46, m.black );
+	face.position.set( 0, 0.45, 0 );
+	face.rotation.x = - 0.4;
+	group.add( face, strut( [ 0, 0, 0.15 ], [ 0, 0.45, 0 ], 0.015, m.silver ), strut( [ - 0.2, 0, - 0.1 ], [ - 0.15, 0.4, 0 ], 0.012, m.silver ), strut( [ 0.2, 0, - 0.1 ], [ 0.15, 0.4, 0 ], 0.012, m.silver ) );
+	return group;
+
+}
+
+// The Lunar Roving Vehicle (Apollo 15, 16, 17), parked where the crews left it: 3.1 m long, 2.3 m
+// wide, four wire-mesh wheels 81 cm across, two seats, the console, the high-gain dish on its mast
+// and the TV camera.
+export function lrv() {
+
+	const m = materials();
+	const group = new Group();
+	group.add( box( 1.4, 0.12, 3.0, m.silver, 0, 0.62, 0 ) );
+	for ( const x of [ - 1.0, 1.0 ] ) for ( const z of [ - 1.15, 1.15 ] ) {
+
+		group.add( wheel( 0.41, 0.23, m.mesh, x, z, true ) );
+		const fender = box( 0.3, 0.03, 0.9, m.gold, x, 0.88, z );
+		group.add( fender );
+
+	}
+
+	// Two seats, folded-tube frames with webbing.
+	for ( const x of [ - 0.35, 0.35 ] ) {
+
+		group.add( box( 0.5, 0.05, 0.5, m.grey, x, 0.75, 0.1 ) );
+		const back = box( 0.5, 0.45, 0.04, m.grey, x, 0.98, 0.35 );
+		back.rotation.x = - 0.2;
+		group.add( back );
+
+	}
+
+	group.add( box( 0.35, 0.35, 0.12, m.grey, 0, 1.0, - 0.45 ) );
+	const mast = cylinder( 0.015, 0.015, 1.0, m.silver, 6 );
+	mast.position.set( - 0.45, 1.25, - 1.1 );
+	const dish = new Mesh( new SphereGeometry( 0.45, 16, 6, 0, Math.PI * 2, 0, 0.6 ), m.mesh );
+	dish.position.set( - 0.45, 1.9, - 1.1 );
+	dish.rotation.x = 0.9;
+	const camera = box( 0.15, 0.15, 0.25, m.white, 0.4, 1.25, - 1.3 );
+	group.add( mast, dish, camera );
+	return group;
+
+}
+
+// Surveyor (1966-68), America's robotic landers before Apollo: a triangular frame about 3 m tall on
+// three legs, a mast with the solar panel and the flat dish on top, and the TV camera.
+export function surveyor() {
+
+	const m = materials();
+	const group = new Group();
+	const frame = cylinder( 0.65, 0.65, 0.9, m.silver, 3 );
+	frame.position.y = 1.0;
+	group.add( frame );
+	for ( let i = 0; i < 3; i ++ ) {
+
+		const a = i / 3 * Math.PI * 2 + Math.PI / 6;
+		leg( group, [ Math.cos( a ) * 0.6, 0.8, Math.sin( a ) * 0.6 ], [ Math.cos( a ) * 2.1, 0.12, Math.sin( a ) * 2.1 ], 0.15, m );
+
+	}
+
+	group.add( box( 0.35, 0.35, 0.35, m.white, 0.35, 1.6, 0 ) );
+	group.add( box( 0.25, 0.4, 0.25, m.silver, - 0.3, 1.65, 0.2 ) );
+	const mast = cylinder( 0.03, 0.03, 1.6, m.silver, 8 );
+	mast.position.y = 2.2;
+	const solar = panel( 0.86, 0.86, m );
+	solar.position.y = 3.0;
+	solar.rotation.x = 0.4;
+	const dish = box( 0.95, 0.03, 0.95, m.white, 0, 2.75, 0 );
+	dish.rotation.x = - 0.5;
+	group.add( mast, solar, dish );
+	return group;
+
+}
+
+// Luna 9 (1966), the first soft landing on another world: a 58 cm ball that rolled to a stop and
+// opened four petals, its antennas sticking out.
+export function lunaLander() {
+
+	const m = materials();
+	const group = new Group();
+	const ball = new Mesh( new SphereGeometry( 0.29, 20, 14 ), m.silver );
+	ball.position.y = 0.35;
+	group.add( ball );
+	for ( let i = 0; i < 4; i ++ ) {
+
+		const a = i / 4 * Math.PI * 2;
+		const petal = box( 0.3, 0.02, 0.55, m.silver );
+		petal.position.set( Math.cos( a ) * 0.45, 0.08, Math.sin( a ) * 0.45 );
+		petal.rotation.y = - a + Math.PI / 2;
+		petal.rotation.x = 0.25;
+		group.add( petal );
+		group.add( strut( [ Math.cos( a + 0.8 ) * 0.2, 0.5, Math.sin( a + 0.8 ) * 0.2 ], [ Math.cos( a + 0.8 ) * 0.5, 1.0, Math.sin( a + 0.8 ) * 0.5 ], 0.006, m.silver ) );
+
+	}
+
+	return group;
+
+}
+
+// The descent stage of the Soviet sample-return landers (Luna 16, 20, 24): four spherical fuel tanks
+// in a frame on four legs, about 4 m across; the ascent stage flew the sample home.
+export function lunaSampleReturn() {
+
+	const m = materials();
+	const group = new Group();
+	for ( const [ x, z ] of [ [ - 0.55, - 0.55 ], [ 0.55, - 0.55 ], [ - 0.55, 0.55 ], [ 0.55, 0.55 ] ] ) {
+
+		const tank = new Mesh( new SphereGeometry( 0.45, 16, 12 ), m.silver );
+		tank.position.set( x, 1.0, z );
+		group.add( tank );
+
+	}
+
+	group.add( box( 1.9, 0.12, 1.9, m.grey, 0, 1.5, 0 ) );
+	group.add( cylinder( 0.35, 0.35, 0.4, m.gold, 12 ).translateY( 1.75 ) );
+	for ( const [ sx, sz ] of [ [ 1, 1 ], [ 1, - 1 ], [ - 1, 1 ], [ - 1, - 1 ] ] ) leg( group, [ sx * 0.9, 0.9, sz * 0.9 ], [ sx * 2.0, 0.12, sz * 2.0 ], 0.25, m );
+	// The drill arm, swung down to the ground.
+	group.add( strut( [ 0.9, 1.5, 0 ], [ 1.8, 0.2, 0 ], 0.03, m.silver ) );
+	return group;
+
+}
+
+// The landing stage that carried Lunokhod 1 and 2 (Luna 17, 21): the same tanks and frame, with the
+// two pairs of ramps the rover rolled down.
+export function lunaLunokhodLander() {
+
+	const m = materials();
+	const group = lunaSampleReturn();
+	for ( const z of [ - 1, 1 ] ) {
+
+		const ramp = box( 0.6, 0.04, 2.0, m.silver, z * 0.6, 0.75, - 1.9 );
+		ramp.rotation.x = 0.7;
+		group.add( ramp );
+
+	}
+
+	return group;
+
+}
+
+// Chang'e 3 (2013), the same lander as Chang'e 4, and Yutu, the same rover as Yutu-2.
+export const change3Lander = change4Lander;
+export const yutu = yutu2;
+
+// Chang'e 5 and 6 (2020, 2024) left their landers when the ascender took the samples up: a wide,
+// low body on four legs, two big solar wings, the drill and the scoop arm, and the flag (China's
+// first, on Chang'e 5).
+export function change5Lander() {
+
+	const m = materials();
+	const group = new Group();
+	const body = cylinder( 1.6, 1.6, 1.0, m.gold, 8 );
+	body.rotation.y = Math.PI / 8;
+	body.position.y = 1.5;
+	group.add( body, box( 2.8, 0.06, 2.8, m.silver, 0, 2.03, 0 ) );
+	for ( const [ sx, sz ] of [ [ 1, 1 ], [ 1, - 1 ], [ - 1, 1 ], [ - 1, - 1 ] ] ) leg( group, [ sx * 1.1, 1.2, sz * 1.1 ], [ sx * 2.6, 0.12, sz * 2.6 ], 0.35, m );
+	for ( const side of [ - 1, 1 ] ) {
+
+		const wing = panel( 2.4, 1.3, m );
+		wing.position.set( side * 2.8, 2.1, 0 );
+		wing.rotation.z = side * 0.25;
+		group.add( wing );
+
+	}
+
+	group.add( strut( [ 1.2, 1.8, - 1.0 ], [ 2.0, 0.3, - 2.0 ], 0.04, m.silver ) );
+	const china = flag( paintChinaFlag, { w: 0.9, h: 0.6, pole: 1.0 } );
+	china.position.set( - 0.6, 2.05, 0.6 );
+	group.add( china );
+	return group;
+
+}
+
+function paintChinaFlag( ctx, w, h ) {
+
+	ctx.fillStyle = '#de2910';
+	ctx.fillRect( 0, 0, w, h );
+	ctx.fillStyle = '#ffde00';
+	const star = ( x, y, r ) => {
+
+		ctx.beginPath();
+		for ( let i = 0; i < 10; i ++ ) {
+
+			const a = - Math.PI / 2 + i * Math.PI / 5;
+			const d = i % 2 ? r * 0.4 : r;
+			ctx.lineTo( x + Math.cos( a ) * d, y + Math.sin( a ) * d );
+
+		}
+
+		ctx.fill();
+
+	};
+	star( w * 0.17, h * 0.27, h * 0.16 );
+	for ( const [ x, y ] of [ [ 0.33, 0.1 ], [ 0.4, 0.2 ], [ 0.4, 0.35 ], [ 0.33, 0.45 ] ] ) star( w * x, h * y, h * 0.05 );
+
+}
+
+// Odysseus (Intuitive Machines IM-1, 2024), the first private Moon landing: a hexagonal body about
+// 4 m tall on six legs, which caught a leg on landing and came to rest tipped on its side.
+export function odysseus() {
+
+	const m = materials();
+	const craft = new Group();
+	const body = cylinder( 0.8, 0.8, 3.0, m.silver, 6 );
+	body.position.y = 2.0;
+	craft.add( body );
+	for ( let i = 0; i < 6; i ++ ) {
+
+		const a = i / 6 * Math.PI * 2;
+		leg( craft, [ Math.cos( a ) * 0.75, 0.9, Math.sin( a ) * 0.75 ], [ Math.cos( a ) * 1.6, 0.12, Math.sin( a ) * 1.6 ], 0.18, m );
+		const cells = panel( 0.7, 2.2, m );
+		cells.rotation.z = Math.PI / 2;
+		cells.rotation.y = - a;
+		cells.position.set( Math.cos( a ) * 0.82, 2.2, Math.sin( a ) * 0.82 );
+		craft.add( cells );
+
+	}
+
+	// On its side, propped a little on a leg.
+	const group = new Group();
+	craft.rotation.z = Math.PI / 2 - 0.3;
+	craft.position.set( 1.6, 0.6, 0 );
+	group.add( craft );
+	return group;
+
+}
+
+// Blue Ghost (Firefly, 2025), which landed upright in Mare Crisium: a squat gold-and-white box about
+// 2 m tall and 3.5 m wide on four legs, solar cells round its sides.
+export function blueGhost() {
+
+	const m = materials();
+	const group = new Group();
+	group.add( box( 2.4, 1.2, 2.4, m.gold, 0, 1.4, 0 ) );
+	group.add( box( 2.5, 0.08, 2.5, m.white, 0, 2.04, 0 ) );
+	for ( const side of [ - 1, 1 ] ) {
+
+		const cells = panel( 2.2, 1.0, m );
+		cells.rotation.z = Math.PI / 2;
+		cells.position.set( side * 1.22, 1.4, 0 );
+		group.add( cells );
+
+	}
+
+	for ( const [ sx, sz ] of [ [ 1, 1 ], [ 1, - 1 ], [ - 1, 1 ], [ - 1, - 1 ] ] ) leg( group, [ sx * 1.1, 1.0, sz * 1.1 ], [ sx * 1.9, 0.12, sz * 1.9 ], 0.28, m );
+	return group;
+
+}
+
+// A crash site: a small fresh crater, darker and brighter rays round it, and a few twisted pieces.
+// No two crashes leave the same scar: the debris is placed from a seed.
+export function impact( seed = 1 ) {
+
+	const m = materials();
+	const group = new Group();
+	let s = seed * 9973 + 17;
+	const random = () => ( s = ( s * 16807 ) % 2147483647 ) / 2147483647;
+	const scar = new Mesh( new CylinderGeometry( 4, 6, 0.04, 24 ), new MeshStandardMaterial( { color: 0x4a4844, roughness: 1 } ) );
+	scar.position.y = 0.01;
+	const pit = new Mesh( new CylinderGeometry( 2.5, 1.2, 0.05, 20 ), new MeshStandardMaterial( { color: 0x2c2b29, roughness: 1 } ) );
+	pit.position.y = 0.035;
+	group.add( scar, pit );
+	for ( let i = 0; i < 9; i ++ ) {
+
+		const a = random() * Math.PI * 2;
+		const d = 2 + random() * 9;
+		const piece = box( 0.2 + random() * 0.6, 0.05 + random() * 0.2, 0.15 + random() * 0.5, random() < 0.5 ? m.silver : m.gold );
+		piece.position.set( Math.cos( a ) * d, 0.08, Math.sin( a ) * d );
+		piece.rotation.set( random() * 0.6, random() * Math.PI, random() * 0.6 );
+		group.add( piece );
+
+	}
+
+	return group;
+
+}
+
 // Each site: what's there, laid out as the photographs from orbit show it (metres east and north of
 // the first piece), and where on the Moon (planetocentric degrees, LROC's published positions).
 export const HARDWARE = [
@@ -503,7 +833,7 @@ export const HARDWARE = [
 ];
 
 // Several pieces in one Group: [ builder, east, north, heading ] each.
-function site( pieces ) {
+export function site( pieces ) {
 
 	const group = new Group();
 	for ( const [ build, east, north, heading ] of pieces ) {

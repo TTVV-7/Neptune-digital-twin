@@ -12,7 +12,10 @@
 // scripts/preview-hardware.mjs to photograph: ?model=<HARDWARE id> or a builder's name, and
 // ?view=<distance>,<height>,<turn degrees>.
 import * as THREE from 'three';
-import * as H from '/src/drive-app/hardware.js';
+import * as MOON from '/src/drive-app/hardware.js';
+// The other worlds' builders too, where they're written yet.
+const more = await Promise.all( [ '/src/drive-app/hardware-mars.js' ].map( url => import( url ).catch( () => ( {} ) ) ) );
+const H = Object.assign( {}, MOON, ...more, { HARDWARE: [ ...MOON.HARDWARE, ...more.flatMap( m => m.HARDWARE ?? [] ) ] } );
 
 const params = new URLSearchParams( location.search );
 const which = params.get( 'model' ) ?? 'apollo-11';
