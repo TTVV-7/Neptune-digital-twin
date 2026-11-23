@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<!-- The rides and their files are found from the site's root, as on the game's page. -->
+		<base href="/" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>City Drive · World Drive</title>
+		<meta name="description" content="Drive a whole city in your browser: Vancouver's downtown, Stanley Park and its bridges, built from OpenStreetMap. Boost, drift and stunt in World Drive's cars, free." />
+		<!-- Out of search for now, like admin.html: it isn't one of the site's pages for search engines
+		     (scripts/test-drive-seo.mjs) until it has their card, structured data and footer. -->
+		<meta name="robots" content="noindex, nofollow" />
+		<meta name="theme-color" content="#070c16" />
+		<link rel="icon" href="/favicon.ico" sizes="48x48" />
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<style>
+			html, body { margin: 0; height: 100%; overflow: hidden; background: #070c16; font: 15px/1.4 system-ui, sans-serif; color: #eef2f5; }
+			#app, #app canvas { position: fixed; inset: 0; display: block; }
+			#hud { position: fixed; inset: 0; pointer-events: none; }
+			#hud > * { pointer-events: auto; }
+			#menu { position: fixed; left: 50%; top: 50%; translate: -50% -50%; width: min( 400px, calc( 100vw - 32px ) ); padding: 22px; box-sizing: border-box;
+				background: rgba( 10, 16, 26, 0.88 ); border: 1px solid rgba( 255, 255, 255, 0.12 ); border-radius: 14px; backdrop-filter: blur( 8px ); }
+			#menu h1 { margin: 0 0 2px; font-size: 22px; }
+			#menu .sub { margin: 0 0 16px; color: #9fb0bf; font-size: 13px; }
+			#menu label { display: block; margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #9fb0bf; }
+			#menu select { width: 100%; padding: 8px 10px; font: inherit; color: inherit; background: #17222e; border: 1px solid #2c3b49; border-radius: 8px; }
+			#menu .buttons { display: flex; gap: 8px; margin-top: 18px; }
+			#menu button { flex: 1; padding: 11px; font: 600 15px system-ui, sans-serif; color: #071018; background: #ffd60a; border: 0; border-radius: 9px; cursor: pointer; }
+			#menu button#resume { background: #2c3b49; color: #eef2f5; }
+			#menu button:disabled { opacity: 0.5; cursor: default; }
+			#menu .keys { margin: 14px 0 0; color: #9fb0bf; font-size: 12px; }
+			#menu kbd { padding: 1px 5px; border: 1px solid #3a4b5b; border-radius: 4px; font: 11px ui-monospace, monospace; }
+			#menu a { color: #9fd3ff; }
+			#loading { position: fixed; top: 16px; left: 50%; translate: -50% 0; padding: 6px 14px; background: rgba( 10, 16, 26, 0.85 ); border-radius: 999px; font-size: 13px; }
+			#credit { position: fixed; right: 8px; bottom: 6px; font-size: 11px; color: #263544; background: rgba( 255, 255, 255, 0.7 ); padding: 1px 6px; border-radius: 4px; }
+		</style>
+	</head>
+	<body>
+		<div id="app"></div>
+		<div id="hud"></div>
+		<div id="loading">Building the city…</div>
+		<div id="menu" hidden>
+			<h1>City Drive</h1>
+			<p class="sub" id="blurb"></p>
+			<label for="city">City</label>
+			<select id="city"></select>
+			<label for="start">Start at</label>
+			<select id="start"></select>
+			<label for="ride">Ride</label>
+			<select id="ride"></select>
+			<div class="buttons">
+				<button type="button" id="resume" hidden>Resume</button>
+				<button type="button" id="go" disabled>Drive</button>
+			</div>
+			<p class="keys"><kbd>W A S D</kbd> drive · <kbd>Shift</kbd> boost · <kbd>Space</kbd> drift and hop · <kbd>R</kbd> back on the road · <kbd>T</kbd> fly · <kbd>C</kbd> camera · <kbd>Esc</kbd> menu</p>
+			<p class="keys">Or <a href="/">drive anywhere on Earth</a> in World Drive.</p>
+		</div>
+		<div id="credit"></div>
+		<script type="module" src="/src/drive-app/city/main.js"></script>
+	</body>
+</html>

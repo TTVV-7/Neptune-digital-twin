@@ -1,7 +1,7 @@
 import { createReadStream, readFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig, loadEnv } from 'vite';
+import { build as viteBuild, defineConfig, loadEnv } from 'vite';
 import { GOOGLE_KEY_NAMES } from './vite.config.js';
 import { LIBRARY_VEHICLES, WORKS_RIDES } from './src/drive-app/catalog.js';
 import { driveSite } from './drive/site/build.js';
@@ -59,7 +59,7 @@ export default defineConfig( ( { command, mode } ) => {
 		// driveSite: the places' pages, /drive/, the Moon's and Mars's pages (/moon/, /mars/: each world
 		// in worlds.js's OFF_EARTH, beside its files from drive/public/<world>/) and /sitemap.xml, for
 		// search engines (drive/site/).
-		plugins: [ publishFromLibrary(), driveSite(), keyStaysOut( envKey ) ],
+		plugins: [ publishFromLibrary(), driveSite(), keyStaysOut( envKey ), ...command === 'build' ? [ cityDrive() ] : [] ],
 	};
 
 } );
@@ -141,6 +141,33 @@ function keyStaysOut( key ) {
 				if ( text.includes( key ) ) this.error( `The Maps key ended up in ${ file.fileName }; World Drive's build must never hold it.` );
 
 			}
+
+		},
+	};
+
+}
+
+// City Drive (/city/, drive/city/index.html: a city built from OpenStreetMap, src/drive-app/city/),
+// built after the game in a build of its own into dist-drive/city/, so the game's page and its
+// chunks are exactly as they'd be without it (two pages in one build would split what they share
+// into chunks of their own). The dev server serves it as it is, from drive/city/.
+function cityDrive() {
+
+	return {
+		name: 'world-drive-city',
+		apply: 'build',
+		async closeBundle() {
+
+			await viteBuild( {
+				configFile: false,
+				root: join( ROOT, 'drive', 'city' ),
+				base: '/city/',
+				publicDir: false,
+				logLevel: 'warn',
+				resolve: { alias: [ { find: /^\/src\//, replacement: `${ join( ROOT, 'src' ) }/` } ] },
+				define: { __DEV_MAPS_KEY__: '""' },
+				build: { outDir: join( ROOT, 'dist-drive', 'city' ), emptyOutDir: true, chunkSizeWarningLimit: 1500 },
+			} );
 
 		},
 	};
