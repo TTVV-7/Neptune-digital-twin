@@ -137,6 +137,13 @@
 	.ch-form .row label.narrow { flex: 0 1 90px; }
 	.ch-form .row label.day { flex-basis: 120px; }
 	.ch-form [hidden] { display: none; }
+	.req-list { list-style: none; margin: 10px 0 0; padding: 0; }
+	.req-list li { padding: 10px 0; border-top: 1px solid var(--line); }
+	.req-list li.done .req-text { color: var(--muted); text-decoration: line-through; }
+	.req-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+	.req-meta { margin-top: 4px; }
+	.req-actions { display: flex; gap: 8px; margin-top: 6px; }
+	.requests .seg { margin-top: 6px; }
 	.reset-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 12px 0; font-size: 14px; }
 	.reset-facts dt { color: var(--muted); }
 	.reset-facts dd { margin: 0; overflow-wrap: anywhere; }
@@ -213,7 +220,7 @@
 		</div>
 	</header>
 	<nav class="jump" aria-label="Jump to">
-		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#maps-cost">Maps cost</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
+		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#maps-cost">Maps cost</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#requests">Requests</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
 	</nav>
 	<div id="out"><p class="muted">Loading...</p></div>
 	<section class="card places" id="places" aria-labelledby="places-title" hidden>
@@ -271,6 +278,12 @@
 		<p class="muted small" id="ach-total"></p>
 		<div id="ach-list"></div>
 		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, drives on the Moon, Mars, Vesta and Ceres, Garage changes, rides tried, Discoveries collected), each held to a day's worth; the Discoveries' counts are the account's players' finds together. A construction ride comes with the achievement beside it.</p>
+	</section>
+	<section class="card requests" id="requests" aria-labelledby="requests-title" hidden>
+		<h2 id="requests-title">Feature requests <span class="muted" id="req-open"></span></h2>
+		<div class="seg" id="req-show" role="group" aria-label="Which requests"><button type="button" data-show="open" aria-pressed="true">Open</button><button type="button" data-show="all" aria-pressed="false">All</button></div>
+		<div id="req-list"><p class="muted">Loading...</p></div>
+		<p class="note">Sent from the account panel's Request a feature by signed-in players (5 a day each). ⭐ marks a supporter.</p>
 	</section>
 	<section class="card resets" id="resets" aria-labelledby="resets-title" hidden>
 		<h2 id="resets-title">Password reset link</h2>
@@ -2421,6 +2434,100 @@
 		};
 		$( 'reset-copy' ).addEventListener( 'click', () => copy( reply, 'Reply copied.' ) );
 		$( 'reset-copy-link' ).addEventListener( 'click', () => copy( answer.link, 'Link copied.' ) );
+
+	} );
+
+} )();
+</script>
+<script>
+( () => {
+
+	// --- Feature requests ---------------------------------------------------------------------
+	//
+	// GET /api/admin/requests: { requests: [ { id, name, text, createdAt, doneAt, supporter } ], open },
+	// newest first (worker/drive/requests.js); POST { id, action: 'done' | 'open' | 'delete' } answers
+	// the same.
+
+	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
+	const $ = id => document.getElementById( id );
+	let data = null;
+	let showing = 'open';
+	load();
+
+	async function load() {
+
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/requests', { credentials: 'same-origin' } );
+
+		} catch {
+
+			return;
+
+		}
+
+		if ( res.status === 401 || res.status === 403 || ! /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ) return;
+		const answer = await res.json().catch( () => null );
+		if ( ! answer ) return;
+		$( 'requests' ).hidden = false;
+		if ( ! res.ok ) {
+
+			$( 'req-list' ).innerHTML = `<p class="muted">${ res.status === 429 ? 'Asked too often just now: try again in a minute.' : `Something went wrong (${ res.status }).` }</p>`;
+			return;
+
+		}
+
+		show( answer );
+
+	}
+
+	function show( answer ) {
+
+		data = answer;
+		window.worldDriveAdmin = { ...window.worldDriveAdmin, requests: answer };
+		$( 'req-open' ).textContent = answer.open ? `(${ answer.open.toLocaleString() } open)` : '';
+		const list = answer.requests.filter( r => showing === 'all' || ! r.doneAt );
+		const when = ms => new Date( ms ).toLocaleString( [], { dateStyle: 'medium', timeStyle: 'short' } );
+		$( 'req-list' ).innerHTML = list.length ? `<ul class="req-list">${ list.map( r => `<li class="${ r.doneAt ? 'done' : '' }" data-id="${ r.id }">
+			<div class="req-text">${ esc( r.text ) }</div>
+			<div class="req-meta muted small">${ r.supporter ? '⭐ ' : '' }${ esc( r.name || 'someone' ) } · ${ esc( when( r.createdAt ) ) }${ r.doneAt ? ` · done ${ esc( when( r.doneAt ) ) }` : '' }</div>
+			<div class="req-actions"><button type="button" data-action="${ r.doneAt ? 'open' : 'done' }">${ r.doneAt ? 'Not done' : 'Done' }</button><button type="button" data-action="delete">Delete</button></div>
+		</li>` ).join( '' ) }</ul>` : `<p class="muted">${ showing === 'open' && answer.requests.length ? 'Nothing open: all done.' : 'No requests yet.' }</p>`;
+
+	}
+
+	$( 'req-show' ).addEventListener( 'click', event => {
+
+		const button = event.target.closest( 'button[data-show]' );
+		if ( ! button || ! data ) return;
+		showing = button.dataset.show;
+		for ( const b of $( 'req-show' ).querySelectorAll( 'button' ) ) b.setAttribute( 'aria-pressed', String( b === button ) );
+		show( data );
+
+	} );
+
+	$( 'req-list' ).addEventListener( 'click', async event => {
+
+		const button = event.target.closest( 'button[data-action]' );
+		if ( ! button ) return;
+		const id = Number( button.closest( 'li' ).dataset.id );
+		const action = button.dataset.action;
+		if ( action === 'delete' && ! confirm( 'Delete this request?' ) ) return;
+		button.disabled = true;
+		try {
+
+			const res = await fetch( '/api/admin/requests', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { id, action } ) } );
+			if ( res.ok ) return show( await res.json() );
+
+		} catch {
+
+			// (Said below.)
+
+		}
+
+		button.disabled = false;
+		alert( 'That didn\'t go through. Try again.' );
 
 	} );
 

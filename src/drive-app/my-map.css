@@ -1,0 +1,147 @@
+/* Your map (my-map.js): a dialog like the account panel's, the map 2:1 as the picture is. */
+
+dialog#my-map {
+	width: min( 760px, calc( 100% - 24px ) );
+	max-height: calc( 100% - 24px );
+	padding: 18px;
+	border: 1px solid var( --line );
+	border-radius: 20px;
+	background: var( --panel-solid );
+	color: var( --ink );
+	overflow-y: auto;
+}
+
+dialog#my-map::backdrop {
+	background: rgba( 4, 8, 16, 0.6 );
+}
+
+dialog#my-map header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+dialog#my-map h2 {
+	margin: 0;
+	font: 900 italic 24px/1 var( --font );
+	text-transform: uppercase;
+}
+
+dialog#my-map .close {
+	width: 36px;
+	height: 36px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: var( --chip );
+	color: var( --ink );
+	font-size: 20px;
+	cursor: pointer;
+}
+
+dialog#my-map .my-map-count {
+	margin: 8px 0 10px;
+	color: var( --muted );
+}
+
+dialog#my-map .my-map-frame {
+	position: relative;
+	border-radius: 12px;
+	overflow: hidden;
+	border: 1px solid var( --line );
+}
+
+dialog#my-map canvas {
+	display: block;
+	width: 100%;
+	aspect-ratio: 2 / 1;
+	touch-action: none;
+	cursor: grab;
+}
+
+dialog#my-map canvas:active {
+	cursor: grabbing;
+}
+
+dialog#my-map .my-map-tools {
+	position: absolute;
+	right: 8px;
+	top: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+dialog#my-map .my-map-tools button,
+dialog#my-map .my-map-bar button {
+	min-width: 36px;
+	min-height: 36px;
+	padding: 6px 12px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: rgba( 7, 12, 22, 0.78 );
+	color: var( --ink );
+	font: 700 14px/1 var( --font );
+	cursor: pointer;
+}
+
+dialog#my-map .my-map-tip {
+	position: absolute;
+	transform: translate( -50%, -150% );
+	padding: 4px 8px;
+	border-radius: 8px;
+	background: rgba( 7, 12, 22, 0.9 );
+	font-size: 13px;
+	font-weight: 700;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+dialog#my-map .my-map-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+dialog#my-map .my-map-key {
+	margin-left: auto;
+	color: var( --muted );
+}
+
+dialog#my-map .my-map-key .dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #3ec1ff;
+	box-shadow: 0 0 6px #3ec1ff;
+}
+
+dialog#my-map .my-map-key .star {
+	color: #ffd23f;
+	font-style: normal;
+	margin-left: 8px;
+}
+
+dialog#my-map .my-map-spots {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 14px;
+	margin: 12px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+dialog#my-map .my-map-spots span[aria-hidden] {
+	color: #ffd23f;
+}
+
+dialog#my-map .muted {
+	color: var( --muted );
+}
+
+dialog#my-map .small {
+	font-size: 13px;
+}

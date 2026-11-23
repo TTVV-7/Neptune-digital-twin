@@ -247,6 +247,13 @@ export function postProgress( { id, secret }, visit, report, { keepalive = false
 
 }
 
+// Every Earth area and start spot this player has driven (Your map, my-map.js): body { places }.
+export function getPlaces( { id, secret } ) {
+
+	return send( 'POST', '/api/progress/places', { id, secret } );
+
+}
+
 // The title on this player's nametag (an id in levels.js's TITLES, '' for the newest): body
 // { level, title }.
 export function postTitle( { id, secret }, title ) {

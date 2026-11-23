@@ -115,6 +115,7 @@ function privacy( contact ) {
 		<li><b>Signed in with Google:</b> your Google account's name and email address, and an ID Google gives for it.</li>
 		<li><b>With a username:</b> the username and a salted hash of your password (never the password itself), and an email only if you give one: for your receipts, and so a forgotten password can be reset when you write from it. Nothing else is sent to it.</li>
 		<li><b>The Supporter Pass:</b> what you bought, when, the amount, and Stripe's reference for it. World Drive never sees your card: payments are made with Stripe.</li>
+		<li><b>Feature requests</b> you send from the account panel: what you wrote, when, and your nickname, read by World Drive's maker and deleted when you ask.</li>
 	</ul>
 	<h2>Why</h2>
 	<p>To run the game and the account you asked for (the leaderboard, your progress, the pass you bought); to keep it fair and working (daily limits, the robot check, finding what's broken); with your permission where the law asks for it (personalised ads); and to keep records of payments that tax law requires.</p>

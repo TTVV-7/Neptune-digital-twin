@@ -4007,6 +4007,35 @@ describe( 'World Drive username and password accounts', () => {
 
 	} );
 
+	test( 'feature requests: a signed-in player sends a few a day; the owner lists them newest first, marks them done and deletes them', async () => {
+
+		const boss = await google( { sub: '3991', email: 'boss@example.com', name: 'Boss' } );
+		const u = await signUp( 'Idea_Haver', 'an idea haver passphrase' );
+		// Signed out, nothing; nothing written, or too much, a 400.
+		assert.equal( ( await send( 'POST', '/api/requests', { text: 'A monster truck' } ) ).status, 401 );
+		assert.equal( ( await send( 'POST', '/api/requests', { text: '   ' }, { cookie: u.cookie } ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/requests', { text: 'x'.repeat( 1001 ) }, { cookie: u.cookie } ) ).status, 400 );
+		for ( let i = 1; i <= 5; i ++ ) assert.equal( ( await send( 'POST', '/api/requests', { text: `  Idea ${ i }\r\nwith a second line  ` }, { cookie: u.cookie, time: ACCOUNT_DAY + i } ) ).status, 200 );
+		assert.equal( ( await send( 'POST', '/api/requests', { text: 'Idea 6' }, { cookie: u.cookie, time: ACCOUNT_DAY + 6 } ) ).status, 429 );
+		// The owner's only.
+		assert.equal( ( await call( server, '/api/admin/requests', { headers: { Cookie: u.cookie }, time: ACCOUNT_DAY + HOUR } ) ).status, 403 );
+		const list = await call( server, '/api/admin/requests', { headers: { Cookie: boss.cookie }, time: ACCOUNT_DAY + HOUR } );
+		assert.equal( list.status, 200, list.text );
+		assert.equal( list.json.open, 5 );
+		assert.deepEqual( list.json.requests.map( r => r.text ), [ 5, 4, 3, 2, 1 ].map( i => `Idea ${ i }\nwith a second line` ) );
+		assert.deepEqual( { ...list.json.requests[ 0 ], id: 0 }, { id: 0, name: 'Idea_Haver', text: 'Idea 5\nwith a second line', createdAt: ACCOUNT_DAY + 5, doneAt: null, supporter: false } );
+		const [ first, second ] = list.json.requests;
+		const done = await send( 'POST', '/api/admin/requests', { id: first.id, action: 'done' }, { cookie: boss.cookie, time: ACCOUNT_DAY + 2 * HOUR } );
+		assert.equal( done.json.open, 4 );
+		assert.equal( done.json.requests[ 0 ].doneAt, ACCOUNT_DAY + 2 * HOUR );
+		assert.equal( ( await send( 'POST', '/api/admin/requests', { id: first.id, action: 'open' }, { cookie: boss.cookie } ) ).json.open, 5 );
+		const gone = await send( 'POST', '/api/admin/requests', { id: second.id, action: 'delete' }, { cookie: boss.cookie } );
+		assert.equal( gone.json.requests.length, 4 );
+		assert.equal( ( await send( 'POST', '/api/admin/requests', { id: first.id, action: 'nope' }, { cookie: boss.cookie } ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/admin/requests', { id: first.id, action: 'delete' }, { cookie: u.cookie } ) ).status, 403 );
+
+	} );
+
 	test( 'the owner\'s Google account (ADMIN_EMAILS) never gets a password, and an account with one never reaches the admin page', async () => {
 
 		const credential = await makeToken( googleKey, { sub: '3998', email: 'BOSS@example.com', name: 'Boss' } );

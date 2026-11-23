@@ -223,6 +223,22 @@ function fromBefore( kept, player, today ) {
 
 }
 
+// POST /api/progress/places { id, secret }: { places }, every area and start spot the player has
+// driven on the Earth (discoveries: 'near:BAND.COL' and 'spot:<id>'), oldest first, for the page's
+// Your map (my-map.js). One of the player's PROGRESS_POSTS, and the player's own secret, as a report.
+export async function progressPlaces( { request, env } ) {
+
+	const db = database( env );
+	const body = await readJson( request, 1024 );
+	if ( ! isObject( body ) ) throw bad();
+	const { id, secret } = credentials( body );
+	await limitReports( env, id );
+	await playerFor( db, env, id, secret );
+	const rows = await db.prepare( 'SELECT place FROM discoveries WHERE player_id = ? ORDER BY created_at, place LIMIT ?' ).bind( id, DISCOVERIES_MAX ).all();
+	return json( { places: rows.results.map( row => row.place ) } );
+
+}
+
 // The player with this id and secret, with what levels need: their XP (and their account's best,
 // `total`), title, last report (its time and id), streak, discoveries, achievements' tallies and
 // parties, when they were made, and whether they're a supporter. A 403 for an unknown id or the

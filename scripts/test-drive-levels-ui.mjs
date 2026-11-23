@@ -1440,3 +1440,43 @@ describe( 'World Drive achievements in the page', () => {
 	} );
 
 } );
+
+describe( 'World Drive levels: Your map', () => {
+
+	test( 'Your map shows the Earth\'s areas and start spots a player has driven: this browser\'s at once, then every device\'s from the Worker', async () => {
+
+		const player = await makePlayer( 'Map_Maker' );
+		// Driven on another device: three areas (Vancouver, the Golden Gate, Monaco) and a start spot.
+		const [ a, b, c ] = [ areaOf( 49.28, - 123.12 ), areaOf( 37.82, - 122.48 ), areaOf( 43.74, 7.42 ) ];
+		worker.d1( `INSERT INTO discoveries ( player_id, place, created_at ) VALUES ( '${ player.id }', '${ a }', 1 ), ( '${ player.id }', '${ b }', 2 ), ( '${ player.id }', '${ c }', 3 ), ( '${ player.id }', 'spot:golden-gate', 4 )` );
+		const page = await levelsPage( { visit: await visitToken(), player } );
+		await page.locator( '#globe-ui .profile .map-open' ).click();
+		const map = page.locator( 'dialog#my-map' );
+		await map.waitFor();
+		await map.locator( '.my-map-count', { hasText: '3 areas and 1 start spot driven on the Earth' } ).waitFor();
+		assert.match( await map.locator( '.my-map-spots' ).textContent(), /Golden Gate Bridge/ );
+		// The list is kept in this browser too, for next time.
+		assert.ok( ( await page.evaluate( () => window.drive.progress.places() ) ).includes( 'spot:golden-gate' ) );
+		// Whole world, and back to the player's places, without errors.
+		await map.locator( '.my-map-world' ).click();
+		await map.locator( '[data-zoom="in"]' ).click();
+		await map.locator( '.my-map-fit' ).click();
+		await shot( page, 'my-map' );
+		await map.locator( '.close' ).click();
+		await map.waitFor( { state: 'hidden' } );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'with nowhere driven yet, it says how to fill it', async () => {
+
+		const page = await levelsPage( { visit: await visitToken() } );
+		await page.locator( '#globe-ui .profile .map-open' ).click();
+		await page.locator( 'dialog#my-map .my-map-count', { hasText: 'Nowhere on the Earth yet' } ).waitFor();
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+} );

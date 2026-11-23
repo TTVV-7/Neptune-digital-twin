@@ -778,6 +778,13 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		onTitle: () => live?.rehello(),
 		onAchievements: () => openAchievements(),
 		onDiscoveries: () => finds.openBook( offEarth() ? world : undefined ),
+		// Your map (my-map.js, its own chunk): the Earth's areas and start spots this player has driven.
+		onMap: () => {
+
+			pauseDrive();
+			import( './my-map.js' ).then( module => module.openMyMap( progress ) ).catch( err => console.error( err ) );
+
+		},
 		discoveries: () => {
 
 			const worlds = Object.keys( FINDS_ON ).map( id => finds.countOf( id ) );

@@ -5325,6 +5325,32 @@ following the tab; the panel on a phone held upright and without Google's sign-i
 accounts by kind. Pictures: `account-1-create-desktop` to `account-11-sign-out-failed-phone` with
 `TEST_SCREENSHOTS`.
 
+## Feature requests
+
+The account panel (signed in) has **Request a feature**, folded at the bottom: a box for up to 1,000
+characters and **Send** (`POST /api/requests`, `worker/drive/requests.js`). Only signed-in accounts
+send, 5 a day each (counted from the table) and 100 a day from one address (`takeTurn` 'request', a
+/48), so a school's players aren't held up by each other. Each is kept in `feature_requests`
+(migration `0015_feature_requests.sql`) with the account and its player's nickname (or username).
+The admin page's **Feature requests** card lists the newest 200, open ones first shown (**Open** /
+**All**), each with who sent it (⭐ for a supporter) and when, **Done** / **Not done** and **Delete**
+(`GET` and `POST /api/admin/requests`, admins only). Nothing is emailed.
+
+## Your map
+
+The profile card on the globe's panel has **🗺️ Your map** (`src/drive-app/my-map.js` and
+`my-map.css`, a chunk of their own loaded when it's opened): NASA's Blue Marble (`/earth/colour.webp`,
+the globe's own picture) with a dot for every Earth area the player has driven (levels' areas,
+about 11 km across, `live-protocol.js`'s cells, drawn at their size once zoomed in that far) and a
+star for every start spot, named below the map and by the pointer. It opens framed on the player's
+places (the short way round, across the date line too); **Whole world**, **Your places**, the
+zoom buttons, the wheel, a drag and a pinch move it. It shows what this browser knows at once
+(`progress.js`'s `places()`: the places the Worker took, before a nickname the ones kept here, and
+what's been driven since) and then the player's whole list from every device (`fetchPlaces()`,
+`POST /api/progress/places` with the player's id and secret, one of their `PROGRESS_POSTS`, the
+`discoveries` rows), which it keeps in this browser too. The Earth only: the other worlds have their
+Discoveries.
+
 ## Forgotten passwords
 
 A username's account whose owner forgets the password gets back in by email, by hand: World Drive
