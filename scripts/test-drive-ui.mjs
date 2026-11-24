@@ -6986,6 +6986,9 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await page.keyboard.press( 'Escape' );
 		await page.locator( '#pause' ).waitFor();
 		const account = page.locator( '#pause .account' );
+		// (Google's button is only drawn once it's on screen: scrolled to, as the menu's taller than
+		// the window here.)
+		await account.scrollIntoViewIfNeeded();
 		await account.locator( '.stub-google' ).waitFor();
 		assert.match( await account.textContent(), /Have the Supporter Pass\? Sign in to use it here\./ );
 		await shot( page, 'pass-4-pause-signed-out' );
