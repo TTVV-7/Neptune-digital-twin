@@ -106,6 +106,7 @@ export function setUpSitePicker( site, { toast } ) {
 		<div class="site-bar">
 			<a class="site-home" href="/build/" title="Your projects and plan">Projects</a>
 			<button type="button" class="site-current" aria-expanded="false" title="Where this project is: click to move it"><span class="site-label">Site</span> <span class="site-name"></span></button>
+			<span class="project-status" id="project-status" role="status" hidden></span>
 		</div>
 		<form class="site-search" hidden>
 			<input type="search" id="site-query" placeholder="Address, city or place" autocomplete="off" aria-label="Find a site">
@@ -169,7 +170,10 @@ export function setUpSitePicker( site, { toast } ) {
 	function moveTo( place ) {
 
 		const url = new URL( window.location.href );
+		// The open project (cloud.js keeps it in the address) goes with it, and is saved at the new place.
+		const project = url.searchParams.get( 'project' );
 		url.search = '';
+		if ( project ) url.searchParams.set( 'project', project );
 		url.searchParams.set( 'at', `${ place.lat.toFixed( 6 ) },${ place.lon.toFixed( 6 ) }` );
 		url.searchParams.set( 'place', place.name.split( ',' ).slice( 0, 2 ).join( ',' ) );
 		toast?.( 'Moving the project…' );

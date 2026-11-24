@@ -866,7 +866,7 @@ code {
 	display: grid;
 	justify-items: center;
 	gap: 6px;
-	max-width: 460px;
+	max-width: 680px;
 	pointer-events: none;
 }
 
@@ -891,6 +891,47 @@ body.library-open .site-picker {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+/* The open project and whether it's saved (cloud.js renderBar). */
+.site-picker .project-status {
+	padding: 6px 12px;
+	border: 1px solid rgba( 255, 255, 255, 0.18 );
+	border-radius: 999px;
+	background: var( --panel );
+	font-size: 13px;
+	white-space: nowrap;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.site-picker .project-status[hidden] {
+	display: none;
+}
+
+.site-picker .project-status[data-state='saved']::before {
+	content: '●';
+	margin-right: 6px;
+	color: #4cd47a;
+}
+
+.site-picker .project-status[data-state='unsaved']::before,
+.site-picker .project-status[data-state='problem']::before {
+	content: '●';
+	margin-right: 6px;
+	color: #ff8a3d;
+}
+
+.site-picker .project-status button {
+	margin-left: 8px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: #ffd60a;
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
 }
 
 .site-picker .site-label {
@@ -997,6 +1038,8 @@ body.has-site-picker.library-open #banner {
 
 .site-picker .site-bar {
 	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
 	gap: 6px;
 	max-width: 100%;
 	min-width: 0;

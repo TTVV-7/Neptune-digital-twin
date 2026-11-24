@@ -120,7 +120,7 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	initials.setAttribute( 'aria-hidden', 'true' );
 	const who = el( 'span', 'who' );
 	chip.append( avatar, initials, who );
-	const layoutsButton = button( 'Layouts', () => dialog.open( layoutsButton ) );
+	const layoutsButton = button( BUILD_APP ? 'Projects' : 'Layouts', () => dialog.open( layoutsButton ) );
 	layoutsButton.setAttribute( 'aria-haspopup', 'dialog' );
 	signedIn.append( chip, layoutsButton, button( 'Sign out', signOut ) );
 
@@ -217,6 +217,8 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	let shown = null;
 	function renderStatus() {
 
+		renderBar();
+
 		const name = link ? `"${ link.name }"` : '';
 		const line = ( text, ...actions ) => {
 
@@ -227,12 +229,44 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 		};
 		if ( viewing ) return line( 'Viewing a shared layout. Changes aren\'t saved.' );
-		if ( ! user ) return line( problem === 'signed-out' && link ? `You were signed out. Sign in to keep saving to ${ name }.` : '' );
+		if ( ! user ) return line( problem === 'signed-out' && link ? `You were signed out. Sign in to keep saving to ${ name }.` : BUILD_APP ? 'Sign in (above) to save this project to your account.' : '' );
+		// World Drive Build: one button, named for what it does.
+		if ( ! link && BUILD_APP ) return line( 'Not saved to your account yet.', [ 'Save as a project', saveAsProject ] );
 		if ( ! link ) return line( 'This layout is only in this browser. Layouts > Save as new keeps it in your account.' );
 		if ( problem === 'conflict' ) return line( `${ name } was changed somewhere else.`, [ 'Open that', openLatest ], [ 'Keep mine', () => saveNow( { force: true } ) ] );
 		if ( problem === 'gone' ) return line( `${ name } isn't in your account any more.`, [ 'Save as new', () => saveAsNew( link.name ).catch( report ) ] );
 		if ( problem === 'failed' ) return line( `${ name }: Couldn't save.`, [ 'Retry', () => saveNow() ] );
 		line( `${ name }: ${ saving || timer ? 'Saving...' : 'Saved' }` );
+
+	}
+
+	// World Drive Build: the same, short, in the site bar at the top (product.js), which is always
+	// in view, where the library's line above isn't while it's closed.
+	let barShown = null;
+	function renderBar() {
+
+		const bar = BUILD_APP ? document.getElementById( 'project-status' ) : null;
+		if ( ! bar ) return;
+		const show = ( text, state, ...actions ) => {
+
+			const says = [ text, state, ...actions.map( ( [ label ] ) => label ) ].join( '|' );
+			if ( says === barShown ) return;
+			barShown = says;
+			bar.hidden = false;
+			bar.dataset.state = state;
+			bar.replaceChildren( text, ...actions.map( ( [ label, action ] ) => button( label, action, 'link' ) ) );
+
+		};
+		const openLibrary = () => {
+
+			if ( ! document.body.classList.contains( 'library-open' ) ) document.getElementById( 'library-toggle' )?.click();
+
+		};
+		if ( viewing ) return show( 'Shared view: not saved', 'view' );
+		if ( ! user ) return show( 'Not saved', 'unsaved', [ 'Sign in to save', openLibrary ] );
+		if ( ! link ) return show( 'Not saved', 'unsaved', [ 'Save as a project', saveAsProject ] );
+		if ( problem === 'conflict' || problem === 'gone' || problem === 'failed' ) return show( `${ link.name }: not saved`, 'problem', [ 'Details', openLibrary ] );
+		show( `${ link.name } · ${ saving || timer ? 'Saving…' : 'Saved' }`, saving || timer ? 'saving' : 'saved' );
 
 	}
 
@@ -397,7 +431,7 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 		if ( print === target.fingerprint && ! force ) return renderStatus();
 
 		const headers = force ? {} : { 'If-Match': `"${ target.updatedAt }"` };
-		saving = call( 'PUT', `layouts/${ target.id }`, { data }, { headers } );
+		saving = call( 'PUT', `layouts/${ target.id }`, BUILD_APP ? { data, site: SITE.name } : { data }, { headers } );
 		renderStatus();
 		try {
 
@@ -470,6 +504,24 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 	}
 
+	// World Drive Build's "Save as a project": named after its place unless you say otherwise.
+	async function saveAsProject() {
+
+		const name = window.prompt( 'Name this project:', SITE.name )?.trim();
+		if ( ! name ) return;
+		try {
+
+			const saved = await saveAsNew( name.slice( 0, 100 ) );
+			if ( saved ) toast( `Saved "${ saved.name }" to your account. Changes save as you go.` );
+
+		} catch ( err ) {
+
+			report( err );
+
+		}
+
+	}
+
 	async function saveAsNew( name ) {
 
 		if ( viewing && ! confirmLeaving( `Save a copy of "${ viewing.name }" to your account and keep working on it here?` ) ) return null;
@@ -518,6 +570,20 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 		link = { id: saved.id, name: saved.name, updatedAt: saved.updatedAt, fingerprint: print };
 		storage( () => localStorage.setItem( LINK_KEY, JSON.stringify( { ...link, owner: user.email } ) ) );
+		projectInAddress( saved.id );
+
+	}
+
+	// World Drive Build keeps the open project in the address (?project=<id>), so a reload, a
+	// bookmark or moving the site (product.js) opens the same project.
+	function projectInAddress( id ) {
+
+		if ( ! BUILD_APP || viewing ) return;
+		const url = new URL( window.location.href );
+		if ( ( url.searchParams.get( 'project' ) ?? null ) === id ) return;
+		if ( id ) url.searchParams.set( 'project', id );
+		else url.searchParams.delete( 'project' );
+		history.replaceState( history.state, '', url.href );
 
 	}
 
@@ -532,6 +598,7 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 		link = null;
 		storage( () => localStorage.removeItem( LINK_KEY ) );
+		projectInAddress( null );
 
 	}
 
@@ -579,7 +646,17 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 		try {
 
-			await use( await call( 'GET', `layouts/${ encodeURIComponent( project ) }` ) );
+			const opened = await call( 'GET', `layouts/${ encodeURIComponent( project ) }` );
+			await use( opened );
+			// Moved (the site picker opens it at the new place): the project moves with it.
+			const moved = opened.site !== SITE.name || Math.abs( ( opened.lat ?? SITE.lat ) - SITE.lat ) > 1e-6 || Math.abs( ( opened.lon ?? SITE.lon ) - SITE.lon ) > 1e-6;
+			if ( moved && link?.id === opened.id ) {
+
+				const data = layout.getData();
+				setLink( await call( 'PUT', `layouts/${ opened.id }`, { data, site: SITE.name }, { headers: { 'If-Match': `"${ link.updatedAt }"` } } ), fingerprint( data ) );
+				toast( `"${ opened.name }" moved to ${ SITE.name }` );
+
+			}
 
 		} catch ( err ) {
 

@@ -359,6 +359,55 @@ test( 'the dashboard signed in: the plan with its views, and projects that open 
 
 } );
 
+test( 'starting a project from the dashboard, moving it, and renaming and deleting it', async () => {
+
+	await page.goto( `${ server.base }/build/` );
+	await signInAs( { sub: 'ui-start', email: 'start@example.com', name: 'Sam Start' } );
+	await dashboard();
+	assert.match( await page.textContent( '#projects-empty' ), /Start a project here/ );
+	await page.fill( '#find-query', 'CN Tower' );
+	await page.click( '#find-go' );
+	await page.waitForSelector( '.start-here input' );
+	assert.equal( await page.inputValue( '.start-here input' ), 'CN Tower, Front Street West' );
+	await page.fill( '.start-here input', 'Tower crane base' );
+	await shot( 'dashboard-start-here' );
+	await Promise.all( [ page.waitForNavigation(), page.click( '.start-here button' ) ] );
+	assert.match( page.url(), /project=[\w-]{16}/ );
+	const id = new URL( page.url() ).searchParams.get( 'project' );
+	// Saved, said in the site bar at the top, which is always in view.
+	await page.locator( '#project-status[data-state="saved"]', { hasText: 'Tower crane base · Saved' } ).waitFor( { timeout: 30000 } );
+	assert.equal( await page.evaluate( () => [ ...document.querySelectorAll( 'button' ) ].some( b => b.textContent === 'Projects' ) ), true, 'the editor calls them projects' );
+	await shot( 'editor-project-saved' );
+
+	// Moved by the site picker (which opens it at the new place, the project in the address): saved there.
+	await page.goto( `${ server.base }/build/app/?at=43.650000,-79.380000&place=Somewhere+Else&project=${ id }` );
+	await page.locator( '#project-status', { hasText: 'Tower crane base · Saved' } ).waitFor( { timeout: 30000 } );
+	await page.waitForFunction( async id => {
+
+		const r = await fetch( `/build/api/layouts/${ id }` );
+		const body = await r.json();
+		return body.site === 'Somewhere Else' && body.lat === 43.65;
+
+	}, id, { timeout: 15000 } );
+
+	// The free plan's one project: a second is refused with what to do.
+	await dashboard();
+	await page.fill( '#find-query', 'CN Tower' );
+	await page.click( '#find-go' );
+	await page.waitForSelector( '.start-here button' );
+	await page.click( '.start-here button' );
+	await page.locator( '.start-note', { hasText: 'free plan saves one project' } ).waitFor();
+
+	// Rename and delete, from the list.
+	page.once( 'dialog', d => d.accept( 'Crane base, north side' ) );
+	await page.click( '.project-actions button:has-text("Rename")' );
+	await page.locator( '.project strong', { hasText: 'Crane base, north side' } ).waitFor();
+	page.once( 'dialog', d => d.accept() );
+	await page.click( '.project-actions button:has-text("Delete")' );
+	await page.locator( '.project' ).waitFor( { state: 'detached' } );
+
+} );
+
 test( 'no page errors', () => {
 
 	// Google's tiles (blocked here) report through the banner, not as page errors.

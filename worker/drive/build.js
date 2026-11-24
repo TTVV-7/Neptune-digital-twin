@@ -396,7 +396,7 @@ async function updateLayout( context ) {
 	if ( ! ID_PATTERN.test( params.id ) ) throw notFound();
 	const body = await readJson( request, LAYOUT_BYTES + 4096 );
 	const fields = readFields( body, { create: false } );
-	if ( fields.name === undefined && fields.data === undefined ) throw badRequest();
+	if ( fields.name === undefined && fields.data === undefined && fields.site === undefined ) throw badRequest();
 	const expected = expectedVersion( request, body );
 	const current = await ownLayout( env, account, params.id, 'updated_at, LENGTH( data ) AS size' );
 	if ( expected !== null && expected !== current.updated_at ) throw new HttpError( 409, 'This layout was changed somewhere else', { updatedAt: current.updated_at } );
@@ -408,9 +408,9 @@ async function updateLayout( context ) {
 	}
 
 	const updatedAt = Math.max( now, current.updated_at + 1 );
-	const row = await env.DB.prepare( `UPDATE build_layouts SET name = COALESCE( ?, name ), data = COALESCE( ?, data ), lat = COALESCE( ?, lat ), lon = COALESCE( ?, lon ), updated_at = ?
+	const row = await env.DB.prepare( `UPDATE build_layouts SET name = COALESCE( ?, name ), site = COALESCE( ?, site ), data = COALESCE( ?, data ), lat = COALESCE( ?, lat ), lon = COALESCE( ?, lon ), updated_at = ?
 		WHERE id = ? AND account_id = ? AND updated_at = ? RETURNING ${ SUMMARY }` )
-		.bind( fields.name ?? null, fields.data ?? null, fields.lat ?? null, fields.lon ?? null, updatedAt, params.id, account.id, current.updated_at ).first();
+		.bind( fields.name ?? null, fields.site ?? null, fields.data ?? null, fields.lat ?? null, fields.lon ?? null, updatedAt, params.id, account.id, current.updated_at ).first();
 	if ( ! row ) throw new HttpError( 409, 'This layout was changed somewhere else', { updatedAt: current.updated_at } );
 	return json( summary( row ), 200, etag( row ) );
 
@@ -556,7 +556,8 @@ function readFields( body, { create } ) {
 
 	if ( ! isObject( body ) ) throw badRequest();
 	const fields = {};
-	if ( create ) fields.site = required( cleanText( body.site, 100 ) );
+	// The place's name: given when it's made, and again when the project is moved (product.js's site picker).
+	if ( create || body.site !== undefined ) fields.site = required( cleanText( body.site, 100 ) );
 	if ( create || body.name !== undefined ) fields.name = required( cleanText( body.name, 100 ) );
 	if ( create || body.data !== undefined ) {
 

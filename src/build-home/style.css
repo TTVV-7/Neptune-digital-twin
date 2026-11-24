@@ -626,3 +626,73 @@ h2 {
 	display: flex;
 	gap: 14px;
 }
+
+.start-here {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	padding: 10px 14px 12px;
+	margin-top: -7px;
+	background: var( --panel );
+	border: 1px solid var( --line );
+	border-top: 0;
+	border-radius: 0 0 8px 8px;
+}
+
+.results li:has( .start-here ) > a {
+	border-radius: 8px 8px 0 0;
+	border-bottom-color: transparent;
+}
+
+.start-here input {
+	flex: 1 1 180px;
+	min-width: 0;
+	padding: 8px 10px;
+	border-radius: 8px;
+	border: 1px solid var( --line );
+	background: var( --ground );
+	color: inherit;
+	font: inherit;
+}
+
+.start-here button {
+	padding: 8px 14px;
+	border: 0;
+	border-radius: 8px;
+	background: var( --safety );
+	color: var( --safety-ink );
+	font: 600 14px var( --body );
+	cursor: pointer;
+}
+
+.start-here button:disabled {
+	opacity: 0.6;
+}
+
+.start-note {
+	flex-basis: 100%;
+	margin: 0;
+	color: #ffb4a8;
+}
+
+.project-actions {
+	display: flex;
+	gap: 14px;
+	padding: 2px 14px 10px;
+}
+
+.link.danger {
+	color: #ff8f80;
+}
+
+.new-project {
+	margin-left: auto;
+	padding: 6px 12px;
+	border: 1px solid var( --line, #2b3946 );
+	border-radius: 8px;
+	background: none;
+	color: inherit;
+	font: 600 13px var( --body );
+	cursor: pointer;
+}

@@ -87,9 +87,11 @@ $( 'find' ).addEventListener( 'submit', async e => {
 			rest.textContent = place.name.split( ',' ).slice( 2 ).join( ',' ).trim();
 			const go = document.createElement( 'span' );
 			go.className = 'go';
-			go.textContent = 'Open the map →';
+			go.textContent = home?.signedIn ? 'Just look around →' : 'Open the map →';
 			link.append( title, rest, go );
 			item.append( link );
+			// Signed in: start a project here, saved to the account before the editor opens.
+			if ( home?.signedIn ) item.append( startHere( place ) );
 			return item;
 
 		} ) );
@@ -106,6 +108,43 @@ $( 'find' ).addEventListener( 'submit', async e => {
 	}
 
 } );
+
+// A place's "Start a project here": a name (the place's, to begin with) and Create, which saves an
+// empty project there and opens it, so everything placed is saved to it from the start.
+function startHere( place ) {
+
+	const form = document.createElement( 'form' );
+	form.className = 'start-here';
+	const site = shortName( place.name );
+	const name = Object.assign( document.createElement( 'input' ), { type: 'text', value: site, maxLength: 100, required: true, ariaLabel: 'Project name' } );
+	name.setAttribute( 'aria-label', 'Project name' );
+	const create = Object.assign( document.createElement( 'button' ), { type: 'submit', textContent: 'Start a project here' } );
+	const said = document.createElement( 'p' );
+	said.className = 'small start-note';
+	said.hidden = true;
+	form.append( name, create, said );
+	form.addEventListener( 'submit', async e => {
+
+		e.preventDefault();
+		create.disabled = true;
+		try {
+
+			const data = { version: 2, site, lat: place.lat, lon: place.lon, items: [], extras: {} };
+			const made = await call( 'POST', 'layouts', { site, name: name.value.trim() || site, data } );
+			location.href = editorAt( { lat: place.lat, lon: place.lon, name: site, project: made.id } );
+
+		} catch ( err ) {
+
+			said.hidden = false;
+			said.textContent = err.status === 403 ? `${ err.message } Open or delete your project below, or go Build Pro.` : `Couldn't make the project: ${ err.message }`;
+			create.disabled = false;
+
+		}
+
+	} );
+	return form;
+
+}
 
 function note( text ) {
 
@@ -161,7 +200,7 @@ async function showProjects() {
 	const most = home.plan?.layouts;
 	$( 'project-count' ).textContent = most ? `${ layouts.length } of ${ most }` : String( layouts.length );
 	empty.hidden = layouts.length > 0;
-	empty.textContent = 'No projects yet. Find your site above, lay a few things out, then save it from the editor\'s library (Layouts → Save as new).';
+	empty.textContent = 'No projects yet. Search for your site above and choose Start a project here.';
 	list.replaceChildren( ...layouts.map( project => {
 
 		const item = document.createElement( 'li' );
@@ -177,7 +216,44 @@ async function showProjects() {
 		meta.className = 'meta';
 		meta.textContent = `Saved ${ ago( project.updatedAt ) }${ project.shared ? ' · shared by link' : '' }`;
 		link.append( name, site, meta );
-		item.append( link );
+		const actions = document.createElement( 'div' );
+		actions.className = 'project-actions';
+		const rename = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Rename' } );
+		rename.addEventListener( 'click', async () => {
+
+			const to = window.prompt( 'Rename the project:', project.name )?.trim();
+			if ( ! to || to === project.name ) return;
+			try {
+
+				await call( 'PUT', `layouts/${ project.id }`, { name: to.slice( 0, 100 ) } );
+				await showProjects();
+
+			} catch ( err ) {
+
+				toast( `Couldn't rename it: ${ err.message }` );
+
+			}
+
+		} );
+		const remove = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link danger', textContent: 'Delete' } );
+		remove.addEventListener( 'click', async () => {
+
+			if ( ! window.confirm( `Delete "${ project.name }"? This can't be undone.` ) ) return;
+			try {
+
+				await call( 'DELETE', `layouts/${ project.id }` );
+				await showProjects();
+				toast( `Deleted "${ project.name }"` );
+
+			} catch ( err ) {
+
+				toast( `Couldn't delete it: ${ err.message }` );
+
+			}
+
+		} );
+		actions.append( rename, remove );
+		item.append( link, actions );
 		return item;
 
 	} ) );
@@ -571,3 +647,13 @@ window.buildHome = { get home() {
 
 await load();
 welcomeBack();
+
+// New project: back up to the search, which starts one.
+$( 'new-project' ).addEventListener( 'click', () => {
+
+	const query = $( 'find-query' );
+	query.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+	query.focus();
+	toast( 'Search for the site, then choose Start a project here' );
+
+} );
