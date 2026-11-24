@@ -263,7 +263,9 @@ function buildApp() {
 					name: 'world-drive-build-page',
 					transformIndexHtml: html => withBuildBeacon( html )
 						.replace( /<title>[^<]*<\/title>/, '<title>World Drive Build · construction site mock-ups</title>' )
-						.replace( '<head>', '<head>\n\t\t<meta name="description" content="Lay out a construction site on a 3D map of anywhere: real-scale equipment, trailers, barriers and earthworks, in your browser." />' ),
+						// Out of search, like the rest of /build/ while it's on trial (its dashboard, account
+						// and legal pages are noindex too, and none of it is in the sitemap).
+						.replace( '<head>', '<head>\n\t\t<meta name="robots" content="noindex, nofollow" />\n\t\t<meta name="description" content="Lay out a construction site on a 3D map of anywhere: real-scale equipment, trailers, barriers and earthworks, in your browser." />' ),
 				} ],
 			} );
 			cpSync( join( PUBLIC, 'library' ), join( outDir, 'library' ), { recursive: true } );
