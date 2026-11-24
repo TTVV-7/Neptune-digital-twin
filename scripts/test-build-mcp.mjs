@@ -316,7 +316,7 @@ test( 'the tools lay out a site', async () => {
 	// A 30.5 m fence line, panels touching, each along the line by its width (3.25 m with its feet).
 	const row = await tool( 'place_row', { project_id: project, item: 'fence-panel', points: [ [ 10, 0 ], [ 10, 30.5 ] ] } );
 	assert.match( row.text, /row of 9 ×/ );
-	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 0, north: 20, width: 30, length: 20, surface: 'asphalt', fence: 'screened', entrances: 2 } ) ).text, /surfaced with asphalt, fenced \(privacy screen\) with 2 entrances/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 0, north: 20, width: 30, length: 20, surface: 'asphalt', fence: 'screened', entrances: 2 } ) ).text, /surfaced with asphalt, fenced \(green privacy screen\) with 2 entrances/ );
 	assert.match( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 15, length: 10, label: 'Rebar' } ) ).text, /Rebar/ );
 	assert.match( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, material: 'road-base', volume: 80 } ) ).text, /road-base, 80 m³/ );
 

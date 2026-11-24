@@ -268,6 +268,16 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 		document.getElementById( 'library-toggle' ).click();
 		out.fence.outside = shown( fence );
 		document.getElementById( 'library-toggle' ).click();
+		// Every kind builds.
+		const { FENCES } = await import( '/src/flatten.js' );
+		out.fence.kinds = {};
+		for ( const kind of Object.values( FENCES ).filter( k => k !== 'none' ) ) {
+
+			models.setParams( old, { fence: kind } );
+			out.fence.kinds[ kind ] = old.pivot.getObjectByProperty( 'name', 'Temporary fence' )?.children.length ?? 0;
+
+		}
+
 		models.setParams( old, { fence: 'none' } );
 		out.fence.removed = ! old.pivot.getObjectByProperty( 'name', 'Temporary fence' ) && ! ( 'fence' in models.toConfig( old ).params );
 		return out;
@@ -282,10 +292,12 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 	assert.equal( result.changed, 'asphalt' );
 	assert.ok( result.asphaltSurface );
 	assert.equal( result.next, 'asphalt', 'the next area takes the surface last chosen' );
-	// A 10 × 10 m area: about 3 m of fence a panel, less three gates of two leaves each.
-	assert.ok( result.fence.parts > 2 && result.fence.panels >= 12 && result.fence.panels <= 20, JSON.stringify( result.fence ) );
+	// A 10 × 10 m area (9.4 m sides inside its edge): three panels on the side with no gate, and a
+	// panel each side of the gate on the other three (the leaves are drawn apart from the panels).
+	assert.ok( result.fence.parts > 2 && result.fence.panels === 9, JSON.stringify( result.fence ) );
 	assert.deepEqual( { fence: result.fence.saved.fence, gates: result.fence.saved.gates }, { fence: 'mesh', gates: 3 } );
 	assert.equal( result.fence.outside, true, 'a fence stays in view outside build mode' );
+	assert.ok( Object.keys( result.fence.kinds ).length === 6 && Object.values( result.fence.kinds ).every( n => n > 0 ), JSON.stringify( result.fence.kinds ) );
 	assert.equal( result.fence.removed, true, 'fence: none takes it away, and out of what\'s saved' );
 	assert.ok( Object.keys( result.types ).length >= 11 && Object.values( result.types ).every( Boolean ), JSON.stringify( result.types ) );
 	assert.equal( result.saved.surfaced.surface, 'asphalt' );

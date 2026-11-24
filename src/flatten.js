@@ -5,12 +5,14 @@ import {
 	EdgesGeometry,
 	Group,
 	InstancedMesh,
+	LinearFilter,
 	LineBasicMaterial,
 	LineSegments,
 	MathUtils,
 	Matrix4,
 	Mesh,
 	MeshBasicMaterial,
+	MeshStandardMaterial,
 	PlaneGeometry,
 	Quaternion,
 	Raycaster,
@@ -22,7 +24,6 @@ import { TileFlatteningPlugin } from '3d-tiles-renderer/plugins';
 import { acceleratedRaycast } from 'three-mesh-bvh';
 import { registerKind } from './kinds.js';
 import { buildProcedural } from './procedural.js';
-import { screenedFence } from './covers.js';
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
@@ -242,15 +243,29 @@ function buildSurface( width, length, id ) {
 
 // --- temporary fencing round an area ---------------------------------------------------------
 //
-// An area can be fenced: 10 ft temporary panels on feet all round its edge (bare chain-link, or with a
-// green privacy screen facing out), with `gates` entrances, each a double drive gate standing open
-// outward. Gates go one to a side, front first (the side the area faces), then the back, right and
-// left, and round again: a fifth goes on the front beside the first. Panels between are stretched or
-// squeezed a little so each run ends exactly at a gate or a corner, as crews cut a panel in on site.
-// Every panel is one instance of the panel's parts, so a long fence is a handful of draw calls.
+// An area can be fenced all round its edge, with `gates` entrances. The kinds:
+//   mesh        10 ft chain-link panels on feet, see-through
+//   screened    the same with a green privacy screen facing out (or `screened-black`)
+//   mesh-silt   chain-link panels with a silt fence along their outside foot
+//   silt        silt fence alone: black geotextile on wooden stakes, its foot dug in
+//   safety      orange plastic safety fence on steel T-posts, see-through
+// An entrance in panel fencing is a 24 ft double drive gate standing open outward; in silt or safety
+// fence, a gap. Entrances go one to a side, front first (the side the area faces), then the back,
+// right and left, and round again: a fifth goes on the front beside the first. Panels between are
+// stretched or squeezed a little so each run ends exactly at a gate or a corner, as crews cut one in
+// on site. Every panel is one instance of the panel's parts, so a long fence is a few draw calls.
 
-export const FENCES = { none: 'none', 'temp fence (chain-link)': 'mesh', 'temp fence with privacy screen': 'screened' };
+export const FENCES = {
+	none: 'none',
+	'temp fence, chain-link (see-through)': 'mesh',
+	'temp fence, green privacy screen': 'screened',
+	'temp fence, black privacy screen': 'screened-black',
+	'temp fence with silt fence at its foot': 'mesh-silt',
+	'silt fence only': 'silt',
+	'orange safety fence on T-posts (see-through)': 'safety',
+};
 const PANEL = 10 * 0.3048;
+const PANEL_HEIGHT = 6 * 0.3048;
 // A double drive gate's opening (m): two 12 ft leaves.
 export const GATE_WIDTH = 24 * 0.3048;
 const MAX_GATES = 8;
@@ -258,16 +273,115 @@ const MAX_GATES = 8;
 const FENCE_INSET = 0.3;
 // How far round from closed the gate leaves stand (degrees): wide open, outward.
 const GATE_OPEN = 100;
+// Kinds that have gates (the others leave a gap) and that are panels.
+const PANELLED = [ 'mesh', 'screened', 'screened-black', 'mesh-silt' ];
+
+const fenceMaterial = ( colour, extra = {} ) => {
+
+	const m = new MeshStandardMaterial( { color: colour, roughness: 0.9, ...extra } );
+	m.userData.shared = true;
+	return m;
+
+};
+let fenceMaterials = null;
+function fenceMaterialsOf() {
+
+	if ( fenceMaterials ) return fenceMaterials;
+	// The safety fence's orange mesh: oval holes, as the extruded plastic has.
+	const canvas = document.createElement( 'canvas' );
+	canvas.width = canvas.height = 64;
+	const ctx = canvas.getContext( '2d' );
+	ctx.fillStyle = '#ff6a13';
+	ctx.fillRect( 0, 0, 64, 64 );
+	ctx.globalCompositeOperation = 'destination-out';
+	for ( const [ x, y ] of [ [ 16, 16 ], [ 48, 16 ], [ 0, 48 ], [ 32, 48 ], [ 64, 48 ] ] ) {
+
+		ctx.beginPath();
+		ctx.ellipse( x, y, 14, 11, 0, 0, Math.PI * 2 );
+		ctx.fill();
+
+	}
+
+	const map = new CanvasTexture( canvas );
+	map.wrapS = map.wrapT = RepeatWrapping;
+	map.colorSpace = SRGBColorSpace;
+	map.repeat.set( PANEL / 0.1, 1.2 / 0.1 );
+	// No smaller copies: averaged down, the holes would fill in and the fence look solid from afar.
+	map.generateMipmaps = false;
+	map.minFilter = LinearFilter;
+	fenceMaterials = {
+		green: fenceMaterial( 0x1f3b2a, { side: DoubleSide } ),
+		black: fenceMaterial( 0x1b1c1d, { side: DoubleSide } ),
+		hem: fenceMaterial( 0x111213 ),
+		geotextile: fenceMaterial( 0x161616, { side: DoubleSide, roughness: 1 } ),
+		stake: fenceMaterial( 0x9a7a52 ),
+		soil: fenceMaterial( 0x5d4a37, { roughness: 1 } ),
+		tpost: fenceMaterial( 0x2f5d3a, { metalness: 0.4, roughness: 0.6 } ),
+		orange: fenceMaterial( 0xffffff, { map, side: DoubleSide, alphaTest: 0.35, roughness: 0.8 } ),
+	};
+	return fenceMaterials;
+
+}
+
+const block = ( group, material, [ w, h, d ], [ x, y, z ] ) => {
+
+	const mesh = new Mesh( new BoxGeometry( w, h, d ), material );
+	mesh.position.set( x, y + h / 2, z );
+	group.add( mesh );
+	return mesh;
+
+};
+
+// One panel's length of a fence kind (along x, its outside towards -z), with no stays: a chain-link
+// panel stands on its feet, as on most sites.
+function fencePiece( style, gate = false ) {
+
+	const m = fenceMaterialsOf();
+	const group = new Group();
+	if ( PANELLED.includes( style ) ) group.add( buildProcedural( 'fence-panel' ) );
+	if ( style === 'screened' || style === 'screened-black' ) {
+
+		const sh = PANEL_HEIGHT - 0.1;
+		block( group, style === 'screened' ? m.green : m.black, [ PANEL - 0.1, sh, 0.004 ], [ 0, 0.13, - 0.025 ] );
+		for ( const y of [ 0.13, 0.13 + sh - 0.04 ] ) block( group, m.hem, [ PANEL - 0.1, 0.04, 0.006 ], [ 0, y, - 0.027 ] );
+
+	}
+
+	// Silt fence: 0.75 m of geotextile on stakes every half panel, its foot buried in a trench whose
+	// spoil is the strip of soil along it. Along a panel fence, just outside its feet.
+	if ( ! gate && ( style === 'silt' || style === 'mesh-silt' ) ) {
+
+		const z = style === 'silt' ? 0 : - 0.45;
+		block( group, m.geotextile, [ PANEL, 0.75, 0.01 ], [ 0, 0, z ] );
+		for ( const x of [ - PANEL / 4, PANEL / 4 ] ) block( group, m.stake, [ 0.05, 0.95, 0.05 ], [ x, 0, z + 0.04 ] );
+		block( group, m.soil, [ PANEL, 0.08, 0.3 ], [ 0, 0, z - 0.17 ] );
+
+	}
+
+	// Safety fence: 1.2 m of orange mesh tied to a T-post at each panel's end.
+	if ( style === 'safety' ) {
+
+		const mesh = new Mesh( new PlaneGeometry( PANEL, 1.2 ), m.orange );
+		mesh.position.set( 0, 0.65, 0 );
+		group.add( mesh );
+		block( group, m.tpost, [ 0.05, 1.5, 0.05 ], [ - PANEL / 2, 0, 0.03 ] );
+
+	}
+
+	return group;
+
+}
 
 const fenceTemplates = new Map();
-function fenceTemplate( style ) {
+function fenceTemplate( style, gate = false ) {
 
-	// [ { geometry, material, matrix } ]: each part of one panel, where it sits in the panel.
-	if ( fenceTemplates.has( style ) ) return fenceTemplates.get( style );
-	const panel = style === 'screened' ? screenedFence( 1 ) : buildProcedural( 'fence-panel' );
-	panel.updateMatrixWorld( true );
+	// [ { geometry, material, matrix } ]: each part of one panel's length, where it sits in it.
+	const key = `${ style }${ gate ? ' gate' : '' }`;
+	if ( fenceTemplates.has( key ) ) return fenceTemplates.get( key );
+	const piece = fencePiece( style, gate );
+	piece.updateMatrixWorld( true );
 	const parts = [];
-	panel.traverse( o => {
+	piece.traverse( o => {
 
 		if ( ! o.isMesh ) return;
 		o.geometry.userData.shared = true;
@@ -275,7 +389,7 @@ function fenceTemplate( style ) {
 		parts.push( { geometry: o.geometry, material: o.material, matrix: o.matrixWorld.clone() } );
 
 	} );
-	fenceTemplates.set( style, parts );
+	fenceTemplates.set( key, parts );
 	return parts;
 
 }
@@ -293,7 +407,7 @@ export function buildFence( width, length, style, gates = 0 ) {
 
 	const group = new Group();
 	group.name = 'Temporary fence';
-	if ( style !== 'mesh' && style !== 'screened' ) return group;
+	if ( ! Object.values( FENCES ).includes( style ) || style === 'none' ) return group;
 	const w = Math.max( 0.5, width / 2 - FENCE_INSET );
 	const l = Math.max( 0.5, length / 2 - FENCE_INSET );
 	// Each side from one corner to the next, going round, with the way out from it: the front is -z.
@@ -305,10 +419,11 @@ export function buildFence( width, length, style, gates = 0 ) {
 	];
 	const perSide = gatesBySide( Math.min( MAX_GATES, Math.max( 0, Math.round( gates ) ) ) );
 	const placements = [];
+	const leaves = [];
 	const yAxis = new Vector3( 0, 1, 0 );
-	const place = ( x, z, yaw, stretch ) => {
+	const place = ( x, z, yaw, stretch, into = placements ) => {
 
-		placements.push( new Matrix4().compose( new Vector3( x, 0, z ), new Quaternion().setFromAxisAngle( yAxis, yaw ), new Vector3( stretch, 1, 1 ) ) );
+		into.push( new Matrix4().compose( new Vector3( x, 0, z ), new Quaternion().setFromAxisAngle( yAxis, yaw ), new Vector3( stretch, 1, 1 ) ) );
 
 	};
 
@@ -317,8 +432,8 @@ export function buildFence( width, length, style, gates = 0 ) {
 		const [ ax, az ] = side.from, [ bx, bz ] = side.to;
 		const run = Math.hypot( bx - ax, bz - az );
 		const dx = ( bx - ax ) / run, dz = ( bz - az ) / run;
-		// A panel's front (-z, where the screen hangs) faces out.
-		const yaw = Math.atan2( - side.out[ 0 ], - side.out[ 1 ] ) + Math.PI;
+		// A panel's outside (-z, where the screen hangs and the silt fence runs) faces out.
+		const yaw = Math.atan2( - side.out[ 0 ], - side.out[ 1 ] );
 		// The openings along this side, spread evenly, never wider than it.
 		const n = perSide[ i ];
 		const gate = Math.min( GATE_WIDTH, run / Math.max( 1, n ) * 0.8 );
@@ -345,8 +460,8 @@ export function buildFence( width, length, style, gates = 0 ) {
 
 		}
 
-		// Each gate's two leaves, hinged at the opening's ends and swung out.
-		for ( const [ a, b ] of openings ) {
+		// Each gate's two leaves, hinged at the opening's ends and swung out (panel fences only).
+		for ( const [ a, b ] of PANELLED.includes( style ) ? openings : [] ) {
 
 			const leaf = ( b - a ) / 2;
 			for ( const [ hinge, toward ] of [ [ a, 1 ], [ b, - 1 ] ] ) {
@@ -357,7 +472,7 @@ export function buildFence( width, length, style, gates = 0 ) {
 				const ux = dx * toward, uz = dz * toward;
 				const c = Math.cos( swing ), sn = Math.sin( swing );
 				const ox = ux * c + uz * sn, oz = - ux * sn + uz * c;
-				place( hx + ox * leaf / 2, hz + oz * leaf / 2, yaw + swing, leaf / PANEL );
+				place( hx + ox * leaf / 2, hz + oz * leaf / 2, yaw + swing, leaf / PANEL, leaves );
 
 			}
 
@@ -365,10 +480,11 @@ export function buildFence( width, length, style, gates = 0 ) {
 
 	} );
 
-	for ( const part of fenceTemplate( style ) ) {
+	for ( const [ list, parts ] of [ [ placements, fenceTemplate( style ) ], [ leaves, leaves.length ? fenceTemplate( style, true ) : [] ] ] ) for ( const part of parts ) {
 
-		const mesh = new InstancedMesh( part.geometry, part.material, placements.length );
-		placements.forEach( ( m, i ) => mesh.setMatrixAt( i, new Matrix4().multiplyMatrices( m, part.matrix ) ) );
+		if ( ! list.length ) continue;
+		const mesh = new InstancedMesh( part.geometry, part.material, list.length );
+		list.forEach( ( m, i ) => mesh.setMatrixAt( i, new Matrix4().multiplyMatrices( m, part.matrix ) ) );
 		mesh.instanceMatrix.needsUpdate = true;
 		mesh.computeBoundingSphere();
 		mesh.castShadow = true;
@@ -448,7 +564,7 @@ registerKind( ZONE_ID, {
 	fields: [
 		{ key: 'surface', label: 'surface', options: SURFACE_OPTIONS, size: true, editor: true },
 		{ key: 'fence', label: 'fence', options: FENCES, size: true, editor: true },
-		{ key: 'gates', label: 'entrances (24 ft gates)', min: 0, max: MAX_GATES, step: 1, size: true, when: p => p.fence !== 'none' },
+		{ key: 'gates', label: 'entrances (24 ft)', min: 0, max: MAX_GATES, step: 1, size: true, when: p => p.fence !== 'none' },
 		{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
 		{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
 		// 0 flattens everything above the floor, as areas always did (and saved ones still do).

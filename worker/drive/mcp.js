@@ -26,6 +26,9 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const ITEMS = new Map( CATALOG.items.map( item => [ item.id, item ] ) );
 const SETS = new Map( CATALOG.sets.map( set => [ set.id, set ] ) );
 const MATERIALS = [ 'gravel', 'sand', 'topsoil', 'soil', 'road-base', 'riprap', 'coal', 'potash' ];
+// src/flatten.js's fences, as named in what Claude is told.
+const FENCE_NAMES = { mesh: 'chain-link', screened: 'green privacy screen', 'screened-black': 'black privacy screen', 'mesh-silt': 'chain-link with silt fence', silt: 'silt fence', safety: 'orange safety fence' };
+const FENCES = Object.keys( FENCE_NAMES );
 // src/flatten.js's surfaces (gravel is road base).
 const SURFACES = [ 'gravel', 'clear-crush', 'pea-gravel', 'drain-rock', 'crusher-dust', 'pit-run', 'recycled-concrete', 'rip-rap', 'millings', 'asphalt', 'concrete', 'none' ];
 // Pieces placed touching end to end in a row; anything else a metre apart.
@@ -159,7 +162,7 @@ const TOOLS = [
 	},
 	{
 		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat) and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none.',
-		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', 'mesh', 'screened' ], default: 'none', description: 'temporary fence round its edge: chain-link panels (mesh) or with a green privacy screen' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft double gates in the fence, one to a side in turn: the front (the side it faces), back, right, left' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
+		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
 		run: addFlatten,
 	},
 	{
@@ -480,14 +483,14 @@ function size( value, name ) {
 async function addFlatten( context, args ) {
 
 	const surface = SURFACES.includes( args.surface ) ? args.surface : 'gravel';
-	const fence = [ 'mesh', 'screened' ].includes( args.fence ) ? args.fence : 'none';
+	const fence = FENCES.includes( args.fence ) ? args.fence : 'none';
 	const gates = fence === 'none' ? 0 : Math.min( 8, Math.max( 0, Math.round( Number( args.entrances ) || 0 ) ) );
 	const params = { width: size( args.width, 'width' ), length: size( args.length, 'length' ), height: 0, surface, ...( fence === 'none' ? {} : { fence, gates } ) };
 	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
 	return await change( context, args.project_id, layout => {
 
 		layout.items.push( config );
-		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ fence === 'screened' ? 'privacy screen' : 'chain-link' }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }.`;
+		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }.`;
 
 	} );
 
