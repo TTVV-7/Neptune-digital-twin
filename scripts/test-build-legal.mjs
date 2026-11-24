@@ -213,7 +213,7 @@ describe( 'World Drive Build\'s legal pages', () => {
 
 	} );
 
-	test( 'the dashboard\'s footer links to them all and its sign-in says signing in accepts the Terms; the game\'s policies point Build users here', () => {
+	test( 'the dashboard\'s footer links to them all and its sign-in says signing in accepts the Terms; the game\'s own policies stay the game\'s, with no link to Build\'s', () => {
 
 		const home = built( '/build/' );
 		for ( const slug of BUILD_LEGAL_PATHS ) assert.ok( linksOf( home ).includes( `/build/${ slug }/` ), `the dashboard doesn't link to /build/${ slug }/` );
@@ -221,7 +221,7 @@ describe( 'World Drive Build\'s legal pages', () => {
 		for ( const path of [ '/privacy/', '/terms/', '/refunds/' ] ) {
 
 			const links = linksOf( built( path ) );
-			for ( const slug of [ 'terms', 'privacy', 'refunds' ] ) assert.ok( links.includes( `/build/${ slug }/` ), `${ path } doesn't point to /build/${ slug }/` );
+			assert.ok( ! links.some( link => link.startsWith( '/build/' ) ), `${ path } links to Build, which is kept apart from the game` );
 
 		}
 

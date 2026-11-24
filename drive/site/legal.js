@@ -9,8 +9,6 @@
 // mailbox service rather than a home) and a phone (DRIVE_CONTACT_PHONE). Without an address the pages
 // say where World Drive is run from (LOCATION).
 //
-// World Drive Build has pages of its own under /build/, from buildLegalPages below; the game's say so.
-//
 // These are a plain-language starting point, written to match what the code actually does (what
 // drive/index.html's About World Drive says is kept, worker/drive/). They aren't legal advice: have a
 // lawyer read them before relying on them, and change them here when what the game keeps changes.
@@ -101,7 +99,6 @@ export function legalPages( contact ) {
 function privacy( contact ) {
 
 	return `
-	<p class="small">Using World Drive Build, the construction site tool? It has its own <a href="/build/terms/">terms</a>, <a href="/build/privacy/">privacy policy</a> and <a href="/build/refunds/">refunds</a>.</p>
 	<p>World Drive is run by ${ owner( contact ) }. This policy says what the game keeps about you and why. In short: as little as the game needs, no selling of anything, and never where you really are. Questions, or to see or delete what's kept: ${ emailLink( contact ) }.</p>
 	<h2>Playing without an account</h2>
 	<ul>
@@ -145,7 +142,6 @@ function privacy( contact ) {
 function terms( contact ) {
 
 	return `
-	<p class="small">Using World Drive Build, the construction site tool? It has its own <a href="/build/terms/">terms</a>, <a href="/build/privacy/">privacy policy</a> and <a href="/build/refunds/">refunds</a>.</p>
 	<p>These terms are between you and ${ owner( contact ) }, who runs World Drive. By playing you accept them; if you don't, please don't play. Nothing here takes away rights consumer law gives you that can't be signed away.</p>
 	<h2>Playing</h2>
 	<ul>
@@ -183,7 +179,6 @@ function terms( contact ) {
 function refunds( contact ) {
 
 	return `
-	<p class="small">Using World Drive Build, the construction site tool? It has its own <a href="/build/terms/">terms</a>, <a href="/build/privacy/">privacy policy</a> and <a href="/build/refunds/">refunds</a>.</p>
 	<p>The Supporter Pass helps pay for the 3D map. If it isn't what you wanted, you can have your money back.</p>
 	<h2>Cancelling the monthly pass</h2>
 	<ul>

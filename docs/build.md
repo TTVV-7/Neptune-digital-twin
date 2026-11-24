@@ -123,7 +123,7 @@ and the Neptune twin.
   and the price labels. The dashboard's footer and the editor (the foot of the library and of the
   help) link to them, and every Google sign-in button in Build has "By continuing you agree to the
   Terms and Privacy Policy" beside it: that line is the Terms' clickwrap, so keep it by any new
-  sign-in button. The game's `/terms/`, `/privacy/` and `/refunds/` point Build users here. Have a
+  sign-in button. Have a
   British Columbia lawyer read the Terms, Privacy Policy and Refunds once before Build Pro is sold.
 - **Privacy and cookies: no banner, so no tracking.** Build sets one cookie, `__Host-wd_session`,
   strictly necessary for signing in, and keeps only the editor's own state in `localStorage`
