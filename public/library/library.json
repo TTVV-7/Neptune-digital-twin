@@ -197,6 +197,32 @@
 		"own": "Weave-Trial: construction_site/Jersey_Barrier_NJ_10ft.glb"
 	},
 	{
+		"id": "barricade-bike-rack",
+		"name": "Pedestrian barricade, steel bike-rack style (6 ft)",
+		"category": "Barriers & fencing",
+		"file": "barricade-bike-rack.glb",
+		"thumb": "thumbs/barricade-bike-rack.webp",
+		"front": "+z",
+		"scale": 1.01496,
+		"dimensions": {
+			"length": 0.3,
+			"width": 1.78,
+			"height": 1.09
+		},
+		"triangles": 538,
+		"sizeKB": 5,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3917d39740eb4c008924a08c273412d1",
+			"url": "https://sketchfab.com/3d-models/construction-site-barrier-3917d39740eb4c008924a08c273412d1",
+			"title": "construction site barrier",
+			"author": "lwse",
+			"authorUrl": "https://sketchfab.com/lwse",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "fence-panel-chainlink",
 		"name": "Temporary fence panel, chain-link detailed (10 x 6 ft)",
 		"category": "Barriers & fencing",
@@ -387,6 +413,32 @@
 		"own": "Weave-Trial: construction_site/Planetary_Mixer_on_Stand.glb"
 	},
 	{
+		"id": "drum-mixer-portable",
+		"name": "Portable drum concrete mixer (6 ft³)",
+		"category": "Concrete & batching",
+		"file": "drum-mixer-portable.glb",
+		"thumb": "thumbs/drum-mixer-portable.webp",
+		"front": "+z",
+		"scale": 1.11059,
+		"dimensions": {
+			"length": 1.26,
+			"width": 0.84,
+			"height": 1.4
+		},
+		"triangles": 21496,
+		"sizeKB": 160,
+		"source": {
+			"site": "Sketchfab",
+			"id": "6994b7287ecb4cd39b0917ec9fb49196",
+			"url": "https://sketchfab.com/3d-models/cement-mixer-6994b7287ecb4cd39b0917ec9fb49196",
+			"title": "Cement Mixer",
+			"author": "Víctor Hernández",
+			"authorUrl": "https://sketchfab.com/victorhugohc",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "crane-all-terrain",
 		"name": "All-terrain crane (6-axle)",
 		"category": "Cranes & lifts",
@@ -484,6 +536,32 @@
 		"triangles": 10800,
 		"sizeKB": 98,
 		"own": "Weave-Trial: crane_model/mammoet_1824_crane.step"
+	},
+	{
+		"id": "construction-hoist-twin",
+		"name": "Construction hoist, twin car (rack and pinion, 90 m mast)",
+		"category": "Cranes & lifts",
+		"file": "construction-hoist-twin.glb",
+		"thumb": "thumbs/construction-hoist-twin.webp",
+		"front": "+z",
+		"scale": 0.997375,
+		"dimensions": {
+			"length": 3.8,
+			"width": 4.51,
+			"height": 90.7
+		},
+		"triangles": 78172,
+		"sizeKB": 848,
+		"source": {
+			"site": "Sketchfab",
+			"id": "1397c3f0c9b449d98c7c4090d3a60aea",
+			"url": "https://sketchfab.com/3d-models/hoist-double-1397c3f0c9b449d98c7c4090d3a60aea",
+			"title": "Hoist - Double",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "crane-crawler",
@@ -1480,6 +1558,136 @@
 		"own": "Weave-Trial: construction_site/Pallet_of_CMU_Blocks.glb"
 	},
 	{
+		"id": "pallet-pavers",
+		"name": "Pallet of concrete pavers",
+		"category": "Materials",
+		"file": "pallet-pavers.glb",
+		"thumb": "thumbs/pallet-pavers.webp",
+		"front": "+z",
+		"scale": 0.863412,
+		"dimensions": {
+			"length": 1.2,
+			"width": 1,
+			"height": 0.52
+		},
+		"triangles": 48996,
+		"sizeKB": 331,
+		"source": {
+			"site": "Sketchfab",
+			"id": "0bfb0a34680f489ebcf1f605ed49cf69",
+			"url": "https://sketchfab.com/3d-models/pile-of-paving-stones-on-a-wooden-pallet-0bfb0a34680f489ebcf1f605ed49cf69",
+			"title": "Pile of paving stones on a wooden pallet",
+			"author": "Оrрндп ЯТG",
+			"authorUrl": "https://sketchfab.com/orphanrtg",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pallet-drywall",
+		"name": "Pallet of drywall (4 x 8 ft sheets)",
+		"category": "Materials",
+		"file": "pallet-drywall.glb",
+		"thumb": "thumbs/pallet-drywall.webp",
+		"front": "+z",
+		"scale": 1.21711,
+		"dimensions": {
+			"length": 2.44,
+			"width": 1.52,
+			"height": 0.97
+		},
+		"triangles": 180,
+		"sizeKB": 127,
+		"source": {
+			"site": "Sketchfab",
+			"id": "96a53fb7172142bba28e150aa646c320",
+			"url": "https://sketchfab.com/3d-models/drywall-gypsum-pallet-low-poly-96a53fb7172142bba28e150aa646c320",
+			"title": "Drywall Gypsum Pallet [Low Poly]",
+			"author": "endbored",
+			"authorUrl": "https://sketchfab.com/endbored",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pallet-plywood",
+		"name": "Pallet of OSB / plywood sheets (8 ft)",
+		"category": "Materials",
+		"file": "pallet-plywood.glb",
+		"thumb": "thumbs/pallet-plywood.webp",
+		"front": "+x",
+		"scale": 1.24459,
+		"dimensions": {
+			"length": 2.5,
+			"width": 1.95,
+			"height": 0.65
+		},
+		"triangles": 724,
+		"sizeKB": 490,
+		"source": {
+			"site": "Sketchfab",
+			"id": "078b48ca073444b2b834eda24cb6bf30",
+			"url": "https://sketchfab.com/3d-models/construction-pallet-plywood-078b48ca073444b2b834eda24cb6bf30",
+			"title": "Construction Pallet Plywood",
+			"author": "Gerhald",
+			"authorUrl": "https://sketchfab.com/Gerhald",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "sand-pile-small",
+		"name": "Sand pile, small (3 m across)",
+		"category": "Materials",
+		"file": "sand-pile-small.glb",
+		"thumb": "thumbs/sand-pile-small.webp",
+		"front": "+z",
+		"scale": 0.504812,
+		"dimensions": {
+			"length": 3,
+			"width": 2.99,
+			"height": 0.65
+		},
+		"triangles": 2506,
+		"sizeKB": 410,
+		"source": {
+			"site": "Sketchfab",
+			"id": "7a7533e1ecab4b1d96da55cc3ad9ad98",
+			"url": "https://sketchfab.com/3d-models/photoscan-low-poly-construction-sand-pile-7a7533e1ecab4b1d96da55cc3ad9ad98",
+			"title": "Photoscan Low-poly Construction Sand Pile",
+			"author": "Martin Topolski",
+			"authorUrl": "https://sketchfab.com/martin.topolski",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "sandbag",
+		"name": "Sandbag (filled, 14 x 26 in bag)",
+		"category": "Materials",
+		"file": "sandbag.glb",
+		"thumb": "thumbs/sandbag.webp",
+		"front": "+z",
+		"scale": 1.19678,
+		"dimensions": {
+			"length": 0.6,
+			"width": 0.39,
+			"height": 0.23
+		},
+		"triangles": 21568,
+		"sizeKB": 617,
+		"source": {
+			"site": "Sketchfab",
+			"id": "aff19e0501834ccaaf2c178a0f23751e",
+			"url": "https://sketchfab.com/3d-models/weathered-sandbag-2048px2-aff19e0501834ccaaf2c178a0f23751e",
+			"title": "Weathered Sandbag - 2048px²",
+			"author": "Mark Peters",
+			"authorUrl": "https://sketchfab.com/mark-peters",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "steel-beam-bundle-w12",
 		"name": "Steel beam bundle (12 x W12x26, 6 m)",
 		"category": "Materials",
@@ -1523,6 +1731,84 @@
 		}
 	},
 	{
+		"id": "worker-coverall-broom",
+		"name": "Construction labourer, hi-vis coveralls with broom (1.78 m)",
+		"category": "People",
+		"file": "worker-coverall-broom.glb",
+		"thumb": "thumbs/worker-coverall-broom.webp",
+		"front": "+z",
+		"scale": 0.939161,
+		"dimensions": {
+			"length": 0.69,
+			"width": 0.94,
+			"height": 1.78
+		},
+		"triangles": 56507,
+		"sizeKB": 1092,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5f04313c5a254cbf80c5002ee1ed06c7",
+			"url": "https://sketchfab.com/3d-models/construction-worker-in-high-visibility-5f04313c5a254cbf80c5002ee1ed06c7",
+			"title": "Construction Worker In High Visibility",
+			"author": "restore50",
+			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "worker-vest-drawings",
+		"name": "Construction worker, hi-vis vest, holding drawings (1.78 m)",
+		"category": "People",
+		"file": "worker-vest-drawings.glb",
+		"thumb": "thumbs/worker-vest-drawings.webp",
+		"front": "+z",
+		"scale": 0.942368,
+		"dimensions": {
+			"length": 0.72,
+			"width": 0.7,
+			"height": 1.79
+		},
+		"triangles": 55622,
+		"sizeKB": 1150,
+		"source": {
+			"site": "Sketchfab",
+			"id": "f3d6999edb1e4cd99da2519c4d75bf2b",
+			"url": "https://sketchfab.com/3d-models/construction-worker-in-safety-gear-f3d6999edb1e4cd99da2519c4d75bf2b",
+			"title": "Construction Worker In Safety Gear",
+			"author": "restore50",
+			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "worker-pointing",
+		"name": "Construction worker, hi-vis vest, pointing (1.78 m)",
+		"category": "People",
+		"file": "worker-pointing.glb",
+		"thumb": "thumbs/worker-pointing.webp",
+		"front": "+z",
+		"scale": 0.938663,
+		"dimensions": {
+			"length": 0.82,
+			"width": 0.92,
+			"height": 1.78
+		},
+		"triangles": 56910,
+		"sizeKB": 1353,
+		"source": {
+			"site": "Sketchfab",
+			"id": "823c6c3f35574543b5efa715ce469b5c",
+			"url": "https://sketchfab.com/3d-models/pointing-construction-worker-823c6c3f35574543b5efa715ce469b5c",
+			"title": "Pointing Construction Worker",
+			"author": "restore50",
+			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "compressor-towable-twin-axle",
 		"name": "Air compressor, towable, twin axle (5 m)",
 		"category": "Power & air",
@@ -1557,6 +1843,32 @@
 		"own": "Weave-Trial: construction_site/Cable_Reel_Wooden.glb"
 	},
 	{
+		"id": "generator-portable-7kw",
+		"name": "Generator, portable open-frame (7.5 kW, gas)",
+		"category": "Power & air",
+		"file": "generator-portable-7kw.glb",
+		"thumb": "thumbs/generator-portable-7kw.webp",
+		"front": "+x",
+		"scale": 0.442922,
+		"dimensions": {
+			"length": 0.97,
+			"width": 0.76,
+			"height": 0.68
+		},
+		"triangles": 61965,
+		"sizeKB": 1263,
+		"source": {
+			"site": "Sketchfab",
+			"id": "323e8d8473a54ca3a59c7f949bfab0be",
+			"url": "https://sketchfab.com/3d-models/medium-duty-portable-generator-323e8d8473a54ca3a59c7f949bfab0be",
+			"title": "Medium-Duty Portable Generator",
+			"author": "The Third Dimension",
+			"authorUrl": "https://sketchfab.com/Thethirdperspective",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "light-tower-led",
 		"name": "LED light tower, towable (30 ft mast)",
 		"category": "Power & air",
@@ -1572,6 +1884,32 @@
 		"triangles": 26392,
 		"sizeKB": 168,
 		"own": "Weave-Trial: construction_site/LED_Light_Tower.glb"
+	},
+	{
+		"id": "work-light-tripod",
+		"name": "Work light, twin-head on tripod stand",
+		"category": "Power & air",
+		"file": "work-light-tripod.glb",
+		"thumb": "thumbs/work-light-tripod.webp",
+		"front": "+z",
+		"scale": 0.00826476,
+		"dimensions": {
+			"length": 2.07,
+			"width": 1.74,
+			"height": 1.91
+		},
+		"triangles": 21954,
+		"sizeKB": 710,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3c6579a8a63b45839351737f31b3082b",
+			"url": "https://sketchfab.com/3d-models/tripod-worklight-3c6579a8a63b45839351737f31b3082b",
+			"title": "Tripod Worklight",
+			"author": "Nikkip",
+			"authorUrl": "https://sketchfab.com/nikkip",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "rail-gondola-coal",
@@ -1606,6 +1944,84 @@
 		"triangles": 54712,
 		"sizeKB": 447,
 		"own": "Weave-Trial: construction_site/Road_Rail_Railcar_Mover.glb"
+	},
+	{
+		"id": "shore-post-steel",
+		"name": "Adjustable steel shore post (Acrow prop, 3 m)",
+		"category": "Shoring",
+		"file": "shore-post-steel.glb",
+		"thumb": "thumbs/shore-post-steel.webp",
+		"front": "+z",
+		"scale": 0.5995,
+		"dimensions": {
+			"length": 0.14,
+			"width": 0.18,
+			"height": 3
+		},
+		"triangles": 1856,
+		"sizeKB": 259,
+		"source": {
+			"site": "Sketchfab",
+			"id": "13bbf4d45e274b69a27b95f609c7499f",
+			"url": "https://sketchfab.com/3d-models/acrow-prop-13bbf4d45e274b69a27b95f609c7499f",
+			"title": "Acrow Prop",
+			"author": "omri1324",
+			"authorUrl": "https://sketchfab.com/omri1324",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "drill-rig-cfa",
+		"name": "CFA piling rig (crawler crane based, 25 m mast)",
+		"category": "Shoring",
+		"file": "drill-rig-cfa.glb",
+		"thumb": "thumbs/drill-rig-cfa.webp",
+		"front": "-z",
+		"scale": 0.995064,
+		"dimensions": {
+			"length": 10,
+			"width": 4.08,
+			"height": 26.87
+		},
+		"triangles": 102668,
+		"sizeKB": 2078,
+		"source": {
+			"site": "Sketchfab",
+			"id": "f3e2f844a75c4399b5e20ff56d96ba08",
+			"url": "https://sketchfab.com/3d-models/rdk-250-drilling-rig-f3e2f844a75c4399b5e20ff56d96ba08",
+			"title": "RDK-250 drilling rig",
+			"author": "Randonavt",
+			"authorUrl": "https://sketchfab.com/Randonavt",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "drill-rig-rotary",
+		"name": "Rotary drilling rig (Kelly bar, BG 28 class)",
+		"category": "Shoring",
+		"file": "drill-rig-rotary.glb",
+		"thumb": "thumbs/drill-rig-rotary.webp",
+		"front": "-x",
+		"scale": 1.10127,
+		"dimensions": {
+			"length": 8.7,
+			"width": 4.41,
+			"height": 21.52
+		},
+		"triangles": 117960,
+		"sizeKB": 830,
+		"source": {
+			"site": "Sketchfab",
+			"id": "997e8984809540e5b3e5ea693eb96983",
+			"url": "https://sketchfab.com/3d-models/pile-driver-997e8984809540e5b3e5ea693eb96983",
+			"title": "Pile Driver",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "pipe-pile-stack-36in",
@@ -1708,6 +2124,32 @@
 		"triangles": 51246,
 		"sizeKB": 407,
 		"own": "Weave-Trial: construction_site/Dust_Fog_Cannon.glb"
+	},
+	{
+		"id": "torch-cart-oxy-acetylene",
+		"name": "Oxy-acetylene torch cart",
+		"category": "Site services",
+		"file": "torch-cart-oxy-acetylene.glb",
+		"thumb": "thumbs/torch-cart-oxy-acetylene.webp",
+		"front": "+z",
+		"scale": 1.25355,
+		"dimensions": {
+			"length": 0.77,
+			"width": 0.88,
+			"height": 1.51
+		},
+		"triangles": 29567,
+		"sizeKB": 998,
+		"source": {
+			"site": "Sketchfab",
+			"id": "418c9c8f78b94a1aaa6d4be2ebb2423a",
+			"url": "https://sketchfab.com/3d-models/torch-welding-cart-418c9c8f78b94a1aaa6d4be2ebb2423a",
+			"title": "Torch Welding Cart",
+			"author": "Jaibu10",
+			"authorUrl": "https://sketchfab.com/Jaibu10",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "porta-potty",
@@ -1873,6 +2315,32 @@
 		"own": "Weave-Trial: construction_site/Solar_Arrow_Board_Trailer.glb"
 	},
 	{
+		"id": "delineator-post",
+		"name": "Delineator post on base (42 in)",
+		"category": "Traffic control",
+		"file": "delineator-post.glb",
+		"thumb": "thumbs/delineator-post.webp",
+		"front": "+z",
+		"scale": 1.00473,
+		"dimensions": {
+			"length": 0.44,
+			"width": 0.44,
+			"height": 1.07
+		},
+		"triangles": 3216,
+		"sizeKB": 50,
+		"source": {
+			"site": "Sketchfab",
+			"id": "e65f49da1a8d40ba8272d9dbc28db170",
+			"url": "https://sketchfab.com/3d-models/traffic-pylon-delineator-post-e65f49da1a8d40ba8272d9dbc28db170",
+			"title": "Traffic Pylon, Delineator Post",
+			"author": "goslinjoe",
+			"authorUrl": "https://sketchfab.com/goslinjoe",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "traffic-cone",
 		"name": "Traffic cone (28 in)",
 		"category": "Traffic control",
@@ -1959,6 +2427,32 @@
 		"own": "Weave-Trial: construction_site/Traffic_Drum_Channelizer.glb"
 	},
 	{
+		"id": "barricade-type-2-light",
+		"name": "Type II barricade with warning light",
+		"category": "Traffic control",
+		"file": "barricade-type-2-light.glb",
+		"thumb": "thumbs/barricade-type-2-light.webp",
+		"front": "+x",
+		"scale": 0.674659,
+		"dimensions": {
+			"length": 0.85,
+			"width": 1.09,
+			"height": 1.35
+		},
+		"triangles": 3192,
+		"sizeKB": 333,
+		"source": {
+			"site": "Sketchfab",
+			"id": "03ebcc6f5320400394f781a47388751b",
+			"url": "https://sketchfab.com/3d-models/barricade-03ebcc6f5320400394f781a47388751b",
+			"title": "Barricade",
+			"author": "Kyle Burton",
+			"authorUrl": "https://sketchfab.com/chimeracreations",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "barricade-type-3-road-closed",
 		"name": "Type III barricade, ROAD CLOSED",
 		"category": "Traffic control",
@@ -1974,6 +2468,84 @@
 		"triangles": 16644,
 		"sizeKB": 128,
 		"own": "Weave-Trial: construction_site/Type_III_Barricade_Road_Closed.glb"
+	},
+	{
+		"id": "sign-work-zone-stand",
+		"name": "Work zone sign on portable stand, worker symbol (36 in, flags)",
+		"category": "Traffic control",
+		"file": "sign-work-zone-stand.glb",
+		"thumb": "thumbs/sign-work-zone-stand.webp",
+		"front": "+z",
+		"scale": 1.14986,
+		"dimensions": {
+			"length": 1.16,
+			"width": 1.35,
+			"height": 2.3
+		},
+		"triangles": 2298,
+		"sizeKB": 194,
+		"source": {
+			"site": "Sketchfab",
+			"id": "06c3528961104f059c5f7dd3ff472ad5",
+			"url": "https://sketchfab.com/3d-models/construction-sign-06c3528961104f059c5f7dd3ff472ad5",
+			"title": "Construction Sign",
+			"author": "Kyle Burton",
+			"authorUrl": "https://sketchfab.com/chimeracreations",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "fire-hydrant",
+		"name": "Fire hydrant (dry barrel)",
+		"category": "Utilities",
+		"file": "fire-hydrant.glb",
+		"thumb": "thumbs/fire-hydrant.webp",
+		"front": "+z",
+		"scale": 0.42418,
+		"dimensions": {
+			"length": 0.4,
+			"width": 0.56,
+			"height": 0.85
+		},
+		"triangles": 19648,
+		"sizeKB": 809,
+		"source": {
+			"site": "Sketchfab",
+			"id": "cc6968cdaec44f7c8f82b0b4f38a1e1b",
+			"url": "https://sketchfab.com/3d-models/fire-hydrant-cc6968cdaec44f7c8f82b0b4f38a1e1b",
+			"title": "Fire Hydrant",
+			"author": "iedalton",
+			"authorUrl": "https://sketchfab.com/iedalton",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "manhole-raised-frame",
+		"name": "Manhole frame and cover on raised riser (24 in lid)",
+		"category": "Utilities",
+		"file": "manhole-raised-frame.glb",
+		"thumb": "thumbs/manhole-raised-frame.webp",
+		"front": "+z",
+		"scale": 0.0389044,
+		"dimensions": {
+			"length": 1.2,
+			"width": 1.2,
+			"height": 0.43
+		},
+		"triangles": 75002,
+		"sizeKB": 1511,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3c260eb299a048cda26e7b11ac2b5514",
+			"url": "https://sketchfab.com/3d-models/manhole-storm-drain-sewer-raised-manhole-cover-3c260eb299a048cda26e7b11ac2b5514",
+			"title": "manhole storm drain sewer raised manhole cover",
+			"author": "franklin clodfelter",
+			"authorUrl": "https://sketchfab.com/fsclodfelter",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "articulated-dump-truck-30t",
@@ -2022,6 +2594,32 @@
 			"accel": 1.8,
 			"brake": 5,
 			"reverse": 15
+		}
+	},
+	{
+		"id": "cargo-van",
+		"name": "Cargo van, full-size (Chevrolet Express 2500)",
+		"category": "Vehicles",
+		"file": "cargo-van.glb",
+		"thumb": "thumbs/cargo-van.webp",
+		"front": "+z",
+		"scale": 100.209,
+		"dimensions": {
+			"length": 5.69,
+			"width": 2.42,
+			"height": 2.01
+		},
+		"triangles": 31240,
+		"sizeKB": 854,
+		"source": {
+			"site": "Sketchfab",
+			"id": "ed2a0b37a01e4e51ba5b82c35d4a9dae",
+			"url": "https://sketchfab.com/3d-models/2003-chevrolet-express-gmc-savana-2500-cargo-van-ed2a0b37a01e4e51ba5b82c35d4a9dae",
+			"title": "2003 Chevrolet Express GMC Savana 2500 Cargo Van",
+			"author": "Ddiaz Design",
+			"authorUrl": "https://sketchfab.com/ddiaz-design",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
 	},
 	{
