@@ -85,6 +85,32 @@
 		"own": "Weave-Trial: railbridge/Rail_Footbridge.glb"
 	},
 	{
+		"id": "scaffold-tower-ringlock-mobile",
+		"name": "Ringlock mobile scaffold tower (2 m bay, 5.7 m, castors)",
+		"category": "Access & scaffolding",
+		"file": "scaffold-tower-ringlock-mobile.glb",
+		"thumb": "thumbs/scaffold-tower-ringlock-mobile.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.34,
+			"width": 2.27,
+			"height": 5.75
+		},
+		"triangles": 38511,
+		"sizeKB": 367,
+		"source": {
+			"site": "Sketchfab",
+			"id": "05e5604ed6884ba8afc4736d09c5daba",
+			"url": "https://sketchfab.com/3d-models/ringlock-mobile-tower-05e5604ed6884ba8afc4736d09c5daba",
+			"title": "Ringlock Mobile Tower",
+			"author": "Meka_Canon",
+			"authorUrl": "https://sketchfab.com/Meka_Canon",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "rolling-stairs",
 		"name": "Rolling stairs (10 step)",
 		"category": "Access & scaffolding",
@@ -362,6 +388,58 @@
 		"own": "Weave-Trial: construction_site/Trailer_Concrete_Line_Pump.glb"
 	},
 	{
+		"id": "concrete-placing-boom-28m",
+		"name": "Concrete placing boom on tower (27 m reach, 20 m tower)",
+		"category": "Concrete & batching",
+		"file": "concrete-placing-boom-28m.glb",
+		"thumb": "thumbs/concrete-placing-boom-28m.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 29.55,
+			"width": 2.7,
+			"height": 25.03
+		},
+		"triangles": 37055,
+		"sizeKB": 332,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5b059f6bc54642b0b38adf39c9952542",
+			"url": "https://sketchfab.com/3d-models/concrete-boom-5b059f6bc54642b0b38adf39c9952542",
+			"title": "Concrete Boom",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "mortar-silo",
+		"name": "Dry mortar / cement silo (approx. 30 m³, 8 m)",
+		"category": "Concrete & batching",
+		"file": "mortar-silo.glb",
+		"thumb": "thumbs/mortar-silo.webp",
+		"front": "+z",
+		"scale": 0.60492,
+		"dimensions": {
+			"length": 3.17,
+			"width": 3.88,
+			"height": 8.01
+		},
+		"triangles": 2379,
+		"sizeKB": 210,
+		"source": {
+			"site": "Sketchfab",
+			"id": "d984c6cd19f5459bb5004db3411a58f7",
+			"url": "https://sketchfab.com/3d-models/concrete-silo-night-racer-d984c6cd19f5459bb5004db3411a58f7",
+			"title": "Concrete Silo- Night Racer",
+			"author": "YdeJonge",
+			"authorUrl": "https://sketchfab.com/YdeJonge",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "mixer-stand",
 		"name": "Mixer stand (steel portal frame)",
 		"category": "Concrete & batching",
@@ -521,6 +599,32 @@
 		}
 	},
 	{
+		"id": "boom-lift-45ft-raised",
+		"name": "Articulating boom lift, raised (45 ft class)",
+		"category": "Cranes & lifts",
+		"file": "boom-lift-45ft-raised.glb",
+		"thumb": "thumbs/boom-lift-45ft-raised.webp",
+		"front": "+z",
+		"scale": 7.67955,
+		"dimensions": {
+			"length": 8.24,
+			"width": 2.28,
+			"height": 9.03
+		},
+		"triangles": 8033,
+		"sizeKB": 116,
+		"source": {
+			"site": "Sketchfab",
+			"id": "1b3a895ca270490f951b69bd113a884c",
+			"url": "https://sketchfab.com/3d-models/cherry-picker-raised-1b3a895ca270490f951b69bd113a884c",
+			"title": "Cherry Picker Raised",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "crane-carry-deck-mammoet-1824",
 		"name": "Carry-deck crane, Mammoet 1824 (boom up, outriggers set)",
 		"category": "Cranes & lifts",
@@ -605,6 +709,32 @@
 		}
 	},
 	{
+		"id": "tower-crane-luffing",
+		"name": "Luffing jib tower crane (46 m jib, raised)",
+		"category": "Cranes & lifts",
+		"file": "tower-crane-luffing.glb",
+		"thumb": "thumbs/tower-crane-luffing.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 45.8,
+			"width": 13.4,
+			"height": 73.08
+		},
+		"triangles": 12199,
+		"sizeKB": 254,
+		"source": {
+			"site": "Sketchfab",
+			"id": "e9a73f7b5cf842ada7ae97cc6282c6c6",
+			"url": "https://sketchfab.com/3d-models/self-erecting-tower-crane-e9a73f7b5cf842ada7ae97cc6282c6c6",
+			"title": "Self-erecting Tower Crane",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "scissor-lift-32ft",
 		"name": "Scissor lift (32 ft, electric)",
 		"category": "Cranes & lifts",
@@ -653,6 +783,32 @@
 		"triangles": 57396,
 		"sizeKB": 402,
 		"own": "Weave-Trial: construction_site/Electric_Scissor_Lift_26ft.glb"
+	},
+	{
+		"id": "crane-truck-50t",
+		"name": "Truck crane, telescopic (50 t class, 4-axle, stowed)",
+		"category": "Cranes & lifts",
+		"file": "crane-truck-50t.glb",
+		"thumb": "thumbs/crane-truck-50t.webp",
+		"front": "+z",
+		"scale": 0.935311,
+		"dimensions": {
+			"length": 12.5,
+			"width": 2.95,
+			"height": 4.01
+		},
+		"triangles": 35778,
+		"sizeKB": 440,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8c343b1ce4724631b4623e9ef7778163",
+			"url": "https://sketchfab.com/3d-models/mobile-hydraulic-truck-crane-telescopic-8c343b1ce4724631b4623e9ef7778163",
+			"title": "Mobile Hydraulic Truck Crane (Telescopic)",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "backhoe-loader",
@@ -1324,6 +1480,32 @@
 		}
 	},
 	{
+		"id": "pallet-jack",
+		"name": "Pallet jack, manual (2.5 t, 27 in forks)",
+		"category": "Material handling",
+		"file": "pallet-jack.glb",
+		"thumb": "thumbs/pallet-jack.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.69,
+			"width": 0.69,
+			"height": 1.22
+		},
+		"triangles": 1840,
+		"sizeKB": 190,
+		"source": {
+			"site": "Sketchfab",
+			"id": "4f4fdcd732924ef89230eb0ccb8d688b",
+			"url": "https://sketchfab.com/3d-models/pallet-jack-4f4fdcd732924ef89230eb0ccb8d688b",
+			"title": "Pallet Jack",
+			"author": "Vadya_Rus",
+			"authorUrl": "https://sketchfab.com/Vadya_Rus",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "radial-stacker-100ft",
 		"name": "Radial stacking conveyor (36 in x 100 ft)",
 		"category": "Material handling",
@@ -1524,6 +1706,32 @@
 		}
 	},
 	{
+		"id": "pallet-bricks",
+		"name": "Pallet of clay bricks (strapped)",
+		"category": "Materials",
+		"file": "pallet-bricks.glb",
+		"thumb": "thumbs/pallet-bricks.webp",
+		"front": "+z",
+		"scale": 0.964376,
+		"dimensions": {
+			"length": 1.5,
+			"width": 0.88,
+			"height": 0.8
+		},
+		"triangles": 1538,
+		"sizeKB": 379,
+		"source": {
+			"site": "Sketchfab",
+			"id": "2297d112371243fd85746335364ae85b",
+			"url": "https://sketchfab.com/3d-models/pallet-of-bricks-2297d112371243fd85746335364ae85b",
+			"title": "Pallet of Bricks",
+			"author": "usedm",
+			"authorUrl": "https://sketchfab.com/usedm",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "pallet-concrete-bags",
 		"name": "Pallet of concrete bags (27 bags)",
 		"category": "Materials",
@@ -1636,6 +1844,32 @@
 		}
 	},
 	{
+		"id": "rebar-bundle-ground",
+		"name": "Rebar laid on ground (4.7 m bars, scan)",
+		"category": "Materials",
+		"file": "rebar-bundle-ground.glb",
+		"thumb": "thumbs/rebar-bundle-ground.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 4.71,
+			"width": 0.3,
+			"height": 0.1
+		},
+		"triangles": 131466,
+		"sizeKB": 1674,
+		"source": {
+			"site": "Sketchfab",
+			"id": "f91f714ee2d44fe09c00ff55f1ea666d",
+			"url": "https://sketchfab.com/3d-models/steel-rebar-stack-on-ground-f91f714ee2d44fe09c00ff55f1ea666d",
+			"title": "Steel Rebar Stack on ground",
+			"author": "ahmedsaeedmirza",
+			"authorUrl": "https://sketchfab.com/ahmedsaeedmirza",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "sand-pile-small",
 		"name": "Sand pile, small (3 m across)",
 		"category": "Materials",
@@ -1731,6 +1965,58 @@
 		}
 	},
 	{
+		"id": "timber-bundle",
+		"name": "Timber bundle, strapped (4.8 m boards)",
+		"category": "Materials",
+		"file": "timber-bundle.glb",
+		"thumb": "thumbs/timber-bundle.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 4.75,
+			"width": 1.24,
+			"height": 0.8
+		},
+		"triangles": 3038,
+		"sizeKB": 245,
+		"source": {
+			"site": "Sketchfab",
+			"id": "025e9f1cb3bd4256ba7570aa991be29b",
+			"url": "https://sketchfab.com/3d-models/pile-of-planks-freegameready-025e9f1cb3bd4256ba7570aa991be29b",
+			"title": "Pile of Planks (Free/GameReady)",
+			"author": "Sebastian Webster",
+			"authorUrl": "https://sketchfab.com/Sebastian.Hamish.Webster",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "concrete-placing-boom",
+		"name": "Concrete Boom",
+		"category": "Other",
+		"file": "concrete-placing-boom.glb",
+		"thumb": "thumbs/concrete-placing-boom.webp",
+		"front": "+z",
+		"scale": 3.7037,
+		"dimensions": {
+			"length": 10,
+			"width": 109.45,
+			"height": 92.69
+		},
+		"triangles": 37055,
+		"sizeKB": 332,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5b059f6bc54642b0b38adf39c9952542",
+			"url": "https://sketchfab.com/3d-models/concrete-boom-5b059f6bc54642b0b38adf39c9952542",
+			"title": "Concrete Boom",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "worker-coverall-broom",
 		"name": "Construction labourer, hi-vis coveralls with broom (1.78 m)",
 		"category": "People",
@@ -1750,6 +2036,32 @@
 			"id": "5f04313c5a254cbf80c5002ee1ed06c7",
 			"url": "https://sketchfab.com/3d-models/construction-worker-in-high-visibility-5f04313c5a254cbf80c5002ee1ed06c7",
 			"title": "Construction Worker In High Visibility",
+			"author": "restore50",
+			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "worker-vest-tool-belt",
+		"name": "Construction worker, hi-vis vest and tool belt (1.78 m)",
+		"category": "People",
+		"file": "worker-vest-tool-belt.glb",
+		"thumb": "thumbs/worker-vest-tool-belt.webp",
+		"front": "+z",
+		"scale": 0.937,
+		"dimensions": {
+			"length": 0.44,
+			"width": 0.59,
+			"height": 1.78
+		},
+		"triangles": 80767,
+		"sizeKB": 1541,
+		"source": {
+			"site": "Sketchfab",
+			"id": "428d8fc1ddff4e6facdd8c60bf90f246",
+			"url": "https://sketchfab.com/3d-models/construction-worker-in-training-428d8fc1ddff4e6facdd8c60bf90f246",
+			"title": "Construction Worker in Training",
 			"author": "restore50",
 			"authorUrl": "https://sketchfab.com/restore50",
 			"license": "CC Attribution",
@@ -1804,6 +2116,58 @@
 			"title": "Pointing Construction Worker",
 			"author": "restore50",
 			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "worker-welder",
+		"name": "Welder with MIG torch and mask (1.78 m)",
+		"category": "People",
+		"file": "worker-welder.glb",
+		"thumb": "thumbs/worker-welder.webp",
+		"front": "+z",
+		"scale": 0.985,
+		"dimensions": {
+			"length": 2.85,
+			"width": 1.03,
+			"height": 1.78
+		},
+		"triangles": 86011,
+		"sizeKB": 1264,
+		"source": {
+			"site": "Sketchfab",
+			"id": "24db1bbbabf349c7a202ac3a894bf939",
+			"url": "https://sketchfab.com/3d-models/009-male-worker-welder-00-24db1bbbabf349c7a202ac3a894bf939",
+			"title": "009 Male Worker Welder 00",
+			"author": "grewe.juergen",
+			"authorUrl": "https://sketchfab.com/grewe.juergen",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "worker-welder-machine",
+		"name": "Welder with MIG welding machine and gas bottle (1.78 m)",
+		"category": "People",
+		"file": "worker-welder-machine.glb",
+		"thumb": "thumbs/worker-welder-machine.webp",
+		"front": "+z",
+		"scale": 0.985,
+		"dimensions": {
+			"length": 2.85,
+			"width": 1.56,
+			"height": 1.78
+		},
+		"triangles": 198778,
+		"sizeKB": 3193,
+		"source": {
+			"site": "Sketchfab",
+			"id": "b6aa2d7b550d4b3c8a7df5c3b414e5e9",
+			"url": "https://sketchfab.com/3d-models/009-male-worker-welder-02-b6aa2d7b550d4b3c8a7df5c3b414e5e9",
+			"title": "009 Male Worker Welder 02",
+			"author": "grewe.juergen",
+			"authorUrl": "https://sketchfab.com/grewe.juergen",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -2147,6 +2511,32 @@
 			"title": "Torch Welding Cart",
 			"author": "Jaibu10",
 			"authorUrl": "https://sketchfab.com/Jaibu10",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "picnic-tables-pair",
+		"name": "Picnic tables, pair (1.6 m, worn timber)",
+		"category": "Site services",
+		"file": "picnic-tables-pair.glb",
+		"thumb": "thumbs/picnic-tables-pair.webp",
+		"front": "+z",
+		"scale": 0.0266667,
+		"dimensions": {
+			"length": 1.6,
+			"width": 3.51,
+			"height": 0.82
+		},
+		"triangles": 1924,
+		"sizeKB": 593,
+		"source": {
+			"site": "Sketchfab",
+			"id": "c962b28e2612421b9392d3ee403b9309",
+			"url": "https://sketchfab.com/3d-models/picnic-tables-c962b28e2612421b9392d3ee403b9309",
+			"title": "Picnic Tables",
+			"author": "Caboose3d",
+			"authorUrl": "https://sketchfab.com/caboose3d",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -2543,6 +2933,32 @@
 			"title": "manhole storm drain sewer raised manhole cover",
 			"author": "franklin clodfelter",
 			"authorUrl": "https://sketchfab.com/fsclodfelter",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "manhole-ring-precast",
+		"name": "Precast concrete manhole ring (1.2 m OD)",
+		"category": "Utilities",
+		"file": "manhole-ring-precast.glb",
+		"thumb": "thumbs/manhole-ring-precast.webp",
+		"front": "+z",
+		"scale": 1.03166,
+		"dimensions": {
+			"length": 1.2,
+			"width": 1.2,
+			"height": 1
+		},
+		"triangles": 312,
+		"sizeKB": 219,
+		"source": {
+			"site": "Sketchfab",
+			"id": "f2b939b77fc74d70a63262bc7e688502",
+			"url": "https://sketchfab.com/3d-models/concrete-ring-game-ready-f2b939b77fc74d70a63262bc7e688502",
+			"title": "Concrete Ring - Game Ready",
+			"author": "Irog",
+			"authorUrl": "https://sketchfab.com/Irog",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
