@@ -2486,28 +2486,6 @@ in the air, and their scores. The pause menu's **Trick mode: bounce off walls** 
 `world-drive.tricks`) brings back the bounces and launches (`walls: 'bounce'`, the stunt tests'
 setting). The help's Stunts line says both.
 
-## Clean roads under Google's map (a test: ?hybrid)
-
-Google's 3D map is one surface: parked cars, trees and the speckle on a road are all "ground" or
-"wall" to the car. In a city City Drive has (Vancouver), `?hybrid` in the address has the car drive
-on that city built from OpenStreetMap instead, invisible under Google's map, which is all that's
-seen (`src/drive-app/city/hybrid.js`): smooth streets, straight walls, bridges as decks, and
-Google's clutter passed through. `?hybrid=show` draws the city too, see-through pink, to check it
-lines up.
-
-- The city is City Drive's own (`build.js`'s `loadCity` and `buildCity`): its streets, parks and
-  buildings on its 1 m lidar ground (Natural Resources Canada's HRDEM, made by `make-city.py`), out to
-  the North Shore and Neptune Terminals.
-- It's put in the scene's frame from the city's origin, and lined up in height with Google's map by
-  measuring: from up to 24 street points within 160 m of the car, straight down onto Google's tiles,
-  the median of Google's height minus the city's (sea level and Google's ellipsoid differ by the
-  geoid, about 17 m there), again every 3 s; a measurement whose spread is over 2.5 m (tiles not fine
-  yet) is passed over. Until it's measured, and within 150 m of the city's edge, Google's mesh is the
-  ground as before. Without a key the test pad stands in for Google's map.
-- What to look for, trying it: whether the car sits on Google's road (the city a little high or low
-  in places: the elevation data is coarser than Google's mesh), how bridges and hills feel, and
-  whether being able to pass through trees and parked cars reads as better or odd.
-
 ## Hardware on the worlds
 
 The landers, rovers and crash sites people have left on the Moon and Mars are in the game, set
