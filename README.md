@@ -889,17 +889,23 @@ player's best stunt run today, this week and all time (a nickname, no sign-up) i
 posted with the visit's signed token and checked against what the game can score.
 
 **City Drive** (`/city/`, `drive/city/index.html`, `src/drive-app/city/`): a standalone page
-where you pick a city, a start spot and a ride and drive a whole city built from **OpenStreetMap**
-(open data, ODbL, credited on the page) instead of Google's tiles, so it costs nothing per visit
-and has no daily cap. The first is **Vancouver**: downtown, Coal Harbour, Stanley Park with its
-causeway and trees, and the Lions Gate, Burrard, Granville and Cambie bridges, which rise over the
-water as decks you drive across. Buildings stand at their mapped heights (or floors × 3.2 m), with
-windows; streets have their widths and centre lines; the sea is driven on as in World Drive. The
+where you pick a city, a start spot and a ride and drive a whole city built from open data instead
+of Google's tiles, so it costs nothing per visit and has no daily cap. The first is **Vancouver and
+the North Shore** (9 × 7 km): downtown, Coal Harbour, Stanley Park, False Creek, and across the
+harbour from the Lions Gate to Lonsdale Quay and Neptune Terminals. Buildings and streets come
+from **OpenStreetMap** (ODbL); the ground from **Natural Resources Canada's 1 m lidar terrain
+model** (HRDEM, Open Government Licence – Canada), both credited on the page. The ground is a
+surface every 10 m coloured by what's there (land, parks and woods with trees, beaches, lakes, the
+sea bed under the water); buildings stand on the lowest ground round their footprint at their
+mapped heights (or floors × 3.2 m), with windows; streets are draped over the ground with their
+widths and centre lines; bridges rise from the ground at their ends to decks over the water. The
 driving is World Drive's own (`drive.js`): boost, drift, stunts, **R** back on the road, **T** to
-fly, **Esc** to the menu; rides locked in World Drive stay locked. A city is made once, offline:
+fly, **Esc** to the menu; rides locked in World Drive stay locked. `?trees=0` leaves the trees out
+on a slow computer. A city is made once, offline (the elevation is read over the internet for just
+its box):
 
 ```bash
-pip install osmium shapely
+pip install osmium shapely rasterio
 ```
 
 ```bash
@@ -907,12 +913,15 @@ curl -o vancouver.osm.pbf https://download.bbbike.org/osm/bbbike/Vancouver/Vanco
 ```
 
 ```bash
-python scripts/make-city.py vancouver.osm.pbf --id vancouver --name Vancouver --bbox 49.270,-123.160,49.3155,-123.095 --start "Robson Street:49.2846,-123.1225" --start "Stanley Park:49.2985,-123.1395" --start "Coal Harbour:49.2895,-123.1235" --start "False Creek:49.2730,-123.1150"
+python scripts/make-city.py vancouver.osm.pbf --id vancouver --name Vancouver --bbox 49.270,-123.160,49.335,-123.035 --dem canada --start "Robson Street:49.2846,-123.1225" --start "Stanley Park:49.2985,-123.1395" --start "Coal Harbour:49.2895,-123.1235" --start "False Creek:49.2730,-123.1150" --start "Lonsdale Quay:49.3115,-123.0830" --start "Neptune Terminals:49.3045,-123.0470"
 ```
 
-That writes `drive/public/cities/vancouver.json` (1.2 MB, 430 kB compressed); list the city in
+That writes `drive/public/cities/vancouver.json` (4.4 MB, 1.5 MB compressed: 29,500 buildings and
+15,500 streets) and `vancouver.ground.bin` (2 MB, 0.5 MB compressed); list the city in
 `src/drive-app/city/cities.js`. Any city works the same way, from a BBBike or Geofabrik extract
-that covers its box. `npm run test:city-drive-ui` drives it in a browser.
+that covers its box; outside southern BC and Alberta, `--dem` takes another elevation GeoTIFF's
+file or URL (USGS 3DEP in the US, Copernicus GLO-30 anywhere), or leave it out for flat ground.
+`npm run test:city-drive-ui` drives it in a browser.
 
 **Driving with others**: everyone else driving the same area (about 11 km across) shows up live as a
 ghost car you pass straight through, with their nickname, ride and Garage look (underglow too);

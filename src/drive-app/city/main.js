@@ -5,9 +5,8 @@ import { Driver } from '../../drive.js';
 import { useFastRaycast } from '../../raycast.js';
 import { createDriveHud } from '../../drive-hud.js';
 import { loadVehicle, loadVehicles, rideLocked, specOf } from '../vehicles.js';
-import { buildCity } from './build.js';
+import { buildCity, loadCity } from './build.js';
 import { CITIES } from './cities.js';
-import { drape, loadTerrain } from './terrain.js';
 
 // City Drive (/city/, drive/city/index.html): World Drive's cars in a whole city built from
 // OpenStreetMap (build.js, scripts/make-city.py) instead of Google's tiles: nothing to pay per
@@ -25,7 +24,7 @@ $( 'app' ).append( renderer.domElement );
 
 const scene = new Scene();
 scene.background = SKY;
-scene.fog = new Fog( SKY, 600, 4500 );
+scene.fog = new Fog( SKY, 800, 6500 );
 addLights( scene );
 scene.background = SKY;
 const camera = new PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.5, 30000 );
@@ -76,9 +75,7 @@ async function openCity( id ) {
 	$( 'go' ).disabled = true;
 	try {
 
-		const res = await fetch( spec.file );
-		if ( ! res.ok ) throw new Error( `${ res.status }` );
-		const data = await res.json();
+		const data = await loadCity( spec.file );
 		if ( city ) {
 
 			scene.remove( city.group );
@@ -94,22 +91,21 @@ async function openCity( id ) {
 
 		}
 
-		const built = buildCity( data );
-		// Over its real hills, where it has its ground (scripts/make-city-terrain.py): before the
-		// raycasting structures are made, as they're made from the points.
-		const terrain = spec.terrain ? await loadTerrain( spec.terrain ) : null;
-		if ( terrain ) drape( built.group, terrain );
+		// ?trees=0 leaves the parks' trees out (a slow computer, and the tests).
+		const built = buildCity( data, { trees: new URLSearchParams( location.search ).get( 'trees' ) !== '0' } );
 		useFastRaycast( built.colliders );
 		scene.add( built.group );
-		city = { spec, data, terrain, ...built };
+		city = { spec, data, ...built };
 		fill( $( 'start' ), data.starts.map( ( s, i ) => [ i, s.name ] ) );
 		$( 'blurb' ).textContent = spec.blurb;
-		$( 'credit' ).textContent = data.credit.replace( '(c)', '©' );
+		$( 'credit' ).textContent = data.credit.replace( '(c)', '©' ).replace( ' | ', ' · ' );
 		document.title = `${ spec.name } · City Drive · World Drive`;
-		history.replaceState( null, '', `?city=${ spec.id }` );
+		const query = new URLSearchParams( location.search );
+		query.set( 'city', spec.id );
+		history.replaceState( null, '', `?${ query }` );
 		// A look over the city while the menu's up.
 		const [ w, h ] = data.size;
-		camera.position.set( w * 0.35, Math.max( w, h ) * 0.35, h * 0.55 );
+		camera.position.set( w * 0.25, Math.max( w, h ) * 0.3, - h * 0.6 );
 		camera.lookAt( 0, 0, 0 );
 
 	} catch ( err ) {

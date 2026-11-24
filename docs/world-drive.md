@@ -2495,10 +2495,9 @@ seen (`src/drive-app/city/hybrid.js`): smooth streets, straight walls, bridges a
 Google's clutter passed through. `?hybrid=show` draws the city too, see-through pink, to check it
 lines up.
 
-- The city is laid over its real hills: `scripts/make-city-terrain.py` bakes its ground every 10 m
-  from AWS's open Terrain Tiles (for Canada, Natural Resources Canada's elevation model) into
-  `drive/public/cities/<id>-terrain.bin` (Vancouver: 480 kB, −2 to 80 m), and `terrain.js` drapes
-  build.js's flat city over it (City Drive's own page too, now).
+- The city is City Drive's own (`build.js`'s `loadCity` and `buildCity`): its streets, parks and
+  buildings on its 1 m lidar ground (Natural Resources Canada's HRDEM, made by `make-city.py`), out to
+  the North Shore and Neptune Terminals.
 - It's put in the scene's frame from the city's origin, and lined up in height with Google's map by
   measuring: from up to 24 street points within 160 m of the car, straight down onto Google's tiles,
   the median of Google's height minus the city's (sea level and Google's ellipsoid differ by the

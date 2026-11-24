@@ -1,13 +1,12 @@
 import { DoubleSide, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { useFastRaycast } from '../../raycast.js';
 import { latLonToEnu } from '../../geo.js';
-import { buildCity } from './build.js';
+import { buildCity, groundHeight, loadCity } from './build.js';
 import { CITIES } from './cities.js';
-import { drape, loadTerrain } from './terrain.js';
 
 // The hybrid ground (docs/world-drive.md, "Clean roads under Google's map", a test behind ?hybrid):
 // in a city City Drive has (cities.js: Vancouver), the car drives on that city built from
-// OpenStreetMap and laid over its real hills (build.js, terrain.js), kept invisible under Google's
+// OpenStreetMap on its lidar ground (build.js), kept invisible under Google's
 // 3D map, which is all that's seen. Its streets are smooth, its buildings' walls straight up, its
 // bridges decks, and what's in Google's mesh but isn't ground (parked cars, trees, lamp posts, the
 // speckle on a road) is passed through rather than hit. Outside the city, Google's mesh is the
@@ -82,10 +81,9 @@ export function createHybrid( { scene, show = false } ) {
 
 		loading ??= ( async () => {
 
-			const data = await ( await fetch( spec.file ) ).json();
-			const terrain = spec.terrain ? await loadTerrain( spec.terrain ) : null;
+			// The city on its ground (build.js: City Drive's, its streets and buildings on its lidar).
+			const data = await loadCity( spec.file );
 			const built = buildCity( data, { trees: false } );
-			if ( terrain ) drape( built.group, terrain );
 			useFastRaycast( built.colliders );
 			built.group.name = 'hybrid-city';
 			built.group.visible = show;
@@ -101,7 +99,7 @@ export function createHybrid( { scene, show = false } ) {
 			}
 
 			scene.add( built.group );
-			city = { spec, data, terrain, ...built };
+			city = { spec, data, ...built };
 
 		} )().finally( () => {
 
@@ -159,7 +157,7 @@ export function createHybrid( { scene, show = false } ) {
 				raycaster.set( _from.set( x, 2000, z ), _down );
 				const hit = raycaster.intersectObject( tiles, true )[ 0 ];
 				if ( ! hit ) continue;
-				const mine = city.terrain ? city.terrain.heightAt( line[ i ] / 10, line[ i + 1 ] / 10 ) : 0;
+				const mine = groundHeight( city.data.ground, line[ i ] / 10, line[ i + 1 ] / 10 );
 				differences.push( hit.point.y - mine );
 
 			}
