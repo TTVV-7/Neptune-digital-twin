@@ -460,15 +460,18 @@ async function recordPurchase( env, db, settings, session, now, buildOnly ) {
 	const reference = typeof named === 'string' && ACCOUNT_ID.test( named ) ? Number( named ) : null;
 	const amount = Number.isSafeInteger( session.amount_total ) ? session.amount_total : null;
 	const currency = typeof session.currency === 'string' && /^[a-z]{3}$/.test( session.currency ) ? session.currency : null;
+	// How much of amount was tax, which Stripe collects as the merchant of record (Managed Payments),
+	// so the admin page can tell what's World Drive's from what's the tax's; NULL when Stripe didn't say.
+	const tax = Number.isSafeInteger( session.total_details?.amount_tax ) && session.total_details.amount_tax >= 0 ? session.total_details.amount_tax : null;
 	// Build Pro's subscription checkout has no PaymentIntent: a refund or chargeback that came first
 	// is found through its subscription's invoices.
-	await db.prepare( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at, subscription, pass )
+	await db.prepare( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at, subscription, pass, tax )
 		VALUES ( ?1, ( SELECT id FROM accounts WHERE id = ?2 ), ?3, ?4, ?5, ?6,
 			COALESCE( ( SELECT status FROM reversals WHERE payment_intent = ?6 ), ( SELECT r.status FROM invoices i JOIN reversals r ON r.payment_intent = i.payment_intent
 				WHERE ?9 = 'build' AND i.subscription = ?8 ORDER BY r.status = 'refunded' DESC LIMIT 1 ), 'paid' ), ?7,
 			COALESCE( ( SELECT created_at FROM reversals WHERE payment_intent = ?6 ), ( SELECT r.created_at FROM invoices i JOIN reversals r ON r.payment_intent = i.payment_intent
-				WHERE ?9 = 'build' AND i.subscription = ?8 LIMIT 1 ) ), ?8, ?9 ) ON CONFLICT ( checkout_session ) DO NOTHING` )
-		.bind( id, reference, email, amount, currency, stripeId( session.payment_intent ), now, subscription, pass ).run();
+				WHERE ?9 = 'build' AND i.subscription = ?8 LIMIT 1 ) ), ?8, ?9, ?10 ) ON CONFLICT ( checkout_session ) DO NOTHING` )
+		.bind( id, reference, email, amount, currency, stripeId( session.payment_intent ), now, subscription, pass, tax ).run();
 	// Build Pro whose money was taken back before its checkout arrived: its subscription is
 	// cancelled now, as it would have been then.
 	if ( pass === 'build' && subscription ) {

@@ -248,7 +248,7 @@ describe( 'World Drive Build\'s admin numbers', () => {
 
 		// The game's money is the Supporter Pass's: one pass bought, its US$19.99, none of Build Pro's.
 		const game = ( await call( '/api/admin/stats?days=7', { cookie: boss } ) ).json;
-		assert.deepEqual( game.rows.filter( r => r[ 1 ] === 'purchases' || r[ 1 ] === 'revenue' ).map( r => r.slice( 1 ) ), [ [ 'purchases', 'paid', 1 ], [ 'revenue', 'usd', 1999 ] ] );
+		assert.deepEqual( game.rows.filter( r => r[ 1 ] === 'purchases' || r[ 1 ] === 'revenue' ).map( r => r.slice( 1 ) ), [ [ 'purchases', 'lifetime', 1 ], [ 'revenue', 'usd', 1999 ] ] );
 		assert.equal( game.totals.unclaimed, 1, 'the pass bought with an email nobody has, not Build Pro\'s' );
 		numbers = answer;
 

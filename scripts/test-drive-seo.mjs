@@ -527,6 +527,14 @@ describe( 'what search engines read', () => {
 		const built = pages.find( page => page.path === '/contact/' ).html;
 		assert.match( built, /<dt>Run by<\/dt><dd>Tom<\/dd><dt>Email<\/dt><dd><a href="mailto:support@worlddrive\.app">support@worlddrive\.app<\/a><\/dd><dt>Based in<\/dt><dd>Vancouver, British Columbia, Canada<\/dd>/ );
 		assert.ok( ! /tel:/.test( built ) );
+		// What's bought and who's paid: prices in CAD plus tax, sold through Stripe's Link, and a refunded
+		// monthly payment's subscription cancelled; the game's pages stay the game's, with nothing of Build.
+		const terms = pages.find( page => page.path === '/terms/' ).html;
+		const refunds = pages.find( page => page.path === '/refunds/' ).html;
+		assert.match( terms, /in Canadian dollars, plus any sales tax or VAT where you live/ );
+		assert.match( terms, /sold to you through Link, Stripe's payment service/ );
+		assert.match( refunds, /its subscription is cancelled too/ );
+		for ( const html of [ terms, refunds ] ) assert.ok( ! /Build Pro/.test( html ) );
 
 	} );
 

@@ -8241,8 +8241,8 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 	// signedIn false answers 401 to both; refuse: { stats, dropins } statuses to answer their first
 	// asks with instead (429, say; 'abort' for no answer at all, as when the server can't be
 	// reached); page.slow: { days: ms } how long the drop-ins' answer for those days takes; totals:
-	// the play stats' totals now.
-	async function adminPage( { viewport = { width: 1280, height: 900 }, colorScheme = 'light', touch = false, signedIn = true, refuse = {}, totals = {}, achievements = null } = {} ) {
+	// the play stats' totals now; rows: its rows ([ day, metric, key, n ]); sales: its recent sales.
+	async function adminPage( { viewport = { width: 1280, height: 900 }, colorScheme = 'light', touch = false, signedIn = true, refuse = {}, totals = {}, rows = [], sales = [], achievements = null } = {} ) {
 
 		const context = await browser.newContext( { viewport, colorScheme, hasTouch: touch, isMobile: touch } );
 		const page = await context.newPage();
@@ -8258,7 +8258,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			if ( ! signedIn ) return route.fulfill( { status: 401, contentType: 'application/json', body: '{"error":"Sign in first"}' } );
 			if ( refused.stats.length ) return route.fulfill( refusal( refused.stats.shift() ) );
 			const days = Number( new URL( route.request().url() ).searchParams.get( 'days' ) );
-			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { from: dayBefore( days - 1 ), to: TODAY, rows: [], previous: { from: '', to: '', first: { visit: null, funnel: null }, rows: [] }, totals, kept: { stats: 730, scores: 35 } } ) } );
+			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { from: dayBefore( days - 1 ), to: TODAY, rows, previous: { from: '', to: '', first: { visit: null, funnel: null }, rows: [] }, totals, sales, kept: { stats: 730, scores: 35 } } ) } );
 
 		} );
 		await page.route( `${ BASE }/api/admin/dropins?*`, async route => {
@@ -8706,6 +8706,56 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			await row.waitFor();
 			assert.deepEqual( await row.locator( 'td' ).allTextContents(), [ 'Accounts', '9', 'Google 5 · password 3 · both 1' ] );
 			assert.equal( await page.locator( 'td', { hasText: /^New accounts$/ } ).count(), 1 );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'the money: a 99-cent day pass bought is said to be one, its Buy counted with the others, the tax taken off; and the recent sales one by one, whose and how each stands', async () => {
+
+		const at = time => Date.parse( `${ TODAY }T${ time }:00Z` );
+		const page = await adminPage( {
+			rows: [ [ TODAY, 'purchases', 'day', 1 ], [ TODAY, 'purchases', 'granted', 1 ], [ TODAY, 'revenue', 'cad', 99 ], [ TODAY, 'tax', 'cad', 12 ], [ TODAY, 'pass', 'open', 4 ], [ TODAY, 'pass', 'buy_day', 1 ], [ TODAY, 'pass', 'ask_signin', 2 ] ],
+			totals: { players: 1, accounts: 1, kinds: { google: 1, password: 0, both: 0 }, supporters: 1, unclaimed: 0 },
+			sales: [
+				{ at: at( '10:00' ), kind: 'day', amount: 99, currency: 'cad', tax: 12, status: 'paid', refunded: false, subscription: null, until: at( '10:00' ) + 86400000, running: true, account: 7, nickname: '<b>Racer</b>', ref: 'abcd1234' },
+				{ at: at( '09:00' ), kind: 'monthly', amount: 199, currency: 'cad', tax: null, status: 'paid', refunded: false, subscription: 'canceled', until: null, running: false, account: null, nickname: null, ref: '' },
+				{ at: at( '08:00' ), kind: 'lifetime', amount: 1999, currency: 'cad', tax: null, status: 'refunded', refunded: true, subscription: null, until: null, running: false, account: 8, nickname: null, ref: '' },
+			],
+		} );
+		try {
+
+			const cells = async name => page.locator( 'table.facts tr', { has: page.locator( 'td:first-child', { hasText: name } ) } ).first().locator( 'td' ).allTextContents();
+			await page.locator( '#sales table' ).waitFor();
+			// The tiles: one bought (the one given by hand isn't), and what it was; the money before tax.
+			const tile = page.locator( '.tile', { has: page.locator( '.label', { hasText: /^Passes bought$/ } ) } );
+			assert.equal( await tile.locator( '.value' ).textContent(), '1' );
+			assert.match( await tile.textContent(), /24 h 1/ );
+			assert.match( await page.locator( '.tile', { has: page.locator( '.label', { hasText: /^Revenue$/ } ) } ).textContent(), /0\.87 before tax \(.*0\.12 tax\)/ );
+			// The day pass's Buy followed to Stripe, as the others are; and those asked to sign in first.
+			const buy = await cells( /^Buy followed to Stripe$/ );
+			assert.equal( buy[ 1 ], '1' );
+			assert.match( buy[ 2 ], /25% of opens · 24 h 1 · monthly 0 · for good 0/ );
+			assert.equal( ( await cells( /^Asked to sign in before buying$/ ) )[ 1 ], '2' );
+			// A row for each kind, in the money's card.
+			assert.equal( ( await cells( /^24-hour passes$/ ) )[ 1 ], '1' );
+			assert.equal( ( await cells( /^Given by hand$/ ) )[ 1 ], '1' );
+			assert.equal( ( await cells( /^For good$/ ) )[ 1 ], '0' );
+			assert.match( ( await cells( /^Accounts with the pass$/ ) )[ 2 ], /24-hour passes only while they run/ );
+			// The sales, newest first, every value as text (a nickname's markup shown, not run).
+			const sales = await page.locator( '#sales tr' ).evaluateAll( trs => trs.slice( 1 ).map( tr => [ ...tr.cells ].map( td => td.textContent ) ) );
+			assert.equal( sales.length, 3 );
+			assert.deepEqual( sales.map( row => row.slice( 1, 3 ) ), [ [ '24-hour pass', 'CA$0.99 (CA$0.12 tax)' ], [ 'Monthly pass', 'CA$1.99' ], [ 'Pass for good', 'CA$19.99' ] ] );
+			assert.deepEqual( sales.map( row => row[ 3 ] ), [ '<b>Racer</b> · account 7', 'not signed in yet (unclaimed)', 'account 8 (no nickname)' ] );
+			assert.match( sales[ 0 ][ 4 ], /^running until / );
+			assert.deepEqual( sales.slice( 1 ).map( row => row[ 4 ] ), [ 'subscription canceled', 'refunded' ] );
+			assert.equal( sales[ 0 ][ 5 ], '…abcd1234' );
+			assert.equal( await page.locator( '#sales b' ).count(), 0 );
+			assert.deepEqual( page.errors, [] );
 
 		} finally {
 
