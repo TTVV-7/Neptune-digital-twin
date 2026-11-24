@@ -235,7 +235,7 @@ describe( 'World Drive on Mars', () => {
 		assert.deepEqual( { ...here, gravity: 0, above: 0, haze: 0 }, {
 			world: 'mars', place: 'mars', name: 'Go-kart', gravity: 0, water: null, none: true, dry: { level: null, dry: true }, sea: false,
 			above: 0, stars: true, sky: true, phobos: true, rules: 0.9, haze: 0, dust: 0xb87a55,
-			grounds: [ 'mars-terrain' ], body: true, levels: 17,
+			grounds: [ 'mars-terrain', 'hardware-colliders' ], body: true, levels: 17,
 		} );
 		// Phobos can't be seen from near either pole (it's always under the horizon past 69°).
 		assert.equal( await page.evaluate( () => {

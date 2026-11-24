@@ -261,7 +261,7 @@ describe( 'World Drive on Vesta and Ceres', () => {
 		const radial = pointOn( 'vesta', here.car.lat, here.car.lon, 1 ).map( ( v, i ) => v - pointOn( 'vesta', here.car.lat, here.car.lon, 0 )[ i ] );
 		assert.ok( angle( here.car.up, radial ) > 1, 'not the sphere\'s up' );
 		assert.deepEqual( { world: here.world, place: here.place, name: here.name, water: here.water, none: here.none, stars: here.stars, recentres: here.recentres, grounds: here.grounds }, {
-			world: 'vesta', place: 'vesta', name: 'Go-kart', water: null, none: true, stars: true, recentres: 0, grounds: [ 'vesta-terrain' ],
+			world: 'vesta', place: 'vesta', name: 'Go-kart', water: null, none: true, stars: true, recentres: 0, grounds: [ 'vesta-terrain', 'hardware-colliders' ],
 		} );
 		assert.equal( await page.locator( '#attribution' ).isVisible(), false );
 		assert.equal( await page.locator( '#vesta-credit' ).isVisible(), true );
@@ -405,7 +405,7 @@ describe( 'World Drive on Vesta and Ceres', () => {
 		assert.ok( Math.abs( here.gravity - 0.284 / 9.81 ) < 1e-6, JSON.stringify( here ) );
 		assert.ok( Math.abs( here.above ) < 0.3, JSON.stringify( here ) );
 		assert.ok( offLevel( 'ceres', here.car ) < 0.05, `${ offLevel( 'ceres', here.car ) }° off the level` );
-		assert.deepEqual( { world: here.world, stars: here.stars, lat: here.origin.lat, lon: here.origin.lon, recentring: here.recentring, grounds: here.grounds }, { world: 'ceres', stars: true, lat: OCCATOR.lat, lon: OCCATOR.lon, recentring: WORLDS.ceres.recentre, grounds: [ 'ceres-terrain' ] } );
+		assert.deepEqual( { world: here.world, stars: here.stars, lat: here.origin.lat, lon: here.origin.lon, recentring: here.recentring, grounds: here.grounds }, { world: 'ceres', stars: true, lat: OCCATOR.lat, lon: OCCATOR.lon, recentring: WORLDS.ceres.recentre, grounds: [ 'ceres-terrain', 'hardware-colliders' ] } );
 		assert.equal( await page.locator( '#ceres-credit' ).isVisible(), true );
 		await shot( page, 'ceres-1-driving' );
 
