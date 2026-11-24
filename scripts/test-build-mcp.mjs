@@ -316,7 +316,7 @@ test( 'the tools lay out a site', async () => {
 	// A 30.5 m fence line, panels touching, each along the line by its width (3.25 m with its feet).
 	const row = await tool( 'place_row', { project_id: project, item: 'fence-panel', points: [ [ 10, 0 ], [ 10, 30.5 ] ] } );
 	assert.match( row.text, /row of 9 ×/ );
-	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 0, north: 20, width: 30, length: 20, surface: 'asphalt' } ) ).text, /surfaced with asphalt/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 0, north: 20, width: 30, length: 20, surface: 'asphalt', fence: 'screened', entrances: 2 } ) ).text, /surfaced with asphalt, fenced \(privacy screen\) with 2 entrances/ );
 	assert.match( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 15, length: 10, label: 'Rebar' } ) ).text, /Rebar/ );
 	assert.match( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, material: 'road-base', volume: 80 } ) ).text, /road-base, 80 m³/ );
 
@@ -327,7 +327,7 @@ test( 'the tools lay out a site', async () => {
 	const panels = items.filter( i => i.item === 'fence-panel' );
 	assert.deepEqual( panels.slice( 0, 2 ).map( i => [ i.east, i.north, i.heading ] ), [ [ 10, 1.63, 270 ], [ 10, 4.88, 270 ] ] );
 	assert.deepEqual( items[ 0 ], { index: 0, item: 'office-trailer-10x40', name: items[ 0 ].name, east: 0, north: 20, heading: 180, size: items[ 0 ].size } );
-	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' ) );
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && i.params.fence === 'screened' && i.params.gates === 2 ) );
 	assert.match( ( await tool( 'move_item', { project_id: project, index: 1, east: 4, heading: 45 } ) ).text, /Moved .* to 4 m east, 14 m north, facing 45°/ );
 	assert.match( ( await tool( 'remove_items', { project_id: project, indexes: [ 2 ] } ) ).text, /Removed 1: Traffic cone/ );
 	assert.equal( ( await tool( 'get_project', { project_id: project } ) ).value.items.length, items.length - 1 );

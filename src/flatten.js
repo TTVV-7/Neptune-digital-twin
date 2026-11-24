@@ -4,6 +4,7 @@ import {
 	DoubleSide,
 	EdgesGeometry,
 	Group,
+	InstancedMesh,
 	LineBasicMaterial,
 	LineSegments,
 	MathUtils,
@@ -11,6 +12,7 @@ import {
 	Mesh,
 	MeshBasicMaterial,
 	PlaneGeometry,
+	Quaternion,
 	Raycaster,
 	RepeatWrapping,
 	SRGBColorSpace,
@@ -19,6 +21,8 @@ import {
 import { TileFlatteningPlugin } from '3d-tiles-renderer/plugins';
 import { acceleratedRaycast } from 'three-mesh-bvh';
 import { registerKind } from './kinds.js';
+import { buildProcedural } from './procedural.js';
+import { screenedFence } from './covers.js';
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
@@ -236,10 +240,151 @@ function buildSurface( width, length, id ) {
 
 }
 
+// --- temporary fencing round an area ---------------------------------------------------------
+//
+// An area can be fenced: 10 ft temporary panels on feet all round its edge (bare chain-link, or with a
+// green privacy screen facing out), with `gates` entrances, each a double drive gate standing open
+// outward. Gates go one to a side, front first (the side the area faces), then the back, right and
+// left, and round again: a fifth goes on the front beside the first. Panels between are stretched or
+// squeezed a little so each run ends exactly at a gate or a corner, as crews cut a panel in on site.
+// Every panel is one instance of the panel's parts, so a long fence is a handful of draw calls.
+
+export const FENCES = { none: 'none', 'temp fence (chain-link)': 'mesh', 'temp fence with privacy screen': 'screened' };
+const PANEL = 10 * 0.3048;
+// A double drive gate's opening (m): two 12 ft leaves.
+export const GATE_WIDTH = 24 * 0.3048;
+const MAX_GATES = 8;
+// The fence line, this far in from the area's edge.
+const FENCE_INSET = 0.3;
+// How far round from closed the gate leaves stand (degrees): wide open, outward.
+const GATE_OPEN = 100;
+
+const fenceTemplates = new Map();
+function fenceTemplate( style ) {
+
+	// [ { geometry, material, matrix } ]: each part of one panel, where it sits in the panel.
+	if ( fenceTemplates.has( style ) ) return fenceTemplates.get( style );
+	const panel = style === 'screened' ? screenedFence( 1 ) : buildProcedural( 'fence-panel' );
+	panel.updateMatrixWorld( true );
+	const parts = [];
+	panel.traverse( o => {
+
+		if ( ! o.isMesh ) return;
+		o.geometry.userData.shared = true;
+		for ( const m of [ o.material ].flat() ) m.userData.shared = true;
+		parts.push( { geometry: o.geometry, material: o.material, matrix: o.matrixWorld.clone() } );
+
+	} );
+	fenceTemplates.set( style, parts );
+	return parts;
+
+}
+
+// Where the gates go: for each side (front, back, right, left), how many.
+function gatesBySide( gates ) {
+
+	const count = [ 0, 0, 0, 0 ];
+	for ( let i = 0; i < gates; i ++ ) count[ i % 4 ] ++;
+	return count;
+
+}
+
+export function buildFence( width, length, style, gates = 0 ) {
+
+	const group = new Group();
+	group.name = 'Temporary fence';
+	if ( style !== 'mesh' && style !== 'screened' ) return group;
+	const w = Math.max( 0.5, width / 2 - FENCE_INSET );
+	const l = Math.max( 0.5, length / 2 - FENCE_INSET );
+	// Each side from one corner to the next, going round, with the way out from it: the front is -z.
+	const sides = [
+		{ from: [ - w, - l ], to: [ w, - l ], out: [ 0, - 1 ] },
+		{ from: [ w, l ], to: [ - w, l ], out: [ 0, 1 ] },
+		{ from: [ w, - l ], to: [ w, l ], out: [ 1, 0 ] },
+		{ from: [ - w, l ], to: [ - w, - l ], out: [ - 1, 0 ] },
+	];
+	const perSide = gatesBySide( Math.min( MAX_GATES, Math.max( 0, Math.round( gates ) ) ) );
+	const placements = [];
+	const yAxis = new Vector3( 0, 1, 0 );
+	const place = ( x, z, yaw, stretch ) => {
+
+		placements.push( new Matrix4().compose( new Vector3( x, 0, z ), new Quaternion().setFromAxisAngle( yAxis, yaw ), new Vector3( stretch, 1, 1 ) ) );
+
+	};
+
+	sides.forEach( ( side, i ) => {
+
+		const [ ax, az ] = side.from, [ bx, bz ] = side.to;
+		const run = Math.hypot( bx - ax, bz - az );
+		const dx = ( bx - ax ) / run, dz = ( bz - az ) / run;
+		// A panel's front (-z, where the screen hangs) faces out.
+		const yaw = Math.atan2( - side.out[ 0 ], - side.out[ 1 ] ) + Math.PI;
+		// The openings along this side, spread evenly, never wider than it.
+		const n = perSide[ i ];
+		const gate = Math.min( GATE_WIDTH, run / Math.max( 1, n ) * 0.8 );
+		const openings = Array.from( { length: n }, ( _, k ) => ( k + 0.5 ) / n * run ).map( at => [ at - gate / 2, at + gate / 2 ] );
+		// Fence between the openings.
+		let start = 0;
+		for ( const [ a, b ] of [ ...openings, [ run, run ] ] ) {
+
+			const stretch = a - start;
+			if ( stretch > 0.3 ) {
+
+				const panels = Math.max( 1, Math.round( stretch / PANEL ) );
+				const each = stretch / panels;
+				for ( let k = 0; k < panels; k ++ ) {
+
+					const at = start + ( k + 0.5 ) * each;
+					place( ax + dx * at, az + dz * at, yaw, each / PANEL );
+
+				}
+
+			}
+
+			start = b;
+
+		}
+
+		// Each gate's two leaves, hinged at the opening's ends and swung out.
+		for ( const [ a, b ] of openings ) {
+
+			const leaf = ( b - a ) / 2;
+			for ( const [ hinge, toward ] of [ [ a, 1 ], [ b, - 1 ] ] ) {
+
+				const hx = ax + dx * hinge, hz = az + dz * hinge;
+				// Closed, the leaf runs from the hinge along the side; open, it turns out of the area.
+				const swing = MathUtils.degToRad( GATE_OPEN ) * toward * ( ( dx * side.out[ 1 ] - dz * side.out[ 0 ] ) > 0 ? 1 : - 1 );
+				const ux = dx * toward, uz = dz * toward;
+				const c = Math.cos( swing ), sn = Math.sin( swing );
+				const ox = ux * c + uz * sn, oz = - ux * sn + uz * c;
+				place( hx + ox * leaf / 2, hz + oz * leaf / 2, yaw + swing, leaf / PANEL );
+
+			}
+
+		}
+
+	} );
+
+	for ( const part of fenceTemplate( style ) ) {
+
+		const mesh = new InstancedMesh( part.geometry, part.material, placements.length );
+		placements.forEach( ( m, i ) => mesh.setMatrixAt( i, new Matrix4().multiplyMatrices( m, part.matrix ) ) );
+		mesh.instanceMatrix.needsUpdate = true;
+		mesh.computeBoundingSphere();
+		mesh.castShadow = true;
+		mesh.userData.noCollide = true;
+		group.add( mesh );
+
+	}
+
+	return group;
+
+}
+
 // The zone as drawn in build mode: a see-through volume over the area, with a floor you can
 // click to select it, up to its height limit if it has one (with a blue ceiling: what's above is
 // left alone). None of it blocks walking or driving.
-export function buildZone( width, length, height = 0, surface = 'none' ) {
+export function buildZone( width, length, height = 0, surface = 'none', fence = 'none', gates = 0 ) {
 
 	const group = new Group();
 	group.name = SURFACES[ surface ] ? `${ SURFACES[ surface ].name } pad` : 'Flattened area';
@@ -263,6 +408,7 @@ export function buildZone( width, length, height = 0, surface = 'none' ) {
 	for ( const mesh of [ volume, edges, floor ] ) mesh.userData.buildOnly = true;
 	if ( SURFACES[ surface ] ) group.add( buildSurface( width, length, surface ) );
 	else group.add( volume, edges, floor );
+	if ( fence !== 'none' ) group.add( buildFence( width, length, fence, gates ) );
 	if ( height > 0 ) {
 
 		const ceiling = new Mesh( new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 ), ceilingMaterial );
@@ -281,10 +427,14 @@ export function buildZone( width, length, height = 0, surface = 'none' ) {
 registerKind( ZONE_ID, {
 	label: 'Flattened area',
 	layer: 'Flatten areas',
-	build: ( { width, length, height, surface } ) => buildZone( width, length, height, surface ),
+	build: ( { width, length, height, surface, fence, gates } ) => buildZone( width, length, height, surface, fence, gates ),
 	// Areas saved before surfaces existed have none, and are saved again without one.
-	normalize: p => ( { width: clampSize( p.width ), length: clampSize( p.length ), height: clampHeight( p.height ), surface: SURFACES[ p.surface ] ? p.surface : 'none' } ),
-	save: ( { surface, ...rest } ) => surface === 'none' ? rest : { ...rest, surface },
+	// And without a fence, which areas saved without one leave out of what's saved.
+	normalize: p => ( {
+		width: clampSize( p.width ), length: clampSize( p.length ), height: clampHeight( p.height ), surface: SURFACES[ p.surface ] ? p.surface : 'none',
+		fence: Object.values( FENCES ).includes( p.fence ) ? p.fence : 'none', gates: Math.min( MAX_GATES, Math.max( 0, Math.round( Number( p.gates ) || 0 ) ) ),
+	} ),
+	save: ( { surface, fence, gates, ...rest } ) => ( { ...rest, ...( surface === 'none' ? {} : { surface } ), ...( fence === 'none' ? {} : { fence, gates } ) } ),
 	// Down to the lowest ground around it as Google made it, so flattening doesn't drag it lower, and
 	// whatever stands in it is cleared. A surfaced one (a pad of gravel, asphalt or concrete) at the
 	// ground's usual height round it instead, so it isn't a pit; what stands on it is pressed flat
@@ -293,10 +443,12 @@ registerKind( ZONE_ID, {
 	solid: false,
 	buildOnly: true,
 	// A surfaced area's gravel or asphalt stays in view outside build mode (it has no red box).
-	shownOutsideBuild: params => params.surface !== 'none',
+	shownOutsideBuild: params => params.surface !== 'none' || params.fence !== 'none',
 	altersMap: true,
 	fields: [
 		{ key: 'surface', label: 'surface', options: SURFACE_OPTIONS, size: true, editor: true },
+		{ key: 'fence', label: 'fence', options: FENCES, size: true, editor: true },
+		{ key: 'gates', label: 'entrances (24 ft gates)', min: 0, max: MAX_GATES, step: 1, size: true, when: p => p.fence !== 'none' },
 		{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
 		{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
 		// 0 flattens everything above the floor, as areas always did (and saved ones still do).
@@ -306,7 +458,7 @@ registerKind( ZONE_ID, {
 	resize: {
 		shape: 'rect',
 		live: true,
-		label: ( { width, length, height, surface } ) => `${ width.toFixed( 1 ) } × ${ length.toFixed( 1 ) } m · ${ Math.round( width * length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ surface ] ? ` · ${ SURFACES[ surface ].name.toLowerCase() }` : '' }${ height > 0 ? ` · up to ${ height.toFixed( 1 ) } m` : '' }`,
+		label: ( { width, length, height, surface, fence } ) => `${ width.toFixed( 1 ) } × ${ length.toFixed( 1 ) } m · ${ Math.round( width * length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ surface ] ? ` · ${ SURFACES[ surface ].name.toLowerCase() }` : '' }${ fence !== 'none' ? ' · fenced' : '' }${ height > 0 ? ` · up to ${ height.toFixed( 1 ) } m` : '' }`,
 	},
 } );
 

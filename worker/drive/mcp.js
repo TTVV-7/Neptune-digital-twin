@@ -159,7 +159,7 @@ const TOOLS = [
 	},
 	{
 		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat) and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none.',
-		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
+		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', 'mesh', 'screened' ], default: 'none', description: 'temporary fence round its edge: chain-link panels (mesh) or with a green privacy screen' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft double gates in the fence, one to a side in turn: the front (the side it faces), back, right, left' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
 		run: addFlatten,
 	},
 	{
@@ -480,11 +480,14 @@ function size( value, name ) {
 async function addFlatten( context, args ) {
 
 	const surface = SURFACES.includes( args.surface ) ? args.surface : 'gravel';
-	const config = { name: 'Flattened area', kind: 'flatten-zone', params: { width: size( args.width, 'width' ), length: size( args.length, 'length' ), height: 0, surface }, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
+	const fence = [ 'mesh', 'screened' ].includes( args.fence ) ? args.fence : 'none';
+	const gates = fence === 'none' ? 0 : Math.min( 8, Math.max( 0, Math.round( Number( args.entrances ) || 0 ) ) );
+	const params = { width: size( args.width, 'width' ), length: size( args.length, 'length' ), height: 0, surface, ...( fence === 'none' ? {} : { fence, gates } ) };
+	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
 	return await change( context, args.project_id, layout => {
 
 		layout.items.push( config );
-		return `Flattened ${ config.params.width } × ${ config.params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }.`;
+		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ fence === 'screened' ? 'privacy screen' : 'chain-link' }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }.`;
 
 	} );
 

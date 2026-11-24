@@ -260,6 +260,16 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 		}
 
 		models.setParams( gravel, { surface: before } );
+		// Fenced, with three entrances: panels all round as instances, saved with the area; and
+		// shown outside build mode on a bare area too.
+		models.setParams( old, { fence: 'mesh', gates: 3 } );
+		const fence = old.pivot.getObjectByProperty( 'name', 'Temporary fence' );
+		out.fence = { parts: fence?.children.length ?? 0, panels: fence?.children[ 0 ]?.count ?? 0, saved: models.toConfig( old ).params };
+		document.getElementById( 'library-toggle' ).click();
+		out.fence.outside = shown( fence );
+		document.getElementById( 'library-toggle' ).click();
+		models.setParams( old, { fence: 'none' } );
+		out.fence.removed = ! old.pivot.getObjectByProperty( 'name', 'Temporary fence' ) && ! ( 'fence' in models.toConfig( old ).params );
 		return out;
 
 	} );
@@ -272,6 +282,11 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 	assert.equal( result.changed, 'asphalt' );
 	assert.ok( result.asphaltSurface );
 	assert.equal( result.next, 'asphalt', 'the next area takes the surface last chosen' );
+	// A 10 × 10 m area: about 3 m of fence a panel, less three gates of two leaves each.
+	assert.ok( result.fence.parts > 2 && result.fence.panels >= 12 && result.fence.panels <= 20, JSON.stringify( result.fence ) );
+	assert.deepEqual( { fence: result.fence.saved.fence, gates: result.fence.saved.gates }, { fence: 'mesh', gates: 3 } );
+	assert.equal( result.fence.outside, true, 'a fence stays in view outside build mode' );
+	assert.equal( result.fence.removed, true, 'fence: none takes it away, and out of what\'s saved' );
 	assert.ok( Object.keys( result.types ).length >= 11 && Object.values( result.types ).every( Boolean ), JSON.stringify( result.types ) );
 	assert.equal( result.saved.surfaced.surface, 'asphalt' );
 	assert.ok( ! ( 'surface' in result.saved.old ), 'saved again without a surface' );
