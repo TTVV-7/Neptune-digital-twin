@@ -16,7 +16,8 @@
 //     snap: 'median',          // how the ground height is found while "snap to ground" is on:
 //                              // 'median' or 'lowest' of the ground around the footprint, with an
 //                              // '-original' suffix to ignore flatten areas and digging (see
-//                              // flatten.js), or false to leave the height alone
+//                              // flatten.js), or false to leave the height alone; or a function of
+//                              // params giving one of those
 //     solid: false,            // whether the player counts as inside its box (default true)
 //     buildOnly: true,         // only shown while the library (build mode) is open
 //     shownOutsideBuild( params ) { return true; },  // for a buildOnly kind: shown outside build

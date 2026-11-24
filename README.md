@@ -544,7 +544,11 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
     instead of Google's photo of what stood there, pressed flat. Its P panel (and the selection's
     Size editor) switches it to **asphalt**, **concrete** or **none (just flatten)**, and the next
     area you draw takes the surface you chose last. The surface stays in view when the library is
-    closed; the red box doesn't. Areas saved before surfaces existed stay bare.
+    closed; the red box doesn't. Areas saved before surfaces existed stay bare. A surfaced area
+    sits at the ground's usual height round it (a bare one at the lowest, to clear everything) and
+    has sides 2.5 m deep, so on a slope it's a pad built up where the ground falls away and cut in
+    where it rises. The surface is drawn over Google's mesh near its edges (whose large triangles
+    slope up over it there) and under what's placed on it.
 - **Sets** (after the tools): a few items that go together, placed in one go and laid out as
   they'd usually stand: a site office compound (office, lunchroom, washroom, toilets, pickups,
   people), a small site office, a concrete pour (boom pump with mixers backed up to it), shotcrete,
