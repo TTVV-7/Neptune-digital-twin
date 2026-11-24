@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>World Drive Build · lay out a construction site on a 3D map</title>
+		<meta name="description" content="Type an address and lay out a construction site on a 3D map of it: real-scale equipment, trailers, barriers and earthworks, in your browser." />
+		<!-- Out of search for now, while it's on trial. -->
+		<meta name="robots" content="noindex, nofollow" />
+		<meta name="theme-color" content="#11171d" />
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" />
+	</head>
+	<body>
+		<header class="top">
+			<a class="brand" href="/build/" aria-label="World Drive Build home"><span class="brand-wd">World Drive</span><span class="brand-build">Build</span></a>
+			<div class="account" id="account">
+				<div id="google-button" class="google-button"></div>
+				<div class="who" id="who" hidden>
+					<span class="plan-pill" id="plan-pill"></span>
+					<span class="who-name" id="who-name"></span>
+					<button type="button" class="link" id="sign-out">Sign out</button>
+				</div>
+			</div>
+		</header>
+
+		<main>
+			<section class="hero" aria-labelledby="find-title">
+				<div class="hero-inner">
+					<p class="eyebrow">Site mock-ups on a 3D map</p>
+					<h1 id="find-title">Where's the site?</h1>
+					<p class="lead">Type an address. You'll land on a 3D map of it, ready to lay out equipment, trailers, fencing and earthworks at real scale.</p>
+					<form class="find" id="find" role="search">
+						<label class="visually-hidden" for="find-query">Site address</label>
+						<input type="search" id="find-query" placeholder="Street address, town or landmark" autocomplete="off" required />
+						<button type="submit" id="find-go">Find site</button>
+					</form>
+					<ul class="results" id="results" aria-live="polite"></ul>
+					<p class="example">Or start from the example: <a id="example" href="/build/app/?at=49.305400,-123.049100&amp;place=North%20Vancouver%20waterfront%20(example)">North Vancouver waterfront</a></p>
+				</div>
+			</section>
+
+			<div class="columns">
+				<section class="projects" aria-labelledby="projects-title">
+					<div class="section-head">
+						<h2 id="projects-title">Your projects</h2>
+						<span class="count" id="project-count"></span>
+					</div>
+					<p class="empty" id="projects-empty"></p>
+					<ul class="project-list" id="project-list"></ul>
+				</section>
+
+				<aside class="plan" aria-labelledby="plan-title">
+					<h2 id="plan-title">Your plan</h2>
+					<div id="plan-body"></div>
+				</aside>
+			</div>
+		</main>
+
+		<footer class="foot">
+			<p>Buildings, roads and terrain in the editor are Google's 3D map, credited there. Equipment models are credited in the editor's library (H).</p>
+			<p><a href="/">World Drive</a> · <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></p>
+		</footer>
+
+		<div class="toast" id="toast" role="status" hidden></div>
+		<script type="module" src="/src/build-home/main.js"></script>
+	</body>
+</html>

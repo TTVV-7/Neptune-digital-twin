@@ -174,10 +174,10 @@ function cityDrive() {
 
 }
 
-// World Drive Build (/build/, docs/build.md): the construction mock-up app (the repository's own
-// app, index.html and src/main.js) built with --mode worlddrive (src/product.js: wherever the
-// project is, Build Pro's gate, its Maps key from World Drive's server, worker/drive/build.js) into
-// dist-drive/build/, in a build of its own as City Drive is. Of public/ it takes only the library
+// World Drive Build (/build/, docs/build.md): its dashboard at /build/, and the construction mock-up
+// app (the repository's own app, index.html and src/main.js) built with --mode worlddrive
+// (src/product.js: wherever the project is, Build Pro's gate, its Maps key from World Drive's server,
+// worker/drive/build.js) at /build/app/, each in a build of its own as City Drive is. Of public/ it takes only the library
 // and what the app itself loads (the Google Maps logo, the walking workers): never public/models'
 // own project models.
 function buildApp() {
@@ -187,12 +187,23 @@ function buildApp() {
 		apply: 'build',
 		async closeBundle() {
 
-			const outDir = join( ROOT, 'dist-drive', 'build' );
+			// Its dashboard first (drive/build/, src/build-home/: finding a site, your projects and
+			// plan), at /build/, which empties the folder; then the editor at /build/app/.
+			await viteBuild( {
+				configFile: false,
+				root: join( ROOT, 'drive', 'build' ),
+				base: '/build/',
+				publicDir: false,
+				logLevel: 'warn',
+				resolve: { alias: [ { find: /^\/src\//, replacement: `${ join( ROOT, 'src' ) }/` } ] },
+				build: { outDir: join( ROOT, 'dist-drive', 'build' ), emptyOutDir: true, assetsDir: 'home' },
+			} );
+			const outDir = join( ROOT, 'dist-drive', 'build', 'app' );
 			await viteBuild( {
 				configFile: join( ROOT, 'vite.config.js' ),
 				root: ROOT,
 				mode: 'worlddrive',
-				base: '/build/',
+				base: '/build/app/',
 				publicDir: false,
 				logLevel: 'warn',
 				build: { outDir, emptyOutDir: true, chunkSizeWarningLimit: 1500 },

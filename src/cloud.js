@@ -3,6 +3,7 @@ import { SITE } from './config.js';
 import { isTyping } from './walk.js';
 import { button, createLayoutsDialog, el } from './cloud-dialog.js';
 import { createPremium } from './premium.js';
+import { BUILD_APP } from './product.js';
 
 // Your account, when the site runs on its Cloudflare Worker (worker/index.js): sign in with
 // Google, save layouts to your account, open them on another computer, and share a read-only
@@ -572,6 +573,22 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 	const token = new URL( window.location.href ).searchParams.get( 'view' );
 	if ( token ) await startViewing( token );
+	// World Drive Build's dashboard opens a project with ?project=<id> (once: then it's the current one).
+	const project = BUILD_APP && ! token ? new URL( window.location.href ).searchParams.get( 'project' ) : null;
+	if ( project && user && link?.id !== project ) {
+
+		try {
+
+			await use( await call( 'GET', `layouts/${ encodeURIComponent( project ) }` ) );
+
+		} catch ( err ) {
+
+			showBanner( err.status === 404 ? 'That project isn\'t in your account.' : `Couldn't open the project: ${ err.message }`, 8000 );
+
+		}
+
+	}
+
 	render();
 
 	// Show a shared layout without saving it over yours. This runs before the app restores your
