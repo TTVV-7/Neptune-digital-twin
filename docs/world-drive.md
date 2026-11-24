@@ -2476,6 +2476,57 @@ token, world: 'mars' }`), on Mars at once, "On Mars" first and the Earth's sayin
 drive**, its gate on Mars's own heights within a metre, driven through and posted with the visit. It
 takes 3 to 4 minutes in Chromium's software renderer.
 
+## Walls: slide, or Trick mode
+
+Walls slide you along them by default (`drive.js`'s `walls: 'slide'`): met at an angle, the car
+turns to follow the wall and carries on, a little slower (`SLIDE_LOSS` of the speed into it), in
+sparks; met more square on than `SLIDE_STOP` (65°) it stops against it; it's never thrown up by a
+wall. Everything else of the stunts is the same: jumps off ramps and crests, spins, flips and rolls
+in the air, and their scores. The pause menu's **Trick mode: bounce off walls** (kept in this browser,
+`world-drive.tricks`) brings back the bounces and launches (`walls: 'bounce'`, the stunt tests'
+setting). The help's Stunts line says both.
+
+## Clean roads under Google's map (a test: ?hybrid)
+
+Google's 3D map is one surface: parked cars, trees and the speckle on a road are all "ground" or
+"wall" to the car. In a city City Drive has (Vancouver), `?hybrid` in the address has the car drive
+on that city built from OpenStreetMap instead, invisible under Google's map, which is all that's
+seen (`src/drive-app/city/hybrid.js`): smooth streets, straight walls, bridges as decks, and
+Google's clutter passed through. `?hybrid=show` draws the city too, see-through pink, to check it
+lines up.
+
+- The city is City Drive's own (`build.js`'s `loadCity` and `buildCity`): its streets, parks and
+  buildings on its 1 m lidar ground (Natural Resources Canada's HRDEM, made by `make-city.py`), out to
+  the North Shore and Neptune Terminals.
+- It's put in the scene's frame from the city's origin, and lined up in height with Google's map by
+  measuring: from up to 24 street points within 160 m of the car, straight down onto Google's tiles,
+  the median of Google's height minus the city's (sea level and Google's ellipsoid differ by the
+  geoid, about 17 m there), again every 3 s; a measurement whose spread is over 2.5 m (tiles not fine
+  yet) is passed over. Until it's measured, and within 150 m of the city's edge, Google's mesh is the
+  ground as before. Without a key the test pad stands in for Google's map.
+- What to look for, trying it: whether the car sits on Google's road (the city a little high or low
+  in places: the elevation data is coarser than Google's mesh), how bridges and hills feel, and
+  whether being able to pass through trees and parked cars reads as better or odd.
+
+## Hardware on the worlds
+
+The landers, rovers and crash sites people have left on the Moon and Mars are in the game, set
+down where they really are: `src/drive-app/hardware-sites.js` lists each site (its name, country,
+year, kind, where it is as published from orbit, LROC's and HiRISE's positions, with sources, and one
+checked fact) and its pieces (a model, metres east and north of the site, a heading); the models are
+built in code at their real size from published dimensions and photographs (`hardware.js` for the
+Moon's, `hardware-mars.js` for Mars's: simplified shapes that read right at driving distance, no
+downloads and no licences to track); and `world-hardware.js` puts them in the game. Only the sites
+within 25 km of the car are built (let go past 35 km), each piece on the ground at its own place,
+upright to the ground there and facing its heading, a few centimetres sunk; each piece but the flat
+ones (crash scars, debris, a parachute) has an invisible box round it that main.js adds to what the
+Driver raycasts (`grounds()`), so the car bounces off a lander as off a wall, and can land on top.
+Driving within 90 m of a site says what it is ("Apollo 11 · USA, 1969. ..."), once a visit. Rovers
+that drove on are where they ended, or for those still driving where they were last reported (the
+site's `asOf`). Vesta and Ceres have no hardware: nothing has landed on either (Dawn orbited both,
+and is still in orbit round Ceres). `scripts/preview-hardware.mjs <folder> [model:distance,height,turn]`
+photographs any model or site on a lunar surface (`scripts/preview-hardware.html`) to judge it.
+
 ## Vesta and Ceres
 
 **Vesta** and **Ceres**, picked in the orrery (**Worlds**, on the globe's panel), turn the globe to the two biggest bodies of the
@@ -4081,7 +4132,7 @@ of the bar, level-ups, the profile card, the track and the Garage's locks at 128
 
 ## Supporter Pass (content)
 
-The Supporter Pass is a one-time payment (CA$4.99) towards World Drive's running costs. This part is
+The Supporter Pass (CA$1.99/month, CA$19.99 once and kept for good, or CA$0.99 for 24 hours; prices in `src/drive-app/pass.js`) goes towards World Drive's running costs. This part is
 what it unlocks and the switch that unlocks it; buying it (Google sign-in, Stripe, its webhook and the
 pass kept in D1) is [below](#supporter-pass-buying-it). Without it the free game is exactly as it was.
 
@@ -4632,8 +4683,8 @@ The pass is bought three ways, each through a Stripe Payment Link of its own in 
 Stripe account: **monthly** (`SUPPORTER_MONTHLY_PRICE`, CA$1.99/month, a subscription kept while it
 runs: the first one was bought on 20 November 2026, so it stays and leads), **once and kept for
 good** (`SUPPORTER_PRICE`, CA$19.99), or for **24 hours** (a **day pass**, `DAY_PASS_PRICE`,
-CA$0.99: the same pass for a day, then it simply ends). One-time CA$4.99 passes from before keep
-working for good. It comes with what's [above](#supporter-pass-content) (seven cars of its own, the
+CA$0.99: the same pass for a day, then it simply ends). Passes bought once before the
+subscription keep working for good. It comes with what's [above](#supporter-pass-content) (seven cars of its own, the
 six levels bring, the seven rides and every Garage look at once), **+50% XP** for [levels](#levels),
 a **⭐ by your name on the leaderboard**, and **30 Earth drives a day** instead of 1, which the day's
 cap for everyone never turns away: they've paid for them.
@@ -4841,7 +4892,7 @@ offers buying just then.
    (or `npx wrangler secret put STRIPE_WEBHOOK_SECRET -c wrangler.drive.jsonc`). It takes effect at
    once, and buying opens. Optionally add `SUPPORTER_EMAILS` the same way.
 5. **Try it for real.** The link is live, so a test is a real purchase: open worlddrive.app, open the
-   pass, sign in, **Buy for CA$4.99** and pay with your own card. Stripe brings you back and the page
+   pass, sign in, **For good: CA$19.99** (or the day pass, CA$0.99, for a cheaper test) and pay with your own card. Stripe brings you back and the page
    says *Thanks! Supporter Pass unlocked*; the webhook's page in Stripe lists the delivery with our
    answer (200). Then refund it in full (Stripe Dashboard → **Payments** → the payment → **Refund**):
    the pass locks again at your next visit. Stripe keeps its fee on a refunded payment, so the test
@@ -4945,12 +4996,14 @@ either signs in to the one account. Driving and the leaderboard still never need
   the pause menu by its name; an account with no Google account by its username.
 - **Creating an account**: Username ("3 to 20 letters, digits, _ or -. Only you see it: the boards
   show your nickname."), Password ("At least 8 characters. A few words together make a good
-  one.") and **Email (optional)** ("For your receipts if you buy the pass. Never shown, never used
-  for anything else."), then, in a box: "The email is only for receipts: nothing is sent to it, so a
-  forgotten password can't be recovered, unless you also link Google. Keep it in a password
-  manager." The email (`contact_email`, `0013_contact_email.sql`) is never checked, so it's kept
-  apart from a Google account's `email` and only ever put on the Stripe checkout
-  (`prefilled_email`): it never makes a purchase the account's. Signed in without Google, the panel
+  one.") and **Email (optional)** ("For your receipts, and to get back in if you forget your
+  password. Never shown, never sent anything else."), then, in a box: "Forget your password and you
+  can get back in by emailing support from this address, or with Google if you link it. Without an
+  email or Google, a forgotten password can't be recovered." (see [Forgotten
+  passwords](#forgotten-passwords)), and that making an account confirms 13 or older and agrees to the
+  terms and privacy policy. The sign-in form has **Forgot password?** under it. The email (`contact_email`, `0013_contact_email.sql`) is never checked, so it's kept
+  apart from a Google account's `email`: it's put on the Stripe checkout (`prefilled_email`) and
+  shown to the owner making a reset link, and never makes a purchase the account's. Signed in without Google, the panel
   has **Email for receipts** to add, change or clear it (`POST /api/account/email`). The rules are checked in the page
   before anything is sent (the same code as the Worker's, `password-rules.js`), then the robot
   check (Turnstile, usually without a click), then the account is made and signed in.
@@ -5322,6 +5375,55 @@ time; a tap on its padding keeping what's typed, and one outside closing it; its
 following the tab; the panel on a phone held upright and without Google's sign-in; and the admin page's
 accounts by kind. Pictures: `account-1-create-desktop` to `account-11-sign-out-failed-phone` with
 `TEST_SCREENSHOTS`.
+
+## Feature requests
+
+The account panel (signed in) has **Request a feature**, folded at the bottom: a box for up to 1,000
+characters and **Send** (`POST /api/requests`, `worker/drive/requests.js`). Only signed-in accounts
+send, 5 a day each (counted from the table) and 100 a day from one address (`takeTurn` 'request', a
+/48), so a school's players aren't held up by each other. Each is kept in `feature_requests`
+(migration `0015_feature_requests.sql`) with the account and its player's nickname (or username).
+The admin page's **Feature requests** card lists the newest 200, open ones first shown (**Open** /
+**All**), each with who sent it (⭐ for a supporter) and when, **Done** / **Not done** and **Delete**
+(`GET` and `POST /api/admin/requests`, admins only). Nothing is emailed.
+
+## Your map
+
+The profile card on the globe's panel has **🗺️ Your map** (`src/drive-app/my-map.js` and
+`my-map.css`, a chunk of their own loaded when it's opened): NASA's Blue Marble (`/earth/colour.webp`,
+the globe's own picture) with a dot for every Earth area the player has driven (levels' areas,
+about 11 km across, `live-protocol.js`'s cells, drawn at their size once zoomed in that far) and a
+star for every start spot, named below the map and by the pointer. It opens framed on the player's
+places (the short way round, across the date line too); **Whole world**, **Your places**, the
+zoom buttons, the wheel, a drag and a pinch move it. It shows what this browser knows at once
+(`progress.js`'s `places()`: the places the Worker took, before a nickname the ones kept here, and
+what's been driven since) and then the player's whole list from every device (`fetchPlaces()`,
+`POST /api/progress/places` with the player's id and secret, one of their `PROGRESS_POSTS`, the
+`discoveries` rows), which it keeps in this browser too. The Earth only: the other worlds have their
+Discoveries.
+
+## Forgotten passwords
+
+A username's account whose owner forgets the password gets back in by email, by hand: World Drive
+sends no email itself (Cloudflare's Email Sending needs Workers Paid; the owner chose not to).
+
+- **The player**: the sign-in form's **Forgot password?** says to email support@worlddrive.app from the
+  email on the account (its email for receipts, `accounts.contact_email`) with the username, or to sign
+  in with Google if it's linked. Making an account and its email field say the email is for that too.
+- **The owner**: on `/admin.html`, **Password reset link**: type the username and **Make a link**
+  (`POST /api/admin/reset-link`, `logins.js`'s `adminResetLink`, admins only). It shows the account's
+  email (check it's the one that wrote: if there's none, check another way, such as what they bought
+  and when, before sending), whether Google is linked, and a reply with the link to copy and send.
+- **The link** (`https://worlddrive.app/?reset=<token>`) works once, for `RESET_HOURS` (24); making
+  another for the account ends the one before. The token is 32 random bytes kept only as its SHA-256
+  (`password_resets`, migration `0014_password_resets.sql`). The page takes it out of the address
+  (`supporter.js`'s `takeReset`) and opens the account panel on **New password**: it asks whose it is
+  (`POST /api/account/reset-check`, for the heading and a password manager), then `POST
+  /api/account/reset` sets the password (the usual rules), signs the account out everywhere (sessions
+  and player keys, as **Sign out everywhere** does) and signs this browser in. A used, expired or
+  made-up link answers 410 and the panel says to email for a new one. Both routes take one of the
+  visitor's `PASSWORD_TRIES` first, and setting the password one of its day's changes. The link is
+  taken before anything changes, so of two sends of one link only one sets a password.
 
 ## What a visit costs, and how it's capped
 
@@ -8466,6 +8568,63 @@ with the page's own script moving a page along too should the rule ever be off. 
 `workers.dev` address: the Turnstile widget only works on worlddrive.app, and one address keeps the
 counts simple (and [search engines](#search-engines) see one site).
 
+## Legal pages
+
+Four plain pages beside the places' (made by `drive/site/build.js`, their words in
+`drive/site/legal.js`): the **privacy policy** at `/privacy/`, the **terms of use** at `/terms/`,
+**refunds and cancelling** at `/refunds/` and **contact and support** at `/contact/`. Every site
+page's footer links to them; in the game, the globe panel's footer and About World Drive do, the
+Supporter Pass's buy area says buying agrees to the terms (with a full refund within 14 days), and
+making an account (a username's form, or the line under Google's button) says it confirms 13 or older
+and agrees to the terms and privacy policy. They open in a new tab, so the game stays open.
+
+They're a plain-language starting point written to match what the code keeps (About World Drive's
+words, the D1 tables), **not legal advice**: have a lawyer read them, and change `legal.js` (and its
+`UPDATED` date) whenever what the game keeps or sells changes.
+
+**Who runs it**: Tom, at **support@worlddrive.app**, in Vancouver (`CONTACT_DEFAULTS` and `LOCATION`
+in `legal.js`). The address is passed on to your own inbox by Cloudflare Email Routing (Cloudflare
+dashboard → worlddrive.app → **Email** → **Email Routing**: turn it on, let it add its DNS records,
+then add a custom address `support` that forwards to your inbox and confirm it from there). To answer
+*from* support@worlddrive.app rather than your own address, add it in Gmail as a "Send mail as"
+address. The build environment can change the name or email (`DRIVE_CONTACT_NAME`,
+`DRIVE_CONTACT_EMAIL`) and add what's kept out of the repository on purpose: a mailing address
+(`DRIVE_CONTACT_ADDRESS`, a PO box or a mailbox service rather than a home) and a phone
+(`DRIVE_CONTACT_PHONE`). Locally they go in `.env.local` (see `.env.example`), for the live site as
+build variables (world-drive Worker → Settings → Build → Variables). Without an address the pages say
+"Based in Vancouver, British Columbia, Canada". BC's consumer law asks a seller online for a business
+address and phone too, so a PO box and a VoIP number are worth adding when you can.
+
+**Before taking payments** (the owner's steps):
+
+1. Turn on Email Routing for support@worlddrive.app (above), and send it a test.
+2. Set `SUPPORTER_MANAGE_LINK` (Stripe's customer portal login link, see
+   [Supporter Pass (buying it)](#supporter-pass-buying-it)): a subscriber's **Account** panel and the
+   pass's sheet show **Manage subscription** (Stripe's page to cancel or change the card) only when
+   it's set; until then they say to get in touch, and you cancel it in Stripe's dashboard.
+3. In Stripe's dashboard, **Settings → Business → Public details**: the support phone and email, and
+   `https://worlddrive.app/terms/`, `/privacy/` and `/refunds/` as the terms, privacy and refund
+   policies. On each Payment Link, turn on **Require customers to accept your terms of service**.
+4. On Google's OAuth consent screen (Google Auth Platform → Branding), set the privacy policy and terms
+   links to `/privacy/` and `/terms/`; AdSense asks for a privacy policy on the site too, and it's now
+   linked from every page.
+
+**A request to delete an account** (the privacy policy promises an answer within 30 days): find the
+account by its email (`accounts.email` or `contact_email`) or username (`logins`), then in D1
+(`npx wrangler d1 execute <database> --remote --config wrangler.drive.jsonc --command "..."`):
+
+```sql
+DELETE FROM players WHERE account_id = <id>;  -- its nickname, scores, times, ghosts, XP, finds
+DELETE FROM accounts WHERE id = <id>;         -- its sign-in, sessions and password
+```
+
+The foreign keys take the rest with them. Its `purchases` rows stay, with the account emptied, as the
+payment records tax law asks for (six years in Canada). A player without an account (only a nickname)
+is deleted by its row in `players`, found by `name`; an offensive nickname is removed the same way.
+
+**A refund** (the policy gives a full one within 14 days, no questions asked): refund the payment in
+Stripe's dashboard; its webhook ends the pass (`reversals`).
+
 ## Search engines
 
 Google hadn't indexed a single page of worlddrive.app: its head had a bare title and no picture,
@@ -8901,12 +9060,15 @@ Keep World Drive's key apart from the construction app's, so its limits and its 
      `https://www.worlddrive.app/*`. (A copied key then doesn't work from other sites.)
    - API restrictions: **Restrict key** → **Map Tiles API** only.
 4. **A daily quota cap.** APIs & Services → Map Tiles API → **Quotas & system limits**: lower the
-   per-day limit on 3D Tiles root tileset requests (the sessions) to a little over `DAILY_VISITS`,
-   e.g. 350, and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
+   per-day limit on 3D Tiles root tileset requests (the sessions) to well over `DAILY_VISITS`,
+   which supporters' drives aren't counted in (e.g. 1,000 with `DAILY_VISITS` at 500), and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
    loads a few thousand tiles). The console's names for these change now and then: look for the
    per-day ones. It's the backstop if the key is copied and used from somewhere the referrer check
    doesn't stop; once a limit is reached, tiles stop loading until midnight Pacific time rather than
    costing more.
+   The admin page's **Google Maps cost** card estimates the bill from the Earth drives counted
+   (`MAPS_PER_1000`, `MAPS_FREE_MONTHLY` and `MAPS_DAILY_CAP` in `drive/public/admin.html`: change
+   them when Google's price or `DAILY_VISITS` does).
 5. **Budget alerts.** Billing → Budgets & alerts → Create budget for the World Drive project, with
    email alerts at, say, 50 %, 90 % and 100 % of what you're happy to spend a month. Check Google's
    current [Map Tiles API pricing](https://developers.google.com/maps/billing-and-pricing/pricing)

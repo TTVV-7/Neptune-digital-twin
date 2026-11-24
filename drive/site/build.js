@@ -10,6 +10,7 @@ import { MARS_SITE } from './mars.js';
 import { MOON_SITE } from './moon.js';
 import { PLACES } from './places.js';
 import { VESTA_SITE } from './vesta.js';
+import { contactDetails, legalPages, missingContact } from './legal.js';
 
 // World Drive's pages for search engines and links (docs/world-drive.md, "Search engines"): a page
 // for each place in places.js at /drive/<slug>/, a page listing them at /drive/, and for each world
@@ -51,6 +52,7 @@ const SOURCES = {
 	places: [ 'drive/site/places.js', 'drive/site/build.js', 'drive/site/site.css', ...OFF_EARTH.map( id => `drive/site/${ id }.js` ) ],
 	world: id => [ `drive/site/${ id }.js`, 'drive/site/build.js', 'drive/site/site.css', `src/drive-app/${ id }-places.js` ],
 	topics: [ 'drive/site/build.js', 'drive/site/site.css', ...OFF_EARTH.map( id => `drive/site/${ id }.js` ) ],
+	legal: [ 'drive/site/legal.js' ],
 };
 // The footer's credit for the Earth's map and search (each other world's is its own: its `credit`).
 const EARTH_CREDIT = 'World Drive is a free arcade driving game on Google\'s photorealistic 3D map; it isn\'t made or endorsed by Google. Map data © Google and its data providers; place search © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.';
@@ -99,7 +101,7 @@ export function worldPlaces( id ) {
 
 // Every page the build makes here, as { path (the address), file (where it goes in dist-drive/),
 // html }, and the sitemap. `when` is each page's date, from git (see lastChanged).
-export function sitePages( { when = lastChanged } = {} ) {
+export function sitePages( { when = lastChanged, contact = contactDetails() } = {} ) {
 
 	const places = sitePlaces();
 	const earthPages = [
@@ -122,12 +124,16 @@ export function sitePages( { when = lastChanged } = {} ) {
 		{ path: '/space/', file: 'space/index.html', html: spacePage() },
 		{ path: '/multiplayer/', file: 'multiplayer/index.html', html: multiplayerPage() },
 	];
+	// The privacy policy, terms, refunds and contact pages (legal.js), with who runs World Drive from
+	// the environment.
+	const legal = legalPages( contact ).map( item => ( { path: `/${ item.slug }/`, file: `${ item.slug }/index.html`, html: legalPage( item ) } ) );
 	const homeDate = when( SOURCES.home );
 	const placesDate = when( SOURCES.places );
 	const sitemap = sitemapXml( [
 		{ path: '/', date: homeDate },
 		...earthPages.map( page => ( { path: page.path, date: placesDate } ) ),
 		...topicPages.map( page => ( { path: page.path, date: when( SOURCES.topics ) } ) ),
+		...legal.map( page => ( { path: page.path, date: when( SOURCES.legal ) } ) ),
 		...OFF_EARTH.flatMap( ( id, i ) => {
 
 			const date = when( SOURCES.world( id ) );
@@ -135,7 +141,7 @@ export function sitePages( { when = lastChanged } = {} ) {
 
 		} ),
 	] );
-	return { pages: [ ...earthPages, ...topicPages, ...worldPages.flat() ], sitemap };
+	return { pages: [ ...earthPages, ...topicPages, ...legal, ...worldPages.flat() ], sitemap };
 
 }
 
@@ -156,9 +162,10 @@ export function worldPlacesList( id ) {
 
 }
 
-// The addresses the site's pages are at: /drive/..., /space/, /multiplayer/ and each other world's,
-// /moon/... to /ceres/...
-const PAGES_AT = new RegExp( `^/(${ [ 'drive', 'space', 'multiplayer', ...OFF_EARTH ].join( '|' ) })(/|$)` );
+// The addresses the site's pages are at: /drive/..., /space/, /multiplayer/, the legal pages
+// (/privacy/, /terms/, /refunds/, /contact/) and each other world's, /moon/... to /ceres/...
+export const LEGAL_PATHS = [ 'privacy', 'terms', 'refunds', 'contact' ];
+const PAGES_AT = new RegExp( `^/(${ [ 'drive', 'space', 'multiplayer', ...LEGAL_PATHS, ...OFF_EARTH ].join( '|' ) })(/|$)` );
 
 // A Vite plugin (vite.drive.config.js): the places' pages, /drive/, each other world's pages and
 // /sitemap.xml in the build and from the dev server, and the home page's lists of places.
@@ -166,8 +173,10 @@ export function driveSite() {
 
 	return {
 		name: 'world-drive-site',
-		transformIndexHtml( html ) {
+		transformIndexHtml( html, { path } = {} ) {
 
+			// Only the game's page has the lists (not City Drive's, /city/, or World Drive Build's, /build/).
+			if ( path?.startsWith( '/city/' ) || path?.startsWith( '/build/' ) ) return html;
 			const lists = [ [ '<!-- places -->', placesList ], ...OFF_EARTH.map( id => [ `<!-- ${ id } places -->`, () => worldPlacesList( id ) ] ) ];
 			for ( const [ list ] of lists ) if ( ! html.includes( list ) ) throw new Error( `drive/index.html has lost its ${ list } list` );
 			return lists.reduce( ( text, [ list, make ] ) => text.replace( list, make() ), html );
@@ -200,6 +209,14 @@ export function driveSite() {
 				next();
 
 			} );
+
+		},
+		buildStart() {
+
+			// Consumer law and Stripe both ask for who runs the shop and how to reach them before anyone
+			// pays: say so if the environment blanks either out (legal.js).
+			const missing = missingContact( contactDetails() );
+			if ( missing.length ) this.warn( `World Drive's contact page and policies are missing ${ missing.join( ', ' ) }: set them before taking payments (docs/world-drive.md, "Legal pages").` );
 
 		},
 		generateBundle() {
@@ -427,6 +444,40 @@ function multiplayerPage() {
 		</ul>
 	</section>
 	${ howToPlay() }`,
+	} );
+
+}
+
+// A legal page (legal.js): the privacy policy, the terms, refunds and cancelling, or contact.
+function legalPage( { slug, title, crumb, description, body } ) {
+
+	const path = `/${ slug }/`;
+	const data = [
+		breadcrumbs( [ [ NAME, '/' ], [ crumb, path ] ] ),
+		{
+			'@context': 'https://schema.org',
+			'@type': slug === 'contact' ? 'ContactPage' : 'WebPage',
+			name: title,
+			description,
+			url: SITE + path,
+			inLanguage: 'en',
+			isPartOf: { '@type': 'WebSite', name: NAME, url: `${ SITE }/` },
+		},
+	];
+	return page( {
+		title: `${ title } – ${ NAME }`,
+		social: `${ NAME }: ${ title }`,
+		description,
+		path,
+		card: CARD,
+		cardAlt: 'World Drive: drive anywhere on Earth or on the Moon, free in your browser',
+		data,
+		body: `
+	<nav class="crumbs" aria-label="Breadcrumb"><a href="/">World Drive</a> <span aria-hidden="true">›</span> <span aria-current="page">${ esc( crumb ) }</span></nav>
+	<section class="legal">
+		<h1>${ esc( title ) }</h1>
+		${ body }
+	</section>`,
 	} );
 
 }
@@ -712,6 +763,7 @@ ${ body }
 </main>
 <footer>
 	<p><a href="/">Play World Drive</a> · <a href="/drive/">All places to drive</a> · ${ OFF_EARTH.map( id => `<a href="/${ id }/">Drive ${ onWorld( id ) }</a>` ).join( ' · ' ) }</p>
+	<p><a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a> · <a href="/refunds/">Refunds</a> · <a href="/contact/">Contact</a></p>
 	<p>${ credit }</p>
 </footer>
 </body>

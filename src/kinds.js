@@ -16,9 +16,13 @@
 //     snap: 'median',          // how the ground height is found while "snap to ground" is on:
 //                              // 'median' or 'lowest' of the ground around the footprint, with an
 //                              // '-original' suffix to ignore flatten areas and digging (see
-//                              // flatten.js), or false to leave the height alone
+//                              // flatten.js), or false to leave the height alone; or a function of
+//                              // params giving one of those
 //     solid: false,            // whether the player counts as inside its box (default true)
 //     buildOnly: true,         // only shown while the library (build mode) is open
+//     shownOutsideBuild( params ) { return true; },  // for a buildOnly kind: shown outside build
+//                              // mode after all, but without its parts marked userData.buildOnly
+//                              // (a flatten area's gravel stays, its red box goes)
 //     altersMap: true,         // changes how Google's mesh is drawn (shown in the attribution)
 //     fields: [ { key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true } ],  // P panel
 //                              // numbers; also { key, label, options: { Gravel: 'gravel', ... } } for

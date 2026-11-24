@@ -1,4 +1,4 @@
-import { postProgress, postTitle } from './api.js';
+import { getPlaces, postProgress, postTitle } from './api.js';
 import {
 	DAILY_KM, DISCOVERIES_MAX, DISCOVER_KM, REPORT_PLACES, SUPPORTER_XP, XP,
 	areaOf, dailyXp, dayBefore, dayOf, drivingXp, emptyReport, isEmptyReport as isEmpty, levelOf, progressOf, rewardsBetween, spotAt, titleOf, trickXp,
@@ -887,6 +887,41 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		report,
 		refresh,
 		setTitle,
+		// Every Earth area and start spot driven, as far as this browser knows ('near:...' and
+		// 'spot:<id>'): the player's places the Worker took, before a nickname the ones kept here, and
+		// what's been driven since (Your map, my-map.js).
+		places() {
+
+			const report = flying?.sent?.report;
+			const all = [
+				...known.id === who() ? known.places : [],
+				...who() ? [] : [ ...local.totals.areas, ...local.totals.spots.map( spot => `spot:${ spot }` ) ],
+				...unsent.areas, ...unsent.spots.map( spot => `spot:${ spot }` ),
+				...report ? [ ...report.areas ?? [], ...( report.spots ?? [] ).map( spot => `spot:${ spot }` ) ] : [],
+			];
+			return [ ...new Set( all ) ];
+
+		},
+		// The player's whole list from the Worker (all their devices'), kept with what this browser
+		// knows; then places() as above. Without a player or a Worker, what's here.
+		async fetchPlaces() {
+
+			const me = player();
+			if ( worker && me?.id && me.secret ) {
+
+				const answer = await getPlaces( me ).catch( () => null );
+				if ( answer?.ok && Array.isArray( answer.body?.places ) && who() === me.id ) {
+
+					remember( answer.body.places.filter( place => typeof place === 'string' ) );
+					save();
+
+				}
+
+			}
+
+			return this.places();
+
+		},
 		// Where the shown XP is on the way to the next level (levels.js's progressOf).
 		get progress() {
 

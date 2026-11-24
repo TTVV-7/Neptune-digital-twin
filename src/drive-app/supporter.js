@@ -27,6 +27,8 @@ import { toast } from './screens.js';
 
 const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
 const THANKS_PARAM = 'supporter';
+// A link to set a new password: /?reset=<token> (logins.js's adminResetLink).
+const RESET_PARAM = 'reset';
 // The webhook usually arrives before the buyer is back from Stripe, but not always: ask a few more
 // times, this far apart (ms).
 const RECHECK_DELAY = 3000;
@@ -110,6 +112,10 @@ export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn
 	passwords = !! worker && passwordsOn === true;
 	siteKey = typeof turnstileSiteKey === 'string' ? turnstileSiteKey : '';
 	const thanks = takeThanks();
+	// A link to set a new password (/?reset=..., made on the admin page): the account panel on its
+	// form, once the page is up.
+	const reset = takeReset();
+	if ( reset && passwords ) openAccount( { reset } );
 	if ( accountsOn() ) {
 
 		const first = refresh();
@@ -395,6 +401,19 @@ function takeThanks() {
 
 }
 
+// A reset link's token, taken out of the address (so a reload or a shared screenshot doesn't keep
+// it), or null.
+function takeReset() {
+
+	const url = new URL( window.location.href );
+	const token = url.searchParams.get( RESET_PARAM );
+	if ( token === null ) return null;
+	url.searchParams.delete( RESET_PARAM );
+	window.history.replaceState( window.history.state, '', url.href );
+	return /^[A-Za-z0-9_-]{43}$/.test( token ) ? token : null;
+
+}
+
 async function welcomeBack() {
 
 	for ( let i = 0; i <= RECHECKS; i ++ ) {
@@ -474,7 +493,7 @@ function who( { email = false } = {} ) {
 // The account panel (account.js, its own chunk, loaded the first time it's opened), with what it
 // needs from here.
 let panel = null;
-export function openAccount() {
+export function openAccount( options ) {
 
 	panel ??= import( './account.js' ).catch( err => {
 
@@ -482,7 +501,7 @@ export function openAccount() {
 		throw err;
 
 	} );
-	panel.then( module => module.openAccount( hooks ) ).catch( () => toast( UNREACHABLE ) );
+	panel.then( module => module.openAccount( hooks, options ) ).catch( () => toast( UNREACHABLE ) );
 
 }
 
@@ -631,7 +650,8 @@ function renderBuy( root ) {
 
 		parts.push( Object.assign( line( lifetime ? '⭐ You have the Supporter Pass. Thanks for helping keep World Drive on the road!' : `⭐ Your 24-hour pass has ${ timeLeft( me.dayPassUntil ) } left. Thanks for helping keep World Drive on the road!` ), { className: 'supporter-thanks' } ) );
 		// A running subscription's (from when the pass was one): where to cancel it or change the card.
-		if ( me.subscribed && purchase.manage ) parts.push( line( Object.assign( document.createElement( 'a' ), { href: purchase.manage, target: '_blank', rel: 'noopener', textContent: 'Manage your subscription' } ) ) );
+		// Without Stripe's portal link, how to ask for it to be done instead: a monthly pass always shows a way to stop.
+		if ( me.subscribed ) parts.push( purchase.manage ? line( pageLink( purchase.manage, 'Manage your subscription' ), ' (cancel or change your card)' ) : line( 'To cancel the monthly pass, ', pageLink( '/contact/', 'get in touch' ), '.' ) );
 
 	}
 
@@ -691,6 +711,8 @@ function renderBuy( root ) {
 
 	if ( status ) parts.push( statusLine() );
 	if ( ! lifetime ) parts.push( Object.assign( line( purchase.enabled ? ( purchase.monthly ? 'Monthly is a subscription: cancel any time. For good and 24 hours are paid once. ' : 'Pay once: for good, or 24 hours and it simply ends. ' ) + 'Paid securely with Stripe, in any country.' : 'Pay once, keep it for good. Buying opens soon.' ), { className: 'small' } ) );
+	// What buying agrees to, and how to get the money back, before anyone pays (drive/site/legal.js).
+	if ( purchase.enabled && ! lifetime ) parts.push( Object.assign( line( 'By buying you agree to the ', pageLink( '/terms/', 'terms' ), '. Changed your mind? A full refund within 14 days: see ', pageLink( '/refunds/', 'refunds' ), ' · ', pageLink( '/contact/', 'help' ), '.' ), { className: 'small' } ) );
 	root.replaceChildren( ...parts );
 	if ( revealSignIn && ! me.signedIn && root.isConnected ) {
 
@@ -735,6 +757,8 @@ function signInParts() {
 
 	}
 
+	// Google's button makes an account as it signs in: what that agrees to (drive/site/legal.js).
+	if ( clientId ) parts.push( Object.assign( line( 'Signing in makes a free account: you confirm you\'re 13 or older and agree to the ', pageLink( '/terms/', 'terms' ), ' and ', pageLink( '/privacy/', 'privacy policy' ), '.' ), { className: 'supporter-line small' } ) );
 	return parts;
 
 }
@@ -743,6 +767,13 @@ function signInParts() {
 function accountLink() {
 
 	return passwords ? [ linkButton( 'Account', () => openAccount() ), ' · ' ] : [];
+
+}
+
+// A link to one of the site's pages (the terms, refunds...), in a new tab so the game stays open.
+function pageLink( href, words ) {
+
+	return Object.assign( document.createElement( 'a' ), { href, target: '_blank', rel: 'noopener', textContent: words } );
 
 }
 

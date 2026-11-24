@@ -18,7 +18,8 @@ import { itemConfig } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { localToEnu } from './geo.js';
 import { isTyping, passesHitFilters } from './walk.js';
-import { ZONE_ID } from './flatten.js';
+import { ZONE_ID, defaultSurface } from './flatten.js';
+import { availableSets, memberPlacement } from './sets.js';
 import { getKind } from './kinds.js';
 import { createHandles, toScreen } from './handles.js';
 import { createToolbar } from './toolbar.js';
@@ -146,14 +147,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// The flatten tool clears Google's mesh (rail cars, trucks, sheds) from an area.
 	addTool( {
 		name: 'Flatten area',
-		hint: 'Drag a rectangle to clear it',
-		title: 'Drag a rectangle on the ground; everything in Google\'s 3D map inside it is pressed flat',
+		hint: 'Drag a rectangle to clear it and lay gravel, asphalt or concrete',
+		title: 'Drag a rectangle on the ground; everything in Google\'s 3D map inside it is pressed flat and surfaced (gravel to start; change it in the P panel)',
 		icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2a3844"/><path d="M6 46h52" stroke="#8a8f86" stroke-width="3"/><rect x="14" y="30" width="18" height="16" fill="#8e3b2a" opacity=".45"/><rect x="34" y="34" width="16" height="12" fill="#2a4f8e" opacity=".45"/><rect x="10" y="20" width="44" height="28" fill="#ff5544" fill-opacity=".2" stroke="#ff3322" stroke-width="2.5" stroke-dasharray="5 3"/><path d="M32 8v10m-5-5 5 5 5-5" stroke="#eef2f5" stroke-width="2.5" fill="none"/></svg>',
 		mode: 'rect',
 		color: 0xff3322,
 		onDone: ( { east, north, heading, width, length } ) => models.load( {
 			kind: ZONE_ID,
-			params: { width, length },
+			params: { width, length, surface: defaultSurface() },
 			east,
 			north,
 			heading,
@@ -165,6 +166,57 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	let category = null;
 	const cards = [];
+
+	// Sets come next, before the library: a few items that go together, placed in one go (sets.js).
+	const sets = availableSets( library );
+	if ( sets.length ) {
+
+		const heading = document.createElement( 'h3' );
+		heading.textContent = 'Sets';
+		list.append( heading );
+
+	}
+
+	for ( const set of sets ) {
+
+		const card = document.createElement( 'button' );
+		card.type = 'button';
+		card.className = 'card set';
+		card.dataset.set = set.id;
+		card.title = `Places ${ set.members.length } items together: ${ set.names.join( ', ' ) }. Each can then be moved or deleted on its own.`;
+		// Up to four of its pieces' pictures, as a grid.
+		const thumbs = document.createElement( 'span' );
+		thumbs.className = 'set-thumbs';
+		for ( const piece of [ ...new Set( set.members.map( m => m.libraryItem ) ) ].filter( i => i.thumb ).slice( 0, 4 ) ) {
+
+			const img = document.createElement( 'img' );
+			img.alt = '';
+			img.loading = 'lazy';
+			img.src = new URL( `library/${ piece.thumb }`, document.baseURI ).href;
+			thumbs.append( img );
+
+		}
+
+		const name = document.createElement( 'span' );
+		name.className = 'name';
+		name.textContent = set.name;
+		const dims = document.createElement( 'span' );
+		dims.className = 'dims';
+		dims.textContent = `${ set.members.length } items · about ${ Math.max( set.dimensions.width, set.dimensions.length ) } × ${ Math.min( set.dimensions.width, set.dimensions.length ) } m`;
+		card.append( thumbs, name, dims );
+		// A set with a locked piece (premium.js) is locked: picking it says what unlocks it.
+		card.addEventListener( 'click', () => {
+
+			const locked = set.members.find( m => isLocked( m.libraryItem ) );
+			if ( locked ) pickLocked( locked.libraryItem );
+			else startPlacingSet( set );
+
+		} );
+		list.append( card );
+		cards.push( { card, item: { id: set.id, name: set.name, category: 'Sets', keywords: `${ set.keywords } ${ set.names.join( ' ' ) }` }, thumb: null, badge: null, row: null } );
+
+	}
+
 	for ( const item of library ) {
 
 		if ( item.category !== category ) {
@@ -261,7 +313,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	search.addEventListener( 'input', () => {
 
 		const query = search.value.trim().toLowerCase();
-		for ( const { card, item } of cards ) card.hidden = query && ! `${ item.name } ${ item.category }`.toLowerCase().includes( query );
+		// Every word has to match somewhere, so "tridem dump" finds the tridem dump truck.
+		const words = query.split( /\s+/ ).filter( Boolean );
+		for ( const { card, item } of cards ) {
+
+			const text = `${ item.name } ${ item.category } ${ item.keywords ?? '' }`.toLowerCase();
+			card.hidden = words.length > 0 && ! words.every( word => text.includes( word ) );
+
+		}
 		for ( const heading of list.querySelectorAll( 'h3' ) ) {
 
 			let next = heading.nextElementSibling;
@@ -452,10 +511,82 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
+	// A set (sets.js): all its pieces load as see-through previews and follow the pointer
+	// together, turned about the set's middle; a click puts them all down as separate items.
+	async function startPlacingSet( set, { heading } = {} ) {
+
+		cancelDrawing();
+		cancelPlacing();
+		select( null );
+		document.exitPointerLock?.();
+		const player = getPlayer();
+		const state = { item: set, set, entry: null, members: [], heading: heading ?? ( player.heading + 180 ) % 360, fromDrag: false, cancelled: false };
+		placing = state;
+		root.classList.add( 'placing' );
+
+		const ahead = Math.max( set.dimensions.length, set.dimensions.width ) / 2 + 8;
+		const rad = player.heading * Math.PI / 180;
+		const start = pointer && groundPoint( pointer.x, pointer.y );
+		const { east, north } = start ? localToEnu( start ) : { east: player.east + Math.sin( rad ) * ahead, north: player.north + Math.cos( rad ) * ahead };
+		state.middle = { east, north };
+
+		const results = await Promise.allSettled( set.members.map( member => models.load( {
+			...itemConfig( member.libraryItem, memberPlacement( member, east, north, state.heading ) ),
+			placing: true,
+		} ) ) );
+		const loaded = results.flatMap( ( r, i ) => r.status === 'fulfilled' ? [ { entry: r.value, member: set.members[ i ] } ] : [] );
+		if ( state.cancelled ) {
+
+			for ( const { entry } of loaded ) models.remove( entry );
+			return;
+
+		}
+
+		const failed = results.filter( r => r.status === 'rejected' );
+		if ( failed.length ) onError( `Could not load ${ failed.length } of the set's items: ${ failed[ 0 ].reason?.message ?? failed[ 0 ].reason }` );
+		if ( loaded.length === 0 ) {
+
+			if ( placing === state ) placing = null;
+			root.classList.remove( 'placing' );
+			return;
+
+		}
+
+		state.members = loaded;
+		state.entry = loaded[ 0 ].entry;
+		for ( const { entry } of loaded ) setGhost( entry, true );
+		if ( pointer ) followPointer();
+
+	}
+
+	// The set's pieces where they stand round its middle, as it's turned now.
+	function arrangeSet() {
+
+		const { middle, heading, members } = placing;
+		for ( const { entry, member } of members ) {
+
+			const at = memberPlacement( member, middle.east, middle.north, heading );
+			Object.assign( entry.state, at );
+			models.apply( entry );
+
+		}
+
+	}
+
 	function followPointer() {
 
 		const { entry } = placing ?? {};
 		if ( ! entry || ! pointer ) return;
+		if ( placing.set ) {
+
+			const point = groundPoint( pointer.x, pointer.y, placing.members.map( m => m.entry.pivot ) );
+			if ( ! point ) return;
+			placing.middle = localToEnu( point );
+			arrangeSet();
+			return;
+
+		}
+
 		const point = groundPoint( pointer.x, pointer.y, entry.pivot );
 		if ( point ) models.moveTo( entry, point );
 
@@ -465,7 +596,11 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		if ( ! placing ) return;
 		placing.heading = ( placing.heading + degrees + 360 ) % 360;
-		if ( placing.entry ) {
+		if ( placing.set ) {
+
+			if ( placing.entry ) arrangeSet();
+
+		} else if ( placing.entry ) {
 
 			placing.entry.state.heading = placing.heading;
 			models.apply( placing.entry );
@@ -476,14 +611,28 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	function commitPlacing( keepPlacing, touch = false ) {
 
-		const { entry, item, heading } = placing ?? {};
+		const { entry, item, heading, set, members } = placing ?? {};
 		if ( ! entry ) return;
 		placing = null;
 		root.classList.remove( 'placing' );
-		entry.placing = false;
-		setGhost( entry, false );
-		models.apply( entry );
+		for ( const placed of set ? members.map( m => m.entry ) : [ entry ] ) {
+
+			placed.placing = false;
+			setGhost( placed, false );
+			models.apply( placed );
+
+		}
+
 		updateCount();
+		if ( set ) {
+
+			// Shift+click puts down another set; otherwise its first piece is selected.
+			if ( keepPlacing ) startPlacingSet( set, { heading } );
+			else select( entry, touch );
+			return;
+
+		}
+
 		// Shift+click places another, unless it has been locked meanwhile (signed out, say).
 		if ( keepPlacing && ! isLocked( item ) ) startPlacing( item, { heading } );
 		else select( entry, touch );
@@ -494,7 +643,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		if ( ! placing ) return;
 		placing.cancelled = true;
-		if ( placing.entry ) models.remove( placing.entry );
+		if ( placing.set ) for ( const { entry } of placing.members ) models.remove( entry );
+		else if ( placing.entry ) models.remove( placing.entry );
 		placing = null;
 		root.classList.remove( 'placing' );
 
@@ -1137,8 +1287,10 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// The point on the ground (or on another model) under the cursor, skipping `exclude`.
 	function groundPoint( x, y, exclude ) {
 
+		// exclude: what's being placed (one pivot, or a set's), which the pointer looks through.
+		const excluded = exclude ? [ exclude ].flat() : [];
 		const hit = castFromScreen( x, y, [ ...getGround(), models.group ] )
-			.find( h => ! exclude || ! isInside( h.object, exclude ) );
+			.find( h => ! excluded.some( pivot => isInside( h.object, pivot ) ) );
 		return hit ? hit.point.clone() : null;
 
 	}

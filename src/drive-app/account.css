@@ -102,7 +102,8 @@ dialog#account label {
 	font-weight: 700;
 }
 
-dialog#account input {
+dialog#account input,
+dialog#account textarea {
 	width: 100%;
 	padding: 10px 12px;
 	border: 1px solid var( --line );
@@ -113,7 +114,8 @@ dialog#account input {
 	color: var( --ink );
 }
 
-dialog#account input:focus-visible {
+dialog#account input:focus-visible,
+dialog#account textarea:focus-visible {
 	outline: 2px solid var( --sky );
 	outline-offset: 1px;
 }
@@ -179,8 +181,44 @@ dialog#account .account-ways b {
 	text-align: right;
 }
 
+/* The pass: its kind, and for a monthly one the way to cancel, as a button. */
 dialog#account .account-pass {
-	font-weight: 700;
+	margin-top: 14px;
+	padding: 12px 14px;
+	border: 1px solid rgba( 255, 207, 74, 0.35 );
+	border-radius: 14px;
+	background: rgba( 255, 207, 74, 0.06 );
+	font-size: 14px;
+}
+
+dialog#account .account-pass p {
+	margin: 0 0 6px;
+}
+
+dialog#account .account-pass .account-pass-title {
+	font-weight: 800;
+}
+
+dialog#account .account-pass .account-note {
+	margin: 8px 0 0;
+	padding: 0;
+	background: none;
+	color: var( --muted );
+}
+
+dialog#account .account-pass a {
+	color: var( --sky );
+}
+
+dialog#account .account-pass .account-manage {
+	display: inline-block;
+	margin-top: 4px;
+	padding: 9px 14px;
+	border-radius: 12px;
+	background: var( --sky );
+	color: #04121f;
+	font-weight: 800;
+	text-decoration: none;
 }
 
 /* Each rarer change, folded under its heading: a row with a chevron that turns as it opens. */
@@ -263,4 +301,24 @@ dialog#account .account-out {
 
 dialog#account .account-section > form + p {
 	margin-top: 12px;
+}
+
+/* "Forgot password?" under the sign-in form, and what it says when opened. */
+dialog#account .account-forgot {
+	margin-top: 10px;
+	font-size: 13px;
+}
+
+dialog#account .account-forgot .account-note {
+	background: rgba( 62, 193, 255, 0.08 );
+}
+
+dialog#account .account-forgot a,
+dialog#account .account-reset a {
+	color: var( --sky );
+}
+
+dialog#account textarea {
+	resize: vertical;
+	min-height: 90px;
 }

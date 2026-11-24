@@ -1,4 +1,5 @@
 import { PROCEDURAL_ITEMS } from './procedural.js';
+import { BUILD_APP, FREE_ITEMS } from './product.js';
 
 // The asset library: vehicles, site trailers, dumpsters and other pieces at real scale, not tied
 // to any one site. public/library/library.json lists model files with their scale and which way
@@ -21,6 +22,7 @@ export const CATEGORY_ORDER = [
 	'Site services',
 	'Power & air',
 	'Dewatering & water treatment',
+	'Utilities',
 	'Access & scaffolding',
 	'Shoring',
 	'Materials',
@@ -49,7 +51,12 @@ export async function loadLibrary() {
 
 	};
 
-	return [ ...downloaded, ...PROCEDURAL_ITEMS ]
+	// World Drive Build (product.js): all but the free plan's items are Build Pro's.
+	// (Its race pieces, the go-kart and jump ramps, are World Drive's, not a construction site's.)
+	const items = [ ...downloaded, ...PROCEDURAL_ITEMS ]
+		.filter( item => ! BUILD_APP || item.category !== 'Race' )
+		.map( item => BUILD_APP ? { ...item, premium: ! FREE_ITEMS.has( item.id ) } : item );
+	return items
 		// Numeric, so sizes come smallest first: a 9 m shelter before a 15 m one.
 		.sort( ( a, b ) => rank( a.category ) - rank( b.category ) || a.category.localeCompare( b.category ) || a.name.localeCompare( b.name, undefined, { numeric: true } ) );
 

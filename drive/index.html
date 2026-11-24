@@ -201,9 +201,9 @@
 						<dt>Can I play with friends?</dt>
 						<dd>Yes. Invite friends gives you a link; whoever opens it joins your party and can drive beside you, on any world. Cars are ghosts that pass through each other, and there's no chat. See <a href="/multiplayer/">driving with friends</a>.</dd>
 						<dt>What does World Drive keep about me?</dt>
-						<dd>Only what the leaderboard and levels need, and never where you really are: see About World Drive.</dd>
+						<dd>Only what the leaderboard and levels need, and never where you really are: see About World Drive and the <a href="/privacy/" target="_blank" rel="noopener">privacy policy</a>.</dd>
 					</dl>
-					<p class="small"><button type="button" class="link about-open">About World Drive</button></p>
+					<p class="small"><button type="button" class="link about-open">About World Drive</button> · <a href="/privacy/" target="_blank" rel="noopener">Privacy</a> · <a href="/terms/" target="_blank" rel="noopener">Terms</a> · <a href="/refunds/" target="_blank" rel="noopener">Refunds</a> · <a href="/contact/" target="_blank" rel="noopener">Contact</a></p>
 				</footer>
 			</div>
 			<button type="button" class="board-open" hidden aria-label="Leaderboard" title="Leaderboard"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M6 2.5h8v4.5a4 4 0 0 1-8 0z" fill="currentColor"/><path d="M6 4.5H3.2v1.2A3.3 3.3 0 0 0 6.3 9M14 4.5h2.8v1.2A3.3 3.3 0 0 1 13.7 9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 11v4M6.5 17.5h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
@@ -233,7 +233,7 @@
 				<div><dt><kbd>F</kbd> <kbd>T</kbd></dt><dd><b>Plane</b>: <kbd>W</kbd> <kbd>S</kbd> thrust, <kbd>Space</kbd> up, <kbd>Shift</kbd> down; at least twice a car's speed, faster the higher you fly. <kbd>F</kbd> or <kbd>T</kbd> again to bail out: a fast free fall (<kbd>W</kbd> dives), then a slow parachute (<kbd>S</kbd> drops faster); low down, it lands</dd></div>
 				<div><dt><kbd>Q</kbd> <kbd>E</kbd> <kbd>Z</kbd> <kbd>X</kbd></dt><dd><b>Plane tricks</b>: <kbd>Q</kbd> <kbd>E</kbd> roll, <kbd>Z</kbd> loop, <kbd>X</kbd> outside loop (<kbd>R</kbd> a quick roll); they score like the car's, best low down</dd></div>
 				<div><dt>In the air</dt><dd><kbd>A</kbd> <kbd>D</kbd> spin · <kbd>W</kbd> <kbd>S</kbd> flip · <kbd>Q</kbd> <kbd>E</kbd> roll</dd></div>
-				<div><dt>Stunts</dt><dd>Hit things to launch; land on your wheels to score. <button type="button" class="link scoring-open">How scoring works</button></dd></div>
+				<div><dt>Stunts</dt><dd>Jump off ramps and crests, spin and flip, land on your wheels to score; walls slide you along them (Trick mode, in the pause menu: hit things to launch). <button type="button" class="link scoring-open">How scoring works</button></dd></div>
 				<div><dt><kbd>R</kbd></dt><dd>Back on the road</dd></div>
 				<div><dt><kbd>C</kbd></dt><dd>Camera</dd></div>
 				<div><dt><kbd>L</kbd></dt><dd>On the Moon, Mars, Vesta and Ceres: colour the ground by its real measured height</dd></div>
@@ -274,6 +274,9 @@
 					<button type="button" class="to-globe">Back to the globe <kbd>M</kbd></button>
 				</div>
 				<div class="settings">
+					<!-- Trick mode (main.js): bounce off walls and get thrown into the air, for stunts; off, the
+					     car slides along walls (jumps, spins and flips still score). -->
+					<label class="setting"><input type="checkbox" class="tricks-toggle" /> Trick mode: bounce off walls</label>
 					<label class="setting"><input type="checkbox" class="pads-toggle" /> Boost pads on the road</label>
 					<label class="setting"><input type="checkbox" class="camera-toggle" checked /> Camera effects</label>
 					<!-- The music (music.js): on or off and how loud, the same as the globe panel's. -->
@@ -512,6 +515,7 @@
 			<h3>Vehicle models</h3>
 			<ul class="credits small"></ul>
 			<p class="small">World Drive is checked by Cloudflare Turnstile so the free drives go to people rather than robots.</p>
+			<p class="small"><a href="/privacy/" target="_blank" rel="noopener">Privacy</a> · <a href="/terms/" target="_blank" rel="noopener">Terms</a> · <a href="/refunds/" target="_blank" rel="noopener">Refunds</a> · <a href="/contact/" target="_blank" rel="noopener">Contact</a></p>
 			<form method="dialog"><button type="submit" class="primary">Close</button></form>
 		</dialog>
 

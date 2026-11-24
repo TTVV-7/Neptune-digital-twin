@@ -31,6 +31,7 @@ import { startVite } from './worker-harness.mjs';
 import { WORKS_RIDES } from '../src/drive-app/catalog.js';
 import { PLACES } from '../drive/site/places.js';
 import { sitePages, WORLD_SITES } from '../drive/site/build.js';
+import { contactDetails } from '../drive/site/legal.js';
 import { linkedPlace, SPOTS } from '../src/drive-app/places.js';
 import { SPOTS_ON } from '../src/drive-app/world-places.js';
 import { OFF_EARTH, onWorld, OnWorld, TheWorld } from '../src/drive-app/worlds.js';
@@ -57,7 +58,7 @@ const WORLD_CHECKS = {
 	moon: {
 		title: 'Drive on the Moon in 3D, Free in Your Browser – World Drive',
 		coordinates: 'selenographic latitude and longitude',
-		honest: /no landers, flags or rover tracks/,
+		honest: /set down where they really are, as simplified models built for the game/,
 		credit: 'https://svs.gsfc.nasa.gov/4720/',
 		phrases: [ 'LOLA', 'LROC', 'public domain', 'made up', 'a sixth of the gravity', 'two and a half times as long', 'The Earth in the sky', 'No water', 'With others', 'bring friends in a party' ],
 		files: { '/moon/height.bin': 2073600, '/moon/colour.webp': 674590 },
@@ -65,7 +66,7 @@ const WORLD_CHECKS = {
 	mars: {
 		title: 'Drive on Mars in 3D, Free in Your Browser – World Drive',
 		coordinates: 'areocentric latitude and longitude',
-		honest: /no landers, rovers or tracks/,
+		honest: /set down where they really are .*as simplified models built for the game/,
 		credit: 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m',
 		phrases: [ 'MOLA', 'Mars Global Surveyor', 'Viking', 'USGS', 'areoid', 'public domain', 'made up', '38% of the gravity', 'about 1.6 times as long', 'butterscotch sky', 'Phobos', 'No water', 'With others', 'Mars\'s own rooms' ],
 		files: { '/mars/height.bin': 8294400, '/mars/colour.webp': 1050320 },
@@ -209,7 +210,7 @@ describe( 'what search engines read', () => {
 
 		assert.deepEqual( OFF_EARTH, [ 'moon', 'mars', 'vesta', 'ceres' ] );
 		const paths = pages.map( page => page.path ).sort();
-		const expected = [ '/', '/drive/', '/space/', '/multiplayer/', ...PLACES.map( place => `/drive/${ place.slug }/` ), ...OFF_EARTH.flatMap( id => [ `/${ id }/`, ...WORLD_SITES[ id ].pages.map( place => `/${ id }/${ place.slug }/` ) ] ) ].sort();
+		const expected = [ '/', '/drive/', '/space/', '/multiplayer/', '/privacy/', '/terms/', '/refunds/', '/contact/', ...PLACES.map( place => `/drive/${ place.slug }/` ), ...OFF_EARTH.flatMap( id => [ `/${ id }/`, ...WORLD_SITES[ id ].pages.map( place => `/${ id }/${ place.slug }/` ) ] ) ].sort();
 		assert.deepEqual( paths, expected );
 		assert.ok( paths.includes( '/mars/olympus-mons/' ) && paths.includes( '/moon/tycho/' ) && paths.includes( '/vesta/' ) && paths.includes( '/ceres/' ) );
 		for ( const place of [ ...PLACES, ...OFF_EARTH.flatMap( id => WORLD_SITES[ id ].pages ) ] ) assert.match( place.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${ place.slug } isn't a clean address` );
@@ -505,6 +506,30 @@ describe( 'what search engines read', () => {
 
 	} );
 
+	test( 'the legal pages: every page links to them, and the contact details come from the environment, never made up', () => {
+
+		for ( const { path, html } of pages.filter( page => page.path !== '/' ) ) assert.match( html, /<footer>[\s\S]*<a href="\/privacy\/">Privacy<\/a> · <a href="\/terms\/">Terms<\/a> · <a href="\/refunds\/">Refunds<\/a> · <a href="\/contact\/">Contact<\/a>/, path );
+		const home = pages.find( page => page.path === '/' ).html;
+		for ( const path of [ '/privacy/', '/terms/', '/refunds/', '/contact/' ] ) assert.ok( linksOf( home ).includes( path ), `the game's page doesn't link to ${ path }` );
+		// With nothing set, no contact details at all (and no "undefined"); with them set, each shown.
+		const bare = sitePages( { when: () => null, contact: { name: '', address: '', phone: '', email: '' } } ).pages;
+		const contactPage = contact => sitePages( { when: () => null, contact } ).pages.find( page => page.path === '/contact/' ).html;
+		assert.ok( ! /undefined|mailto:|tel:/.test( bare.filter( page => [ '/privacy/', '/terms/', '/refunds/', '/contact/' ].includes( page.path ) ).map( page => page.html ).join( '' ) ) );
+		const html = contactPage( { name: 'Pat Example', address: '1 Main St, Vancouver BC', phone: '+1 (604) 555-0100', email: 'help@example.com' } );
+		assert.match( html, /<a href="mailto:help@example\.com">help@example\.com<\/a>/ );
+		assert.match( html, /<a href="tel:\+16045550100">\+1 \(604\) 555-0100<\/a>/ );
+		assert.match( html, /1 Main St, Vancouver BC/ );
+		assert.match( contactPage( { name: '<b>', address: '', phone: '', email: '' } ), /&lt;b&gt;/ );
+		// Unless the environment says otherwise: Tom at support@worlddrive.app, no address or phone,
+		// only where it's run from; and so the built page.
+		assert.deepEqual( contactDetails( {} ), { name: 'Tom', address: '', phone: '', email: 'support@worlddrive.app' } );
+		assert.equal( contactDetails( { DRIVE_CONTACT_EMAIL: ' help@example.com ' } ).email, 'help@example.com' );
+		const built = pages.find( page => page.path === '/contact/' ).html;
+		assert.match( built, /<dt>Run by<\/dt><dd>Tom<\/dd><dt>Email<\/dt><dd><a href="mailto:support@worlddrive\.app">support@worlddrive\.app<\/a><\/dd><dt>Based in<\/dt><dd>Vancouver, British Columbia, Canada<\/dd>/ );
+		assert.ok( ! /tel:/.test( built ) );
+
+	} );
+
 	test( 'every link within the site answers (no redirects, no 404s)', async () => {
 
 		const checked = new Map();
@@ -531,9 +556,10 @@ describe( 'what search engines read', () => {
 
 		assert.ok( checked.size > 30, `only ${ checked.size } links` );
 		// Off the site, only the credits: OpenStreetMap's copyright page, NASA's for the Moon, the
-		// USGS's colour mosaic for Mars and its planetary maps for Vesta and Ceres.
+		// USGS's colour mosaic for Mars and its planetary maps for Vesta and Ceres; and, from the privacy
+		// policy, Google's, Stripe's and Canada's privacy commissioner's pages.
 		const outside = new Set( pages.flatMap( ( { html } ) => linksOf( html ) ).filter( href => /^https?:/.test( href ) && ! href.startsWith( SITE ) ) );
-		assert.deepEqual( [ ...outside ].sort(), [ 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m', 'https://planetarymaps.usgs.gov/mosaic/', 'https://svs.gsfc.nasa.gov/4720/', 'https://www.instagram.com/printyours.ca/', 'https://www.openstreetmap.org/copyright' ] );
+		assert.deepEqual( [ ...outside ].sort(), [ 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m', 'https://planetarymaps.usgs.gov/mosaic/', 'https://policies.google.com/technologies/partner-sites', 'https://stripe.com/privacy', 'https://svs.gsfc.nasa.gov/4720/', 'https://www.instagram.com/printyours.ca/', 'https://www.openstreetmap.org/copyright', 'https://www.priv.gc.ca/' ] );
 
 		// Each world's pages are beside the files the game fetches from /moon/ and /mars/, which are
 		// still there, whole.

@@ -540,6 +540,25 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
   boxes while the library is open (the Show panel hides them); select one to move, turn, resize or
   delete it, which brings the original back, and **B** shows the original everywhere for a moment.
   It only changes what this app draws; Google's data isn't touched.
+  - **Surface:** a flattened area is laid with **gravel** to start, so it reads as a finished pad
+    instead of Google's photo of what stood there, pressed flat. Its P panel (and the selection's
+    Size editor) switches it to **asphalt**, **concrete** or **none (just flatten)**, and the next
+    area you draw takes the surface you chose last. The surface stays in view when the library is
+    closed; the red box doesn't. Areas saved before surfaces existed stay bare. A surfaced area
+    sits at the ground's usual height round it (a bare one at the lowest, to clear everything) and
+    has sides 2.5 m deep, so on a slope it's a pad built up where the ground falls away and cut in
+    where it rises. The surface is drawn over Google's mesh near its edges (whose large triangles
+    slope up over it there) and under what's placed on it.
+- **Sets** (after the tools): a few items that go together, placed in one go and laid out as
+  they'd usually stand: a site office compound (office, lunchroom, washroom, toilets, pickups,
+  people), a small site office, a concrete pour (boom pump with mixers backed up to it), shotcrete,
+  bulk excavation, mass haul, grading and paving, gravel trucks (tandem to tri-tri), semi
+  trailers with their tractors, and a lane closure. A set
+  follows the pointer like an item, **R** turns it about its middle, a click puts it down and
+  Shift+click puts down another. Each piece is then its own item, to move, swap or delete. Sets are
+  listed in `src/sets.js`; a piece whose item isn't in the library is left out.
+- **Search** matches every word you type anywhere in an item's name or category (or a set's
+  pieces), so `tridem dump` or `office people` find what you mean.
 
 Three kinds of items:
 
@@ -548,7 +567,9 @@ Three kinds of items:
   to 24 x 60 ft, 20/40 yd roll-offs, fabric shelters, a frac tank, workers. Add more there. Plant with
   no clean download is built in code too, at the size of a common machine of its class: generators,
   compressors and a fuel tank (`src/power-models.js`), mobile cranes and telehandlers
-  (`src/crane-models.js`) and the tower crane (`src/tower-crane.js`).
+  (`src/crane-models.js`), the tower crane (`src/tower-crane.js`), and gravel trucks and trailers
+  (`src/truck-models.js`: a tridem dump truck, tandem and tridem pups, a transfer trailer, truck and
+  pup, truck and transfer, tri-tri, and end dump, belly dump and lowboy trailers for a semi).
 - **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
   their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
 - **Our own** (`public/library/` too, marked `own` in `library.json`): 61 models we drew in CAD in the
@@ -870,6 +891,46 @@ Teleporting moves the loaded world rather than loading a new one, so it costs no
 Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderboard keeps each
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
 posted with the visit's signed token and checked against what the game can score.
+
+**World Drive Build** (`/build/`, [docs/build.md](docs/build.md)): this construction app offered to
+anyone on World Drive's site and accounts, at any address, with a free plan (33 everyday items, 15
+3D map views a month, one saved project) and **Build Pro** (everything, 300 views, unlimited projects
+and share links) sold through Stripe; World Drive's owner has everything.
+
+**City Drive** (`/city/`, `drive/city/index.html`, `src/drive-app/city/`): a standalone page
+where you pick a city, a start spot and a ride and drive a whole city built from open data instead
+of Google's tiles, so it costs nothing per visit and has no daily cap. The first is **Vancouver and
+the North Shore** (9 × 7 km): downtown, Coal Harbour, Stanley Park, False Creek, and across the
+harbour from the Lions Gate to Lonsdale Quay and Neptune Terminals. Buildings and streets come
+from **OpenStreetMap** (ODbL); the ground from **Natural Resources Canada's 1 m lidar terrain
+model** (HRDEM, Open Government Licence – Canada), both credited on the page. The ground is a
+surface every 10 m coloured by what's there (land, parks and woods with trees, beaches, lakes, the
+sea bed under the water); buildings stand on the lowest ground round their footprint at their
+mapped heights (or floors × 3.2 m), with windows; streets are draped over the ground with their
+widths and centre lines; bridges rise from the ground at their ends to decks over the water. The
+driving is World Drive's own (`drive.js`): boost, drift, stunts, **R** back on the road, **T** to
+fly, **Esc** to the menu; rides locked in World Drive stay locked. `?trees=0` leaves the trees out
+on a slow computer. A city is made once, offline (the elevation is read over the internet for just
+its box):
+
+```bash
+pip install osmium shapely rasterio
+```
+
+```bash
+curl -o vancouver.osm.pbf https://download.bbbike.org/osm/bbbike/Vancouver/Vancouver.osm.pbf
+```
+
+```bash
+python scripts/make-city.py vancouver.osm.pbf --id vancouver --name Vancouver --bbox 49.270,-123.160,49.335,-123.035 --dem canada --start "Robson Street:49.2846,-123.1225" --start "Stanley Park:49.2985,-123.1395" --start "Coal Harbour:49.2895,-123.1235" --start "False Creek:49.2730,-123.1150" --start "Lonsdale Quay:49.3115,-123.0830" --start "Neptune Terminals:49.3045,-123.0470"
+```
+
+That writes `drive/public/cities/vancouver.json` (4.4 MB, 1.5 MB compressed: 29,500 buildings and
+15,500 streets) and `vancouver.ground.bin` (2 MB, 0.5 MB compressed); list the city in
+`src/drive-app/city/cities.js`. Any city works the same way, from a BBBike or Geofabrik extract
+that covers its box; outside southern BC and Alberta, `--dem` takes another elevation GeoTIFF's
+file or URL (USGS 3DEP in the US, Copernicus GLO-30 anywhere), or leave it out for flat ground.
+`npm run test:city-drive-ui` drives it in a browser.
 
 **Driving with others**: everyone else driving the same area (about 11 km across) shows up live as a
 ghost car you pass straight through, with their nickname, ride and Garage look (underglow too);

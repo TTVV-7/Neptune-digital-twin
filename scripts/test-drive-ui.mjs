@@ -154,6 +154,21 @@ async function newPage( { viewport = { width: 1280, height: 800 }, touch = false
 
 	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch, reducedMotion } );
 	await pickRide( context, ride );
+	// Trick mode on (walls bounce the car off), as the stunt tests were written for; slide mode's own
+	// test switches the Driver to it.
+	await context.addInitScript( () => {
+
+		try {
+
+			if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
+
+		} catch {
+
+			// Storage blocked: slide mode, the default.
+
+		}
+
+	} );
 	const page = await context.newPage();
 	page.searches = [];
 	page.outside = [];
@@ -352,6 +367,81 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await page.evaluate( () => Number( document.querySelector( '#hud .dhud-number' ).textContent ) ) > 0 );
 		await shot( page, 'drive-5-driving' );
 		assert.equal( await page.evaluate( () => performance.getEntriesByType( 'navigation' ).length ), navigations );
+
+	} );
+
+	test( 'slide mode (Trick mode off): a wall met at an angle turns the kart along it, still driving, never thrown up; met square on it stops; the switch is kept', async () => {
+
+		const result = await page.evaluate( () => {
+
+			const { driver: d, ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const step = ( seconds, each ) => {
+
+				for ( let i = 0; i < Math.round( seconds * 60 ); i ++ ) {
+
+					d.update( 1 / 60 );
+					if ( each?.() === false ) return;
+
+				}
+
+			};
+			const reset = ( kmh, heading ) => {
+
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading, course: heading, view: heading, speed: kmh / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, drifting: 0, driftHop: false, boost: null } );
+				d.update( 1 / 60 );
+
+			};
+			const land = pad.children.find( child => child.isMesh );
+			const wall = land.clone();
+			wall.material = land.material.clone();
+			wall.material.side = 2;
+			wall.rotation.set( 0, 0, 0 );
+			wall.scale.set( 200 / 4000, 6 / 2000, 1 );
+			wall.position.set( 0, 3, 30 );
+			pad.add( wall );
+			wall.updateMatrixWorld();
+			const was = d.walls;
+			d.walls = 'slide';
+			const out = {};
+			// At 90 km/h, 35° off the wall's line: along it, grounded, not through.
+			reset( 90, 55 );
+			d.press( 'KeyW' );
+			let air = false, maxY = 0;
+			step( 3, () => {
+
+				air ||= !! d.air || ! d.grounded;
+				maxY = Math.max( maxY, d.y );
+
+			} );
+			d.release( 'KeyW' );
+			out.glancing = { air, maxY, north: d.north, speed: d.speed * 3.6, heading: ( ( d.heading % 360 ) + 360 ) % 360 };
+			// Square on: it stops against it.
+			reset( 90, 0 );
+			let flown = false;
+			step( 2, () => {
+
+				flown ||= !! d.air;
+
+			} );
+			out.square = { flown, north: d.north, speed: Math.abs( d.speed ) * 3.6 };
+			d.walls = was;
+			pad.remove( wall );
+			return out;
+
+		} );
+		// Slid along: on the ground all the way, under 0.5 m up, still going, turned to run along it (east).
+		assert.equal( result.glancing.air, false, JSON.stringify( result.glancing ) );
+		assert.ok( result.glancing.maxY < 0.5, JSON.stringify( result.glancing ) );
+		assert.ok( result.glancing.north < 30, JSON.stringify( result.glancing ) );
+		assert.ok( result.glancing.speed > 30, JSON.stringify( result.glancing ) );
+		assert.ok( Math.abs( result.glancing.heading - 90 ) < 20, JSON.stringify( result.glancing ) );
+		// Square on: stopped at it, never thrown up.
+		assert.equal( result.square.flown, false, JSON.stringify( result.square ) );
+		assert.ok( result.square.north < 30 && result.square.speed < 5, JSON.stringify( result.square ) );
+		// The pause menu's switch: off (slide) unless chosen, and kept.
+		assert.equal( await page.evaluate( () => document.querySelector( '#pause .tricks-toggle' ) !== null ), true );
 
 	} );
 
@@ -6660,7 +6750,7 @@ const CLIENT = 'test-client.apps.googleusercontent.com';
 const PASS_LINK = 'https://buy.stripe.com/test_madeUpLink000';
 const DAY_LINK = 'https://buy.stripe.com/test_madeUpDayLink000';
 const MONTH_LINK = 'https://buy.stripe.com/test_madeUpMonthLink000';
-const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', monthly: { link: MONTH_LINK, price: 'CA$1.79/month' }, day: { link: DAY_LINK, price: 'CA$0.89' } } };
+const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$19.99', monthly: { link: MONTH_LINK, price: 'CA$1.79/month' }, day: { link: DAY_LINK, price: 'CA$0.89' } } };
 const ALICE = { signedIn: true, name: 'Alice Example', email: 'alice@example.com', supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '42' } };
 const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' };
 
@@ -6765,10 +6855,10 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		// Both ways to buy, with their prices, for everyone; the ways to sign in (and Google's script)
 		// only once one's picked.
 		await area.locator( '.buy-life' ).waitFor();
-		assert.equal( await area.locator( '.buy-life' ).textContent(), 'For good: CA$4.99' );
+		assert.equal( await area.locator( '.buy-life' ).textContent(), 'For good: CA$19.99' );
 		assert.equal( await area.locator( '.buy-day' ).textContent(), '24 hours: CA$0.89' );
 		assert.equal( await area.locator( '.buy-month.primary' ).textContent(), 'Monthly: CA$1.79/month' );
-		assert.deepEqual( await area.locator( '.buy-options button' ).allTextContents(), [ '24 hours: CA$0.89', 'Monthly: CA$1.79/month', 'For good: CA$4.99' ] );
+		assert.deepEqual( await area.locator( '.buy-options button' ).allTextContents(), [ '24 hours: CA$0.89', 'Monthly: CA$1.79/month', 'For good: CA$19.99' ] );
 		assert.match( await area.textContent(), /Have the pass already\? Sign in[\s\S]*Monthly is a subscription: cancel any time\./ );
 		assert.equal( await area.locator( '.stub-google' ).count(), 0 );
 		assert.equal( page.google, 0 );
@@ -6877,7 +6967,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await openPass( page );
 		const area = sheet( page );
 		await area.locator( '.supporter-thanks', { hasText: 'Your 24-hour pass has 14 h left.' } ).waitFor();
-		assert.equal( await area.locator( '.buy-life' ).textContent(), 'Keep it for good: CA$4.99' );
+		assert.equal( await area.locator( '.buy-life' ).textContent(), 'Keep it for good: CA$19.99' );
 		assert.equal( await area.locator( '.buy-day' ).count(), 0 );
 		await area.locator( '.buy-life' ).click();
 		assert.equal( new URL( ( await page.evaluate( () => window.opened ) )[ 0 ][ 0 ] ).pathname, new URL( PASS_LINK ).pathname );
@@ -6896,6 +6986,9 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await page.keyboard.press( 'Escape' );
 		await page.locator( '#pause' ).waitFor();
 		const account = page.locator( '#pause .account' );
+		// (Google's button is only drawn once it's on screen: scrolled to, as the menu's taller than
+		// the window here.)
+		await account.scrollIntoViewIfNeeded();
 		await account.locator( '.stub-google' ).waitFor();
 		assert.match( await account.textContent(), /Have the Supporter Pass\? Sign in to use it here\./ );
 		await shot( page, 'pass-4-pause-signed-out' );
@@ -7496,6 +7589,16 @@ async function accountPage( { me = SIGNED_OUT, clientId = CLIENT, ...options } =
 			return json( route, state.me = { ...me, google: false, name: '', email: '' } );
 
 		}
+		if ( path === 'reset-check' || path === 'reset' ) {
+
+			if ( body.token !== state.resetToken ) return json( route, { error: 'This link has been used or has expired. Email support for a new one', reason: 'reset' }, 410 );
+			if ( path === 'reset-check' ) return json( route, { username: 'Racer_1' } );
+			state.resetToken = null;
+			state.password = body.password;
+			return json( route, state.me = { ...RACER } );
+
+		}
+
 		if ( path === 'sign-out-everywhere' ) {
 
 			state.me = SIGNED_OUT;
@@ -7570,7 +7673,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		const form = account.locator( 'form.account-sign-up' );
 		assert.deepEqual( await fields( form ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ], [ 'email', 'email', 'email', 'Email (optional)' ] ] );
 		assert.equal( await form.locator( 'input[name="username"]' ).getAttribute( 'autocapitalize' ), 'none' );
-		assert.match( await form.textContent(), /The email is only for receipts: nothing is sent to it, so a forgotten password can't be recovered, unless you also link Google\./ );
+		assert.match( await form.textContent(), /Forget your password and you can get back in by emailing support from this address, or with Google if you link it\./ );
 		await shot( page, 'account-1-create-desktop' );
 		// The rules, before anything is sent.
 		await form.locator( 'input[name="username"]' ).fill( 'Racer 1' );
@@ -7638,6 +7741,108 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
 		await sheet( page ).locator( '.supporter-passwords' ).waitFor();
 		assert.equal( page.asked.signOuts, 1 );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'forgot password: how to get back in by email; a reset link opens a new-password form that signs in, taken out of the address; a used one says so', async () => {
+
+		const TOKEN = 'A'.repeat( 43 );
+		const page = await accountPage();
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Or use a username and password' );
+		const forgot = account.locator( '.account-forgot' );
+		await forgot.locator( 'button', { hasText: 'Forgot password?' } ).click();
+		const mail = forgot.locator( 'a[href^="mailto:support@worlddrive.app"]' );
+		await mail.waitFor();
+		assert.match( await forgot.textContent(), /from the email on your account .*and say your username/ );
+		assert.match( await forgot.textContent(), /Sign in with Google above instead/ );
+		await page.context().close();
+
+		// The link: opened on its form, the token gone from the address at once.
+		const linked = await accountPage();
+		linked.state.resetToken = TOKEN;
+		await linked.goto( `${ BASE }/?reset=${ TOKEN }` );
+		await linked.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		const reset = panel( linked ).locator( 'form.account-reset' );
+		await reset.locator( 'p', { hasText: 'A new password for Racer_1.' } ).waitFor();
+		assert.equal( new URL( linked.url() ).searchParams.has( 'reset' ), false );
+		assert.equal( await panel( linked ).locator( '#account-title' ).textContent(), 'New password' );
+		assert.equal( await reset.locator( 'input[name="username"]' ).inputValue(), 'Racer_1' );
+		await reset.locator( 'input[name="password"]' ).fill( 'short' );
+		await reset.locator( 'button[type="submit"]' ).click();
+		await reset.locator( '.account-status', { hasText: /at least/i } ).waitFor();
+		await reset.locator( 'input[name="password"]' ).fill( 'a brand new long password' );
+		await reset.locator( 'button[type="submit"]' ).click();
+		await panel( linked ).waitFor( { state: 'hidden' } );
+		assert.equal( linked.state.password, 'a brand new long password' );
+		await linked.waitForFunction( () => window.drive.supporter.me?.signedIn );
+		const sent = linked.asked.account.filter( ask => ask.path === 'reset' );
+		assert.deepEqual( sent.map( ask => ask.body ), [ { token: TOKEN, password: 'a brand new long password' } ] );
+		assert.deepEqual( linked.errors, [] );
+		await linked.context().close();
+
+		// Used already: said so, with how to get another, and nothing to send.
+		const used = await accountPage();
+		await used.goto( `${ BASE }/?reset=${ TOKEN }` );
+		await used.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		const gone = panel( used ).locator( 'form.account-reset' );
+		await gone.locator( 'p', { hasText: 'This link has been used or has expired.' } ).waitFor();
+		assert.equal( await gone.locator( 'button[type="submit"]' ).isDisabled(), true );
+		await gone.locator( 'a[href="mailto:support@worlddrive.app"]' ).waitFor();
+		await used.context().close();
+
+	} );
+
+	test( 'a supporter\'s panel says which pass it is; a monthly one\'s has Manage subscription (Stripe\'s portal) at once, or without it how to ask', async () => {
+
+		const MANAGE = 'https://billing.stripe.com/p/login/test_portal';
+		const monthly = { ...RACER, supporter: true, subscribed: true, purchase: { ...RACER.purchase, manage: MANAGE } };
+		const page = await accountPage( { me: monthly } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Account' );
+		const pass = account.locator( '.account-pass' );
+		// Not folded away: seen as the panel opens.
+		assert.equal( await pass.isVisible(), true );
+		assert.match( await pass.textContent(), /Monthly subscription\. Cancel any time/ );
+		const manage = pass.locator( 'a.account-manage' );
+		assert.equal( await manage.textContent(), 'Manage subscription' );
+		assert.deepEqual( [ await manage.getAttribute( 'href' ), await manage.getAttribute( 'target' ) ], [ MANAGE, '_blank' ] );
+		assert.deepEqual( await pass.locator( 'a:not(.account-manage)' ).evaluateAll( links => links.map( a => a.getAttribute( 'href' ) ) ), [ '/refunds/', '/contact/' ] );
+		await shot( page, 'account-pass-monthly' );
+		// Request a feature: folded at the bottom, sent to the Worker, thanked.
+		await page.route( `${ BASE }/api/requests`, route => route.fulfill( { contentType: 'application/json', body: '{"ok":true}' } ) );
+		const request = await unfold( account, 'Request a feature' );
+		await request.locator( 'textarea' ).fill( 'A monster truck, please' );
+		assert.equal( await request.locator( '.account-hint' ).textContent(), '23 / 1000' );
+		const sentRequest = page.waitForRequest( req => req.url().endsWith( '/api/requests' ) );
+		await request.locator( 'button[type="submit"]' ).click();
+		assert.deepEqual( ( await sentRequest ).postDataJSON(), { text: 'A monster truck, please' } );
+		await request.locator( '.account-status', { hasText: 'Sent. Thanks!' } ).waitFor();
+		assert.equal( await request.locator( 'textarea' ).inputValue(), '' );
+		await shot( page, 'account-request' );
+		// The pass's sheet says it too.
+		await page.keyboard.press( 'Escape' );
+		await sheet( page ).locator( 'a', { hasText: 'Manage your subscription' } ).waitFor();
+
+		// Stripe's link not set: how to ask for it instead, never no way at all.
+		page.state.me = { ...monthly, purchase: RACER.purchase };
+		await page.evaluate( () => window.drive.supporter.refresh?.() );
+		await page.waitForFunction( () => ! window.drive.supporter.me?.purchase?.manage );
+		await openAccountPanel( page, 'Account' );
+		assert.equal( await pass.locator( 'a.account-manage' ).count(), 0 );
+		assert.match( await pass.textContent(), /To cancel or change your card, get in touch/ );
+
+		// Paid once: nothing to cancel.
+		await page.keyboard.press( 'Escape' );
+		page.state.me = { ...RACER, supporter: true };
+		await page.evaluate( () => window.drive.supporter.refresh?.() );
+		await page.waitForFunction( () => ! window.drive.supporter.me?.subscribed );
+		await openAccountPanel( page, 'Account' );
+		assert.match( await pass.textContent(), /Yours for good\. Paid once: nothing to cancel\./ );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
@@ -7878,7 +8083,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 
 			}
 
-			assert.deepEqual( await account.locator( 'details.account-section > summary' ).allTextContents(), [ 'Change password', 'Unlink Google', 'Remove username and password' ] );
+			assert.deepEqual( await account.locator( 'details.account-section > summary' ).allTextContents(), [ 'Change password', 'Unlink Google', 'Remove username and password', 'Request a feature' ] );
 			assert.equal( await account.locator( 'details.account-section[open]' ).count(), 0 );
 			assert.equal( await account.locator( 'input:visible' ).count(), 0, 'a password field shown before it was asked for' );
 			assert.equal( await account.locator( '.stub-google' ).count(), 0, 'Google\'s buttons drawn while folded away' );
@@ -8571,6 +8776,8 @@ describe( 'World Drive challenges', () => {
 
 			window.worldDriveVisitTest = { visit };
 			localStorage.setItem( 'world-drive.pads', 'off' );
+		// Trick mode on (walls bounce the car off), as the stunt tests were written for; slide mode's own test turns it off.
+		if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
 			if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
 			for ( const [ key, value ] of Object.entries( storage ) ) localStorage.setItem( key, value );
 
@@ -10523,6 +10730,69 @@ describe( 'World Drive challenges', () => {
 		await section.scrollIntoViewIfNeeded();
 		await shot( page, 'challenges-admin-3-phone' );
 		await context.close();
+
+	} );
+
+} );
+
+describe( 'World Drive: clean roads under the map (?hybrid, Vancouver)', () => {
+
+	test( 'in Vancouver the car drives on the city built from OpenStreetMap, lined up with the map under it (the test pad standing in for Google\'s), and keeps to its streets', async () => {
+
+		const page = await newPage();
+		await page.goto( `${ BASE }/?hybrid=show` );
+		// (The notice offering the test pad, as there's no key here, or the globe already.)
+		await page.waitForFunction( () => window.drive?.mode === 'globe' || [ ...document.querySelectorAll( '#notice button' ) ].some( b => /test pad/.test( b.textContent ) && b.offsetParent ), null, { timeout: 30000 } );
+		if ( await page.evaluate( () => window.drive?.mode !== 'globe' ) ) await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+		// Robson Street, heading south-east along it.
+		await page.evaluate( () => window.drive.dropIn( { name: 'Robson Street', lat: 49.28457, lon: - 123.12245, heading: 135 } ) );
+		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+		await page.waitForFunction( () => window.drive.hybrid.city && window.drive.hybrid.offset !== null, null, { timeout: 30000 } );
+		const state = await page.evaluate( () => {
+
+			const { hybrid, driver, ground } = window.drive;
+			return { offset: hybrid.offset, on: hybrid.active( { east: driver.east, north: driver.north } ), grounds: ground.getColliders().map( g => g.name ) };
+
+		} );
+		// Measured (on the pad, the city lowered by the street's own height), and driven on.
+		assert.ok( Number.isFinite( state.offset ), JSON.stringify( state ) );
+		assert.equal( state.on, true, JSON.stringify( state ) );
+		assert.ok( state.grounds.includes( 'ground' ), JSON.stringify( state ) );
+		// Driven along the street for 4 s: on its surface all the way, never falling through or flung up.
+		const run = await page.evaluate( () => {
+
+			const { driver: d, hybrid } = window.drive;
+			const surface = () => {
+
+				const ray = new d.raycaster.constructor( new d.camera.position.constructor( - d.east, d.y + 50, d.north ), new d.camera.position.constructor( 0, - 1, 0 ) );
+				return ray.intersectObject( hybrid.colliders, true )[ 0 ]?.point.y ?? null;
+
+			};
+			// (Its first second it settles from where it was put down, on the map, onto the city's street.)
+			for ( let i = 0; i < 60; i ++ ) d.update( 1 / 60 );
+			d.press( 'KeyW' );
+			let worst = 0, air = 0;
+			for ( let i = 0; i < 240; i ++ ) {
+
+				d.update( 1 / 60 );
+				const s = surface();
+				if ( s !== null && d.grounded ) worst = Math.max( worst, Math.abs( d.y - s ) );
+				if ( ! d.grounded ) air ++;
+
+			}
+
+			d.release( 'KeyW' );
+			return { worst, air, speed: d.speed * 3.6 };
+
+		} );
+		assert.ok( run.worst < 0.6, JSON.stringify( run ) );
+		assert.ok( run.air < 10, JSON.stringify( run ) );
+		assert.ok( run.speed > 20, JSON.stringify( run ) );
+		await page.waitForTimeout( 500 );
+		await shot( page, 'hybrid-vancouver' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
 
 	} );
 

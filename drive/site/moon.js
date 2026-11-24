@@ -7,8 +7,9 @@
 //
 // They're honest about the game too: World Drive's Moon has the real Moon's big shapes (LOLA's
 // heights, a quarter of a degree apart) and colours (LROC's photographs), but everything smaller is
-// made up, and there are no landers, flags or rover tracks in it. Nothing here says you can see the
-// Apollo hardware, or anything narrower than those heights can show.
+// made up. The hardware people left there is set down where it is (world-hardware.js), as simplified
+// models (hardware.js), and the pages say so; there are no rover tracks. Nothing here says you can see
+// anything narrower than those heights can show.
 //
 // slug: the page's address under /moon/; spot: the Moon start spot its Drive here pins; name: as
 // the page says it (called: the name in a sentence, where that's not just the name); region: the
@@ -256,7 +257,7 @@ export const MOON_PAGES = [
 // What every Moon page says about how World Drive's Moon is made, and what's made up.
 export const MOON_MADE = [
 	'World Drive\'s Moon is the real Moon\'s shape: its heights are from the laser altimeter (LOLA) on NASA\'s Lunar Reconnaissance Orbiter, every quarter of a degree (7.6 km apart at the equator), so the seas, basins, mountains and big craters are where they are, and its colours are from the orbiter\'s camera (LROC). They\'re NASA\'s, in the public domain.',
-	'Everything smaller than that is made up: the craters you drive among, from about 13 km across down to a few metres, and the gentle rolls of the ground, the same on every visit. There are no landers, flags or rover tracks in it.',
+	'Everything smaller than that is made up: the craters you drive among, from about 13 km across down to a few metres, and the gentle rolls of the ground, the same on every visit. The landers, rovers, flags and crash sites people left there are set down where they really are, as simplified models built for the game, not exact copies; there are no rover tracks.',
 ];
 
 // Driving there, as a list on each Moon page and the Moon's own page.

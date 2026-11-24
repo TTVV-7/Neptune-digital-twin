@@ -112,6 +112,7 @@ export class ModelManager extends EventDispatcher {
 
 		const pivot = new Group();
 		pivot.name = config.name ?? kind?.label;
+		drawnAfterGround( content );
 		pivot.add( content );
 		this.group.add( pivot );
 
@@ -284,7 +285,9 @@ export class ModelManager extends EventDispatcher {
 	readGround( entry, detail ) {
 
 		const { pivot, state, footprint } = entry;
-		const mode = getKind( entry.kind )?.snap ?? 'median';
+		// A kind's snap can depend on its params (a flatten area's on whether it's surfaced).
+		const snap = getKind( entry.kind )?.snap;
+		const mode = ( typeof snap === 'function' ? snap( entry.params ) : snap ) ?? 'median';
 		const original = mode.endsWith( '-original' ) && this.originalHeight;
 		pivot.updateMatrixWorld();
 
@@ -406,6 +409,7 @@ export class ModelManager extends EventDispatcher {
 		const content = kind.build( entry.params );
 		useFastRaycast( content );
 		entry.footprint = new Box3().setFromObject( content );
+		drawnAfterGround( content );
 		entry.pivot.add( content );
 		this.apply( entry );
 
@@ -453,7 +457,16 @@ export class ModelManager extends EventDispatcher {
 
 		const { pivot } = entry;
 		const hidden = this.isHidden( entry );
-		pivot.visible = ! hidden && ( ! getKind( entry.kind )?.buildOnly || this.buildMode );
+		const kind = getKind( entry.kind );
+		// A buildOnly kind can keep part of itself in view outside build mode (a flatten area's
+		// gravel): then only its parts marked userData.buildOnly (the red box) come and go.
+		const partly = !! kind?.buildOnly && !! kind.shownOutsideBuild?.( entry.params );
+		pivot.visible = ! hidden && ( ! kind?.buildOnly || this.buildMode || partly );
+		if ( kind?.buildOnly ) pivot.traverse( o => {
+
+			if ( o.userData.buildOnly ) o.visible = this.buildMode || ! partly;
+
+		} );
 		if ( !! pivot.userData.hidden === hidden ) return false;
 		pivot.userData.hidden = hidden;
 		this.hiddenCount += hidden ? 1 : - 1;
@@ -518,6 +531,20 @@ function upgradeConfig( config ) {
 	if ( ! config.zone ) return config;
 	const { zone, library, ...rest } = config;
 	return { ...rest, kind: 'flatten-zone', params: { ...zone } };
+
+}
+
+// What's placed is drawn after the ground (Google's tiles and earthworks, renderOrder 0) and after a
+// flatten area's surface (flatten.js's SURFACE_ORDER, drawn over the ground without writing depth),
+// so it stands on that surface rather than under it. Parts that set an order of their own keep it.
+export const PLACED_ORDER = 1;
+function drawnAfterGround( object ) {
+
+	object.traverse( o => {
+
+		if ( ( o.isMesh || o.isLine || o.isPoints ) && o.renderOrder === 0 ) o.renderOrder = PLACED_ORDER;
+
+	} );
 
 }
 

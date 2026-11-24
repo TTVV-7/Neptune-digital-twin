@@ -15,7 +15,7 @@
 	"assets": {
 		"directory": "./dist-drive",
 		"binding": "ASSETS",
-		"run_worker_first": [ "/api/*", "/c", "/ads.txt" ]
+		"run_worker_first": [ "/api/*", "/build/api/*", "/build/app/api/*", "/c", "/ads.txt" ]
 	},
 	// Both addresses are the Worker's custom domains (Cloudflare makes their DNS records and
 	// certificates). www sends you on to worlddrive.app (worker/drive/index.js and the page itself).
@@ -33,8 +33,10 @@
 	"vars": {
 		// Earth visits a day for everyone together, and for each visitor (one: past it, or past the day's
 		// cap, the page opens on the Moon, which costs nothing); both start again at midnight UTC.
-		// Each visit is one billed Google Maps session; a visit to the Moon or Mars is never counted.
-		"DAILY_VISITS": "300",
+		// Each visit is one billed Google Maps session; a visit to the Moon or Mars is never counted, nor
+		// is a supporter's (PER_VISITOR_DAILY_SUPPORTER, by account, on top of these). Google's daily
+		// quota on 3D Tiles root tileset requests must stay above this and the supporters' together.
+		"DAILY_VISITS": "500",
 		"PER_VISITOR_DAILY": "1",
 		// The Turnstile widget for worlddrive.app (public; its secret is the TURNSTILE_SECRET secret).
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAFs3k5sgUIQHSuGC",
@@ -54,6 +56,9 @@
 		"DAY_PASS_PAYMENT_LINK": "https://buy.stripe.com/28E14mgX21bFf5U1gGfrW03",
 		"DAY_PASS_PAYMENT_LINK_ID": "plink_1UdfbbCEvam6zTiEHMlUr66T",
 		"DAY_PASS_PRICE": "CA$0.99",
+		// Stripe's customer portal login link: where a monthly supporter cancels, changes their card or
+		// sees receipts (the Account panel's and the pass sheet's Manage subscription).
+		"SUPPORTER_MANAGE_LINK": "https://billing.stripe.com/p/login/9B6bJ0fSYaMf3nc0cCfrW00",
 		// Driving with others (worker/drive/live.js): "off" is the kill switch. New connections are
 		// turned away, those already in a room are closed as they next say anything (or at the room's
 		// next alarm) once the room runs the new version (a busy one can take up to 5 minutes to; see

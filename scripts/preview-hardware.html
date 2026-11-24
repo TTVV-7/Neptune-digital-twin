@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Hardware preview</title>
+<style>html, body { margin: 0; background: #000; } canvas { display: block; }</style>
+<script type="importmap">{ "imports": { "three": "/node_modules/three/build/three.module.js" } }</script>
+</head>
+<body>
+<script type="module">
+// A look at the hardware (src/drive-app/hardware.js) on a lunar surface under a low sun, for
+// scripts/preview-hardware.mjs to photograph: ?model=<HARDWARE id> or a builder's name, and
+// ?view=<distance>,<height>,<turn degrees>.
+import * as THREE from 'three';
+import * as MOON from '/src/drive-app/hardware.js';
+// The other worlds' builders too, where they're written yet.
+const more = await Promise.all( [ '/src/drive-app/hardware-mars.js' ].map( url => import( url ).catch( () => ( {} ) ) ) );
+const H = Object.assign( {}, MOON, ...more, { HARDWARE: [ ...MOON.HARDWARE, ...more.flatMap( m => m.HARDWARE ?? [] ) ] } );
+
+const params = new URLSearchParams( location.search );
+const which = params.get( 'model' ) ?? 'apollo-11';
+const [ distance, height, turn ] = ( params.get( 'view' ) ?? '14,4,35' ).split( ',' ).map( Number );
+const width = Number( params.get( 'w' ) ?? 1280 );
+const tall = Number( params.get( 'h' ) ?? 720 );
+
+const renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+renderer.setSize( width, tall );
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.append( renderer.domElement );
+const scene = new THREE.Scene();
+scene.background = new THREE.Color( 0x000000 );
+
+// Regolith: grey, speckled, gently rolling, with a few small craters.
+const canvas = document.createElement( 'canvas' );
+canvas.width = canvas.height = 512;
+const ctx = canvas.getContext( '2d' );
+ctx.fillStyle = '#8a8884';
+ctx.fillRect( 0, 0, 512, 512 );
+for ( let i = 0; i < 9000; i ++ ) {
+
+	const v = 100 + Math.random() * 70;
+	ctx.fillStyle = `rgb(${ v },${ v - 2 },${ v - 5 })`;
+	ctx.fillRect( Math.random() * 512, Math.random() * 512, 2, 2 );
+
+}
+
+const texture = new THREE.CanvasTexture( canvas );
+texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+texture.repeat.set( 30, 30 );
+texture.colorSpace = THREE.SRGBColorSpace;
+const ground = new THREE.PlaneGeometry( 300, 300, 150, 150 );
+const pos = ground.attributes.position;
+const craters = [ [ 18, - 22, 4 ], [ - 25, 10, 6 ], [ 9, 30, 3 ], [ - 12, - 38, 5 ] ];
+for ( let i = 0; i < pos.count; i ++ ) {
+
+	const x = pos.getX( i ), y = pos.getY( i );
+	let z = Math.sin( x * 0.05 ) * 0.4 + Math.cos( y * 0.04 ) * 0.3;
+	for ( const [ cx, cy, r ] of craters ) {
+
+		const d = Math.hypot( x - cx, - y - cy ) / r;
+		if ( d < 1 ) z -= ( 1 - d * d ) * r * 0.25;
+		else if ( d < 1.4 ) z += ( 1.4 - d ) * r * 0.12;
+
+	}
+
+	// Flat where the hardware stands.
+	z *= Math.min( 1, Math.hypot( x, y ) / 12 );
+	pos.setZ( i, z );
+
+}
+
+ground.computeVertexNormals();
+const floor = new THREE.Mesh( ground, new THREE.MeshStandardMaterial( { map: texture, roughness: 1 } ) );
+floor.rotation.x = - Math.PI / 2;
+floor.receiveShadow = true;
+scene.add( floor );
+
+// A low sun, long shadows; a little fill as from the bright ground; the Earth in the sky.
+const sun = new THREE.DirectionalLight( 0xfffaf0, 3.2 );
+sun.position.set( - 40, 22, 25 );
+sun.castShadow = true;
+sun.shadow.mapSize.set( 4096, 4096 );
+Object.assign( sun.shadow.camera, { left: - 25, right: 25, top: 25, bottom: - 25, near: 1, far: 150 } );
+sun.shadow.bias = - 0.0004;
+scene.add( sun, new THREE.HemisphereLight( 0x8899aa, 0x55524c, 0.5 ) );
+const earth = new THREE.Mesh( new THREE.SphereGeometry( 6, 32, 16 ), new THREE.MeshBasicMaterial( { color: 0x3f74c8 } ) );
+earth.position.set( 60, 55, - 160 );
+scene.add( earth );
+
+const entry = H.HARDWARE.find( h => h.id === which );
+const model = entry ? entry.build() : H[ which ]();
+model.traverse( o => {
+
+	o.castShadow = true;
+	o.receiveShadow = true;
+
+} );
+scene.add( model );
+
+// Frame it: the camera `distance` from the model's middle, `height` up, turned `turn` degrees.
+const bounds = new THREE.Box3().setFromObject( model );
+const middle = bounds.getCenter( new THREE.Vector3() );
+const camera = new THREE.PerspectiveCamera( 40, width / tall, 0.05, 1000 );
+const a = turn * Math.PI / 180;
+camera.position.set( middle.x + Math.sin( a ) * distance, height, middle.z - Math.cos( a ) * distance );
+camera.lookAt( middle.x, middle.y * 0.8, middle.z );
+renderer.render( scene, camera );
+window.rendered = true;
+</script>
+</body>
+</html>

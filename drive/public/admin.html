@@ -137,6 +137,20 @@
 	.ch-form .row label.narrow { flex: 0 1 90px; }
 	.ch-form .row label.day { flex-basis: 120px; }
 	.ch-form [hidden] { display: none; }
+	.req-list { list-style: none; margin: 10px 0 0; padding: 0; }
+	.req-list li { padding: 10px 0; border-top: 1px solid var(--line); }
+	.req-list li.done .req-text { color: var(--muted); text-decoration: line-through; }
+	.req-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+	.req-meta { margin-top: 4px; }
+	.req-actions { display: flex; gap: 8px; margin-top: 6px; }
+	.requests .seg { margin-top: 6px; }
+	.reset-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 12px 0; font-size: 14px; }
+	.reset-facts dt { color: var(--muted); }
+	.reset-facts dd { margin: 0; overflow-wrap: anywhere; }
+	.reset-facts .warn { color: #ff9b6b; }
+	.reset-copy { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+	.reset-copy textarea { font: 13px/1.5 ui-monospace, monospace; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); width: 100%; resize: vertical; }
+	.resets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 	.ch-warn { border: 1px solid var(--down); border-radius: 8px; padding: 8px 10px; color: var(--text); }
 	.ch-warn p { margin: 0 0 8px; }
 	.ch-warn b { color: var(--down); }
@@ -206,7 +220,7 @@
 		</div>
 	</header>
 	<nav class="jump" aria-label="Jump to">
-		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#any">Any count</a><a href="#todo">To do</a>
+		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#maps-cost">Maps cost</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#requests">Requests</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
 	</nav>
 	<div id="out"><p class="muted">Loading...</p></div>
 	<section class="card places" id="places" aria-labelledby="places-title" hidden>
@@ -264,6 +278,21 @@
 		<p class="muted small" id="ach-total"></p>
 		<div id="ach-list"></div>
 		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, drives on the Moon, Mars, Vesta and Ceres, Garage changes, rides tried, Discoveries collected), each held to a day's worth; the Discoveries' counts are the account's players' finds together. A construction ride comes with the achievement beside it.</p>
+	</section>
+	<section class="card requests" id="requests" aria-labelledby="requests-title" hidden>
+		<h2 id="requests-title">Feature requests <span class="muted" id="req-open"></span></h2>
+		<div class="seg" id="req-show" role="group" aria-label="Which requests"><button type="button" data-show="open" aria-pressed="true">Open</button><button type="button" data-show="all" aria-pressed="false">All</button></div>
+		<div id="req-list"><p class="muted">Loading...</p></div>
+		<p class="note">Sent from the account panel's Request a feature by signed-in players (5 a day each). ⭐ marks a supporter.</p>
+	</section>
+	<section class="card resets" id="resets" aria-labelledby="resets-title" hidden>
+		<h2 id="resets-title">Password reset link</h2>
+		<p class="muted small">For a player who's forgotten their password and emailed support. Check the email below is the one that wrote to you, then send them the link. It works once, for 24 hours; making another ends the one before.</p>
+		<form class="ch-form" id="reset-form">
+			<label>Username <input name="username" id="reset-username" autocomplete="off" spellcheck="false" required maxlength="20"></label>
+			<div class="row"><button type="submit">Make a link</button><span class="muted small" id="reset-say" role="status"></span></div>
+		</form>
+		<div id="reset-out"></div>
 	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
@@ -404,6 +433,43 @@
 		// Each day's value of a metric (or one of its keys), and a share of two of them, for the tiles' lines.
 		const dailyKey = ( metric, key ) => days.map( d => keyDay.get( `${ metric }:${ key }` )?.get( d ) ?? 0 );
 		const ratio = ( parts, wholes ) => parts.map( ( p, i ) => wholes[ i ] ? p / wholes[ i ] : 0 );
+		// What the Earth's drives cost Google's Map Tiles API (the 3D Earth): each is one billed 3D tiles
+		// session (a free player's, a supporter's or the owner's), MAPS_PER_1000 US dollars a thousand
+		// after the month's MAPS_FREE_MONTHLY (none: the bill shows none taken off). Days from before the
+		// visits were told apart by kind (visit_kind began on 2026-11-18) count every visit, since every
+		// page then opened on Google's 3D globe. This month from the days shown (when they reach back to
+		// the 1st), and the month at that pace. An estimate: Google's bill is what counts.
+		const mapsCost = () => {
+
+			const kinds = [ [ 'free', 'earth' ], [ 'supporters', 'earth_supporter' ], [ 'you', 'owner' ] ];
+			const told = d => ( byDay.get( 'visit_kind' )?.get( d ) ?? 0 ) > 0;
+			const sessionsOn = d => told( d ) ? sum( kinds.map( ( [ , kind ] ) => keyDay.get( `visit_kind:${ kind }` )?.get( d ) ?? 0 ) ) : keyDay.get( 'visit:all' )?.get( d ) ?? 0;
+			const sessions = sum( days.map( sessionsOn ) );
+			const untold = sum( days.filter( d => ! told( d ) ).map( sessionsOn ) );
+			const usd = n => new Intl.NumberFormat( undefined, { style: 'currency', currency: 'USD' } ).format( n );
+			const billed = n => Math.max( 0, n - MAPS_FREE_MONTHLY ) * MAPS_PER_1000 / 1000;
+			const monthStart = `${ to.slice( 0, 7 ) }-01`;
+			const daysInMonth = new Date( Date.UTC( Number( to.slice( 0, 4 ) ), Number( to.slice( 5, 7 ) ), 0 ) ).getUTCDate();
+			const dayOfMonth = Number( to.slice( 8, 10 ) );
+			const covered = days.includes( monthStart );
+			const month = covered ? sum( days.filter( d => d >= monthStart ).map( sessionsOn ) ) : null;
+			// The last 7 days' rate (not the month's, whose first days were quieter) for the days left.
+			const recent = days.slice( - 7 );
+			const perDay = recent.length ? sum( recent.map( sessionsOn ) ) / recent.length : 0;
+			const pace = month === null ? null : Math.round( month + perDay * ( daysInMonth - dayOfMonth ) );
+			const split = kinds.map( ( [ label, kind ] ) => `${ label } ${ num( total( 'visit_kind', kind ) ) }` ).join( ' · ' ) + ( untold ? ` · before ${ num( untold ) }` : '' );
+			return facts( [
+				[ 'Earth sessions', num( sessions ), split ],
+				[ 'These days', usd( billed( sessions ) ), `${ num( days.length ) } days` ],
+				[ 'A day lately', usd( perDay * MAPS_PER_1000 / 1000 ), `about ${ num( Math.round( perDay ) ) } a day, last 7 days` ],
+				...( month === null ? [] : [
+					[ 'This month', usd( billed( month ) ), `${ num( month ) } so far` ],
+					[ 'Month at this pace', usd( billed( pace ) ), `about ${ num( pace ) }, at the last 7 days' rate` ],
+				] ),
+				[ 'Most a month', usd( billed( MAPS_DAILY_CAP * 30 ) ), `cap: ${ num( MAPS_DAILY_CAP ) } a day, + supporters` ],
+			] ) + `<p class="note">Each Earth drive is one billed 3D tiles session (Google's Map Tiles API); flying about in it costs no more. At US$${ MAPS_PER_1000 } a thousand${ MAPS_FREE_MONTHLY ? ` after ${ num( MAPS_FREE_MONTHLY ) } free a month` : ', with no free ones taken off, as the bill shows' }. "Before": days from before visits were counted by kind, when every page opened on Google's 3D globe, so every visit counts. Check the real bill in Google Cloud's Billing.${ covered ? '' : ' Pick a period that reaches back to the 1st for this month\'s total.' }</p>`;
+
+		};
 		// [ group, [ label, value, change, fewerIsBetter, days' values, what it means ] ]: change is
 		// [ now, before ] compared as a change in per cent, or for a share [ now, before, 'points' ] as
 		// the difference in points.
@@ -529,6 +595,7 @@
 					[ 'Passes nobody has signed in for yet', num( totals.unclaimed ?? 0 ), '' ],
 				] ) }
 				<p class="note">Counted from the Worker's own tables as you ask. Purchases refunded or charged back are left out, and players the owner removed. New bests are runs that beat a player's best on a board, from the scores log, which keeps only the last ${ esc( scoresKept ) } days${ scoresPartial ? ': this period\'s count is partial' : scoresKept < 2 * days.length ? ': too few for the period before, so no comparison' : '' }.</p></div>
+				<div class="card" id="maps-cost"><h2>Google Maps cost <span class="muted">(estimate)</span></h2>${ mapsCost() }</div>
 				<div class="card"><h2>When people load in <span class="muted">(your time)</span></h2>${ hourChart( byHour, offset ) }</div>
 				<div class="card"><h2>Where they come from</h2>${ bars( keys( 'load' ), num, 10 ) }</div>
 				<div class="card wide" id="rides"><h2>Rides compared</h2>${ ridesTable }</div>
@@ -794,7 +861,16 @@
 
 	}
 
-	// Money by currency (in its smallest unit, as Stripe has it) as text: "CA$9.98", or several.
+	// Money by currency (in its smallest unit, as Stripe has it) as text: "CA$39.98", or several.
+	// Google's Map Tiles API price for Photorealistic 3D Tiles sessions (root tileset requests), US
+	// dollars a thousand at the first tier, and the free ones each month (none: November 2026's bill,
+	// about US$14 for about 2,400 sessions, had none taken off); and wrangler.drive.jsonc's
+	// DAILY_VISITS: the admin page's cost estimate. Change them here when any changes.
+	const MAPS_PER_1000 = 6;
+	const MAPS_FREE_MONTHLY = 0;
+	const MAPS_PRICE_CHECKED = 'November 2026';
+	const MAPS_DAILY_CAP = 500;
+
 	function money( byCurrency ) {
 
 		const parts = [ ...byCurrency ].filter( ( [ , n ] ) => n ).map( ( [ currency, n ] ) => {
@@ -2276,6 +2352,8 @@
 		const answer = await res.json().catch( () => null );
 		if ( ! answer ) return;
 		$( 'achievements' ).hidden = false;
+		// (The password reset card too: only an admin gets this far.)
+		$( 'resets' ).hidden = false;
 		if ( ! res.ok ) {
 
 			$( 'ach-list' ).innerHTML = `<p class="muted">${ res.status === 429 ? 'Asked too often just now: try again in a minute.' : `Something went wrong (${ res.status }).` }</p>`;
@@ -2290,6 +2368,168 @@
 		$( 'ach-list' ).innerHTML = `<table class="bars">${ achievements.map( a => `<tr><td class="name">${ esc( a.name ) }<span class="muted small"> · ${ esc( a.goal ) }${ a.ride ? ` · unlocks the ${ esc( a.ride.toLowerCase() ) }` : '' } · ${ a.checked ? 'checked' : 'trusted' }</span></td><td><div class="bar"><span style="width:${ ( 100 * a.players / top ).toFixed( 1 ) }%"></span></div></td><td class="num">${ a.players.toLocaleString() }</td><td class="share">${ players ? Math.round( 100 * a.players / players ) : 0 }%</td></tr>` ).join( '' ) }</table>`;
 
 	}
+
+} )();
+</script>
+<script>
+( () => {
+
+	// --- Password reset links -----------------------------------------------------------------
+	//
+	// POST /api/admin/reset-link { username }: { username, email, google, link, expiresAt }, a one-time
+	// link to set a new password (worker/drive/logins.js's adminResetLink), for a player who's emailed
+	// support. Shown with the account's email, to check against the one that wrote, and a reply to copy.
+
+	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
+	const $ = id => document.getElementById( id );
+	const form = $( 'reset-form' );
+	const say = text => { $( 'reset-say' ).textContent = text; };
+
+	form.addEventListener( 'submit', async event => {
+
+		event.preventDefault();
+		const username = $( 'reset-username' ).value.trim();
+		if ( ! username ) return;
+		say( 'Making a link...' );
+		$( 'reset-out' ).innerHTML = '';
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/reset-link', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { username } ) } );
+
+		} catch {
+
+			return say( 'Couldn\'t reach World Drive.' );
+
+		}
+
+		const answer = await res.json().catch( () => null );
+		if ( ! res.ok ) return say( answer?.error ?? `Something went wrong (${ res.status }).` );
+		say( '' );
+		const until = new Date( answer.expiresAt ).toLocaleString( [], { dateStyle: 'medium', timeStyle: 'short' } );
+		const reply = `Hi ${ answer.username },\n\nHere's your link to set a new password for World Drive. It works once, until ${ until }:\n\n${ answer.link }\n\nIf you didn't ask for this, you can ignore it: your password stays as it is.\n\nTom, World Drive`;
+		$( 'reset-out' ).innerHTML = `
+			<dl class="reset-facts">
+				<dt>Username</dt><dd>${ esc( answer.username ) }</dd>
+				<dt>Email on the account</dt><dd>${ answer.email ? `<b>${ esc( answer.email ) }</b>` : '<b class="warn">none</b>: check another way it\'s theirs (what they bought, when) before sending' }</dd>
+				<dt>Google linked</dt><dd>${ answer.google ? 'yes: they can sign in with Google instead' : 'no' }</dd>
+				<dt>Works until</dt><dd>${ esc( until ) }</dd>
+			</dl>
+			<label class="reset-copy">Reply to send <textarea id="reset-reply" rows="9" readonly>${ esc( reply ) }</textarea></label>
+			<div class="row"><button type="button" id="reset-copy">Copy reply</button><button type="button" id="reset-copy-link">Copy link only</button></div>`;
+		const copy = async ( text, words ) => {
+
+			try {
+
+				await navigator.clipboard.writeText( text );
+				say( words );
+
+			} catch {
+
+				$( 'reset-reply' ).select();
+				say( 'Select and copy it by hand.' );
+
+			}
+
+		};
+		$( 'reset-copy' ).addEventListener( 'click', () => copy( reply, 'Reply copied.' ) );
+		$( 'reset-copy-link' ).addEventListener( 'click', () => copy( answer.link, 'Link copied.' ) );
+
+	} );
+
+} )();
+</script>
+<script>
+( () => {
+
+	// --- Feature requests ---------------------------------------------------------------------
+	//
+	// GET /api/admin/requests: { requests: [ { id, name, text, createdAt, doneAt, supporter } ], open },
+	// newest first (worker/drive/requests.js); POST { id, action: 'done' | 'open' | 'delete' } answers
+	// the same.
+
+	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
+	const $ = id => document.getElementById( id );
+	let data = null;
+	let showing = 'open';
+	load();
+
+	async function load() {
+
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/requests', { credentials: 'same-origin' } );
+
+		} catch {
+
+			return;
+
+		}
+
+		if ( res.status === 401 || res.status === 403 || ! /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ) return;
+		const answer = await res.json().catch( () => null );
+		if ( ! answer ) return;
+		$( 'requests' ).hidden = false;
+		if ( ! res.ok ) {
+
+			$( 'req-list' ).innerHTML = `<p class="muted">${ res.status === 429 ? 'Asked too often just now: try again in a minute.' : `Something went wrong (${ res.status }).` }</p>`;
+			return;
+
+		}
+
+		show( answer );
+
+	}
+
+	function show( answer ) {
+
+		data = answer;
+		window.worldDriveAdmin = { ...window.worldDriveAdmin, requests: answer };
+		$( 'req-open' ).textContent = answer.open ? `(${ answer.open.toLocaleString() } open)` : '';
+		const list = answer.requests.filter( r => showing === 'all' || ! r.doneAt );
+		const when = ms => new Date( ms ).toLocaleString( [], { dateStyle: 'medium', timeStyle: 'short' } );
+		$( 'req-list' ).innerHTML = list.length ? `<ul class="req-list">${ list.map( r => `<li class="${ r.doneAt ? 'done' : '' }" data-id="${ r.id }">
+			<div class="req-text">${ esc( r.text ) }</div>
+			<div class="req-meta muted small">${ r.supporter ? '⭐ ' : '' }${ esc( r.name || 'someone' ) } · ${ esc( when( r.createdAt ) ) }${ r.doneAt ? ` · done ${ esc( when( r.doneAt ) ) }` : '' }</div>
+			<div class="req-actions"><button type="button" data-action="${ r.doneAt ? 'open' : 'done' }">${ r.doneAt ? 'Not done' : 'Done' }</button><button type="button" data-action="delete">Delete</button></div>
+		</li>` ).join( '' ) }</ul>` : `<p class="muted">${ showing === 'open' && answer.requests.length ? 'Nothing open: all done.' : 'No requests yet.' }</p>`;
+
+	}
+
+	$( 'req-show' ).addEventListener( 'click', event => {
+
+		const button = event.target.closest( 'button[data-show]' );
+		if ( ! button || ! data ) return;
+		showing = button.dataset.show;
+		for ( const b of $( 'req-show' ).querySelectorAll( 'button' ) ) b.setAttribute( 'aria-pressed', String( b === button ) );
+		show( data );
+
+	} );
+
+	$( 'req-list' ).addEventListener( 'click', async event => {
+
+		const button = event.target.closest( 'button[data-action]' );
+		if ( ! button ) return;
+		const id = Number( button.closest( 'li' ).dataset.id );
+		const action = button.dataset.action;
+		if ( action === 'delete' && ! confirm( 'Delete this request?' ) ) return;
+		button.disabled = true;
+		try {
+
+			const res = await fetch( '/api/admin/requests', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { id, action } ) } );
+			if ( res.ok ) return show( await res.json() );
+
+		} catch {
+
+			// (Said below.)
+
+		}
+
+		button.disabled = false;
+		alert( 'That didn\'t go through. Try again.' );
+
+	} );
 
 } )();
 </script>

@@ -21,6 +21,7 @@ import { dewateringBag, fracTank, flocDosingTrailer, sandFilterSkid, trashPump, 
 import { person } from './people.js';
 import { POWER_ITEMS } from './power-models.js';
 import { CRANE_ITEMS } from './crane-models.js';
+import { TRUCK_ITEMS } from './truck-models.js';
 import { KART_ITEM } from './kart.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
@@ -92,6 +93,8 @@ export const PROCEDURAL_ITEMS = [
 	// (crane-models.js, tower-crane.js).
 	...POWER_ITEMS,
 	...CRANE_ITEMS,
+	// Tridem dump trucks, pups, transfer, end dump, belly dump and lowboy trailers (truck-models.js).
+	...TRUCK_ITEMS,
 	// A go-kart with a driver (kart.js), drivable like the other vehicles.
 	KART_ITEM,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );

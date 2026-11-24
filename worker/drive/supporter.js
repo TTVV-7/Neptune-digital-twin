@@ -59,7 +59,15 @@ function webhookSettings( env ) {
 	const secret = text( env.STRIPE_WEBHOOK_SECRET );
 	const linkIds = text( env.SUPPORTER_PAYMENT_LINK_ID ).split( ',' ).map( id => id.trim() ).filter( Boolean );
 	if ( ! secret.startsWith( 'whsec_' ) || linkIds.some( id => ! LINK_ID_PATTERN.test( id ) ) ) return null;
-	return { secret, linkIds, dayLinkId: dayLinkId( env ), testMode: paymentLink( env )?.pathname.startsWith( '/test_' ) ?? false };
+	return { secret, linkIds, dayLinkId: dayLinkId( env ), buildLinkId: buildLinkId( env ), testMode: paymentLink( env )?.pathname.startsWith( '/test_' ) ?? false };
+
+}
+
+// BUILD_PAYMENT_LINK_ID (World Drive Build's Pro plan, build.js) when it's a plink_ id, else ''.
+export function buildLinkId( env ) {
+
+	const id = text( env.BUILD_PAYMENT_LINK_ID );
+	return LINK_ID_PATTERN.test( id ) ? id : '';
 
 }
 
@@ -178,6 +186,24 @@ export async function supporterPass( env, account, now = Date.now() ) {
 
 }
 
+// { pro, subscribed }: whether this account has World Drive Build's Pro plan (build.js): a purchase
+// through its Payment Link (pass 'build'), its or bought with its Google email, not refunded, its
+// subscription not stopped (as livePurchase has it for the pass's), or its email in BUILD_EMAILS
+// (testers, given it without paying). subscribed: through a subscription that's running, so the
+// page offers to manage it.
+export async function buildPlan( env, account ) {
+
+	const email = typeof account?.email === 'string' ? account.email.toLowerCase() : '';
+	if ( email && list( env.BUILD_EMAILS ).includes( email ) ) return { pro: true, subscribed: false };
+	const active = ACTIVE_STATUSES.map( status => `'${ status }'` ).join( ', ' );
+	const row = await database( env ).prepare( `SELECT u.subscription FROM accounts a JOIN purchases u ON ${ ownPurchase( 'u', 'a' ) }
+		WHERE a.id = ?1 AND u.pass = 'build' AND u.refunded_at IS NULL
+		AND ( u.subscription IS NULL OR NOT EXISTS ( SELECT 1 FROM subscriptions s WHERE s.id = u.subscription AND s.status NOT IN ( ${ active } ) ) )
+		ORDER BY u.subscription IS NULL LIMIT 1` ).bind( account.id ).first();
+	return { pro: !! row, subscribed: !! row?.subscription };
+
+}
+
 // SQL that's true when the account with the id `account` (SQL: a parameter or a column) has the
 // pass: bought by it and not refunded (and, for a subscription, the subscription still active, and
 // for a day pass, bought in the last 24 hours: livePurchase; a lifetime or legacy one-time purchase
@@ -271,7 +297,8 @@ async function recordPurchase( db, settings, session, now ) {
 	const subscription = session.mode === 'subscription' ? stripeId( session.subscription ) : null;
 	if ( session.payment_status !== 'paid' && ! ( subscription && session.payment_status === 'no_payment_required' ) ) return;
 	const link = stripeId( session.payment_link );
-	const pass = settings.dayLinkId && link === settings.dayLinkId ? 'day' : null;
+	// World Drive Build's Pro plan (build.js) is kept here too, as its own kind, which gives no pass.
+	const pass = settings.dayLinkId && link === settings.dayLinkId ? 'day' : settings.buildLinkId && link === settings.buildLinkId ? 'build' : null;
 	if ( ! pass && settings.linkIds.length && ! settings.linkIds.includes( link ) ) return;
 	const id = stripeId( session.id );
 	if ( ! id ) return;

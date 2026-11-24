@@ -176,3 +176,25 @@
 			font-size: 13px;
 			color: var( --muted );
 		}
+		/* The legal pages (legal.js): the contact details as a list of what and where. */
+		.legal .small {
+			font-size: 14px;
+			color: var( --muted );
+		}
+		.contact {
+			display: grid;
+			grid-template-columns: max-content 1fr;
+			gap: 6px 18px;
+			margin: 18px 0;
+			padding: 16px 18px;
+			border: 1px solid var( --line );
+			border-radius: 12px;
+			background: var( --chip );
+		}
+		.contact dt {
+			color: var( --muted );
+		}
+		.contact dd {
+			margin: 0;
+			overflow-wrap: anywhere;
+		}

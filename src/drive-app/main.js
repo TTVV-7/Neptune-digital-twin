@@ -15,6 +15,8 @@ import { EARTH, FALLBACK, MOON, OFF_EARTH, isWorld, listOf, onWorld, TheWorld, W
 import { SPOTS_ON, worldSpot } from './world-places.js';
 import { earthUrl } from './orrery-first.js';
 import { createFinds } from './finds.js';
+import { createWorldHardware } from './world-hardware.js';
+import { createHybrid } from './city/hybrid.js';
 import { FINDS_ON } from './finds-data.js';
 import { createLens } from './lens.js';
 import { loadVehicle, loadVehicles, lookOf, specOf } from './vehicles.js';
@@ -34,7 +36,7 @@ import { createProgress, onLevelChange } from './progress.js';
 import { ACHIEVEMENTS, ridesOf } from './achievement-rules.js';
 import { onFeatsChange } from './feats.js';
 import { setUpProfile } from './profile.js';
-import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, SPOTS, worldOf } from './places.js';
+import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, SPOTS, storage, worldOf } from './places.js';
 import { createLive, flagsOf, velocityOf, worldsOf } from './live.js';
 import { createStats } from './stats.js';
 import { METRICS, dropinBucket } from './stats-protocol.js';
@@ -539,7 +541,29 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	// surface where it's round the vehicle, unless that's left out for a moment (`bare`: underSea).
 	let bare = false;
 	// (On the Earth before its tiles, with no test pad either, nothing: nothing's driven there then.)
-	const grounds = () => offEarth() ? [ body().terrain ] : [ tiles ? tiles.group : pad, ...sea.shown && ! bare ? [ sea.mesh ] : [] ].filter( Boolean );
+	// (On the worlds made in the page, the landers and rovers people left there are hit too: hardware's
+	// boxes, world-hardware.js.)
+	// A test behind ?hybrid (city/hybrid.js): in a city City Drive has (Vancouver), the car drives on
+	// that city built from OpenStreetMap, invisible under Google's map (?hybrid=show draws it too):
+	// smooth streets and straight walls, Google's parked cars and trees passed through.
+	const HYBRID = new URLSearchParams( location.search ).get( 'hybrid' );
+	const hybrid = HYBRID !== null ? createHybrid( { scene, show: HYBRID === 'show' } ) : null;
+	const onHybrid = () => {
+
+		if ( ! hybrid || offEarth() ) return false;
+		// (Asked for the ground before the Driver is made, as the models are set up: not yet.)
+		try {
+
+			return driver.active && hybrid.active( { east: driver.east, north: driver.north } );
+
+		} catch {
+
+			return false;
+
+		}
+
+	};
+	const grounds = () => offEarth() ? [ body().terrain, ...hardware ? [ hardware.colliders ] : [] ] : onHybrid() ? [ hybrid.colliders, ...sea.shown && ! bare ? [ sea.mesh ] : [] ] : [ tiles ? tiles.group : pad, ...sea.shown && ! bare ? [ sea.mesh ] : [] ].filter( Boolean );
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
 	// The globe as each world has it (GlobeView.setBody): the Earth's, and each other world's, its
@@ -610,6 +634,24 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	// Speed lines, overdrive's flashing edges and the camera's jolts and shakes, with their switch in
 	// the pause menu (screen-fx.js).
 	const screenFx = createScreenFx( { scene, driver, toggle: $( 'pause' ).querySelector( '.camera-toggle' ), touch: () => document.body.classList.contains( 'touch' ) } );
+	// Trick mode (the pause menu's switch, kept in this browser): walls bounce the car off and throw it
+	// up, for stunts. Off (the default), it slides along walls; jumps off ramps, spins and flips still
+	// score either way (drive.js's walls).
+	{
+
+		const TRICKS_KEY = 'world-drive.tricks';
+		const toggle = $( 'pause' ).querySelector( '.tricks-toggle' );
+		const on = storage( () => localStorage.getItem( TRICKS_KEY ) ) === 'on';
+		driver.walls = on ? 'bounce' : 'slide';
+		toggle.checked = on;
+		toggle.addEventListener( 'change', () => {
+
+			driver.walls = toggle.checked ? 'bounce' : 'slide';
+			storage( () => localStorage.setItem( TRICKS_KEY, toggle.checked ? 'on' : 'off' ) );
+
+		} );
+
+	}
 
 	const state = { mode: 'globe', place: null, entry: null, vehicle: null, drop: null, leaving: false };
 	// Where the scene's frame is now ({ lat, lon, height }: degrees, and m over the world's ellipsoid
@@ -711,6 +753,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	let profile = null;
 	// Discoveries (finds.js): made just below, once progress is (it sends what's collected).
 	let finds = null;
+	let hardware = null;
 	const progress = createProgress( {
 		worker,
 		visit: () => visit,
@@ -757,6 +800,10 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		pause: () => pauseDrive(),
 	} );
 	finds.setWorld( world );
+	// The hardware people left on these worlds (world-hardware.js): landers, rovers and crash sites, set
+	// down where they are, near the car.
+	hardware = createWorldHardware( { bodyOf: id => bodies[ id ] ?? null, toast: ( text, ms ) => screens.toast( text, ms ) } );
+	hardware.setWorld( offEarth() ? world : null );
 	profile = setUpProfile( {
 		progress,
 		player: () => board.player,
@@ -778,6 +825,13 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		onTitle: () => live?.rehello(),
 		onAchievements: () => openAchievements(),
 		onDiscoveries: () => finds.openBook( offEarth() ? world : undefined ),
+		// Your map (my-map.js, its own chunk): the Earth's areas and start spots this player has driven.
+		onMap: () => {
+
+			pauseDrive();
+			import( './my-map.js' ).then( module => module.openMyMap( progress ) ).catch( err => console.error( err ) );
+
+		},
 		discoveries: () => {
 
 			const worlds = Object.keys( FINDS_ON ).map( id => finds.countOf( id ) );
@@ -1494,6 +1548,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 			placeEarth( earth, ellipsoid, place );
 			earthAt = { lat: place.lat, lon: place.lon, height: place.height ?? 0 };
 			if ( tiles ) recentreTiles( tiles, place );
+			hybrid?.setFrame( earthAt ).catch( err => console.error( err ) );
 
 		}
 
@@ -1663,6 +1718,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// The world's Discoveries (its beacons on its ground, its pins on its globe; none on the Earth),
 		// and the data lens's heights for it.
 		finds.setWorld( world );
+		hardware?.setWorld( offEarth() ? world : null );
 		lens.setWorld( world, body() );
 		if ( offEarth() ) stats.add( 'world', world );
 		for ( const [ id, other ] of Object.entries( bodies ) ) other.group.visible = id === world;
@@ -2967,6 +3023,9 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// a parachute) the reach is wider and has a ceiling; in a challenge's run the card is small.
 		const onWorld = state.mode === 'driving' && driver.active ? carOnWorld() : null;
 		finds.update( dt, onWorld && { ...onWorld, flying: !! driver.flying || ! driver.grounded, compact: document.body.classList.contains( 'ch-running' ) } );
+		hardware?.update( dt, onWorld );
+		// (Lined up with Google's map; without a key, with the test pad, which stands in for it.)
+		if ( hybrid && ! offEarth() && driver.active ) hybrid.update( dt, { east: driver.east, north: driver.north }, tiles?.group ?? pad ?? null );
 
 		live?.update( car() );
 		pads.update( dt );
@@ -3206,7 +3265,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 
 		},
 		models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx, stats,
+		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx, stats, hardware, hybrid,
 		get mode() {
 
 			return state.mode;

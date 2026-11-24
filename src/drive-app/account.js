@@ -17,21 +17,29 @@ import { toast } from './screens.js';
 // only ever sent to the Worker's account routes.
 
 const UNREACHABLE = 'Couldn\'t reach World Drive. Check your connection and try again.';
-const NO_RECOVERY = 'The email is only for receipts: nothing is sent to it, so a forgotten password can\'t be recovered, unless you also link Google. Keep it in a password manager.';
+// Where a player who's forgotten their password writes (drive/site/legal.js's contact email).
+const SUPPORT_EMAIL = 'support@worlddrive.app';
+const NO_RECOVERY = 'Forget your password and you can get back in by emailing support from this address, or with Google if you link it. Without an email or Google, a forgotten password can\'t be recovered.';
 
 let hooks = null;
 let dialog = null;
 // 'sign-in' or 'sign-up': which the signed-out form does.
 let mode = 'sign-in';
+// A reset link's token (/?reset=..., supporter.js's takeReset) while the panel shows its form for a
+// new password, signed in or out; null otherwise.
+let resetToken = null;
+// Whether the sign-in form shows how to get back in after a forgotten password.
+let forgotOpen = false;
 // What the panel was last drawn for, so it's drawn again only when that changes (not as the user
 // types, whenever /api/me is asked again).
 let drawnFor = '';
 let ids = 0;
 
 // Opens the panel (made the first time), with supporter.js's hooks.
-export function openAccount( from ) {
+export function openAccount( from, { reset = null } = {} ) {
 
 	hooks = from;
+	if ( reset ) resetToken = reset;
 	if ( ! dialog ) {
 
 		dialog = document.createElement( 'dialog' );
@@ -71,7 +79,8 @@ export function openAccount( from ) {
 
 function stateOf( me ) {
 
-	return me?.signedIn ? `in:${ me.username ?? '' }:${ me.google ? 1 : 0 }:${ me.email }:${ me.contactEmail ?? '' }` : `out:${ mode }`;
+	if ( resetToken ) return `reset:${ resetToken }`;
+	return me?.signedIn ? `in:${ me.username ?? '' }:${ me.google ? 1 : 0 }:${ me.email }:${ me.contactEmail ?? '' }:${ passState( me ) }` : `out:${ mode }`;
 
 }
 
@@ -83,7 +92,7 @@ function draw( always = false ) {
 	drawnFor = state;
 	const close = Object.assign( button( '×', () => dialog.close() ), { className: 'close' } );
 	close.setAttribute( 'aria-label', 'Close' );
-	const title = Object.assign( document.createElement( 'h2' ), { id: 'account-title', textContent: me?.signedIn ? 'Your account' : mode === 'sign-up' ? 'Create account' : 'Sign in' } );
+	const title = Object.assign( document.createElement( 'h2' ), { id: 'account-title', textContent: resetToken ? 'New password' : me?.signedIn ? 'Your account' : mode === 'sign-up' ? 'Create account' : 'Sign in' } );
 	const header = document.createElement( 'header' );
 	header.append( title, close );
 	// Drawn again with the focus in it (a tab pressed, a form sent), the focus stays in it: on the
@@ -92,7 +101,7 @@ function draw( always = false ) {
 	const focused = dialog.contains( document.activeElement ) ? focusKey( document.activeElement ) : null;
 	// The folded section that was open stays open, if it's still there.
 	const opened = dialog.querySelector( 'details[open] > summary' )?.textContent;
-	dialog.replaceChildren( header, ...( me?.signedIn ? signedIn( me ) : signedOut() ) );
+	dialog.replaceChildren( header, ...( resetToken ? [ resetForm() ] : me?.signedIn ? signedIn( me ) : signedOut() ) );
 	if ( opened ) for ( const summary of dialog.querySelectorAll( 'details > summary' ) ) if ( summary.textContent === opened ) summary.parentElement.open = true;
 	if ( focused !== null && dialog.open ) {
 
@@ -151,7 +160,7 @@ function signInForm() {
 	const { form, status, submit } = makeForm( 'account-sign-in', 'Sign in' );
 	const username = field( form, 'Username', { name: 'username', autocomplete: 'username' } );
 	const password = field( form, 'Password', { name: 'password', type: 'password', autocomplete: 'current-password' } );
-	form.append( submit, status );
+	form.append( submit, status, forgotPart() );
 	form.addEventListener( 'submit', async event => {
 
 		event.preventDefault();
@@ -169,13 +178,42 @@ function signInForm() {
 
 }
 
+// "Forgot password?": how to get back in. No email is sent by the game: the player writes to
+// support from the email on their account, and gets a link back (the owner makes it on the admin
+// page: logins.js's adminResetLink), or signs in with Google if it's linked.
+function forgotPart() {
+
+	const box = document.createElement( 'div' );
+	box.className = 'account-forgot';
+	const toggle = Object.assign( button( 'Forgot password?', () => {
+
+		forgotOpen = ! forgotOpen;
+		draw( true );
+
+	} ), { className: 'link account-forgot-open' } );
+	toggle.setAttribute( 'aria-expanded', String( forgotOpen ) );
+	box.append( toggle );
+	if ( forgotOpen ) {
+
+		const mail = `mailto:${ SUPPORT_EMAIL }?subject=${ encodeURIComponent( 'World Drive: forgot my password' ) }&body=${ encodeURIComponent( 'My username is: \n' ) }`;
+		box.append(
+			linksLine( 'Email ', [ mail, SUPPORT_EMAIL ], ' from the email on your account (the one your receipts go to) and say your username. You\'ll get a link back to set a new password, usually within a day.' ),
+			Object.assign( paragraph( hooks.google ? 'Linked Google to the account? Sign in with Google above instead.' : 'No email on the account? Write anyway with your username and what you bought, if anything, and we\'ll see what can be done.' ), { className: 'account-hint' } ),
+		);
+
+	}
+
+	return box;
+
+}
+
 function signUpForm() {
 
 	const { form, status, submit } = makeForm( 'account-sign-up', 'Create account' );
 	const username = field( form, 'Username', { name: 'username', autocomplete: 'username', minLength: 3, maxLength: 20, hint: '3 to 20 letters, digits, _ or -. Only you see it: the boards show your nickname.' } );
 	const password = field( form, 'Password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: `At least ${ PASSWORD_MIN } characters. A few words together make a good one.` } );
-	const email = field( form, 'Email (optional)', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'For your receipts if you buy the pass. Never shown, never used for anything else.' } );
-	form.append( Object.assign( paragraph( NO_RECOVERY ), { className: 'account-note' } ), robotSlot(), submit, status );
+	const email = field( form, 'Email (optional)', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'For your receipts, and to get back in if you forget your password. Never shown, never sent anything else.' } );
+	form.append( Object.assign( paragraph( NO_RECOVERY ), { className: 'account-note' } ), agreeing(), robotSlot(), submit, status );
 	form.addEventListener( 'submit', async event => {
 
 		event.preventDefault();
@@ -192,6 +230,71 @@ function signUpForm() {
 		busy( form, false );
 		if ( ! answer.ok ) return say( status, problem( answer ) );
 		signedInNow( answer.body );
+
+	} );
+	return form;
+
+}
+
+// What making an account agrees to (drive/site/legal.js), with the pages in a new tab so the game
+// stays open.
+function agreeing() {
+
+	const p = linksLine( 'By creating an account you confirm you\'re 13 or older and agree to the ', [ '/terms/', 'terms' ], ' and the ', [ '/privacy/', 'privacy policy' ], '.' );
+	p.classList.add( 'account-terms' );
+	return p;
+
+}
+
+// --- a reset link ---
+
+// The form a reset link opens on (/?reset=...): whose it is (asked of the Worker, so a password
+// manager saves the new password under the right username), the new password, and signed in once
+// it's set. A link used or out of date says so, and how to get a new one.
+function resetForm() {
+
+	const { form, status, submit } = makeForm( 'account-reset', 'Set password and sign in' );
+	const token = resetToken;
+	const who = Object.assign( paragraph( 'Checking the link...' ), { className: 'account-label' } );
+	const username = Object.assign( document.createElement( 'input' ), { type: 'text', name: 'username', autocomplete: 'username', hidden: true } );
+	const password = field( form, 'New password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: `At least ${ PASSWORD_MIN } characters. A few words together make a good one.` } );
+	form.prepend( who, username );
+	form.append( submit, status );
+	submit.disabled = true;
+	const gone = text => {
+
+		who.textContent = text;
+		password.disabled = true;
+		submit.disabled = true;
+		form.append( linksLine( 'Email ', [ `mailto:${ SUPPORT_EMAIL }`, SUPPORT_EMAIL ], ' for a new link.' ) );
+
+	};
+	send( 'POST', '/api/account/reset-check', { token } ).then( answer => {
+
+		if ( token !== resetToken ) return;
+		if ( ! answer.ok ) return gone( answer.status === 410 ? 'This link has been used or has expired.' : problem( answer ) );
+		username.value = answer.body.username;
+		who.textContent = `A new password for ${ answer.body.username }.`;
+		submit.disabled = false;
+		password.focus();
+
+	} );
+	form.addEventListener( 'submit', async event => {
+
+		event.preventDefault();
+		const wrong = passwordProblem( password.value, username.value );
+		if ( wrong ) return say( status, `${ wrong }.` );
+		busy( form, true );
+		say( status, 'Setting your password...' );
+		const answer = await send( 'POST', '/api/account/reset', { token, password: password.value } );
+		busy( form, false );
+		if ( ! answer.ok ) return answer.status === 410 ? gone( 'This link has been used or has expired.' ) : say( status, problem( answer ) );
+		resetToken = null;
+		forgotOpen = false;
+		mode = 'sign-in';
+		hooks.update( answer.body );
+		toast( `New password set: signed in as ${ answer.body.username ?? hooks.who() }` );
+		dialog.close();
 
 	} );
 	return form;
@@ -222,7 +325,7 @@ function signedIn( me ) {
 		item( 'Username', me.username ?? 'none' ),
 	);
 	parts.push( Object.assign( paragraph( 'You sign in with:' ), { className: 'account-label' } ), list );
-	if ( me.supporter ) parts.push( Object.assign( paragraph( '⭐ Supporter Pass' ), { className: 'account-pass' } ) );
+	if ( me.supporter ) parts.push( passPart( me ) );
 
 	// Signing out here or everywhere: both buttons off while it's sent (a second tap doesn't send it
 	// again), and what went wrong said just under them (the pass's sheet, which says it too, is
@@ -247,7 +350,98 @@ function signedIn( me ) {
 	parts.push( me.username ? changeForm( me ) : addForm() );
 	parts.push( googlePart( me ) );
 	if ( me.username && me.google ) parts.push( removeForm( me ) );
+	parts.push( requestForm() );
 	return parts;
+
+}
+
+// The pass, for a supporter: which kind it is, and for a monthly one where to cancel it or change the
+// card (Stripe's customer portal, SUPPORTER_MANAGE_LINK) or, without that link, to ask. Never folded
+// away: someone paying every month finds how to stop at once (drive/site/legal.js's /refunds/).
+function passPart( me ) {
+
+	const box = document.createElement( 'div' );
+	box.className = 'account-pass';
+	const manage = me.purchase?.manage;
+	const lines = [ Object.assign( paragraph( '⭐ Supporter Pass' ), { className: 'account-pass-title' } ) ];
+	if ( me.subscribed ) {
+
+		lines.push( paragraph( 'Monthly subscription. Cancel any time: you won\'t be charged again, and the pass stays until the end of the month you\'ve paid for.' ) );
+		if ( manage ) lines.push( Object.assign( pageLink( manage, 'Manage subscription' ), { className: 'account-manage' } ), Object.assign( paragraph( 'Cancel, change your card or see your receipts on Stripe, with the email you paid with.' ), { className: 'account-note' } ) );
+		else lines.push( linksLine( 'To cancel or change your card, ', [ '/contact/', 'get in touch' ], ' and it\'s done for you.' ) );
+
+	} else if ( me.dayPassUntil ) {
+
+		lines.push( paragraph( '24-hour pass. Paid once: it simply ends, nothing to cancel.' ) );
+
+	} else {
+
+		lines.push( paragraph( 'Yours for good. Paid once: nothing to cancel.' ) );
+
+	}
+
+	lines.push( linksLine( '', [ '/refunds/', 'Refunds' ], ' · ', [ '/contact/', 'Help' ] ) );
+	box.append( ...lines );
+	return box;
+
+}
+
+// What the pass part shows, so the panel is drawn again when it changes.
+function passState( me ) {
+
+	return me.supporter ? `${ me.subscribed ? 'month' : me.dayPassUntil ? 'day' : 'life' }:${ me.purchase?.manage ?? '' }` : 'none';
+
+}
+
+// A link to a page, in a new tab so the game stays open.
+function pageLink( href, words ) {
+
+	return Object.assign( document.createElement( 'a' ), { href, target: '_blank', rel: 'noopener', textContent: words } );
+
+}
+
+// A line of words and links: each [ href, words ] a link.
+function linksLine( ...parts ) {
+
+	const p = Object.assign( document.createElement( 'p' ), { className: 'account-note' } );
+	p.append( ...parts.filter( part => part !== '' ).map( part => Array.isArray( part ) ? pageLink( ...part ) : part ) );
+	return p;
+
+}
+
+// "Request a feature": what the player would like, sent to the owner's admin page (POST /api/requests,
+// worker/drive/requests.js), a few a day.
+const REQUEST_MOST = 1000;
+function requestForm() {
+
+	const { form, status, submit } = makeForm( 'account-request', 'Send' );
+	const id = `account-field-${ ++ ids }`;
+	const label = Object.assign( document.createElement( 'label' ), { htmlFor: id, textContent: 'What would make World Drive better?' } );
+	const text = Object.assign( document.createElement( 'textarea' ), { id, name: 'request', rows: 4, maxLength: REQUEST_MOST, placeholder: 'A car, a place, a world, a way to play...' } );
+	const count = Object.assign( document.createElement( 'p' ), { className: 'account-hint' } );
+	const counted = () => {
+
+		count.textContent = `${ text.value.length } / ${ REQUEST_MOST }`;
+
+	};
+	counted();
+	text.addEventListener( 'input', counted );
+	form.append( label, text, count, submit, status );
+	form.addEventListener( 'submit', async event => {
+
+		event.preventDefault();
+		if ( ! text.value.trim() ) return say( status, 'Write what you\'d like first.' );
+		busy( form, true );
+		say( status, 'Sending...' );
+		const answer = await send( 'POST', '/api/requests', { text: text.value } );
+		busy( form, false );
+		if ( ! answer.ok ) return say( status, problem( answer ) );
+		text.value = '';
+		counted();
+		say( status, 'Sent. Thanks! Every request is read.' );
+
+	} );
+	return section( 'Request a feature', paragraph( 'Ideas for rides, places, worlds or anything else go straight to the person who makes World Drive.' ), form );
 
 }
 
