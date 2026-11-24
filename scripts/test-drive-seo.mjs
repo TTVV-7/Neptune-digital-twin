@@ -527,6 +527,18 @@ describe( 'what search engines read', () => {
 		const built = pages.find( page => page.path === '/contact/' ).html;
 		assert.match( built, /<dt>Run by<\/dt><dd>Tom<\/dd><dt>Email<\/dt><dd><a href="mailto:support@worlddrive\.app">support@worlddrive\.app<\/a><\/dd><dt>Based in<\/dt><dd>Vancouver, British Columbia, Canada<\/dd>/ );
 		assert.ok( ! /tel:/.test( built ) );
+		// What's bought and who's paid: prices in CAD plus tax, sold through Stripe's Link, and Build Pro
+		// in the terms and the refunds as well as the pass.
+		const terms = pages.find( page => page.path === '/terms/' ).html;
+		const refunds = pages.find( page => page.path === '/refunds/' ).html;
+		assert.match( terms, /in Canadian dollars, plus any sales tax or VAT where you live/ );
+		assert.match( terms, /sold to you through Link, Stripe's payment service/ );
+		assert.match( terms, /<h2>World Drive Build Pro<\/h2>/ );
+		assert.match( refunds, /Build Pro/ );
+		assert.match( refunds, /its subscription is cancelled too/ );
+		// Both plans may go on one refund (takeBack matches by customer), and the pages say so.
+		assert.match( terms, /refunding a payment for one may end the other too/ );
+		assert.match( pages.find( page => page.path === '/contact/' ).html, /<b>Cancel Build Pro:<\/b>/ );
 
 	} );
 

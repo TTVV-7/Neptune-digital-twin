@@ -266,9 +266,14 @@ export async function stripeWebhook( { request, env, now } ) {
 	if ( event.livemode !== true && ! settings.testMode ) return json( { received: true } );
 	const object = isObject( event.data?.object ) ? event.data.object : {};
 	if ( event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded' ) await recordPurchase( db, settings, object, now );
-	// Stripe only sets refunded once the whole charge is; a partial refund keeps the pass.
-	else if ( event.type === 'charge.refunded' && object.refunded === true ) await takeBack( db, object.payment_intent, 'refunded', now );
+	// Stripe only sets refunded once the whole charge is; a partial refund keeps the pass. The Charge
+	// names its customer too, which finds a monthly pass whose renewal it was (takeBack).
+	else if ( event.type === 'charge.refunded' && object.refunded === true ) await takeBack( db, object.payment_intent, 'refunded', now, object );
 	// A chargeback: the bank takes the money back as the dispute opens, and gives it back if it's won.
+	// A Dispute names its charge and PaymentIntent but no customer, and the Worker has no Stripe API
+	// key to look the charge up with, so a chargeback of a monthly pass's payment (whose PaymentIntent
+	// no purchase has) can't be tied to its pass here: the owner cancels that subscription in Stripe,
+	// which takes the pass away (customer.subscription.deleted). A one-time pass's is found as ever.
 	else if ( event.type === 'charge.dispute.funds_withdrawn' ) await takeBack( db, object.payment_intent, 'disputed', now );
 	else if ( event.type === 'charge.dispute.funds_reinstated' ) await giveBack( db, object.payment_intent );
 	// A subscription started, changed (a renewal that failed, a card fixed) or ended: its pass follows.
@@ -296,6 +301,18 @@ async function recordPurchase( db, settings, session, now ) {
 
 	const subscription = session.mode === 'subscription' ? stripeId( session.subscription ) : null;
 	if ( session.payment_status !== 'paid' && ! ( subscription && session.payment_status === 'no_payment_required' ) ) return;
+	// A paid checkout's PaymentIntent was never a subscription's renewal (those are paid through an
+	// invoice, not a checkout), so a monthly pass that a refund of it took back, guessing it was one
+	// (takeBack: the refund was delivered before this checkout, while Stripe was still retrying it),
+	// was taken back by mistake, and is given back. Before the links are checked: a checkout through
+	// a link that isn't World Drive's isn't recorded, but its refund could still have been guessed.
+	const paymentIntent = stripeId( session.payment_intent );
+	if ( paymentIntent ) {
+
+		await db.prepare( 'UPDATE purchases SET status = \'paid\', refunded_at = NULL, taken_back_by = NULL WHERE taken_back_by = ?' ).bind( paymentIntent ).run();
+
+	}
+
 	const link = stripeId( session.payment_link );
 	// World Drive Build's Pro plan (build.js) is kept here too, as its own kind, which gives no pass.
 	const pass = settings.dayLinkId && link === settings.dayLinkId ? 'day' : settings.buildLinkId && link === settings.buildLinkId ? 'build' : null;
@@ -306,10 +323,15 @@ async function recordPurchase( db, settings, session, now ) {
 	const reference = typeof session.client_reference_id === 'string' && ACCOUNT_ID.test( session.client_reference_id ) ? Number( session.client_reference_id ) : null;
 	const amount = Number.isSafeInteger( session.amount_total ) ? session.amount_total : null;
 	const currency = typeof session.currency === 'string' && /^[a-z]{3}$/.test( session.currency ) ? session.currency : null;
-	await db.prepare( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at, subscription, pass )
+	// Who paid (the Stripe Customer, which a refund of a monthly pass's renewal is found by: takeBack)
+	// and how much of amount was tax, which Stripe collects as the merchant of record, so the admin
+	// page can tell what's World Drive's from what's the tax's.
+	const customer = customerId( session.customer );
+	const tax = Number.isSafeInteger( session.total_details?.amount_tax ) && session.total_details.amount_tax >= 0 ? session.total_details.amount_tax : null;
+	await db.prepare( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at, subscription, pass, customer, tax )
 		VALUES ( ?1, ( SELECT id FROM accounts WHERE id = ?2 ), ?3, ?4, ?5, ?6, COALESCE( ( SELECT status FROM reversals WHERE payment_intent = ?6 ), 'paid' ), ?7,
-			( SELECT created_at FROM reversals WHERE payment_intent = ?6 ), ?8, ?9 ) ON CONFLICT ( checkout_session ) DO NOTHING` )
-		.bind( id, reference, email, amount, currency, stripeId( session.payment_intent ), now, subscription, pass ).run();
+			( SELECT created_at FROM reversals WHERE payment_intent = ?6 ), ?8, ?9, ?10, ?11 ) ON CONFLICT ( checkout_session ) DO NOTHING` )
+		.bind( id, reference, email, amount, currency, paymentIntent, now, subscription, pass, customer, tax ).run();
 
 }
 
@@ -329,16 +351,69 @@ async function subscriptionChanged( db, subscription, eventAt, now ) {
 // The money for a payment taken back (status 'refunded' or 'disputed'): its pass goes. Kept in
 // reversals too, for a purchase that hasn't arrived yet; a refund outranks a chargeback there, so a
 // late "dispute won" never undoes a refund.
-async function takeBack( db, paymentIntent, status, now ) {
+// A refund of a subscription's payment (`charge`: the refunded Charge, given for refunds only)
+// matches no purchase by its PaymentIntent: a subscription's Checkout Session has none, and each
+// renewal is paid by a new one. The Charge doesn't say which subscription it paid, if any (on this
+// API version it has no invoice, and the Worker has no Stripe API key to ask with), so this is a
+// best guess: when no purchase has that PaymentIntent, the charge has a customer, and that
+// customer has a subscription purchase (the monthly pass, or World Drive Build's Pro plan, 'build')
+// still running, not refunded, for the same amount in the same currency (a renewal charges what the
+// checkout did, tax included), that's taken back. Or one whose checkout charged nothing (it started
+// with a free trial, so there's no amount to compare). A subscription that has ended isn't touched,
+// so an old one's real money stays counted. A one-time pass of theirs never is either: its own
+// PaymentIntent is what refunds it. The guess is wrong when the refunded charge was a one-time
+// purchase's whose checkout Stripe hasn't delivered yet (out of order, as reversals is for), so
+// the purchase taken back keeps the PaymentIntent that did it (taken_back_by), and recordPurchase
+// gives it back when that checkout arrives. It can still be wrong, and stay wrong, for a charge of
+// something that isn't World Drive's (another product on the same Stripe account, a charge made by
+// hand) refunded after its checkout, from the same customer, for the same amount and currency: the
+// admin page shows each purchase's status, and the owner sets one back in the database by hand
+// (status 'paid', refunded_at and taken_back_by NULL). If a customer has a
+// monthly pass and Build's Pro plan both at the same price, a refund of either's renewal takes back
+// both. The purchase stays taken back even if the subscription goes on renewing (the Worker
+// doesn't hear of renewals, only of refunds), so the owner cancels the subscription in Stripe when
+// refunding it, as the refunds page says: a refunded monthly pass is cancelled too. Every
+// statement changes nothing the second time (Stripe retries), and the customer's look is by an
+// index, over that one customer's purchases.
+async function takeBack( db, paymentIntent, status, now, charge = null ) {
 
 	const id = stripeId( paymentIntent );
-	if ( ! id ) return;
-	await db.batch( [
-		db.prepare( `INSERT INTO reversals ( payment_intent, status, created_at ) VALUES ( ?1, ?2, ?3 )
-			ON CONFLICT ( payment_intent ) DO UPDATE SET status = excluded.status WHERE excluded.status = 'refunded'` ).bind( id, status, now ),
-		db.prepare( `UPDATE purchases SET status = ?2, refunded_at = COALESCE( refunded_at, ?3 )
-			WHERE payment_intent = ?1 AND ( refunded_at IS NULL OR ( ?2 = 'refunded' AND status = 'disputed' ) )` ).bind( id, status, now ),
-	] );
+	const payer = customerId( charge?.customer );
+	if ( ! id && ! payer ) return;
+	const statements = [];
+	if ( id ) {
+
+		statements.push(
+			db.prepare( `INSERT INTO reversals ( payment_intent, status, created_at ) VALUES ( ?1, ?2, ?3 )
+				ON CONFLICT ( payment_intent ) DO UPDATE SET status = excluded.status WHERE excluded.status = 'refunded'` ).bind( id, status, now ),
+			db.prepare( `UPDATE purchases SET status = ?2, refunded_at = COALESCE( refunded_at, ?3 )
+				WHERE payment_intent = ?1 AND ( refunded_at IS NULL OR ( ?2 = 'refunded' AND status = 'disputed' ) )` ).bind( id, status, now ),
+		);
+
+	}
+
+	const amount = Number.isSafeInteger( charge?.amount ) ? charge.amount : null;
+	const currency = typeof charge?.currency === 'string' && /^[a-z]{3}$/.test( charge.currency ) ? charge.currency : null;
+	if ( payer && status === 'refunded' && amount !== null && currency ) {
+
+		const active = ACTIVE_STATUSES.map( value => `'${ value }'` ).join( ', ' );
+		statements.push( db.prepare( `UPDATE purchases SET status = 'refunded', refunded_at = ?3, taken_back_by = ?1
+			WHERE customer = ?2 AND subscription IS NOT NULL AND ( pass IS NULL OR pass = 'build' ) AND refunded_at IS NULL
+			AND currency = ?5 AND ( amount = ?4 OR amount = 0 )
+			AND NOT EXISTS ( SELECT 1 FROM subscriptions s WHERE s.id = purchases.subscription AND s.status NOT IN ( ${ active } ) )
+			AND ( ?1 IS NULL OR NOT EXISTS ( SELECT 1 FROM purchases WHERE payment_intent = ?1 ) )` ).bind( id, payer, now, amount, currency ) );
+
+	}
+
+	if ( statements.length ) await db.batch( statements );
+
+}
+
+// A Stripe Customer's id (cus_...) from a field that holds one (or the expanded object), else null.
+function customerId( value ) {
+
+	const id = stripeId( value );
+	return id?.startsWith( 'cus_' ) ? id : null;
 
 }
 

@@ -6,7 +6,7 @@ import { KEEP_DAYS, adminAccount, askedDays } from './admin.js';
 import { recordPlaces } from './dropins.js';
 import { database } from './players.js';
 import { KEEP as KEEP_SCORES } from './scores.js';
-import { hasPass, supporterEmails } from './supporter.js';
+import { DAY_PASS_MS, hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
 import { OFF_EARTH } from '../../src/drive-app/worlds.js';
 
@@ -15,7 +15,9 @@ import { OFF_EARTH } from '../../src/drive-app/worlds.js';
 // posts it every few minutes and as it goes out of sight; visits are counted here as /api/visit
 // hands them out. Only counts: nothing of who (src/drive-app/stats-protocol.js), so no cookie and
 // no consent banner. The admin page is also told what the leaderboard's and the Supporter Pass's own
-// tables say of each day (FACTS) and how many there are now (TOTALS), counted as it asks.
+// tables say of each day (FACTS) and how many there are now (TOTALS), counted as it asks, and the
+// period's last few sales one by one (SALES: what was bought, when, and by which account, so a sale
+// the owner sees come in can be told apart from the counts; never an email or a Stripe id).
 //
 // A post carries the places of the drop-ins it counts too (dropins.js): where people drop in, to
 // about a kilometre, for the admin page's heat map, at no request of its own.
@@ -26,10 +28,22 @@ import { OFF_EARTH } from '../../src/drive-app/worlds.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
+// SQL: what the purchase `u` was, as the admin page tells sales apart (a 99-cent day pass and a
+// lifetime pass are not the same sale, and counted together they made the page's "passes paid" read
+// as if someone had bought the pass for good): 'granted' (given by hand, whatever it gives), 'day'
+// (the 24-hour pass), 'build' (Build Pro, a month's or for good), 'monthly' (the Supporter Pass as a
+// subscription: no kind, a subscription), 'lifetime' (the pass for good, or a legacy one-time pass:
+// no kind, no subscription, bought through Stripe, taken back since or not, so Recent sales says a
+// refunded one was a lifetime pass), and 'other' for anything else (a kind a later version adds, or
+// a status written by hand), so a new kind shows up as one rather than being counted as another.
+const KIND = u => `CASE WHEN ${ u }.status = 'granted' THEN 'granted' WHEN ${ u }.pass = 'day' THEN 'day' WHEN ${ u }.pass = 'build' THEN 'build'
+	WHEN ${ u }.pass IS NULL AND ${ u }.subscription IS NOT NULL THEN 'monthly'
+	WHEN ${ u }.pass IS NULL AND ${ u }.status IN ( 'paid', 'refunded', 'disputed' ) THEN 'lifetime' ELSE 'other' END`;
+
 // What the admin page is told of each day from the leaderboard's and the Supporter Pass's own tables,
 // counted as it asks (nothing more is kept for it): [ metric, SQL giving day, key, n for the times
 // from ?1 to before ?2 (ms) ], each grouped by the UTC day of created_at. Only counts: nobody's name,
-// email or id leaves these.
+// email or id leaves these (the sales one by one are SALES', which says what of them leaves).
 const FACTS = [
 	// New nicknames: the players made (and not since removed by the owner).
 	[ 'players', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, 'new' AS key, COUNT(*) AS n FROM players
@@ -40,13 +54,41 @@ const FACTS = [
 	// Accounts made: Google accounts signed in for the first time, and accounts made with a username.
 	[ 'accounts', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, 'new' AS key, COUNT(*) AS n FROM accounts
 		WHERE created_at >= ?1 AND created_at < ?2 GROUP BY day` ],
-	// Passes recorded and not taken back, by status ('paid', or 'granted' by hand), and their money by
-	// currency, in its smallest unit (cents): a refund or a chargeback takes a purchase out of both.
-	[ 'purchases', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, status AS key, COUNT(*) AS n FROM purchases
-		WHERE refunded_at IS NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, status` ],
+	// Purchases recorded and not taken back, by what they were (KIND: 'day', 'monthly', 'lifetime',
+	// 'build', 'granted' or 'other'), and their money by currency, in its smallest unit (cents): a
+	// refund or a chargeback takes a purchase out of all of them. revenue is what the buyer paid, tax
+	// included (Stripe collects the tax as the merchant of record, so it was never World Drive's);
+	// tax is the tax in it, by currency, from the purchases Stripe said it of (recorded from
+	// 0020_purchase_details.sql on, so older ones have none): the page takes it off for the money
+	// before tax.
+	[ 'purchases', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, ${ KIND( 'purchases' ) } AS key, COUNT(*) AS n FROM purchases
+		WHERE refunded_at IS NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, key` ],
 	[ 'revenue', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, currency AS key, SUM( amount ) AS n FROM purchases
 		WHERE refunded_at IS NULL AND amount IS NOT NULL AND currency IS NOT NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, currency` ],
+	[ 'tax', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, currency AS key, SUM( tax ) AS n FROM purchases
+		WHERE refunded_at IS NULL AND amount IS NOT NULL AND tax IS NOT NULL AND currency IS NOT NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, currency` ],
 ];
+
+// How many sales the admin page is shown one by one: the period's newest.
+const SALES_SHOWN = 25;
+
+// The period's last SALES_SHOWN purchases (from ?1 to before ?2, ms), the newest first (the last
+// recorded first of two at the same moment), taken back
+// or not, for the admin page's Recent sales: when, what (KIND), what was paid and the tax in it,
+// its status ('paid', 'refunded', 'disputed', 'granted'), its subscription's status as Stripe last
+// told us (NULL with none), and whose: the account it's recorded to, or the one with the email it
+// was paid with (as the pass finds its owner: supporter.js's ownPurchase), with that account's
+// leaderboard nickname (its player last seen, if it has linked one). What leaves this for the page
+// is that and no more (adminStats' sale): the account's id and public nickname, never the email
+// paid with or the account's, and of the Stripe ids only the checkout's last few characters, enough
+// to find the sale in Stripe's dashboard by.
+const SALES = `SELECT x.*, ( SELECT name FROM players WHERE account_id = x.owner ORDER BY last_seen_at DESC LIMIT 1 ) AS nickname FROM (
+	SELECT p.rowid AS seq, p.checkout_session, p.created_at, ${ KIND( 'p' ) } AS kind, p.amount, p.currency, p.tax, p.status, p.refunded_at,
+		p.subscription IS NOT NULL AS subscribed, s.status AS subscription_status,
+		COALESCE( p.account_id, ( SELECT MIN( a.id ) FROM accounts a WHERE a.email = p.email AND p.email <> '' ) ) AS owner
+	FROM purchases p LEFT JOIN subscriptions s ON s.id = p.subscription
+	WHERE p.created_at >= ?1 AND p.created_at < ?2 ORDER BY p.created_at DESC, p.rowid DESC LIMIT ${ SALES_SHOWN } ) x
+	ORDER BY x.created_at DESC, x.seq DESC`;
 
 // How many there are now: players, accounts (all of them, and by how they sign in: with Google only,
 // with a username and password only, or both: logins.js), the accounts with the pass (hasPass:
@@ -136,10 +178,12 @@ export async function countVisit( env, now, kind = '', { again = false } = {} ) 
 //   { from, to, rows: [ [ day, metric, key, n ] ],
 //     previous: { from, to, rows: [ [ metric, key, n ] ] },
 //     totals: { players, accounts, kinds: { google, password, both }, supporters, unclaimed },
+//     sales: [ { at, kind, amount, currency, tax, status, refunded, subscription, until, running, account, nickname, ref } ],
 //     kept: { stats, scores } }
 // rows: the page's and the visits' counts a day (stats_daily) and FACTS's, alike. previous: the same
 // for the as many days before those, added up over them (what the page compares with: summed here,
-// so a year's comparison is a few hundred rows, not tens of thousands). totals: TOTALS's, now. kept:
+// so a year's comparison is a few hundred rows, not tens of thousands). totals: TOTALS's, now.
+// sales: SALES', the period's newest first (sale). kept:
 // how many days back the counts and the scores log go. 401 without a signed-in account, 403 for one
 // not in ADMIN_EMAILS, 429 past ADMIN_LOOKS a minute (admin.js). Rows older than KEEP_DAYS go as
 // it's asked. Every query is bounded by the days asked for (stats_daily by its key, the scores log
@@ -159,11 +203,12 @@ export async function adminStats( context ) {
 	const start = Date.parse( `${ before.from }T00:00:00Z` );
 	const end = Date.parse( `${ to }T00:00:00Z` ) + DAY;
 	context.ctx?.waitUntil?.( db.prepare( 'DELETE FROM stats_daily WHERE day < ?' ).bind( dayOf( now - KEEP_DAYS * DAY ) ).run().catch( () => {} ) );
-	const [ counts, earlier, firsts, totals, ...facts ] = await db.batch( [
+	const [ counts, earlier, firsts, totals, sold, ...facts ] = await db.batch( [
 		db.prepare( 'SELECT day, metric, key, n FROM stats_daily WHERE day >= ? AND day <= ? ORDER BY day' ).bind( from, to ),
 		db.prepare( 'SELECT metric, key, SUM( n ) AS n FROM stats_daily WHERE day >= ? AND day <= ? GROUP BY metric, key' ).bind( before.from, before.to ),
 		db.prepare( `SELECT metric, MIN( day ) AS first FROM stats_daily WHERE day >= ? AND day <= ? AND metric IN ( 'visit', 'funnel' ) GROUP BY metric` ).bind( before.from, before.to ),
 		db.prepare( TOTALS ).bind( supporterEmails( env ) ),
+		db.prepare( SALES ).bind( Date.parse( `${ from }T00:00:00Z` ), end ),
 		...FACTS.map( ( [ , sql ] ) => db.prepare( sql ).bind( start, end ) ),
 	] );
 	const rows = counts.results.map( r => [ r.day, r.metric, r.key, r.n ] );
@@ -197,7 +242,30 @@ export async function adminStats( context ) {
 		from, to, rows,
 		previous: { ...before, first, rows: [ ...previous.values() ] },
 		totals: { players, accounts, kinds: { google, password, both }, supporters, unclaimed },
+		sales: sold.results.map( row => sale( row, now ) ),
 		kept: { stats: KEEP_DAYS, scores: KEEP_SCORES / DAY },
 	} );
+
+}
+
+// A SALES row as the admin page is told it: at (ms), kind (KIND), amount and tax in currency's
+// smallest unit (null when not known), status, refunded (taken back, by a refund or a chargeback
+// the bank still has), subscription (its status as Stripe last told us, '' for one not heard of
+// yet, which counts as running as it does for the pass, or null for a one-time purchase); for a
+// day pass, until (ms) when its 24 hours end, and running, whether they still are at `now` (and it
+// isn't taken back); account (its id, or null for a purchase nobody has signed in for yet) and
+// nickname (its leaderboard name, or null); ref: the Stripe checkout's last 8 characters, to find
+// it in Stripe's dashboard by ('' for one added by hand, whose id is whatever the owner wrote).
+function sale( row, now ) {
+
+	const refunded = row.refunded_at !== null;
+	const until = row.kind === 'day' ? row.created_at + DAY_PASS_MS : null;
+	return {
+		at: row.created_at, kind: row.kind, amount: row.amount, currency: row.currency, tax: row.tax, status: row.status, refunded,
+		subscription: row.subscribed ? row.subscription_status ?? '' : null,
+		until, running: until !== null && ! refunded && until > now,
+		account: row.owner ?? null, nickname: row.nickname ?? null,
+		ref: /^cs_\w{8,}$/.test( row.checkout_session ) ? row.checkout_session.slice( - 8 ) : '',
+	};
 
 }

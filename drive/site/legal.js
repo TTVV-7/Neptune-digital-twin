@@ -12,10 +12,29 @@
 // These are a plain-language starting point, written to match what the code actually does (what
 // drive/index.html's About World Drive says is kept, worker/drive/). They aren't legal advice: have a
 // lawyer read them before relying on them, and change them here when what the game keeps changes.
+//
+// Paying: every Payment Link (the passes' and Build Pro's) has Stripe Managed Payments on, Stripe's
+// merchant of record service. The buyer is sold the pass "through Link", Stripe's payment service: Link
+// is who takes the money, works out and collects the sales tax or VAT where they live (on top of the
+// price, which is in Canadian dollars), sends the receipts and is named on their card statement
+// (LINK.COM*...), under the payment terms shown in the checkout's footer. World Drive is still who
+// provides what's bought, and who refunds it (from Stripe's Dashboard). The pages say so in plain words
+// and no more than that: what Link's role is in law is Stripe's to describe, not these pages'.
+// The statement line says "may show" because it comes from Stripe's docs, not a charge seen here.
+//
+// What the pages promise about refunds and chargebacks of a subscription (the monthly pass, Build
+// Pro) is partly the owner's to keep, not the Worker's: it has no Stripe API key, so it can't cancel
+// anything in Stripe, and a chargeback of a subscription's payment can't be tied to its purchase
+// (worker/drive/supporter.js, stripeWebhook and takeBack). So refunding a subscription's payment
+// means cancelling the subscription in Stripe too, and a chargeback of one means cancelling it
+// straight away (that's what ends the pass or Build Pro); the pages word it as "is cancelled", which
+// is what happens, not as something that happens by itself. And a refund matched by its customer
+// can take back both of someone's plans when they cost the same, which the pages own up to: the owner
+// puts the other back by hand when they write.
 
 import { esc } from './build.js';
 
-export const UPDATED = '23 November 2026';
+export const UPDATED = '24 November 2026';
 export const CONTACT_VARS = { name: 'DRIVE_CONTACT_NAME', address: 'DRIVE_CONTACT_ADDRESS', phone: 'DRIVE_CONTACT_PHONE', email: 'DRIVE_CONTACT_EMAIL' };
 // What's shown unless the environment says otherwise: no address or phone in the repository.
 export const CONTACT_DEFAULTS = { name: 'Tom', address: '', phone: '', email: 'support@worlddrive.app' };
@@ -75,14 +94,14 @@ export function legalPages( contact ) {
 			slug: 'terms',
 			title: 'Terms of Use',
 			crumb: 'Terms',
-			description: 'The rules for playing World Drive, making an account and buying the Supporter Pass: who can play, fair play, what the pass is, and liability.',
+			description: 'The rules for playing World Drive, making an account and buying the Supporter Pass or World Drive Build Pro: who can play, fair play, what you\'re buying and who you pay, and liability.',
 			body: terms( contact ),
 		},
 		{
 			slug: 'refunds',
 			title: 'Refunds and Cancelling',
 			crumb: 'Refunds',
-			description: 'How to cancel a World Drive Supporter Pass subscription, and how to get a refund: a full refund on any pass within 14 days, no questions asked.',
+			description: 'How to cancel a World Drive Supporter Pass or Build Pro subscription, and how to get a refund: a full refund on any pass or Build Pro payment within 14 days, no questions asked.',
 			body: refunds( contact ),
 		},
 		{
@@ -113,8 +132,8 @@ function privacy( contact ) {
 	<p>An account is only needed for the Supporter Pass and to keep your progress on every device.</p>
 	<ul>
 		<li><b>Signed in with Google:</b> your Google account's name and email address, and an ID Google gives for it.</li>
-		<li><b>With a username:</b> the username and a salted hash of your password (never the password itself), and an email only if you give one: for your receipts, and so a forgotten password can be reset when you write from it. Nothing else is sent to it.</li>
-		<li><b>The Supporter Pass:</b> what you bought, when, the amount, and Stripe's reference for it. World Drive never sees your card: payments are made with Stripe.</li>
+		<li><b>With a username:</b> the username and a salted hash of your password (never the password itself), and an email only if you give one: to fill in Stripe's checkout for you (the receipt goes to whatever email you pay with), and so a forgotten password can be reset when you write from it. Nothing else is sent to it.</li>
+		<li><b>The Supporter Pass and Build Pro:</b> what you bought, when, the amount (and how much of it was tax), and Stripe's references for the payment and for you as its customer. World Drive never sees your card: payments are made with Stripe.</li>
 		<li><b>Feature requests</b> you send from the account panel: what you wrote, when, and your nickname, read by World Drive's maker and deleted when you ask.</li>
 	</ul>
 	<h2>Why</h2>
@@ -123,7 +142,7 @@ function privacy( contact ) {
 	<ul>
 		<li><b>Cloudflare</b> hosts the game and its data, checks for robots (Turnstile) and counts visits without cookies (Web Analytics).</li>
 		<li><b>Google</b> streams the 3D map of the Earth (your browser asks Google for it directly), runs Google sign-in if you use it, and shows the ad on the globe with AdSense. Google and its partners use cookies to show, count and, where you allow it, personalise the ad; in the EEA, the UK and Switzerland Google asks first. See <a href="https://policies.google.com/technologies/partner-sites">how Google uses information from sites that use its services</a>. There's no ad with the Supporter Pass.</li>
-		<li><b>Stripe</b> takes payments and keeps its own records of them under <a href="https://stripe.com/privacy">its privacy policy</a>.</li>
+		<li><b>Stripe</b> takes payments: the pass and Build Pro are sold to you through Link, Stripe's payment service, which collects what's needed to take the payment and work out the tax where you live (your card, email and billing country or address), sends your receipts, and keeps its own records under <a href="https://stripe.com/privacy">Stripe's privacy policy</a>.</li>
 		<li><b>OpenStreetMap</b> answers place searches.</li>
 	</ul>
 	<p>Nothing is sold or shared for anyone else's marketing. These services may keep data outside Canada (in the United States and elsewhere), where other laws apply.</p>
@@ -161,8 +180,17 @@ function terms( contact ) {
 	<ul>
 		<li>The pass is a licence to use extra things in the game (rides, Garage looks, more Earth drives a day, no ads) for as long as it lasts: 24 hours, while a monthly subscription is paid, or for good (for as long as World Drive runs). It isn't money, can't be exchanged for money, and can't be sold or passed to another account.</li>
 		<li>The monthly pass renews each month until you cancel it, which you can do at any time. See <a href="/refunds/">refunds and cancelling</a>.</li>
-		<li>Prices are shown before you pay, in Canadian dollars; your bank may convert them. Taxes, where they apply, are shown at checkout.</li>
-		<li>If a payment is reversed (a chargeback or a refund), the pass it paid for ends.</li>
+		<li>Prices are shown before you pay, in Canadian dollars, plus any sales tax or VAT where you live, shown at checkout. Stripe may show the price converted to your own currency; if not, your bank may convert it.</li>
+		<li>If a payment is refunded, the pass it paid for ends, and when it's a monthly payment the subscription is cancelled too, so it won't renew. If a payment is charged back, the pass ends; for the monthly pass, the subscription is cancelled and the pass ends with it.</li>
+		<li>If you have both the monthly pass and Build Pro, refunding a payment for one may end the other too for a while: write, and it will be put back.</li>
+	</ul>
+	<p><b>Who you pay.</b> Payments are processed by Stripe. At checkout the pass is sold to you through Link, Stripe's payment service, which acts as the reseller: it takes the payment, works out and collects any sales tax or VAT for where you live, and emails your receipt. Your card statement may show the payment as LINK.COM. The payment terms shown at Stripe's checkout also apply to the payment; these terms apply to the pass itself, which World Drive provides, and World Drive is still who you ask for help or a refund.</p>
+	<h2>World Drive Build Pro</h2>
+	<ul>
+		<li><a href="/build/">World Drive Build</a> is free to use with an account. Build Pro is a licence to use Build's extra features (the whole library and sets, more 3D map views a month, more saved projects, share links and your company's logo) for as long as its monthly subscription is paid. Like the pass, it isn't money and can't be sold or passed to another account.</li>
+		<li>It renews each month until you cancel it, which you can do at any time: <b>Manage your subscription</b> on Build's page where it's shown, or ${ emailLink( contact ) }. See <a href="/refunds/">refunds and cancelling</a>.</li>
+		<li>The price is shown before you pay, and it's paid the same way as the pass: in Canadian dollars, plus any sales tax or VAT where you live, sold through Link as above.</li>
+		<li>If a payment is refunded, Build Pro ends and the subscription is cancelled too, so it won't renew. If a payment is charged back, the subscription is cancelled and Build Pro ends with it.</li>
 	</ul>
 	<h2>Others' work</h2>
 	<p>The Earth's map is Google's and its data providers', the place search OpenStreetMap's, the other worlds' maps NASA's and the USGS's, and each car model its maker's (see About World Drive in the game). World Drive isn't made or endorsed by Google, NASA or any carmaker.</p>
@@ -179,19 +207,21 @@ function terms( contact ) {
 function refunds( contact ) {
 
 	return `
-	<p>The Supporter Pass helps pay for the 3D map. If it isn't what you wanted, you can have your money back.</p>
-	<h2>Cancelling the monthly pass</h2>
+	<p>The Supporter Pass and World Drive Build Pro help pay for the 3D map. If either isn't what you wanted, you can have your money back.</p>
+	<h2>Cancelling the monthly pass or Build Pro</h2>
 	<ul>
-		<li>Open the Supporter Pass in the game (from the globe's panel or the pause menu) while signed in, and press <b>Manage your subscription</b>. That opens Stripe's page where you cancel or change your card. Or ${ emailLink( contact ) } and it will be cancelled for you.</li>
-		<li>Once cancelled, you won't be charged again. The pass stays until the end of the month you've paid for.</li>
+		<li><b>The monthly pass:</b> open the Supporter Pass in the game (from the globe's panel or the pause menu) while signed in, and press <b>Manage your subscription</b>. That opens Stripe's page where you cancel or change your card.</li>
+		<li><b>Build Pro:</b> open <a href="/build/">World Drive Build</a> while signed in and press <b>Manage your subscription</b>, where it's shown.</li>
+		<li>Or ${ emailLink( contact ) } and it will be cancelled for you.</li>
+		<li>Once cancelled, you won't be charged again. The pass or Build Pro stays until the end of the month you've paid for.</li>
 	</ul>
 	<h2>Refunds</h2>
 	<ul>
-		<li><b>Within 14 days of buying</b> any pass (24 hours, monthly or for good): a full refund on request, no questions asked. For the monthly pass, that's the first month's payment, or any later month's within 14 days of it being charged.</li>
+		<li><b>Within 14 days of buying</b> any pass (24 hours, monthly or for good) or Build Pro: a full refund on request, no questions asked. For a monthly subscription, that's the first month's payment, or any later month's within 14 days of it being charged.</li>
 		<li><b>If something went wrong</b> (you paid and the pass didn't unlock, you were charged twice, or the game didn't work for you during a day pass): a full refund whenever you ask.</li>
-		<li>A refunded pass ends when the refund is made.</li>
+		<li>A refunded pass or Build Pro ends when the refund is made. When a monthly payment is refunded, its subscription is cancelled too, so it won't renew. If you have both the monthly pass and Build Pro, a refund of one may end the other too for a while: write, and it will be put back.</li>
 	</ul>
-	<p>To ask, ${ emailLink( contact ) } from the email on the receipt, or say the account's username. Refunds go back to the card you paid with through Stripe, usually within 5 to 10 business days.</p>
+	<p>To ask, ${ emailLink( contact ) } from the email on the receipt, or say the account's username. Refunds are made through Stripe (you were sold the pass through Link, its payment service, so the email saying it's done may come from Link) and go back to the card you paid with, usually within 5 to 10 business days, including any tax you paid.</p>
 	<p>This is on top of any rights the law gives you where you live, such as the 14-day right to withdraw in the EU and the UK.</p>
 	<p class="small">Last updated ${ UPDATED }. See also the <a href="/terms/">terms of use</a>.</p>`;
 
@@ -200,12 +230,13 @@ function refunds( contact ) {
 function contactPage( contact ) {
 
 	return `
-	<p>For help with the game, your account, the Supporter Pass, a refund or your data, or to report a nickname on the boards, get in touch. Email is quickest; you'll usually hear back within two business days.</p>
+	<p>For help with the game, your account, the Supporter Pass, World Drive Build Pro, a refund or your data, or to report a nickname on the boards, get in touch. Email is quickest; you'll usually hear back within two business days.</p>
 	${ contactBlock( contact ) }
 	<h2>Help yourself</h2>
 	<ul>
 		<li><b>The pass didn't unlock?</b> Sign in with the same account you bought it with, open the Supporter Pass and press <b>Restore purchases</b>.</li>
 		<li><b>Cancel the monthly pass:</b> the Supporter Pass in the game, then <b>Manage your subscription</b>. See <a href="/refunds/">refunds and cancelling</a>.</li>
+		<li><b>Cancel Build Pro:</b> <a href="/build/">World Drive Build</a> while signed in, then <b>Manage your subscription</b> where it's shown, or email.</li>
 		<li><b>Forgot your password?</b> Email us from the email on your account and say your username: you'll get a link to set a new one. Linked Google? Sign in with Google instead.</li>
 		<li><b>Delete your account or see your data:</b> see the <a href="/privacy/">privacy policy</a>.</li>
 	</ul>

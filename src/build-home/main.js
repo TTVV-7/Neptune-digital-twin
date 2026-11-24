@@ -264,9 +264,20 @@ async function showProjects() {
 
 const PLANS = {
 	free: { name: 'Free', blurb: 'Everyday site pieces, 15 3D map views a month, one saved project.' },
-	pro: { name: 'Build Pro', blurb: 'The whole library and sets, 300 3D map views a month, unlimited projects and share links.' },
+	// Not "unlimited projects": the server caps Pro at BUILD_LAYOUT_LIMIT (worker/drive/build.js, 200
+	// unless set), so the blurb promises more of them, and proBlurb() puts the number in once the
+	// server has said it (a Pro account's plan.layouts).
+	pro: { name: 'Build Pro', blurb: 'The whole library and sets, 300 3D map views a month, far more projects and share links.' },
 	owner: { name: 'Owner', blurb: 'Everything, with 3D map views that are never counted.' },
 };
+
+// Build Pro's blurb with how many projects it keeps, when that's known: only a Pro account is told
+// (its plan.layouts); everyone else gets the plain words.
+function proBlurb( layouts ) {
+
+	return Number.isFinite( layouts ) && layouts > 1 ? `The whole library and sets, 300 3D map views a month, up to ${ layouts } projects and share links.` : PLANS.pro.blurb;
+
+}
 
 function showPlan() {
 
@@ -286,7 +297,7 @@ function showPlan() {
 	head.className = 'plan-head';
 	head.innerHTML = `<span class="tier tier-${ plan.tier }"></span><p class="plan-blurb"></p>`;
 	head.querySelector( '.tier' ).textContent = info.name;
-	head.querySelector( '.plan-blurb' ).textContent = info.blurb;
+	head.querySelector( '.plan-blurb' ).textContent = plan.tier === 'pro' ? proBlurb( plan.layouts ) : info.blurb;
 	body.append( head );
 
 	// 3D map views this month: a gauge, as a site's fuel or hours meter.
@@ -474,7 +485,7 @@ function upgrade( premium ) {
 	box.className = 'upgrade';
 	if ( ! premium.link ) {
 
-		box.innerHTML = '<p><strong>Build Pro opens soon.</strong> The whole library, sets, 300 views a month, unlimited projects and share links.</p>';
+		box.innerHTML = '<p><strong>Build Pro opens soon.</strong> The whole library, sets, 300 views a month, far more projects and share links.</p>';
 		return box;
 
 	}
@@ -487,9 +498,23 @@ function upgrade( premium ) {
 	link.href = url.href;
 	link.target = '_blank';
 	link.rel = 'noopener';
-	link.textContent = `Go Build Pro · ${ premium.price }`;
-	box.append( link, Object.assign( document.createElement( 'p' ), { className: 'small', textContent: 'Billed monthly through Stripe. Cancel any time.' } ) );
+	// The price only when the server has one (BUILD_PRICE): without it the button just says so, and
+	// Stripe's checkout shows the price, rather than the page making one up.
+	link.textContent = premium.price ? `Go Build Pro · ${ premium.price }` : 'Go Build Pro';
+	box.append( link, Object.assign( document.createElement( 'p' ), { className: 'small', textContent: 'Billed monthly through Stripe. Cancel any time.' } ), terms() );
 	return box;
+
+}
+
+// The small print under the button, as the Supporter Pass has it (src/drive-app/supporter.js): what
+// buying agrees to and how to get the money back, before anyone pays (drive/site/legal.js covers
+// Build Pro in its terms and refunds). Built from text nodes and links, nothing from the server in it.
+function terms() {
+
+	const page = ( href, words ) => Object.assign( document.createElement( 'a' ), { href, target: '_blank', rel: 'noopener', textContent: words } );
+	const small = Object.assign( document.createElement( 'p' ), { className: 'small upgrade-terms' } );
+	small.append( 'By buying you agree to the ', page( '/terms/', 'terms' ), '. Prices in CAD, plus tax where it applies. Changed your mind? A full refund within 14 days: see ', page( '/refunds/', 'refunds' ), '.' );
+	return small;
 
 }
 
@@ -498,7 +523,7 @@ function compare( premium ) {
 
 	const wrap = document.createElement( 'div' );
 	wrap.className = 'compare';
-	for ( const [ tier, price ] of [ [ 'free', 'Free' ], [ 'pro', premium.link ? premium.price : 'Opens soon' ] ] ) {
+	for ( const [ tier, price ] of [ [ 'free', 'Free' ], [ 'pro', premium.link ? premium.price ?? 'Monthly' : 'Opens soon' ] ] ) {
 
 		const card = document.createElement( 'div' );
 		card.className = `compare-card compare-${ tier }`;

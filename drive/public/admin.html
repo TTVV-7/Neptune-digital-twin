@@ -10,9 +10,11 @@
 	The owner's play stats (docs/world-drive.md, "Play stats"): GET /api/admin/stats, for a Google
 	account in ADMIN_EMAILS signed in on worlddrive.app (worker/drive/stats.js). Counts a day only,
 	nothing of who: the page's and the visits' counts, and what the Worker's own tables say of each day
-	(new players, new bests, accounts, passes and their money). Each figure is set against the as many
-	days before the period shown, which the Worker sends added up. Charts drawn as plain SVG here, with
-	nothing loaded from anywhere else.
+	(new players, new bests, accounts, passes by what they were and their money). Each figure is set
+	against the as many days before the period shown, which the Worker sends added up. Charts drawn as
+	plain SVG here, with nothing loaded from anywhere else. The one thing of who: Recent sales, the
+	period's newest purchases one by one (what, when, what was paid, and the account it's whose by its
+	id and leaderboard nickname), so a sale that comes in can be seen for what it was; never an email.
 	And where people drop in (docs/world-drive.md, "Where people drop in"): GET /api/admin/dropins,
 	the cells about a kilometre each way that drop-ins were at, as a heat map of the Earth, the Moon,
 	Mars, Vesta or Ceres and a table of the top places, for today, the week, the month or longer. The
@@ -72,6 +74,9 @@
 	.facts td { padding: 5px 0; border-bottom: 1px solid var(--line); }
 	.facts td.num { text-align: right; white-space: nowrap; padding-left: 8px; }
 	.facts td.change { text-align: right; white-space: nowrap; padding-left: 8px; font-size: 12px; width: 1%; }
+	/* A note that says what a figure is made of ("24 h 1 · monthly 0 · for good 0") wraps on a phone
+	   rather than pushing the page wider than it. */
+	@media ( max-width: 600px ) { .facts td.change { white-space: normal; width: 40%; } }
 	.facts tr:last-child td { border-bottom: 0; }
 	.notice { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
 	.note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
@@ -198,6 +203,10 @@
 	.rides tr:last-child td { border-bottom: 0; }
 	.rides .hi { color: var(--up); font-weight: 650; }
 	.rides .lo { color: var(--down); font-weight: 650; }
+	/* Recent sales: words, not figures, so read from the left; a refunded one red (.lo) but not bold. */
+	.sales th, .sales td { text-align: left; }
+	.sales td { overflow-wrap: anywhere; }
+	.sales tr.lo { font-weight: 400; }
 </style>
 </head>
 <body>
@@ -220,7 +229,7 @@
 		</div>
 	</header>
 	<nav class="jump" aria-label="Jump to">
-		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#maps-cost">Maps cost</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#requests">Requests</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
+		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#sales">Sales</a><a href="#maps-cost">Maps cost</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#requests">Requests</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
 	</nav>
 	<div id="out"><p class="muted">Loading...</p></div>
 	<section class="card places" id="places" aria-labelledby="places-title" hidden>
@@ -340,8 +349,12 @@
 		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the other worlds',
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups', ad: 'Ad on the globe (visits it showed in, and blocked in)',
 		challenge: 'Challenges (opened, started, finished, posted; the word while driving said, and its button pressed; a friend\'s link shared, opened, and a run started from it)',
-		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New accounts (Google or username)', purchases: 'Passes by status', revenue: 'Revenue (smallest unit)',
+		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New accounts (Google or username)',
+		purchases: 'Purchases by what they were (24-hour, monthly, for good, Build Pro, given by hand; refunds left out)', revenue: 'Revenue, tax included (cents)', tax: 'Tax in the revenue (cents, where Stripe said it)',
 	};
+	// What a purchase was (stats.js's KIND): [ key, its rows' name, its short name, a Recent sales row's ].
+	const KINDS = [ [ 'day', '24-hour passes', '24 h', '24-hour pass' ], [ 'monthly', 'Monthly subscriptions started', 'monthly', 'Monthly pass' ], [ 'lifetime', 'For good', 'for good', 'Pass for good' ], [ 'build', 'Build Pro', 'Build Pro', 'Build Pro' ], [ 'granted', 'Given by hand', 'given', 'Given by hand' ], [ 'other', 'Something else', 'other', 'Something else' ] ];
+	const kindOf = key => KINDS.find( ( [ k ] ) => k === key ) ?? [ key, pretty( String( key ) ), String( key ), pretty( String( key ) ) ];
 
 	let shown = null;
 	select.addEventListener( 'change', load );
@@ -383,7 +396,7 @@
 
 	}
 
-	function show( { from, to, rows, previous = { from: '', to: '', rows: [] }, totals = {}, kept = {} } ) {
+	function show( { from, to, rows, previous = { from: '', to: '', rows: [] }, totals = {}, sales = [], kept = {} } ) {
 
 		document.getElementById( 'range' ).textContent = `${ from } to ${ to } (today so far), UTC`;
 		// metric => key => total, and metric => day => total; and the period before's metric => key => total.
@@ -427,6 +440,22 @@
 		const searchesBefore = earlier( 'search' ) - earlier( 'search', 'nothing' );
 		const worldPlay = total( 'play_world' );
 		const moneyNow = money( keys( 'revenue' ) );
+		// The money less the tax in it (which Stripe collects as the merchant of record, so it was
+		// never World Drive's), by currency. Only the sales Stripe said the tax of have it taken off:
+		// those from before purchases kept their tax have none, so for a period with them this is a
+		// little more than World Drive got.
+		const lessTax = ( revenue, tax ) => new Map( [ ...revenue ].map( ( [ currency, n ] ) => [ currency, n - ( tax.get( currency ) ?? 0 ) ] ) );
+		const taxNow = keys( 'tax' );
+		const taxed = sum( taxNow.values() ) > 0;
+		const beforeTax = taxed ? `${ money( lessTax( keys( 'revenue' ), taxNow ) ).text } before tax (${ money( taxNow ).text } tax)` : sum( keys( 'revenue' ).values() ) ? 'tax included, none recorded' : '';
+		// Sales: every purchase but those given by hand (stats.js's KIND keys, refunds left out), each
+		// day's (a function: dailyKey comes below) and the period before's; and how many of each kind,
+		// for the tile's line.
+		const soldIn = ( count, metric ) => count( metric ) - count( metric, 'granted' );
+		const sold = soldIn( total, 'purchases' );
+		const soldDaily = () => daily( 'purchases' ).map( ( n, i ) => n - dailyKey( 'purchases', 'granted' )[ i ] );
+		const buys = total( 'pass', 'buy' ) + total( 'pass', 'buy_day' ) + total( 'pass', 'buy_month' );
+		const soldSplit = KINDS.filter( ( [ key ] ) => key !== 'granted' && total( 'purchases', key ) ).map( ( [ key, , short ] ) => `${ short } ${ num( total( 'purchases', key ) ) }` ).join( ' · ' );
 		// [ label, value, change ]: change is [ now, before ] compared as a change in per cent, or for a
 		// share [ now, before, 'points' ] as the difference in points.
 		const share = ( part, whole ) => whole ? 100 * part / whole : 0;
@@ -470,7 +499,8 @@
 			] ) + `<p class="note">Each Earth drive is one billed 3D tiles session (Google's Map Tiles API); flying about in it costs no more. At US$${ MAPS_PER_1000 } a thousand${ MAPS_FREE_MONTHLY ? ` after ${ num( MAPS_FREE_MONTHLY ) } free a month` : ', with no free ones taken off, as the bill shows' }. "Before": days from before visits were counted by kind, when every page opened on Google's 3D globe, so every visit counts. Check the real bill in Google Cloud's Billing.${ covered ? '' : ' Pick a period that reaches back to the 1st for this month\'s total.' }</p>`;
 
 		};
-		// [ group, [ label, value, change, fewerIsBetter, days' values, what it means ] ]: change is
+		// [ group, [ label, value, change, fewerIsBetter, days' values, what it means, a line under the
+		// value (what it's made of), if any ] ]: change is
 		// [ now, before ] compared as a change in per cent, or for a share [ now, before, 'points' ] as
 		// the difference in points.
 		const groups = [
@@ -503,8 +533,10 @@
 				[ 'Mean load', loads ? `${ ( total( 'load_ms' ) / loads / 1000 ).toFixed( 1 ) } s` : '-', [ loads ? total( 'load_ms' ) / loads : 0, earlier( 'load_time' ) ? earlier( 'load_ms' ) / earlier( 'load_time' ) : 0 ], true, ratio( daily( 'load_ms' ), daily( 'load_time' ) ), 'From opening the page to the globe showing.' ],
 			] ],
 			[ 'Money', [
-				[ 'Passes bought', num( total( 'purchases', 'paid' ) ), [ total( 'purchases', 'paid' ), earlier( 'purchases', 'paid' ) ], false, dailyKey( 'purchases', 'paid' ), 'Supporter Passes paid for.' ],
-				[ 'Revenue', moneyNow.text, null, false, null, 'Money from passes, in each currency.' ],
+				// Each with a line under it saying what's in it: a 99-cent day pass is one of these as much as
+				// a pass for good is, so the kinds are always said.
+				[ 'Passes bought', num( sold ), [ sold, soldIn( earlier, 'purchases' ) ], false, soldDaily(), 'Everything paid for through Stripe: 24-hour passes, monthly subscriptions started (not their renewals), passes for good and Build Pro. Refunded and charged-back ones are left out, and passes given by hand.', soldSplit ],
+				[ 'Revenue', moneyNow.text, null, false, null, 'What buyers paid for these, tax included, in each currency. "Before tax" takes off the tax Stripe collected (as the merchant of record) on the sales it said the tax of; Stripe\'s fees come off too before the payout.', beforeTax ],
 			] ],
 		];
 
@@ -546,7 +578,7 @@
 		const firstDay = rows.find( ( [ , metric ] ) => metric === 'visit' )?.[ 0 ];
 		out.innerHTML = `
 			<div class="tiles" id="tiles">
-				${ groups.map( ( [ group, list ], g ) => `<h2 class="group">${ esc( group ) }</h2>${ g ? '' : `<div class="tile today"><div class="label" title="Visits and driving so far today (UTC).">Today so far (UTC)</div><div class="value">${ esc( num( today( 'visit' ) ) ) }</div><div class="change muted">visits · ${ esc( hours( today( 'play' ) ) ) } played</div></div>` }` + list.map( ( [ label, value, change, fewerIsBetter, series, tip ] ) => `<div class="tile"><div class="label" title="${ esc( tip ?? '' ) }">${ esc( label ) }</div><div class="value">${ esc( value ) }</div>${ compared( label ) ? changeOf( change, fewerIsBetter ) : '' }${ spark( series ) }</div>` ).join( '' ) ).join( '' ) }
+				${ groups.map( ( [ group, list ], g ) => `<h2 class="group">${ esc( group ) }</h2>${ g ? '' : `<div class="tile today"><div class="label" title="Visits and driving so far today (UTC).">Today so far (UTC)</div><div class="value">${ esc( num( today( 'visit' ) ) ) }</div><div class="change muted">visits · ${ esc( hours( today( 'play' ) ) ) } played</div></div>` }` + list.map( ( [ label, value, change, fewerIsBetter, series, tip, detail ] ) => `<div class="tile"><div class="label" title="${ esc( tip ?? '' ) }">${ esc( label ) }</div><div class="value">${ esc( value ) }</div>${ detail ? `<div class="change muted">${ esc( detail ) }</div>` : '' }${ compared( label ) ? changeOf( change, fewerIsBetter ) : '' }${ spark( series ) }</div>` ).join( '' ) ).join( '' ) }
 			</div>
 			${ comparable ? comparableNew ? '' : '<p class="note" style="margin:-6px 0 12px">The newer counts (how far visits get, the other worlds, searches, problems) don\'t cover all of the period before this one, so they have no ▲ or ▼.</p>' : '<p class="note" style="margin:-6px 0 12px">The counts don\'t cover all of the period before this one (they start later), so the play figures have no ▲ or ▼.</p>' }
 			${ firstDay && firstDay > from ? `<p class="note" style="margin:-6px 0 12px">Counts start on ${ esc( firstDay ) }: nothing before it.</p>` : '' }
@@ -576,7 +608,11 @@
 					[ 'Leaderboard opened', num( total( 'board', 'open' ) ), '' ],
 					[ 'Nicknames picked', num( total( 'board', 'named' ) ), '' ],
 					[ 'Supporter Pass sheet opened', num( total( 'pass', 'open' ) ), '' ],
-					[ 'Buy followed to Stripe', num( total( 'pass', 'buy' ) ), percent( total( 'pass', 'buy' ), total( 'pass', 'open' ) ) + ' of opens' ],
+					...( total( 'pass', 'pitch' ) ? [ [ 'Opened from the free-drive limit\'s notice', num( total( 'pass', 'pitch' ) ), '' ] ] : [] ),
+					// Each of the pass's Buy buttons is counted as its own key (main.js's onBuy): for good,
+					// the day pass and the monthly one, all followed to Stripe.
+					[ 'Buy followed to Stripe', num( buys ), `${ percent( buys, total( 'pass', 'open' ) ) } of opens · 24 h ${ num( total( 'pass', 'buy_day' ) ) } · monthly ${ num( total( 'pass', 'buy_month' ) ) } · for good ${ num( total( 'pass', 'buy' ) ) }` ],
+					[ 'Asked to sign in before buying', num( total( 'pass', 'ask_signin' ) ), 'Buy pressed signed out' ],
 					[ 'Levels reached', num( total( 'level_up' ) ), '' ],
 					...( total( 'ad' ) ? [ [ 'Visits an ad showed in / blocked in', `${ num( total( 'ad', 'shown' ) ) } / ${ num( total( 'ad', 'blocked' ) ) }`, '' ] ] : [] ),
 					[ 'Parties made / joined', `${ num( total( 'party', 'made' ) ) } / ${ num( total( 'party', 'joined' ) ) }`, '' ],
@@ -585,16 +621,20 @@
 					[ 'New players (nicknames)', num( total( 'players' ) ), changeText( [ total( 'players' ), earlier( 'players' ) ] ) ],
 					[ 'New bests on the boards', num( total( 'scores' ) ), scoresNote ],
 					[ 'New accounts', num( total( 'accounts' ) ), changeText( [ total( 'accounts' ), earlier( 'accounts' ) ] ) ],
-					...[ ...keys( 'purchases' ) ].map( ( [ status, n ] ) => [ `Passes ${ status === 'paid' ? 'bought' : status }`, num( n ), changeText( [ n, earlier( 'purchases', status ) ] ) ] ),
-					[ 'Revenue', moneyNow.text, `${ money( before.get( 'revenue' ) ?? new Map() ).text } before` ],
+					// A row for each kind of purchase (stats.js's KIND), the main four always, a kind a later
+					// version adds only when there's one.
+					...KINDS.filter( ( [ key ] ) => key !== 'other' || total( 'purchases', key ) || earlier( 'purchases', key ) ).map( ( [ key, name ] ) => [ name, num( total( 'purchases', key ) ), changeText( [ total( 'purchases', key ), earlier( 'purchases', key ) ] ) ] ),
+					[ 'Revenue (tax included)', moneyNow.text, `${ money( before.get( 'revenue' ) ?? new Map() ).text } the period before` ],
+					[ 'Before tax', taxed ? money( lessTax( keys( 'revenue' ), taxNow ) ).text : '-', taxed ? `${ money( taxNow ).text } tax, where known` : 'no tax recorded' ],
 				] ) }
 				<h3>Now</h3>${ facts( [
 					[ 'Players', num( totals.players ?? 0 ), '' ],
 					[ 'Accounts', num( totals.accounts ?? 0 ), totals.kinds ? `Google ${ num( totals.kinds.google ?? 0 ) } · password ${ num( totals.kinds.password ?? 0 ) } · both ${ num( totals.kinds.both ?? 0 ) }` : '' ],
-					[ 'Accounts with the pass', num( totals.supporters ?? 0 ), '' ],
+					[ 'Accounts with the pass', num( totals.supporters ?? 0 ), '24-hour passes only while they run' ],
 					[ 'Passes nobody has signed in for yet', num( totals.unclaimed ?? 0 ), '' ],
 				] ) }
-				<p class="note">Counted from the Worker's own tables as you ask. Purchases refunded or charged back are left out, and players the owner removed. New bests are runs that beat a player's best on a board, from the scores log, which keeps only the last ${ esc( scoresKept ) } days${ scoresPartial ? ': this period\'s count is partial' : scoresKept < 2 * days.length ? ': too few for the period before, so no comparison' : '' }.</p></div>
+				<p class="note">Counted from the Worker's own tables as you ask. Purchases refunded or charged back are left out, and players the owner removed. A monthly subscription is counted once, as it starts: its renewals aren't new purchases. Revenue is what buyers paid, tax included; Stripe collects the tax (it's the merchant of record), and before tax takes it off only for the sales whose tax was recorded. New bests are runs that beat a player's best on a board, from the scores log, which keeps only the last ${ esc( scoresKept ) } days${ scoresPartial ? ': this period\'s count is partial' : scoresKept < 2 * days.length ? ': too few for the period before, so no comparison' : '' }.</p></div>
+				<div class="card wide" id="sales"><h2>Recent sales <span class="muted">(your time)</span></h2>${ salesTable( sales ) }</div>
 				<div class="card" id="maps-cost"><h2>Google Maps cost <span class="muted">(estimate)</span></h2>${ mapsCost() }</div>
 				<div class="card"><h2>When people load in <span class="muted">(your time)</span></h2>${ hourChart( byHour, offset ) }</div>
 				<div class="card"><h2>Where they come from</h2>${ bars( keys( 'load' ), num, 10 ) }</div>
@@ -758,7 +798,8 @@
 		// The pass: the sheet opened, followed to Stripe, and paid; and visits turned away by a cap.
 		const opens = total( 'pass', 'open' );
 		const buys = total( 'pass', 'buy' ) + total( 'pass', 'buy_day' ) + total( 'pass', 'buy_month' );
-		const paid = total( 'purchases', 'paid' );
+		// Paid: every kind of purchase (stats.js's KIND) but those given by hand.
+		const paid = total( 'purchases' ) - total( 'purchases', 'granted' );
 		const capped = total( 'visit_kind', 'moon_daily_cap' ) + total( 'visit_kind', 'moon_visitor_cap' );
 		if ( opens >= 20 && buys / opens < 0.05 ) add( 'watch', 30, `Few who open the Supporter Pass go on to buy`, `The pass's sheet was opened ${ num( opens ) } times; ${ num( buys ) } (${ pc( buys, opens ) }%) followed to Stripe and ${ num( paid ) } paid.`, 'Lead with the cheapest option (the day pass), say in one line what it gets them right now, and show it when they hit the limit.' );
 		if ( buys >= 5 && paid / buys < 0.4 ) add( 'watch', 28, 'People go to Stripe but don\'t finish paying', `${ num( buys ) } followed Buy to Stripe, ${ num( paid ) } paid (${ pc( paid, buys ) }%).`, 'Check Stripe\'s checkout on a phone, the currencies and payment methods offered (Apple Pay, Google Pay), and the price shown before Buy.' );
@@ -895,6 +936,34 @@
 	function facts( list ) {
 
 		return `<table class="facts">${ list.map( ( [ name, value, note ] ) => `<tr><td>${ esc( name ) }</td><td class="num">${ esc( value ) }</td><td class="change muted">${ esc( note ?? '' ) }</td></tr>` ).join( '' ) }</table>`;
+
+	}
+
+	// The period's newest sales one by one (GET /api/admin/stats's sales, stats.js's sale), so a sale
+	// the owner hears of can be found and seen for what it was: when (in this browser's time), what
+	// (a 99-cent day pass isn't a pass for good), what was paid and the tax in it, whose (the account's
+	// id and its leaderboard nickname; never an email: the Worker sends none), and how it stands now
+	// (a day pass running or run out, a subscription active or canceled, refunded or charged back).
+	function salesTable( sales ) {
+
+		if ( ! sales.length ) return '<p class="muted">No sales in this period.</p>';
+		const when = ms => new Date( ms ).toLocaleString( [], { dateStyle: 'medium', timeStyle: 'short' } );
+		// A time today as just the time, else with its date.
+		const at = ms => new Date( ms ).toDateString() === new Date().toDateString() ? new Date( ms ).toLocaleTimeString( [], { timeStyle: 'short' } ) : when( ms );
+		const paid = s => ! Number.isFinite( s.amount ) || ! s.currency ? '-' : money( new Map( [ [ s.currency, s.amount ] ] ) ).text + ( s.tax ? ` (${ money( new Map( [ [ s.currency, s.tax ] ] ) ).text } tax)` : '' );
+		const who = s => ! Number.isFinite( s.account ) ? 'not signed in yet (unclaimed)' : s.nickname ? `${ s.nickname } · account ${ s.account }` : `account ${ s.account } (no nickname)`;
+		const what = s => kindOf( s.kind )[ 3 ] + ( s.kind === 'build' && typeof s.subscription === 'string' ? ' (monthly)' : '' );
+		const state = s => {
+
+			if ( s.refunded ) return s.status === 'disputed' ? 'charged back' : 'refunded';
+			if ( s.kind === 'granted' ) return 'given by hand';
+			if ( Number.isFinite( s.until ) ) return s.running ? `running until ${ at( s.until ) }` : `ran out ${ at( s.until ) }`;
+			if ( typeof s.subscription === 'string' ) return s.subscription ? `subscription ${ s.subscription.replace( /_/g, ' ' ) }` : 'subscription: not heard from Stripe yet';
+			return s.kind === 'lifetime' ? 'for good' : s.status;
+
+		};
+		return `<div class="scroll"><table class="rides sales"><tr><th>When</th><th>What</th><th>Paid</th><th>Who</th><th>Now</th><th>Stripe</th></tr>${ sales.map( s => `<tr class="${ s.refunded ? 'lo' : '' }"><td>${ esc( when( s.at ) ) }</td><td>${ esc( what( s ) ) }</td><td>${ esc( paid( s ) ) }</td><td>${ esc( who( s ) ) }</td><td>${ esc( state( s ) ) }</td><td class="muted">${ s.ref ? `…${ esc( s.ref ) }` : '' }</td></tr>` ).join( '' ) }</table></div>
+			<p class="note">The period's newest ${ esc( num( sales.length ) ) } purchases, refunded ones too. Who: the account it's whose (bought signed in, or the one with the email it was paid with) by its id and its leaderboard nickname, or nobody yet; never an email. Stripe: the end of the checkout's id, to search for in Stripe's dashboard. A cancelled monthly pass stays active until the end of the month paid for.</p>`;
 
 	}
 

@@ -712,7 +712,10 @@ function renderBuy( root ) {
 	if ( status ) parts.push( statusLine() );
 	if ( ! lifetime ) parts.push( Object.assign( line( purchase.enabled ? ( purchase.monthly ? 'Monthly is a subscription: cancel any time. For good and 24 hours are paid once. ' : 'Pay once: for good, or 24 hours and it simply ends. ' ) + 'Paid securely with Stripe, in any country.' : 'Pay once, keep it for good. Buying opens soon.' ), { className: 'small' } ) );
 	// What buying agrees to, and how to get the money back, before anyone pays (drive/site/legal.js).
-	if ( purchase.enabled && ! lifetime ) parts.push( Object.assign( line( 'By buying you agree to the ', pageLink( '/terms/', 'terms' ), '. Changed your mind? A full refund within 14 days: see ', pageLink( '/refunds/', 'refunds' ), ' · ', pageLink( '/contact/', 'help' ), '.' ), { className: 'small' } ) );
+	// The prices are the Payment Links' own, in Canadian dollars, and Stripe adds the sales tax or VAT
+	// where the buyer lives at checkout (it sells the pass as the merchant of record), so say so here
+	// rather than let the total at checkout be a surprise.
+	if ( purchase.enabled && ! lifetime ) parts.push( Object.assign( line( 'By buying you agree to the ', pageLink( '/terms/', 'terms' ), '. Prices in CAD, plus tax where it applies. Changed your mind? A full refund within 14 days: see ', pageLink( '/refunds/', 'refunds' ), ' · ', pageLink( '/contact/', 'help' ), '.' ), { className: 'small' } ) );
 	root.replaceChildren( ...parts );
 	if ( revealSignIn && ! me.signedIn && root.isConnected ) {
 

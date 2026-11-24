@@ -14,7 +14,8 @@ import { googleClientId } from './settings.js';
 //          BUILD_FREE_MONTHLY 3D map views a month (15 if unset), while today's free views for
 //          everyone together are under BUILD_FREE_DAILY (200 if unset: Google bills each one)
 //   pro    Build Pro, bought through its Stripe Payment Link (BUILD_PAYMENT_LINK, its id
-//          BUILD_PAYMENT_LINK_ID, the price as shown BUILD_PRICE, e.g. "US$5/month"; supporter.js's
+//          BUILD_PAYMENT_LINK_ID, the price as shown BUILD_PRICE, e.g. "CA$7/month", and none shown
+//          without it: the link's own price is the only true one, in CAD; supporter.js's
 //          webhook keeps it), or BUILD_EMAILS (comma-separated, given it without paying): the whole
 //          library, BUILD_LAYOUT_LIMIT projects (200), share links, and BUILD_PRO_MONTHLY views (300)
 //   owner  an account in ADMIN_EMAILS (World Drive's owner, admin.js): everything, never counted
@@ -194,7 +195,11 @@ function premiumFor( env, account, plan ) {
 	if ( buying ) {
 
 		premium.link = link;
-		premium.price = cleanText( env.BUILD_PRICE ?? '', 40 ) || 'US$5/month';
+		// The price as the Payment Link has it, for the button. Unset, there's none rather than a made-up
+		// one: a guess in another currency would contradict the terms (prices in Canadian dollars) and
+		// the checkout, and the page just says "Go Build Pro" and leaves the price to Stripe's page.
+		const price = cleanText( env.BUILD_PRICE ?? '', 40 );
+		if ( price ) premium.price = price;
 		if ( account ) premium.clientReferenceId = String( account.id );
 		const manage = httpsUrl( env.SUPPORTER_MANAGE_LINK );
 		if ( plan?.subscribed && manage ) premium.manage = manage;

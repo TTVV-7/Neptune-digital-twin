@@ -342,6 +342,9 @@ test( 'the dashboard signed in: the plan with its views, and projects that open 
 	assert.equal( state.tier, 'Free' );
 	assert.equal( state.views, '0 / 15' );
 	assert.match( state.soon, /Go Build Pro · US\$5\/month/ );
+	// The small print before paying, as the Supporter Pass's: the terms and refunds, in a new tab.
+	assert.match( state.soon, /By buying you agree to the terms\. Prices in CAD, plus tax where it applies\./ );
+	assert.deepEqual( await page.$$eval( '.upgrade-terms a', links => links.map( a => [ a.getAttribute( 'href' ), a.target, a.rel ] ) ), [ [ '/terms/', '_blank', 'noopener' ], [ '/refunds/', '_blank', 'noopener' ] ] );
 	assert.equal( state.count, '1 of 1' );
 	assert.equal( state.projects.length, 1 );
 	assert.equal( state.projects[ 0 ].name, 'Tower crane pad' );
