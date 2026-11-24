@@ -1,4 +1,4 @@
-import { Box3, DoubleSide, Euler, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Raycaster, SRGBColorSpace, TextureLoader, Vector3 } from 'three';
+import { Box3, DoubleSide, Euler, Matrix4, Mesh, MeshStandardMaterial, Raycaster, SRGBColorSpace, TextureLoader, Vector3 } from 'three';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { loadLibrary } from './library.js';
 
@@ -18,12 +18,20 @@ const BRANDED = new Set( [
 const ALONG = 0.45;
 const MOST = 2.4;
 const UP = 0.4;
-// It's centred this far up the item (of its height), and stands this far off the surface (m), as
-// paint is drawn over what's under it without fighting it for depth.
-const HEIGHT_AT = 0.55;
+// It stands this far off the surface (m), as paint is drawn over what's under it without fighting
+// it for depth.
 const LIFT = 0.025;
 // How deep a slice of the model the logo is cut from, round its outer surface (m).
-const SLICE = 0.5;
+const SLICE = 0.3;
+// Where the logo is looked for: centres at these shares of the side's length and height, a grid of
+// GRID × GRID rays each; the rays have to land within FLAT metres of each other on one mesh, facing
+// out of the side within SQUARE (the cosine); and it shrinks to MIN_SIZE (m wide) to fit.
+const ALONG_AT = [ 0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8 ];
+const HEIGHT_AT = [ 0.55, 0.45, 0.65, 0.35, 0.75 ];
+const GRID = 4;
+const FLAT = 0.12;
+const SQUARE = 0.8;
+const MIN_SIZE = 0.5;
 const LAYER = 'company-logo';
 
 export function setUpLogo( { models, layers, apiBase } ) {
@@ -122,50 +130,101 @@ export function setUpLogo( { models, layers, apiBase } ) {
 		}
 
 		const meshes = [];
-		const quaternion = new Quaternion();
-		entry.pivot.getWorldQuaternion( quaternion );
-		const middle = box.getCenter( new Vector3() );
-		const y = box.min.y + height * HEIGHT_AT;
 		const raycaster = new Raycaster();
+		raycaster.far = width + 2;
+		// Pivot-frame point → world, and the outward way for each side.
+		const toWorld = v => v.applyMatrix4( entry.pivot.matrixWorld );
+		const at = ( side, a, y, out = 1 ) => alongZ
+			? new Vector3( side > 0 ? box.max.x + out : box.min.x - out, y, a )
+			: new Vector3( a, y, side > 0 ? box.max.z + out : box.min.z - out );
+		const a0 = alongZ ? box.min.z : box.min.x;
 		for ( const side of [ 1, - 1 ] ) {
 
-			// Where this side's outer surface is, by a ray in from outside at the logo's middle: the
-			// logo is cut from a thin slice there, not from what's behind it (a dump body's floor, a
-			// cab's seats).
 			const outward = alongZ ? new Vector3( side, 0, 0 ) : new Vector3( 0, 0, side );
-			const start = alongZ ? new Vector3( side > 0 ? box.max.x + 1 : box.min.x - 1, y, middle.z ) : new Vector3( middle.x, y, side > 0 ? box.max.z + 1 : box.min.z - 1 );
-			const worldOut = outward.clone().transformDirection( entry.pivot.matrixWorld );
-			raycaster.set( start.applyMatrix4( entry.pivot.matrixWorld ), worldOut.clone().negate() );
-			raycaster.far = width + 2;
-			const hit = raycaster.intersectObjects( targets, false )[ 0 ];
-			if ( ! hit ) continue;
-			const position = hit.point;
-			// The projector's z points out of this side, so the logo reads the right way from outside.
-			const turn = new Quaternion().setFromAxisAngle( new Vector3( 0, 1, 0 ), alongZ ? side * Math.PI / 2 : ( side > 0 ? 0 : Math.PI ) );
-			const orientation = new Euler().setFromQuaternion( quaternion.clone().multiply( turn ) );
-			const size = new Vector3( w, h, SLICE );
-			for ( const target of targets ) {
+			const worldIn = outward.clone().transformDirection( entry.pivot.matrixWorld ).negate();
+			const spot = flatSpot( side );
+			if ( ! spot ) continue;
+			// Square to the panel it's on: facing along the panel's normal, upright.
+			const normal = spot.normal.clone().projectOnPlane( new Vector3( 0, 1, 0 ) ).normalize();
+			if ( normal.lengthSq() < 0.5 ) continue;
+			const yaw = Math.atan2( normal.x, normal.z );
+			const orientation = new Euler( 0, yaw, 0, 'YXZ' );
+			const geometry = new DecalGeometry( spot.mesh, spot.point, orientation, new Vector3( spot.w, spot.h, SLICE ) );
+			if ( geometry.attributes.position.count === 0 ) {
 
-				const geometry = new DecalGeometry( target, position, orientation, size );
-				if ( geometry.attributes.position.count === 0 ) {
+				geometry.dispose();
+				continue;
 
-					geometry.dispose();
-					continue;
+			}
+
+			// Into the pivot's frame, and lifted outward off the panel (some models' normals point
+			// in, so not along those).
+			geometry.applyMatrix4( toPivot );
+			geometry.translate( outward.x * LIFT, 0, outward.z * LIFT );
+			const mesh = new Mesh( geometry, material );
+			mesh.name = 'Company logo';
+			mesh.renderOrder = 2;
+			mesh.raycast = () => {};
+			mesh.userData.noCollide = true;
+			mesh.visible = shown;
+			entry.pivot.add( mesh );
+			meshes.push( mesh );
+
+			// The flattest place on this side for the logo, as large as fits (down to MIN_SIZE):
+			// candidate centres along and up the side, each tried with a grid of rays over the logo's
+			// rectangle; a spot counts when the rays land on one mesh, close to one plane, square to
+			// the side. { mesh, point, normal (world, facing out), w, h } or null.
+			function flatSpot( side ) {
+
+				for ( let size = 1; size * w >= MIN_SIZE; size *= 0.75 ) {
+
+					const sw = w * size, sh = h * size;
+					let best = null;
+					for ( const t of ALONG_AT ) for ( const u of HEIGHT_AT ) {
+
+						const a = a0 + length * t;
+						const y = box.min.y + height * u;
+						if ( a - sw / 2 < a0 || a + sw / 2 > a0 + length || y - sh / 2 < box.min.y || y + sh / 2 > box.max.y ) continue;
+						const found = probe( side, a, y, sw, sh );
+						if ( found && ( ! best || found.score > best.score ) ) best = { ...found, w: sw, h: sh };
+
+					}
+
+					if ( best ) return best;
 
 				}
 
-				// Into the pivot's frame, and lifted outward off the surface (some models' normals
-				// point in, so not along those).
-				geometry.applyMatrix4( toPivot );
-				geometry.translate( outward.x * LIFT, 0, outward.z * LIFT );
-				const mesh = new Mesh( geometry, material );
-				mesh.name = 'Company logo';
-				mesh.renderOrder = 2;
-				mesh.raycast = () => {};
-				mesh.userData.noCollide = true;
-				mesh.visible = shown;
-				entry.pivot.add( mesh );
-				meshes.push( mesh );
+				return null;
+
+			}
+
+			// The rays over a sw × sh rectangle centred at (a, y): the panel they agree on, or null.
+			function probe( side, a, y, sw, sh ) {
+
+				const hits = [];
+				for ( let i = 0; i < GRID; i ++ ) for ( let j = 0; j < GRID; j ++ ) {
+
+					const da = ( i / ( GRID - 1 ) - 0.5 ) * sw * 0.95;
+					const dy = ( j / ( GRID - 1 ) - 0.5 ) * sh * 0.95;
+					raycaster.set( toWorld( at( side, a + da, y + dy ) ), worldIn );
+					const hit = raycaster.intersectObjects( targets, false )[ 0 ];
+					if ( ! hit?.face ) return null;
+					hits.push( hit );
+
+				}
+
+				const mesh = hits[ Math.floor( hits.length / 2 ) ].object;
+				if ( hits.some( hit => hit.object !== mesh ) ) return null;
+				const distances = hits.map( hit => hit.distance ).sort( ( p, q ) => p - q );
+				const spread = distances[ distances.length - 1 ] - distances[ 0 ];
+				if ( spread > FLAT ) return null;
+				const centre = hits[ Math.floor( hits.length / 2 ) ];
+				const normal = centre.face.normal.clone().transformDirection( centre.object.matrixWorld );
+				// Facing out of this side, whichever way the model's own normals point.
+				if ( normal.dot( worldIn ) > 0 ) normal.negate();
+				if ( - normal.dot( worldIn ) < SQUARE ) return null;
+				// Nearest the side's outside and flattest wins: a door over a step behind it.
+				return { mesh, point: centre.point.clone(), normal, score: - spread - distances[ 0 ] * 0.05 };
 
 			}
 
