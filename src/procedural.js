@@ -1,16 +1,12 @@
 import {
 	BoxGeometry,
-	CanvasTexture,
 	Color,
 	CylinderGeometry,
-	DoubleSide,
 	ExtrudeGeometry,
 	Group,
 	Mesh,
 	MeshStandardMaterial,
-	RepeatWrapping,
 	Shape,
-	SRGBColorSpace,
 	Vector2,
 } from 'three';
 import { buildExcavator, EXCAVATOR_20T, EXCAVATOR_MINI } from './excavator-model.js';
@@ -23,6 +19,7 @@ import { POWER_ITEMS } from './power-models.js';
 import { CRANE_ITEMS } from './crane-models.js';
 import { TRUCK_ITEMS } from './truck-models.js';
 import { KART_ITEM } from './kart.js';
+import { fencePanel } from './fence-panel.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -197,85 +194,6 @@ function pipeBollard() {
 	cylinder( group, yellow, 0.084, 1.2, [ 0, 0.02, 0 ], 20 );
 	const cap = cylinder( group, yellow, 0.084, 0.06, [ 0, 1.22, 0 ], 20 );
 	cap.scale.set( 0.9, 1, 0.9 );
-	return group;
-
-}
-
-let chainLinkMaterial;
-function chainLink() {
-
-	if ( ! chainLinkMaterial ) {
-
-		// The wire covers about a fifth of the panel, so with ordinary mipmaps its alpha fades away a
-		// few metres off and only the frame is left. Each smaller level is drawn by hand instead,
-		// with wire at least a pixel wide, so further away the mesh becomes a see-through haze.
-		const levels = [];
-		for ( let size = 64; size >= 1; size /= 2 ) {
-
-			const canvas = document.createElement( 'canvas' );
-			canvas.width = canvas.height = size;
-			const ctx = canvas.getContext( '2d' );
-			if ( size >= 4 ) {
-
-				ctx.strokeStyle = '#c9ced2';
-				ctx.lineWidth = Math.max( 5 * size / 64, 1 );
-				ctx.beginPath();
-				ctx.moveTo( 0, 0 );
-				ctx.lineTo( size, size );
-				ctx.moveTo( size, 0 );
-				ctx.lineTo( 0, size );
-				ctx.stroke();
-
-			} else {
-
-				ctx.fillStyle = 'rgba( 201, 206, 210, 0.45 )';
-				ctx.fillRect( 0, 0, size, size );
-
-			}
-
-			levels.push( canvas );
-
-		}
-
-		const texture = new CanvasTexture( levels[ 0 ] );
-		texture.mipmaps = levels;
-		texture.generateMipmaps = false;
-		texture.colorSpace = SRGBColorSpace;
-		texture.wrapS = texture.wrapT = RepeatWrapping;
-		texture.repeat.set( 10 * FT / 0.06, 6 * FT / 0.06 );
-		// Blended, so the haze is see-through; the alpha test keeps the gaps out of the depth buffer.
-		chainLinkMaterial = new MeshStandardMaterial( { map: texture, transparent: true, alphaTest: 0.01, side: DoubleSide, metalness: 0.6, roughness: 0.5 } );
-		chainLinkMaterial.userData.shared = true;
-
-	}
-
-	return chainLinkMaterial;
-
-}
-
-function fencePanel() {
-
-	const group = new Group();
-	const width = 10 * FT;
-	const height = 6 * FT;
-	const lift = 0.08;
-	const mesh = new Mesh( new BoxGeometry( width, height, 0.005 ), chainLink() );
-	mesh.position.set( 0, lift + height / 2, 0 );
-	group.add( mesh );
-
-	// Tube frame.
-	const tube = STEEL();
-	for ( const x of [ - width / 2, width / 2 ] ) cylinder( group, tube, 0.02, height, [ x, lift, 0 ], 8 );
-	for ( const y of [ lift, lift + height ] ) {
-
-		const rail = cylinder( group, tube, 0.02, width, [ 0, 0, 0 ], 8 );
-		rail.rotation.z = Math.PI / 2;
-		rail.position.set( 0, y, 0 );
-
-	}
-
-	// Rubber feet at both ends.
-	for ( const x of [ - width / 2, width / 2 ] ) box( group, BLACK(), [ 0.2, 0.12, 0.6 ], [ x, 0, 0 ] );
 	return group;
 
 }

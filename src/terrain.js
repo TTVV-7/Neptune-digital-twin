@@ -68,6 +68,11 @@ const DISTURBED = 0.02;
 // With Google tiles, ground this many nodes (1 m) round a pit is drawn too, as a lip of disturbed
 // earth, so the pit's edge meets Google's ground cleanly.
 const APRON = 2;
+// The ground drawn round a pit is no higher than the lowest ground this many nodes (3 m) from it:
+// further than half a car or a rail car is wide (see lipHeights).
+const LIP_REACH = 6;
+// And never more than this above the pit's rim (m): a building beside it is wider than LIP_REACH.
+const LIP_RISE = 1;
 // Inside the drawn earthworks, Google's mesh is hidden from this far below their surface upwards
 // (hideUnderEarthworks): what's lower is behind the surface anyway, and Google's ground at about
 // the same height would show through in patches. Raycasts ignore what is above it (covers).
@@ -1578,6 +1583,8 @@ export class Terrain extends EventDispatcher {
 
 		const shown = this.standIn ? null : this.shownNodes( chunk, changed );
 		chunk.shown = shown;
+		chunk.drawn = shown ? this.lipHeights( chunk, changed, shown ) : null;
+		if ( chunk.drawn ) for ( let k = 0; k < COUNT; k ++ ) position.array[ k * 3 + 1 ] = chunk.drawn[ k ];
 		this.maskDirty = true;
 		const index = geometry.index.array;
 		let n = 0;
@@ -1623,6 +1630,45 @@ export class Terrain extends EventDispatcher {
 		const apron = crop( filterGrid( cuts, NODES + 2 * APRON, APRON, Math.max ), APRON );
 		for ( let k = 0; k < COUNT; k ++ ) if ( apron[ k ] ) shown[ k ] = 1;
 		return shown;
+
+	}
+
+	// Heights to draw with Google tiles: the earthworks as they are, and the untouched ground drawn
+	// round them (the apron round a pit) at the ground rather than at what stands on it. The ground
+	// is read from above off Google's mesh, so beside a pit it is the roof of a parked car or a rail
+	// car as often as the ground; drawn there, and with Google's mesh hidden above it, those showed
+	// as slabs of earth rising off the pit's edge. So each such node is drawn no higher than the
+	// lowest ground within LIP_REACH of it (what's beside a car) or LIP_RISE above the rim of the pit
+	// it's round, nor lower than that rim (gentle rises round a pit stay where they are).
+	lipHeights( chunk, changed, shown ) {
+
+		const drawn = chunk.surface.slice();
+		const rims = [];
+		for ( const design of this.designs.values() ) {
+
+			if ( design.type !== 'cut' || ! Number.isFinite( design.rim ) ) continue;
+			const b = design.bounds();
+			const pad = ( APRON + 2 ) * CELL;
+			rims.push( { rim: design.rim, minX: b.minX - pad, maxX: b.maxX + pad, minZ: b.minZ - pad, maxZ: b.maxZ + pad } );
+
+		}
+
+		if ( rims.length === 0 ) return drawn;
+		const side = NODES + 2 * LIP_REACH;
+		const lowest = crop( filterGrid( this.padded( chunk, LIP_REACH, ( c, k ) => c.base[ k ], Infinity ), side, LIP_REACH, Math.min ), LIP_REACH );
+		for ( let k = 0; k < COUNT; k ++ ) {
+
+			// (Every untouched node near a pit: the drawn cells' outer corners are just outside the apron.)
+			if ( changed[ k ] ) continue;
+			const x = chunk.x( k ), z = chunk.z( k );
+			let rim = Infinity;
+			for ( const r of rims ) if ( x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ ) rim = Math.min( rim, r.rim );
+			if ( rim === Infinity ) continue;
+			drawn[ k ] = Math.min( drawn[ k ], Math.max( lowest[ k ], rim ), rim + LIP_RISE );
+
+		}
+
+		return drawn;
 
 	}
 
@@ -1715,7 +1761,7 @@ export class Terrain extends EventDispatcher {
 				const b = chunk.j0 + Math.floor( k / NODES ) - j0;
 				if ( a >= w || b >= h ) continue;
 				const t = ( b * w + a ) * 2;
-				data[ t ] = chunk.surface[ k ];
+				data[ t ] = ( chunk.drawn ?? chunk.surface )[ k ];
 				if ( chunk.shown[ k ] ) data[ t + 1 ] = 1;
 
 			}

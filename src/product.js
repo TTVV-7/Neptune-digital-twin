@@ -9,7 +9,8 @@
 //   - locks all but FREE_ITEMS of the library behind Build Pro (premium.js's gate).
 // Everywhere else (the Neptune twin), none of this applies.
 
-export const BUILD_APP = import.meta.env.MODE === 'worlddrive';
+// (No Vite in Node, where tests load some modules: not Build there.)
+export const BUILD_APP = import.meta.env?.MODE === 'worlddrive';
 
 const SITE_KEY = 'world-drive-build.site';
 // Where a new visitor starts: a working waterfront terminal, with plenty to plan around.

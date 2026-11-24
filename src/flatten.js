@@ -23,7 +23,7 @@ import {
 import { TileFlatteningPlugin } from '3d-tiles-renderer/plugins';
 import { acceleratedRaycast } from 'three-mesh-bvh';
 import { registerKind } from './kinds.js';
-import { buildProcedural } from './procedural.js';
+import { fencePanel } from './fence-panel.js';
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
@@ -338,7 +338,7 @@ function fencePiece( style, gate = false ) {
 
 	const m = fenceMaterialsOf();
 	const group = new Group();
-	if ( PANELLED.includes( style ) ) group.add( buildProcedural( 'fence-panel' ) );
+	if ( PANELLED.includes( style ) ) group.add( fencePanel() );
 	if ( style === 'screened' || style === 'screened-black' ) {
 
 		const sh = PANEL_HEIGHT - 0.1;
