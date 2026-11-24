@@ -16,7 +16,6 @@ import { SPOTS_ON, worldSpot } from './world-places.js';
 import { earthUrl } from './orrery-first.js';
 import { createFinds } from './finds.js';
 import { createWorldHardware } from './world-hardware.js';
-import { createHybrid } from './city/hybrid.js';
 import { FINDS_ON } from './finds-data.js';
 import { createLens } from './lens.js';
 import { loadVehicle, loadVehicles, lookOf, specOf } from './vehicles.js';
@@ -543,27 +542,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 	// (On the Earth before its tiles, with no test pad either, nothing: nothing's driven there then.)
 	// (On the worlds made in the page, the landers and rovers people left there are hit too: hardware's
 	// boxes, world-hardware.js.)
-	// A test behind ?hybrid (city/hybrid.js): in a city City Drive has (Vancouver), the car drives on
-	// that city built from OpenStreetMap, invisible under Google's map (?hybrid=show draws it too):
-	// smooth streets and straight walls, Google's parked cars and trees passed through.
-	const HYBRID = new URLSearchParams( location.search ).get( 'hybrid' );
-	const hybrid = HYBRID !== null ? createHybrid( { scene, show: HYBRID === 'show' } ) : null;
-	const onHybrid = () => {
-
-		if ( ! hybrid || offEarth() ) return false;
-		// (Asked for the ground before the Driver is made, as the models are set up: not yet.)
-		try {
-
-			return driver.active && hybrid.active( { east: driver.east, north: driver.north } );
-
-		} catch {
-
-			return false;
-
-		}
-
-	};
-	const grounds = () => offEarth() ? [ body().terrain, ...hardware ? [ hardware.colliders ] : [] ] : onHybrid() ? [ hybrid.colliders, ...sea.shown && ! bare ? [ sea.mesh ] : [] ] : [ tiles ? tiles.group : pad, ...sea.shown && ! bare ? [ sea.mesh ] : [] ].filter( Boolean );
+	const grounds = () => offEarth() ? [ body().terrain, ...hardware ? [ hardware.colliders ] : [] ] : [ tiles ? tiles.group : pad, ...sea.shown && ! bare ? [ sea.mesh ] : [] ].filter( Boolean );
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
 	// The globe as each world has it (GlobeView.setBody): the Earth's, and each other world's, its
@@ -1548,7 +1527,6 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 			placeEarth( earth, ellipsoid, place );
 			earthAt = { lat: place.lat, lon: place.lon, height: place.height ?? 0 };
 			if ( tiles ) recentreTiles( tiles, place );
-			hybrid?.setFrame( earthAt ).catch( err => console.error( err ) );
 
 		}
 
@@ -3021,8 +2999,6 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		const onWorld = state.mode === 'driving' && driver.active ? carOnWorld() : null;
 		finds.update( dt, onWorld && { ...onWorld, flying: !! driver.flying || ! driver.grounded, compact: document.body.classList.contains( 'ch-running' ) } );
 		hardware?.update( dt, onWorld );
-		// (Lined up with Google's map; without a key, with the test pad, which stands in for it.)
-		if ( hybrid && ! offEarth() && driver.active ) hybrid.update( dt, { east: driver.east, north: driver.north }, tiles?.group ?? pad ?? null );
 
 		live?.update( car() );
 		pads.update( dt );
@@ -3228,7 +3204,7 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 
 		},
 		models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx, stats, hardware, hybrid,
+		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx, stats, hardware,
 		get mode() {
 
 			return state.mode;
