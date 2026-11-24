@@ -287,6 +287,17 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 		document.getElementById( 'library-toggle' ).click();
 		models.setParams( pit, { fence: 'none' } );
 		out.pit.removed = ! ( 'fence' in models.toConfig( pit ).params ) && ! pit.pivot.getObjectByProperty( 'name', 'Temporary fence' );
+		// Its way down: a stair tower or a hoist on the floor, standing at the pit's depth; a ramp is
+		// in the ground (no model); each saved with it, and none left out.
+		out.access = {};
+		for ( const access of [ 'stairs', 'hoist', 'ramp', 'none' ] ) {
+
+			models.setParams( pit, { access } );
+			const thing = pit.pivot.getObjectByProperty( 'name', access === 'stairs' ? 'Stair tower' : 'Hoist' );
+			out.access[ access ] = { model: !! thing && thing.position.y === - 3, saved: models.toConfig( pit ).params.access ?? null };
+
+		}
+
 		models.remove( pit );
 		out.fence.removed = ! old.pivot.getObjectByProperty( 'name', 'Temporary fence' ) && ! ( 'fence' in models.toConfig( old ).params );
 		return out;
@@ -308,6 +319,7 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 	assert.equal( result.fence.outside, true, 'a fence stays in view outside build mode' );
 	assert.ok( Object.keys( result.fence.kinds ).length === 6 && Object.values( result.fence.kinds ).every( n => n > 0 ), JSON.stringify( result.fence.kinds ) );
 	assert.deepEqual( { ...result.pit, saved: { fence: result.pit.saved.fence, gates: result.pit.saved.gates } }, { fence: true, saved: { fence: 'silt', gates: 1 }, outside: true, outlines: false, removed: true } );
+	assert.deepEqual( result.access, { stairs: { model: true, saved: 'stairs' }, hoist: { model: true, saved: 'hoist' }, ramp: { model: false, saved: 'ramp' }, none: { model: false, saved: null } } );
 	assert.equal( result.fence.removed, true, 'fence: none takes it away, and out of what\'s saved' );
 	assert.ok( Object.keys( result.types ).length >= 11 && Object.values( result.types ).every( Boolean ), JSON.stringify( result.types ) );
 	assert.equal( result.saved.surfaced.surface, 'asphalt' );

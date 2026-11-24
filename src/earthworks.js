@@ -17,6 +17,7 @@ import {
 } from 'three';
 import { registerKind } from './kinds.js';
 import { FENCES, buildFence } from './flatten.js';
+import { HOIST, STAIR_TOWER, hoist, stairTower } from './pit-access.js';
 import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, hideUnderEarthworks, insideRect, materialIndex, rectBounds, rectFrame, spread } from './terrain.js';
 import { addHitFilter } from './walk.js';
 import { createPourStream } from './pour.js';
@@ -162,10 +163,10 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 	registerKind( EXCAVATION, {
 		label: 'Excavation',
 		build: buildPitMarker,
-		normalize: p => ( { ...normaliseExcavation( p ), ...pitFence( p ) } ),
+		normalize: p => ( { ...normaliseExcavation( p ), ...pitFence( p ), access: Object.values( ACCESS ).includes( p.access ) ? p.access : 'none' } ),
 		// Params at what their absence means are left out, so pits saved before sides had methods
 		// (or fences) save again byte for byte.
-		save: ( { fence, gates, ...rest } ) => ( { ...saveExcavation( rest ), ...( fence === 'none' ? {} : { fence, gates } ) } ),
+		save: ( { fence, gates, access, ...rest } ) => ( { ...saveExcavation( rest ), ...( fence === 'none' ? {} : { fence, gates } ), ...( access && access !== 'none' ? { access } : {} ) } ),
 		// The rim is the ground as it was, so digging doesn't drag the pit down after itself, and
 		// the lowest of it, so whatever stands in Google's mesh there (rail cars, a shed) is dug
 		// away with the pit instead of lifting the floor to its roof.
@@ -173,7 +174,7 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 		solid: false,
 		buildOnly: true,
 		// A fenced pit's fence stays in view outside build mode; its outlines don't.
-		shownOutsideBuild: params => params.fence !== 'none',
+		shownOutsideBuild: params => params.fence !== 'none' || params.access === 'stairs' || params.access === 'hoist',
 		fields: PIT_FIELDS,
 		// Resizing keeps the depth and the sides. Digging again reworks the ground under the
 		// whole pit, so that waits until the handle is let go; meanwhile the top of the cut and the
@@ -620,6 +621,8 @@ function pitDesign( entry, { order, progress, floorUnder } ) {
 			// While rakers wait to go in, a berm is left against their walls.
 			g.geom = geometryAtStage( design.geom, design.plan, design.stage );
 			g.final = design.geom;
+			g.ramp = rampOf( params, design.geom );
+			g.rampFinal = g.ramp;
 			// Round the top of the cut: the rectangle itself for a pit drawn by its top, and wider
 			// than the floor for one drawn by its floor, by the larger of each pair of sides.
 			const { hw, hl, margin } = cutBounds( design.geom );
@@ -660,16 +663,22 @@ function pitDesign( entry, { order, progress, floorUnder } ) {
 		},
 		bounds: () => rectBounds( g.rect, g.margin ),
 		// Infinity (the rim less -Infinity) where it isn't cut at all.
+		// The access ramp, if any, is left standing in the cut: no deeper than it is there.
 		height: ( x, z ) => {
 
 			const [ u, v ] = toPit( g.frame, x, z );
-			return g.rim - depthAt( g.geom, u, v, g.stage.dig * progress( entry ) );
+			const dig = g.stage.dig * progress( entry );
+			const depth = depthAt( g.geom, u, v, dig );
+			const ramp = depth > 0 ? rampDepth( g.ramp, u, v, dig ) : null;
+			return g.rim - ( ramp === null ? depth : Math.min( depth, ramp ) );
 
 		},
 		heightFinal: ( x, z ) => {
 
 			const [ u, v ] = toPit( g.frame, x, z );
-			return g.rim - depthAt( g.final, u, v, g.final.depth );
+			const depth = depthAt( g.final, u, v, g.final.depth );
+			const ramp = depth > 0 ? rampDepth( g.rampFinal, u, v, g.final.depth ) : null;
+			return g.rim - ( ramp === null ? depth : Math.min( depth, ramp ) );
 
 		},
 	};
@@ -866,6 +875,9 @@ const stagesOf = params => designOf( params ).stages;
 // is, how the sides are cut (all alike, or each side its own way in a sub-folder, named by which
 // way each faces), then what that way needs: the shoring system, the soil and slope, the benches,
 // the support levels for walls, the groundwater, and the dig stage shown.
+// A pit's way down (pit-access.js), as the P panel offers it.
+const ACCESS = { none: 'none', 'ramp (1:8, 5 m wide, from the front)': 'ramp', 'stair tower': 'stairs', 'hoist (lift)': 'hoist' };
+
 const PIT_FIELDS = [
 	{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
 	{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
@@ -904,6 +916,8 @@ const PIT_FIELDS = [
 	{ key: 'anchorAngle', label: 'tieback angle (° down)', min: 10, max: 45, step: 1, when: params => levelTypes( params ).includes( 'tiebacks' ) },
 	{ key: 'bondLength', label: 'bond length (m)', min: 4.5, max: 12, step: 0.5, when: params => levelTypes( params ).includes( 'tiebacks' ) },
 	{ key: 'groundwater', label: 'groundwater (m down)', min: 0, step: 0.1 },
+	// The way down: an earth ramp from the front edge, a stair tower or a hoist in a back corner.
+	{ key: 'access', label: 'access', options: ACCESS },
 	// A fence round the top of the cut, PIT_FENCE_BACK back from its edge (flatten.js's kinds).
 	{ key: 'fence', label: 'fence round the pit', options: FENCES },
 	{ key: 'gates', label: 'entrances (24 ft)', min: 0, max: 8, step: 1, when: params => params.fence !== 'none' },
@@ -1033,6 +1047,33 @@ function baseSize( entry, solved ) {
 // its floor has its floor outlined too, dashed; its top is round the floor, off centre when its
 // sides differ. A pit drawn by its top (as all were before) has the marker it always had, so its
 // footprint, and with it the ground it snaps to and its handles, are the same.
+// An access ramp: its fall (run per metre down) and width (m), narrower in a narrow pit.
+const RAMP_RUN = 8;
+const RAMP_WIDTH = 5;
+// Stairs and hoists stand this far in from the floor's edge (m): clear of shoring and its walers.
+const ACCESS_CLEAR = 1.2;
+
+// The ramp in a pit's frame: across u0..u1, from the top edge at v1 down to the floor at v1 - run,
+// or null. Steeper than RAMP_RUN where the pit is too short for it.
+export function rampOf( params, geom ) {
+
+	if ( params.access !== 'ramp' ) return null;
+	const { top } = outlines( geom );
+	const width = Math.min( RAMP_WIDTH, ( top.u1 - top.u0 ) * 0.6 );
+	const run = Math.min( geom.depth * RAMP_RUN, ( top.v1 - top.v0 ) * 0.9 );
+	const middle = ( top.u0 + top.u1 ) / 2;
+	return { u0: middle - width / 2, u1: middle + width / 2, v1: top.v1, run };
+
+}
+
+// How far below the rim the ramp is at (u, v), or null off it.
+function rampDepth( ramp, u, v, depth ) {
+
+	if ( ! ramp || u < ramp.u0 || u > ramp.u1 || v > ramp.v1 + 1 ) return null;
+	return Math.min( depth, depth * Math.max( 0, ramp.v1 - v ) / ramp.run );
+
+}
+
 // A pit's fence stands this far back from the top of the cut (m): clear of its edge, as barriers
 // round an excavation are kept.
 const PIT_FENCE_BACK = 1;
@@ -1074,6 +1115,23 @@ function buildPitMarker( params ) {
 	for ( const object of objects ) object.userData.buildOnly = true;
 	for ( const line of [ outline, floor ] ) if ( line ) line.raycast = () => {};
 	group.add( ...objects );
+	if ( params.access === 'stairs' || params.access === 'hoist' ) {
+
+		// In a back corner of the floor (left for stairs, right for the hoist), from the floor up
+		// past the rim; the stairs' flights run along the back wall.
+		const geom = designOf( params ).geom;
+		const floorAt = outlines( geom ).floor ?? outlines( geom ).top;
+		const stairs = params.access === 'stairs';
+		const size = stairs ? STAIR_TOWER : HOIST;
+		const thing = stairs ? stairTower( geom.depth ) : hoist( geom.depth );
+		const u = stairs ? floorAt.u0 + ACCESS_CLEAR + size.length / 2 : floorAt.u1 - ACCESS_CLEAR - size.length / 2;
+		const v = floorAt.v0 + ACCESS_CLEAR + size.width / 2;
+		thing.position.set( u, - geom.depth, - v );
+		thing.name = stairs ? 'Stair tower' : 'Hoist';
+		group.add( thing );
+
+	}
+
 	if ( params.fence && params.fence !== 'none' ) {
 
 		// buildFence sets its line FENCE_INSET in from the rectangle it's given.
