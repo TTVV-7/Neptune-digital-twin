@@ -1724,95 +1724,24 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
-	test( 'a refund of a monthly pass\'s renewal (a PaymentIntent no purchase has) takes the pass away, found by its customer; a one-time pass of theirs stays, and the customer and tax are kept', async () => {
+	test( 'a purchase keeps the tax in its total, NULL when Stripe sends none or nonsense', async () => {
 
-		const fay = await signIn( { sub: '1012', email: 'fay@example.com', name: 'Fay' } );
-		const account = server.d1( 'SELECT id FROM accounts WHERE email = \'fay@example.com\'' )[ 0 ].id;
-		// Fay's monthly pass (no PaymentIntent, as a subscription's checkout has none), and a day pass
-		// of hers bought the same day, each with her Stripe customer and the tax in the total.
-		const bought = ( id, extra ) => {
+		const bought = ( id, total_details ) => {
 
-			const event = checkout( id, { reference: String( account ), email: 'fay@example.com' } );
-			Object.assign( event.data.object, { customer: 'cus_fay', total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 260 } }, extra );
+			const event = checkout( id, { email: 'tax@example.com' } );
+			Object.assign( event.data.object, { total_details } );
 			return event;
 
 		};
-		assert.equal( ( await webhook( server, bought( 'fay_month', { mode: 'subscription', subscription: 'sub_fay', payment_intent: null } ) ) ).status, 200 );
-		assert.equal( ( await webhook( server, bought( 'fay_day', { payment_link: DAY_LINK_ID } ) ) ).status, 200 );
-		// Not a cus_ id, or a tax that isn't a whole number of cents: neither kept.
-		assert.equal( ( await webhook( server, bought( 'fay_odd', { customer: 'acct_nope', total_details: { amount_tax: -1 } } ) ) ).status, 200 );
-		const rows = () => server.d1( 'SELECT checkout_session, customer, tax, status, refunded_at FROM purchases WHERE checkout_session LIKE \'cs_test_fay%\' ORDER BY 1' );
-		assert.deepEqual( rows(), [
-			{ checkout_session: 'cs_test_fay_day', customer: 'cus_fay', tax: 260, status: 'paid', refunded_at: null },
-			{ checkout_session: 'cs_test_fay_month', customer: 'cus_fay', tax: 260, status: 'paid', refunded_at: null },
-			{ checkout_session: 'cs_test_fay_odd', customer: null, tax: null, status: 'paid', refunded_at: null },
+		assert.equal( ( await webhook( server, bought( 'tax_some', { amount_discount: 0, amount_shipping: 0, amount_tax: 260 } ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, bought( 'tax_none', undefined ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, bought( 'tax_odd', { amount_tax: -1 } ) ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT checkout_session, tax FROM purchases WHERE checkout_session LIKE \'cs_test_tax%\' ORDER BY 1' ), [
+			{ checkout_session: 'cs_test_tax_none', tax: null },
+			{ checkout_session: 'cs_test_tax_odd', tax: null },
+			{ checkout_session: 'cs_test_tax_some', tax: 260 },
 		] );
-		server.d1( 'DELETE FROM purchases WHERE checkout_session = \'cs_test_fay_odd\'' );
-		assert.deepEqual( ( await me( fay.cookie ) ).json.subscribed, true );
-		// A renewal's charge, refunded: its own PaymentIntent, Fay's customer, what the checkout charged.
-		const renewal = ( id, customer, amount = 1999, currency = 'cad' ) => {
-
-			const event = refund( id );
-			Object.assign( event.data.object, { customer, amount, currency } );
-			return event;
-
-		};
-		// Someone else's customer changes nothing of hers, and nor does a refund of hers of something
-		// at another price (another product on the Stripe account, not this subscription's renewal).
-		assert.equal( ( await webhook( server, renewal( 'renewal_stranger', 'cus_stranger' ) ) ).status, 200 );
-		assert.equal( ( await webhook( server, renewal( 'renewal_other', 'cus_fay', 500 ) ) ).status, 200 );
-		assert.equal( ( await webhook( server, renewal( 'renewal_usd', 'cus_fay', 1999, 'usd' ) ) ).status, 200 );
-		assert.deepEqual( rows().map( row => row.status ), [ 'paid', 'paid' ] );
-		// A one-time purchase's refund delivered before its checkout (Stripe retrying that) looks like a
-		// renewal's at first and takes the monthly pass back, but the checkout, when it arrives, shows
-		// whose it was: the monthly pass is given back, and the new purchase comes in refunded.
-		assert.equal( ( await webhook( server, renewal( 'fay_early', 'cus_fay' ) ) ).status, 200 );
-		assert.equal( rows()[ 1 ].status, 'refunded' );
-		assert.equal( ( await webhook( server, bought( 'fay_early' ) ) ).status, 200 );
-		assert.deepEqual( rows().map( row => [ row.checkout_session, row.status ] ), [
-			[ 'cs_test_fay_day', 'paid' ],
-			[ 'cs_test_fay_early', 'refunded' ],
-			[ 'cs_test_fay_month', 'paid' ],
-		] );
-		assert.equal( server.d1( 'SELECT taken_back_by FROM purchases WHERE checkout_session = \'cs_test_fay_month\'' )[ 0 ].taken_back_by, null );
-		server.d1( 'DELETE FROM purchases WHERE checkout_session = \'cs_test_fay_early\'' );
-		// Hers: the monthly pass goes, the day pass stays (it's still the day she bought it).
-		const later = PASS_DAY + HOUR;
-		assert.equal( ( await webhook( server, renewal( 'renewal_fay', 'cus_fay' ), { time: later } ) ).status, 200 );
-		assert.deepEqual( rows().map( row => [ row.checkout_session, row.status, row.refunded_at ] ), [
-			[ 'cs_test_fay_day', 'paid', null ],
-			[ 'cs_test_fay_month', 'refunded', later ],
-		] );
-		const { json } = await me( fay.cookie, later );
-		assert.equal( json.supporter, true );
-		assert.equal( json.subscribed, undefined );
-		// The same refund again (Stripe retrying) changes nothing, the time it was taken back included.
-		assert.equal( ( await webhook( server, renewal( 'renewal_fay', 'cus_fay' ), { time: later + HOUR } ) ).status, 200 );
-		assert.deepEqual( rows().map( row => [ row.checkout_session, row.status, row.refunded_at ] ), [
-			[ 'cs_test_fay_day', 'paid', null ],
-			[ 'cs_test_fay_month', 'refunded', later ],
-		] );
-		// A refund of the day pass itself goes by its PaymentIntent, as ever.
-		assert.equal( ( await webhook( server, renewal( 'fay_day', 'cus_fay' ), { time: later } ) ).status, 200 );
-		assert.equal( ( await me( fay.cookie, later ) ).json.supporter, false );
-		// A one-time pass's refund (its PaymentIntent matched) never reaches a subscription of the same
-		// customer's: a new monthly pass of Fay's stays when her day pass's refund arrives again.
-		assert.equal( ( await webhook( server, bought( 'fay_month2', { mode: 'subscription', subscription: 'sub_fay2', payment_intent: null } ) ) ).status, 200 );
-		assert.equal( ( await webhook( server, renewal( 'fay_day', 'cus_fay' ), { time: later } ) ).status, 200 );
-		assert.equal( server.d1( 'SELECT status FROM purchases WHERE checkout_session = \'cs_test_fay_month2\'' )[ 0 ].status, 'paid' );
-		// A subscription of hers that ended long ago (cancelled, then she subscribed again) keeps its
-		// money: a refund of the new one's renewal takes back only the one still running.
-		assert.equal( ( await webhook( server, bought( 'fay_old', { mode: 'subscription', subscription: 'sub_fay_old', payment_intent: null } ) ) ).status, 200 );
-		server.d1( `INSERT INTO subscriptions ( id, status, event_at, updated_at ) VALUES ( 'sub_fay_old', 'canceled', ${ PASS_DAY }, ${ PASS_DAY } )` );
-		assert.equal( ( await webhook( server, renewal( 'renewal_fay2', 'cus_fay' ), { time: later } ) ).status, 200 );
-		assert.deepEqual( server.d1( 'SELECT checkout_session, status FROM purchases WHERE checkout_session IN ( \'cs_test_fay_month2\', \'cs_test_fay_old\' ) ORDER BY 1' ), [
-			{ checkout_session: 'cs_test_fay_month2', status: 'refunded' },
-			{ checkout_session: 'cs_test_fay_old', status: 'paid' },
-		] );
-		// (The suite's later tests count the purchases as they were.)
-		server.d1( 'DELETE FROM purchases WHERE checkout_session LIKE \'cs_test_fay%\'' );
-		server.d1( 'DELETE FROM subscriptions WHERE id = \'sub_fay_old\'' );
-		server.d1( 'DELETE FROM reversals WHERE payment_intent IN ( \'pi_renewal_stranger\', \'pi_renewal_other\', \'pi_renewal_usd\', \'pi_fay_early\', \'pi_renewal_fay\', \'pi_renewal_fay2\', \'pi_fay_day\' )' );
+		server.d1( 'DELETE FROM purchases WHERE checkout_session LIKE \'cs_test_tax%\'' );
 
 	} );
 
@@ -2259,8 +2188,8 @@ describe( 'World Drive Supporter Pass', () => {
 			[ today, 'accounts', 'new', 1 ], [ dayAt( ADMIN_DAY - 3 * DAY ), 'accounts', 'new', 1 ],
 			// The passes by what they were, and their money (tax included) and the tax in it, by currency.
 			[ today, 'purchases', 'lifetime', 2 ], [ today, 'purchases', 'day', 1 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'purchases', 'granted', 1 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'purchases', 'monthly', 1 ],
-			[ dayAt( ADMIN_DAY - DAY ), 'purchases', 'build', 1 ], [ dayAt( ADMIN_DAY - DAY ), 'purchases', 'other', 1 ],
-			[ today, 'revenue', 'cad', 3998 + 99 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'revenue', 'cad', 299 ], [ dayAt( ADMIN_DAY - DAY ), 'revenue', 'cad', 1600 ],
+			// (Build Pro's, and a kind a later version adds, are the Build tab's or nobody's: not the game's money.)
+			[ today, 'revenue', 'cad', 3998 + 99 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'revenue', 'cad', 299 ],
 			[ today, 'tax', 'cad', 12 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'tax', 'cad', 39 ],
 		] ) );
 		assert.deepEqual( rows.map( ( [ day ] ) => day ), rows.map( ( [ day ] ) => day ).sort() );
@@ -2271,13 +2200,11 @@ describe( 'World Drive Supporter Pass', () => {
 		} );
 		// The week's sales one by one, the newest first (the last recorded first of two at once), taken back too: what, when, what was paid, and
 		// whose (the account and its nickname, or nobody yet), and never an email or a whole Stripe id.
-		const nia = account( '1201' ), oto = account( '1202' ), pia = account( '1203' );
+		const nia = account( '1201' ), oto = account( '1202' );
 		assert.deepEqual( res.json.sales, [
 			{ at: ADMIN_DAY - HOUR, kind: 'lifetime', amount: 1999, currency: 'cad', tax: null, status: 'paid', refunded: false, subscription: null, until: null, running: false, account: null, nickname: null, ref: '' },
 			{ at: ADMIN_DAY - HOUR, kind: 'lifetime', amount: 1999, currency: 'cad', tax: null, status: 'paid', refunded: false, subscription: null, until: null, running: false, account: nia, nickname: 'Admin Ada', ref: '' },
 			{ at: ADMIN_DAY - 2 * HOUR, kind: 'day', amount: 99, currency: 'cad', tax: 12, status: 'paid', refunded: false, subscription: null, until: ADMIN_DAY + 22 * HOUR, running: true, account: nia, nickname: 'Admin Ada', ref: '00000001' },
-			{ at: ADMIN_DAY - DAY, kind: 'build', amount: 1500, currency: 'cad', tax: null, status: 'paid', refunded: false, subscription: null, until: null, running: false, account: pia, nickname: null, ref: 'd_000003' },
-			{ at: ADMIN_DAY - DAY - HOUR, kind: 'other', amount: 100, currency: 'cad', tax: null, status: 'paid', refunded: false, subscription: null, until: null, running: false, account: pia, nickname: null, ref: '00000004' },
 			{ at: ADMIN_DAY - 2 * DAY + HOUR, kind: 'monthly', amount: 299, currency: 'cad', tax: 39, status: 'paid', refunded: false, subscription: 'active', until: null, running: false, account: oto, nickname: null, ref: 'h_000002' },
 			// Given by hand to Oto's email: Oto's, as the pass is.
 			{ at: ADMIN_DAY - 2 * DAY, kind: 'granted', amount: null, currency: null, tax: null, status: 'granted', refunded: false, subscription: null, until: null, running: false, account: oto, nickname: null, ref: '' },

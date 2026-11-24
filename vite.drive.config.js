@@ -1,11 +1,11 @@
-import { cpSync, createReadStream, readFileSync } from 'node:fs';
+import { cpSync, createReadStream, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as viteBuild, defineConfig, loadEnv } from 'vite';
 import { GOOGLE_KEY_NAMES } from './vite.config.js';
 import { LIBRARY_VEHICLES, WORKS_RIDES } from './src/drive-app/catalog.js';
-import { driveSite } from './drive/site/build.js';
-import { CONTACT_VARS } from './drive/site/legal.js';
+import { buildSitePages, driveSite } from './drive/site/build.js';
+import { CONTACT_VARS, contactDetails } from './drive/site/legal.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): its own page, drive/index.html with
 // src/drive-app/boot.js (which loads main.js), sharing src/ with the construction app, and its
@@ -174,6 +174,36 @@ function cityDrive() {
 
 }
 
+// Cloudflare Web Analytics on World Drive Build's editor (/build/app/), as on its dashboard
+// (drive/build/index.html) and the game (drive/index.html): World Drive's own site's token, only on
+// worlddrive.app. The editor's page is the Neptune twin's index.html, whose beacon is the twin's own
+// site's (its token, on any https host): that one is swapped for this, or the editor's visits would
+// count as the twin's. No cookies, nothing kept in the browser.
+const BUILD_BEACON = `<script>
+			// Cloudflare Web Analytics (no cookies): World Drive's, only on worlddrive.app itself, so local
+			// development and tests aren't counted (vite.drive.config.js's withBuildBeacon).
+			if ( location.hostname === 'worlddrive.app' ) {
+
+				const beacon = document.createElement( 'script' );
+				beacon.defer = true;
+				beacon.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+				beacon.dataset.cfBeacon = '{"token": "f788bd8a2fb34dc2a64001b4ebab52c2"}';
+				document.head.append( beacon );
+
+			}
+		</script>`;
+
+// The editor's page with the twin's beacon swapped for World Drive's (BUILD_BEACON). A page with no
+// beacon of the twin's left to swap (index.html changed) fails the build, rather than quietly
+// counting the editor somewhere else, or nowhere.
+function withBuildBeacon( html ) {
+
+	const twin = /<script>(?:(?!<\/script>)[\s\S])*?cloudflareinsights(?:(?!<\/script>)[\s\S])*<\/script>/;
+	if ( ! twin.test( html ) ) throw new Error( 'index.html has no Cloudflare Web Analytics beacon for World Drive Build\'s to replace (vite.drive.config.js, withBuildBeacon)' );
+	return html.replace( twin, BUILD_BEACON );
+
+}
+
 // World Drive Build (/build/, docs/build.md): its dashboard at /build/, and the construction mock-up
 // app (the repository's own app, index.html and src/main.js) built with --mode worlddrive
 // (src/product.js: wherever the project is, Build Pro's gate, its Maps key from World Drive's server,
@@ -198,6 +228,28 @@ function buildApp() {
 				resolve: { alias: [ { find: /^\/src\//, replacement: `${ join( ROOT, 'src' ) }/` } ] },
 				build: { outDir: join( ROOT, 'dist-drive', 'build' ), emptyOutDir: true, assetsDir: 'home' },
 			} );
+			// Its legal pages (/build/terms/ and the rest, drive/site/legal.js), into the folder that
+			// build has just emptied.
+			for ( const page of buildSitePages() ) {
+
+				mkdirSync( dirname( join( ROOT, 'dist-drive', page.file ) ), { recursive: true } );
+				writeFileSync( join( ROOT, 'dist-drive', page.file ), page.html );
+
+			}
+
+			// The account page (drive/build/account/, src/build-account/: plan and billing, sign-in,
+			// connected apps, share links, your data) at /build/account/, after the dashboard, whose
+			// build empties /build/. Support's email is legal.js's, as the policies have it.
+			await viteBuild( {
+				configFile: false,
+				root: join( ROOT, 'drive', 'build', 'account' ),
+				base: '/build/account/',
+				publicDir: false,
+				logLevel: 'warn',
+				resolve: { alias: [ { find: /^\/src\//, replacement: `${ join( ROOT, 'src' ) }/` } ] },
+				define: { __BUILD_SUPPORT_EMAIL__: JSON.stringify( contactDetails().email ) },
+				build: { outDir: join( ROOT, 'dist-drive', 'build', 'account' ), emptyOutDir: true, assetsDir: 'assets' },
+			} );
 			const outDir = join( ROOT, 'dist-drive', 'build', 'app' );
 			await viteBuild( {
 				configFile: join( ROOT, 'vite.config.js' ),
@@ -209,7 +261,7 @@ function buildApp() {
 				build: { outDir, emptyOutDir: true, chunkSizeWarningLimit: 1500 },
 				plugins: [ {
 					name: 'world-drive-build-page',
-					transformIndexHtml: html => html
+					transformIndexHtml: html => withBuildBeacon( html )
 						.replace( /<title>[^<]*<\/title>/, '<title>World Drive Build · construction site mock-ups</title>' )
 						.replace( '<head>', '<head>\n\t\t<meta name="description" content="Lay out a construction site on a 3D map of anywhere: real-scale equipment, trailers, barriers and earthworks, in your browser." />' ),
 				} ],

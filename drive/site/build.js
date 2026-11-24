@@ -10,7 +10,7 @@ import { MARS_SITE } from './mars.js';
 import { MOON_SITE } from './moon.js';
 import { PLACES } from './places.js';
 import { VESTA_SITE } from './vesta.js';
-import { contactDetails, legalPages, missingContact } from './legal.js';
+import { BUILD_LEGAL_LINKS, buildLegalPages, contactDetails, legalPages, missingContact } from './legal.js';
 
 // World Drive's pages for search engines and links (docs/world-drive.md, "Search engines"): a page
 // for each place in places.js at /drive/<slug>/, a page listing them at /drive/, and for each world
@@ -145,6 +145,18 @@ export function sitePages( { when = lastChanged, contact = contactDetails() } = 
 
 }
 
+// World Drive Build's legal pages (legal.js's buildLegalPages): { path, file (in dist-drive/), html }
+// for /build/terms/ and the rest, with its model credits from public/library/CREDITS.md. They're out
+// of search, like the rest of /build/ while it's on trial, so they're not in the sitemap; and
+// they're written into dist-drive/build/ by vite.drive.config.js's buildApp, after the dashboard's
+// own build has emptied that folder.
+export function buildSitePages( { contact = contactDetails() } = {} ) {
+
+	const credits = readFileSync( join( ROOT, 'public', 'library', 'CREDITS.md' ), 'utf8' );
+	return buildLegalPages( contact, credits ).map( item => ( { path: `/build/${ item.slug }/`, file: `build/${ item.slug }/index.html`, html: buildLegalPage( item ) } ) );
+
+}
+
 // The home page's list of places (in its static content: drive/index.html). Each links to its
 // page, and says where its Drive here goes (data-play), so a tap in the game flies the globe there
 // rather than leaving the visit (main.js).
@@ -165,7 +177,9 @@ export function worldPlacesList( id ) {
 // The addresses the site's pages are at: /drive/..., /space/, /multiplayer/, the legal pages
 // (/privacy/, /terms/, /refunds/, /contact/) and each other world's, /moon/... to /ceres/...
 export const LEGAL_PATHS = [ 'privacy', 'terms', 'refunds', 'contact' ];
-const PAGES_AT = new RegExp( `^/(${ [ 'drive', 'space', 'multiplayer', ...LEGAL_PATHS, ...OFF_EARTH ].join( '|' ) })(/|$)` );
+// World Drive Build's own (legal.js's buildLegalPages): /build/terms/ and the rest.
+export const BUILD_LEGAL_PATHS = [ 'terms', 'privacy', 'refunds', 'acceptable-use', 'credits' ];
+const PAGES_AT = new RegExp( `^/(${ [ 'drive', 'space', 'multiplayer', ...LEGAL_PATHS, ...OFF_EARTH, ...BUILD_LEGAL_PATHS.map( slug => `build/${ slug }` ) ].join( '|' ) })(/|$)` );
 
 // A Vite plugin (vite.drive.config.js): the places' pages, /drive/, each other world's pages and
 // /sitemap.xml in the build and from the dev server, and the home page's lists of places.
@@ -193,8 +207,9 @@ export function driveSite() {
 				// /ceres/) is never a page: it's passed on, to be served from drive/public/ as before.
 				if ( /\.[a-z0-9]+$/i.test( url.pathname ) && url.pathname !== '/sitemap.xml' ) return next();
 				// Made afresh each time, so an edit to places.js or a world's words shows on a reload.
-				const { pages, sitemap } = sitePages( { when: () => today() } );
+				const { pages: sitePagesNow, sitemap } = sitePages( { when: () => today() } );
 				if ( url.pathname === '/sitemap.xml' ) return send( res, 'application/xml; charset=utf-8', sitemap );
+				const pages = [ ...sitePagesNow, ...buildSitePages() ];
 				const page = pages.find( p => p.path === url.pathname );
 				if ( page ) return send( res, 'text/html; charset=utf-8', page.html );
 				// As Cloudflare's assets do: the address without its slash is sent on to it.
@@ -479,6 +494,73 @@ function legalPage( { slug, title, crumb, description, body } ) {
 		${ body }
 	</section>`,
 	} );
+
+}
+
+// A World Drive Build legal page: the same look as the game's (site.css), in Build's slate and safety
+// yellow, kept out of search, with links to the others and back to Build at its foot. No script, and
+// nothing loaded from anyone else.
+const BUILD_CSS = `
+		body {
+			background: #11171d;
+		}
+		.brand b {
+			margin-left: 6px;
+			padding: 2px 8px;
+			border-radius: 4px;
+			background: var( --accent );
+			color: var( --accent-ink );
+			font-size: 15px;
+			font-style: normal;
+			vertical-align: middle;
+		}
+		.legal code {
+			font-size: 14px;
+			overflow-wrap: anywhere;
+		}
+		.legal .credits {
+			font-size: 14px;
+		}
+`;
+function buildLegalPage( { slug, title, crumb, description, body } ) {
+
+	const path = `/build/${ slug }/`;
+	const css = readFileSync( join( HERE, 'site.css' ), 'utf8' );
+	return `<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>${ esc( title ) } – World Drive Build</title>
+	<meta name="description" content="${ esc( description ) }" />
+	<!-- Out of search for now, like the rest of /build/ while it's on trial. -->
+	<meta name="robots" content="noindex, nofollow" />
+	<link rel="canonical" href="${ SITE + path }" />
+	<meta name="theme-color" content="#11171d" />
+	<link rel="icon" href="/favicon.ico" sizes="48x48" />
+	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	<style>
+${ css }${ BUILD_CSS }	</style>
+</head>
+<body>
+<header class="top">
+	<a class="brand" href="/build/">World Drive <b>Build</b></a>
+	<a class="play" href="/build/">Open Build</a>
+</header>
+<main>
+	<nav class="crumbs" aria-label="Breadcrumb"><a href="/build/">World Drive Build</a> <span aria-hidden="true">›</span> <span aria-current="page">${ esc( crumb ) }</span></nav>
+	<section class="legal">
+		<h1>${ esc( title ) }</h1>
+		${ body }
+	</section>
+</main>
+<footer>
+	<p>${ BUILD_LEGAL_LINKS.map( ( [ name, href ] ) => `<a href="${ href }">${ esc( name ) }</a>` ).join( ' · ' ) }</p>
+	<p><a href="/build/">World Drive Build</a> · <a href="/">World Drive</a></p>
+</footer>
+</body>
+</html>
+`;
 
 }
 

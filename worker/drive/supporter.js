@@ -2,6 +2,7 @@ import { HttpError, isObject, json, list } from '../http.js';
 import { LINK_ID_PATTERN, cleanEmail, readEvent, stripeId } from '../stripe.js';
 import { database } from './players.js';
 import { googleClientId } from './settings.js';
+import { stripeApi, stripeSecret, stripeTestMode } from './stripe-api.js';
 
 // The Supporter Pass (docs/world-drive.md), towards World Drive's running costs, three ways, each
 // through a Stripe Payment Link of its own: a subscription (monthly, kept while it runs), bought once
@@ -38,6 +39,11 @@ import { googleClientId } from './settings.js';
 // Buying is on only when GOOGLE_CLIENT_ID, the link and the secret are all set. A link that isn't
 // https, a secret that isn't a whsec_ one (an API key pasted there by mistake) or a link id that
 // isn't a plink_ one leaves it off.
+//
+// World Drive Build Pro (build.js, billing.js) shares the webhook: its own checkouts say so in their
+// metadata (pass 'build'), and its subscriptions, invoices, refunds and chargebacks are kept here too
+// (docs/build.md). Every event's id is kept (stripe_events), so one already acted on is skipped
+// when Stripe sends it again.
 
 const ACCOUNT_ID = /^[1-9][0-9]{0,14}$/;
 const MAX_PRICE = 40;
@@ -45,6 +51,10 @@ const MAX_PRICE = 40;
 // Any other (canceled, unpaid, incomplete_expired, paused...) takes it away until it's active again.
 export const ACTIVE_STATUSES = [ 'active', 'trialing', 'past_due' ];
 const STATUS = /^[a-z_]{1,40}$/;
+const EVENT_ID = /^evt_[A-Za-z0-9_]{1,250}$/;
+// An event still 'processing' this long after it came in (ms) was cut off half done: Stripe's next
+// try at it is let through.
+const STUCK_MS = 5 * 60 * 1000;
 // How long a day pass lasts (ms) from its payment.
 export const DAY_PASS_MS = 24 * 60 * 60 * 1000;
 
@@ -59,7 +69,23 @@ function webhookSettings( env ) {
 	const secret = text( env.STRIPE_WEBHOOK_SECRET );
 	const linkIds = text( env.SUPPORTER_PAYMENT_LINK_ID ).split( ',' ).map( id => id.trim() ).filter( Boolean );
 	if ( ! secret.startsWith( 'whsec_' ) || linkIds.some( id => ! LINK_ID_PATTERN.test( id ) ) ) return null;
-	return { secret, linkIds, dayLinkId: dayLinkId( env ), buildLinkId: buildLinkId( env ), testMode: paymentLink( env )?.pathname.startsWith( '/test_' ) ?? false };
+	return {
+		secret, linkIds, dayLinkId: dayLinkId( env ), buildLinkId: buildLinkId( env ),
+		// BUILD_PAYMENT_LINK_ID set to something that isn't a link id: a checkout through Build Pro's old
+		// link can't be told apart, so a link that isn't the day pass's is never taken for the pass.
+		buildLinkBroken: text( env.BUILD_PAYMENT_LINK_ID ) !== '' && ! buildLinkId( env ),
+		testMode: paymentLink( env )?.pathname.startsWith( '/test_' ) ?? false,
+		// Build Pro sold with a test-mode key (a staging Worker): its test-mode events count, for Build Pro only.
+		buildTestMode: stripeTestMode( env ),
+	};
+
+}
+
+// Whether the webhook can check what Stripe sends (its secret, and the link ids, are set right):
+// Build Pro isn't sold without it (billing.js).
+export function webhookReady( env ) {
+
+	return !! webhookSettings( env );
 
 }
 
@@ -186,21 +212,49 @@ export async function supporterPass( env, account, now = Date.now() ) {
 
 }
 
-// { pro, subscribed }: whether this account has World Drive Build's Pro plan (build.js): a purchase
-// through its Payment Link (pass 'build'), its or bought with its Google email, not refunded, its
-// subscription not stopped (as livePurchase has it for the pass's), or its email in BUILD_EMAILS
-// (testers, given it without paying). subscribed: through a subscription that's running, so the
-// page offers to manage it.
-export async function buildPlan( env, account ) {
+// World Drive Build's Pro plan for this account (build.js) at `now` (ms): { pro, subscribed, status,
+// interval, renewsAt, cancelAtPeriodEnd, pastDue, comped, customer }. pro: a purchase of it (pass
+// 'build': its own checkout, billing.js, or its old Payment Link), its or bought with its Google
+// email, not refunded or charged back, its subscription not stopped (as livePurchase has it for the
+// pass's: past_due keeps it while Stripe retries the card; canceled, unpaid and the rest end it);
+// or given by the owner (build_comps, until a time or for good); or its email in BUILD_EMAILS
+// (testers). subscribed: through a subscription that's running, so the page offers to manage it.
+// status: that subscription's (or the last one's, once stopped: 'canceled', 'unpaid', or 'refunded'
+// and 'disputed' for one whose money was taken back), null with none. interval: 'month' or 'year'.
+// renewsAt (ms): when it renews, or ends if cancelAtPeriodEnd. pastDue: its last invoice failed, or
+// Stripe says past_due, so the page asks for a new card. customer: the account has a Stripe customer
+// (billing.js), so it can open the billing portal.
+export async function buildPlan( env, account, now = Date.now() ) {
 
 	const email = typeof account?.email === 'string' ? account.email.toLowerCase() : '';
-	if ( email && list( env.BUILD_EMAILS ).includes( email ) ) return { pro: true, subscribed: false };
+	const listed = !! email && list( env.BUILD_EMAILS ).includes( email );
 	const active = ACTIVE_STATUSES.map( status => `'${ status }'` ).join( ', ' );
-	const row = await database( env ).prepare( `SELECT u.subscription FROM accounts a JOIN purchases u ON ${ ownPurchase( 'u', 'a' ) }
-		WHERE a.id = ?1 AND u.pass = 'build' AND u.refunded_at IS NULL
-		AND ( u.subscription IS NULL OR NOT EXISTS ( SELECT 1 FROM subscriptions s WHERE s.id = u.subscription AND s.status NOT IN ( ${ active } ) ) )
-		ORDER BY u.subscription IS NULL LIMIT 1` ).bind( account.id ).first();
-	return { pro: !! row, subscribed: !! row?.subscription };
+	// The account's best Build Pro purchase (a live one first, a subscription's before a one-time
+	// one, the newest), with its subscription as last heard, and whether its latest invoice failed.
+	const row = await database( env ).prepare( `SELECT a.stripe_customer AS customer,
+		EXISTS ( SELECT 1 FROM build_comps c WHERE c.account_id = a.id AND ( c.until IS NULL OR c.until > ?2 ) ) AS comped, p.*
+		FROM accounts a LEFT JOIN ( SELECT u.subscription, u.status AS purchase_status, u.refunded_at, s.status, s.interval, s.current_period_end,
+			s.cancel_at_period_end, s.cancel_at,
+			( u.refunded_at IS NULL AND ( u.subscription IS NULL OR s.id IS NULL OR s.status IN ( ${ active } ) ) ) AS live,
+			( SELECT i.status FROM invoices i WHERE i.subscription = u.subscription ORDER BY i.created_at DESC LIMIT 1 ) IN ( 'payment_failed', 'action_required' ) AS failed
+			FROM accounts b JOIN purchases u ON ${ ownPurchase( 'u', 'b' ) } LEFT JOIN subscriptions s ON s.id = u.subscription
+			WHERE b.id = ?1 AND u.pass = 'build' ORDER BY live DESC, u.subscription IS NULL, u.created_at DESC LIMIT 1 ) p ON 1
+		WHERE a.id = ?1` ).bind( account.id, now ).first();
+	const live = !! row?.live;
+	const subscribed = live && !! row.subscription;
+	let status = null;
+	if ( row?.subscription ) status = row.refunded_at !== null ? row.purchase_status : row.status ?? 'active';
+	return {
+		pro: live || !! row?.comped || listed,
+		subscribed,
+		status,
+		interval: subscribed && ( row.interval === 'month' || row.interval === 'year' ) ? row.interval : null,
+		renewsAt: subscribed ? row.cancel_at ?? row.current_period_end ?? null : null,
+		cancelAtPeriodEnd: subscribed && !! row.cancel_at_period_end,
+		pastDue: subscribed && ( row.status === 'past_due' || !! row.failed ),
+		comped: !! row?.comped || listed,
+		customer: !! row?.customer,
+	};
 
 }
 
@@ -254,7 +308,9 @@ export function supporterEmails( env, now = Date.now() ) {
 // same-origin check (index.js), since it doesn't come from a page; its Stripe-Signature proves it
 // instead (readEvent: an HMAC of the raw body with the signing secret, compared in constant time
 // with each v1, within five minutes of when it was signed). Anything properly signed is answered
-// 200, including events this doesn't act on, so Stripe doesn't keep sending them again.
+// 200, including events this doesn't act on, so Stripe doesn't keep sending them again. Each event
+// is kept by its id first (stripe_events): one already acted on is answered and skipped. One that
+// fails is marked so and answered 500, and Stripe's next try at it is let through.
 export async function stripeWebhook( { request, env, now } ) {
 
 	const settings = webhookSettings( env );
@@ -263,27 +319,109 @@ export async function stripeWebhook( { request, env, now } ) {
 	const event = await readEvent( request, settings.secret );
 	// A test-mode event (a test-mode endpoint's secret set here by mistake) is a payment made with a
 	// test card, which anyone with a test link can make for nothing: never a pass on the live site.
-	if ( event.livemode !== true && ! settings.testMode ) return json( { received: true } );
-	const object = isObject( event.data?.object ) ? event.data.object : {};
-	if ( event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded' ) await recordPurchase( db, settings, object, now );
-	// Stripe only sets refunded once the whole charge is; a partial refund keeps the pass. The Charge
-	// names its customer too, which finds a monthly pass whose renewal it was (takeBack).
-	else if ( event.type === 'charge.refunded' && object.refunded === true ) await takeBack( db, object.payment_intent, 'refunded', now, object );
-	// A chargeback: the bank takes the money back as the dispute opens, and gives it back if it's won.
-	// A Dispute names its charge and PaymentIntent but no customer, and the Worker has no Stripe API
-	// key to look the charge up with, so a chargeback of a monthly pass's payment (whose PaymentIntent
-	// no purchase has) can't be tied to its pass here: the owner cancels that subscription in Stripe,
-	// which takes the pass away (customer.subscription.deleted). A one-time pass's is found as ever.
-	else if ( event.type === 'charge.dispute.funds_withdrawn' ) await takeBack( db, object.payment_intent, 'disputed', now );
-	else if ( event.type === 'charge.dispute.funds_reinstated' ) await giveBack( db, object.payment_intent );
-	// A subscription started, changed (a renewal that failed, a card fixed) or ended: its pass follows.
-	else if ( event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted' ) {
+	// With Build Pro sold on a test key (staging), test-mode events are for Build Pro only.
+	let buildOnly = false;
+	if ( event.livemode !== true && ! settings.testMode ) {
 
-		await subscriptionChanged( db, object, Number.isSafeInteger( event.created ) ? event.created * 1000 : now, now );
+		if ( ! settings.buildTestMode ) return json( { received: true } );
+		buildOnly = true;
 
 	}
 
+	const id = typeof event.id === 'string' && EVENT_ID.test( event.id ) ? event.id : null;
+	if ( id && ! await firstLook( db, id, event.type, now ) ) return json( { received: true } );
+	let result;
+	try {
+
+		result = await handleEvent( env, db, settings, event, now, buildOnly );
+
+	} catch ( err ) {
+
+		if ( id ) await db.prepare( 'UPDATE stripe_events SET result = \'error\' WHERE id = ?' ).bind( id ).run();
+		await countWebhook( db, now, 'error' );
+		throw err;
+
+	}
+
+	if ( id ) await db.prepare( 'UPDATE stripe_events SET result = ? WHERE id = ?' ).bind( result, id ).run();
+	if ( result === 'unmatched' ) await countWebhook( db, now, result );
 	return json( { received: true } );
+
+}
+
+// Keeps the event's id, and says whether to act on it: not if it has been acted on already, or is
+// being now. One that did nothing ('ignored') or failed is looked at again: acting on it again does
+// no harm, since nothing came of it the first time.
+async function firstLook( db, id, type, now ) {
+
+	const kind = typeof type === 'string' ? type.slice( 0, 100 ) : '';
+	const row = await db.prepare( `INSERT INTO stripe_events ( id, type, received_at, result ) VALUES ( ?1, ?2, ?3, 'processing' )
+		ON CONFLICT ( id ) DO UPDATE SET received_at = excluded.received_at, result = 'processing'
+		WHERE stripe_events.result IN ( 'ignored', 'error' ) OR ( stripe_events.result = 'processing' AND stripe_events.received_at < ?4 ) RETURNING id` )
+		.bind( id, kind, now, now - STUCK_MS ).first();
+	return !! row;
+
+}
+
+// A webhook event that went wrong ('error') or paid for nothing we sell ('unmatched'), counted for
+// the owner's admin page (stats.js's stats_daily, as build_webhook:<result>).
+async function countWebhook( db, now, result ) {
+
+	try {
+
+		await db.prepare( `INSERT INTO stats_daily ( day, metric, key, n ) VALUES ( ?, 'build_webhook', ?, 1 )
+			ON CONFLICT ( day, metric, key ) DO UPDATE SET n = n + 1` ).bind( new Date( now ).toISOString().slice( 0, 10 ), result ).run();
+
+	} catch ( err ) {
+
+		console.error( 'Stats', err?.name, err?.message );
+
+	}
+
+}
+
+// What an event does: 'ok', 'ignored' (nothing here to do) or 'unmatched' (stripe_events' result).
+async function handleEvent( env, db, settings, event, now, buildOnly ) {
+
+	const object = isObject( event.data?.object ) ? event.data.object : {};
+	const eventAt = Number.isSafeInteger( event.created ) ? event.created * 1000 : now;
+	switch ( event.type ) {
+
+		case 'checkout.session.completed':
+		case 'checkout.session.async_payment_succeeded':
+			return await recordPurchase( env, db, settings, object, now, buildOnly );
+		// Stripe only sets refunded once the whole charge is; a partial refund keeps the pass.
+		case 'charge.refunded':
+			if ( object.refunded !== true ) return 'ignored';
+			await takeBack( db, object.payment_intent, 'refunded', now );
+			await endBuild( env, db, chargeOf( object ), 'refunded', now );
+			return 'ok';
+		// A chargeback opened: Build Pro ends at once, and its subscription is cancelled so it isn't
+		// billed again (the Supporter Pass waits for the money to go, as it always has).
+		case 'charge.dispute.created':
+			return await endBuild( env, db, disputeOf( object ), 'disputed', now ) ? 'ok' : 'ignored';
+		// A chargeback: the bank takes the money back as the dispute opens, and gives it back if it's won.
+		case 'charge.dispute.funds_withdrawn':
+			await takeBack( db, object.payment_intent, 'disputed', now );
+			await endBuild( env, db, disputeOf( object ), 'disputed', now );
+			return 'ok';
+		case 'charge.dispute.funds_reinstated':
+			await giveBack( db, object.payment_intent );
+			await giveBuildBack( db, disputeOf( object ) );
+			return 'ok';
+		// A subscription started, changed (a renewal that failed, a card fixed, set to cancel) or ended: its pass follows.
+		case 'customer.subscription.created':
+		case 'customer.subscription.updated':
+		case 'customer.subscription.deleted':
+			return await subscriptionChanged( db, object, eventAt, now );
+		case 'invoice.paid':
+		case 'invoice.payment_failed':
+		case 'invoice.payment_action_required':
+			return await invoiceChanged( env, db, object, event.type, now );
+		default:
+			return 'ignored';
+
+	}
 
 }
 
@@ -297,123 +435,294 @@ export async function stripeWebhook( { request, env, now } ) {
 // taken back.
 // A subscription's checkout has its subscription's id, so the pass lasts while that's active; one
 // that starts with a free trial completes with nothing to pay ('no_payment_required').
-async function recordPurchase( db, settings, session, now ) {
+// World Drive Build Pro's own checkout (billing.js) says so in its metadata (pass 'build', and the
+// account in account_id); one through its old Payment Link is told by the link's id. It's kept as
+// its own kind, which gives no pass. A paid checkout that's neither and came through no Payment Link
+// (one made through the API, as Build Pro's are) is never a pass, whatever the link settings say:
+// it's 'unmatched', kept in stripe_events for the owner to look at.
+async function recordPurchase( env, db, settings, session, now, buildOnly ) {
 
 	const subscription = session.mode === 'subscription' ? stripeId( session.subscription ) : null;
-	if ( session.payment_status !== 'paid' && ! ( subscription && session.payment_status === 'no_payment_required' ) ) return;
-	// A paid checkout's PaymentIntent was never a subscription's renewal (those are paid through an
-	// invoice, not a checkout), so a monthly pass that a refund of it took back, guessing it was one
-	// (takeBack: the refund was delivered before this checkout, while Stripe was still retrying it),
-	// was taken back by mistake, and is given back. Before the links are checked: a checkout through
-	// a link that isn't World Drive's isn't recorded, but its refund could still have been guessed.
-	const paymentIntent = stripeId( session.payment_intent );
-	if ( paymentIntent ) {
+	if ( session.payment_status !== 'paid' && ! ( subscription && session.payment_status === 'no_payment_required' ) ) return 'ignored';
+	const link = stripeId( session.payment_link );
+	const metadata = isObject( session.metadata ) ? session.metadata : {};
+	let pass = null;
+	if ( metadata.pass === 'build' || ( settings.buildLinkId && link === settings.buildLinkId ) ) pass = 'build';
+	else if ( metadata.pass !== undefined ) return 'unmatched';
+	else if ( settings.dayLinkId && link === settings.dayLinkId ) pass = 'day';
+	else if ( ! link || settings.buildLinkBroken ) return 'unmatched';
+	else if ( settings.linkIds.length && ! settings.linkIds.includes( link ) ) return 'ignored';
+	if ( buildOnly && pass !== 'build' ) return 'ignored';
+	const id = stripeId( session.id );
+	if ( ! id ) return 'ignored';
+	const email = cleanEmail( session.customer_details?.email ?? session.customer_email );
+	const named = typeof metadata.account_id === 'string' && ACCOUNT_ID.test( metadata.account_id ) ? metadata.account_id : session.client_reference_id;
+	const reference = typeof named === 'string' && ACCOUNT_ID.test( named ) ? Number( named ) : null;
+	const amount = Number.isSafeInteger( session.amount_total ) ? session.amount_total : null;
+	const currency = typeof session.currency === 'string' && /^[a-z]{3}$/.test( session.currency ) ? session.currency : null;
+	// How much of amount was tax, which Stripe collects as the merchant of record (Managed Payments),
+	// so the admin page can tell what's World Drive's from what's the tax's; NULL when Stripe didn't say.
+	const tax = Number.isSafeInteger( session.total_details?.amount_tax ) && session.total_details.amount_tax >= 0 ? session.total_details.amount_tax : null;
+	// Build Pro's subscription checkout has no PaymentIntent: a refund or chargeback that came first
+	// is found through its subscription's invoices.
+	await db.prepare( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at, subscription, pass, tax )
+		VALUES ( ?1, ( SELECT id FROM accounts WHERE id = ?2 ), ?3, ?4, ?5, ?6,
+			COALESCE( ( SELECT status FROM reversals WHERE payment_intent = ?6 ), ( SELECT r.status FROM invoices i JOIN reversals r ON r.payment_intent = i.payment_intent
+				WHERE ?9 = 'build' AND i.subscription = ?8 ORDER BY r.status = 'refunded' DESC LIMIT 1 ), 'paid' ), ?7,
+			COALESCE( ( SELECT created_at FROM reversals WHERE payment_intent = ?6 ), ( SELECT r.created_at FROM invoices i JOIN reversals r ON r.payment_intent = i.payment_intent
+				WHERE ?9 = 'build' AND i.subscription = ?8 LIMIT 1 ) ), ?8, ?9, ?10 ) ON CONFLICT ( checkout_session ) DO NOTHING` )
+		.bind( id, reference, email, amount, currency, stripeId( session.payment_intent ), now, subscription, pass, tax ).run();
+	// Build Pro whose money was taken back before its checkout arrived: its subscription is
+	// cancelled now, as it would have been then.
+	if ( pass === 'build' && subscription ) {
 
-		await db.prepare( 'UPDATE purchases SET status = \'paid\', refunded_at = NULL, taken_back_by = NULL WHERE taken_back_by = ?' ).bind( paymentIntent ).run();
+		const row = await db.prepare( 'SELECT refunded_at FROM purchases WHERE checkout_session = ?' ).bind( id ).first();
+		if ( Number.isSafeInteger( row?.refunded_at ) ) await cancelSubscription( env, db, subscription );
+		// A second Build Pro running for the same account (two checkouts paid, despite billing.js
+		// expiring the older): counted for the admin page (build_webhook:duplicate), for the owner to
+		// refund and cancel one.
+		else if ( reference !== null && await otherBuild( db, reference, subscription ) ) {
+
+			console.error( 'Stripe', 'a second Build Pro subscription for one account' );
+			await countWebhook( db, now, 'duplicate' );
+
+		}
 
 	}
 
-	const link = stripeId( session.payment_link );
-	// World Drive Build's Pro plan (build.js) is kept here too, as its own kind, which gives no pass.
-	const pass = settings.dayLinkId && link === settings.dayLinkId ? 'day' : settings.buildLinkId && link === settings.buildLinkId ? 'build' : null;
-	if ( ! pass && settings.linkIds.length && ! settings.linkIds.includes( link ) ) return;
-	const id = stripeId( session.id );
-	if ( ! id ) return;
-	const email = cleanEmail( session.customer_details?.email ?? session.customer_email );
-	const reference = typeof session.client_reference_id === 'string' && ACCOUNT_ID.test( session.client_reference_id ) ? Number( session.client_reference_id ) : null;
-	const amount = Number.isSafeInteger( session.amount_total ) ? session.amount_total : null;
-	const currency = typeof session.currency === 'string' && /^[a-z]{3}$/.test( session.currency ) ? session.currency : null;
-	// Who paid (the Stripe Customer, which a refund of a monthly pass's renewal is found by: takeBack)
-	// and how much of amount was tax, which Stripe collects as the merchant of record, so the admin
-	// page can tell what's World Drive's from what's the tax's.
-	const customer = customerId( session.customer );
-	const tax = Number.isSafeInteger( session.total_details?.amount_tax ) && session.total_details.amount_tax >= 0 ? session.total_details.amount_tax : null;
-	await db.prepare( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at, subscription, pass, customer, tax )
-		VALUES ( ?1, ( SELECT id FROM accounts WHERE id = ?2 ), ?3, ?4, ?5, ?6, COALESCE( ( SELECT status FROM reversals WHERE payment_intent = ?6 ), 'paid' ), ?7,
-			( SELECT created_at FROM reversals WHERE payment_intent = ?6 ), ?8, ?9, ?10, ?11 ) ON CONFLICT ( checkout_session ) DO NOTHING` )
-		.bind( id, reference, email, amount, currency, paymentIntent, now, subscription, pass, customer, tax ).run();
+	return 'ok';
 
 }
 
-// A subscription's status as Stripe says it is, from an event made at `eventAt` (ms): kept unless
-// a newer event has already said otherwise.
+// Whether the account `account` has a Build Pro subscription running other than `subscription`.
+async function otherBuild( db, account, subscription ) {
+
+	const active = ACTIVE_STATUSES.map( status => `'${ status }'` ).join( ', ' );
+	return !! await db.prepare( `SELECT 1 FROM subscriptions WHERE account_id = ?1 AND pass = 'build' AND id <> ?2 AND status IN ( ${ active } )
+		UNION ALL SELECT 1 FROM purchases u WHERE u.account_id = ?1 AND u.pass = 'build' AND u.subscription <> ?2 AND u.refunded_at IS NULL
+		AND NOT EXISTS ( SELECT 1 FROM subscriptions s WHERE s.id = u.subscription AND s.status NOT IN ( ${ active } ) ) LIMIT 1` ).bind( account, subscription ).first();
+
+}
+
+// Stripe's time (seconds) in ms, or null.
+function msOf( seconds ) {
+
+	return Number.isSafeInteger( seconds ) ? seconds * 1000 : null;
+
+}
+
+// SQL: where the subscription status `status` (SQL) comes in a subscription's life, so that of two
+// events made in the same second (Stripe's times are whole seconds) the later in its life wins,
+// whichever arrives last: a retried 'incomplete' never undoes 'active'.
+function statusRank( status ) {
+
+	return `CASE ${ status } WHEN 'incomplete' THEN 0 WHEN 'trialing' THEN 1 WHEN 'active' THEN 2 WHEN 'past_due' THEN 3
+		WHEN 'unpaid' THEN 4 WHEN 'paused' THEN 4 WHEN 'canceled' THEN 5 WHEN 'incomplete_expired' THEN 5 ELSE 2 END`;
+
+}
+
+// A subscription as Stripe says it is, from an event made at `eventAt` (ms): kept unless a newer
+// event has already said otherwise (or, in the same second, one later in its life: statusRank). Its price, period and cancelling are read where either of
+// Stripe's API versions puts them (the period on the subscription, or on its item since 2025).
 async function subscriptionChanged( db, subscription, eventAt, now ) {
 
 	const id = stripeId( subscription.id );
 	const status = typeof subscription.status === 'string' && STATUS.test( subscription.status ) ? subscription.status : null;
-	if ( ! id || ! id.startsWith( 'sub_' ) || ! status ) return;
-	await db.prepare( `INSERT INTO subscriptions ( id, status, event_at, updated_at ) VALUES ( ?1, ?2, ?3, ?4 )
-		ON CONFLICT ( id ) DO UPDATE SET status = excluded.status, event_at = excluded.event_at, updated_at = excluded.updated_at
-		WHERE excluded.event_at >= subscriptions.event_at` ).bind( id, status, eventAt, now ).run();
+	if ( ! id || ! id.startsWith( 'sub_' ) || ! status ) return 'ignored';
+	const metadata = isObject( subscription.metadata ) ? subscription.metadata : {};
+	const item = isObject( subscription.items?.data?.[ 0 ] ) ? subscription.items.data[ 0 ] : {};
+	const price = isObject( item.price ) ? item.price : isObject( subscription.plan ) ? subscription.plan : {};
+	const interval = price.recurring?.interval ?? price.interval;
+	const amount = price.unit_amount ?? price.amount;
+	const quantity = item.quantity ?? subscription.quantity;
+	const cancelAt = msOf( subscription.cancel_at );
+	await db.prepare( `INSERT INTO subscriptions ( id, status, event_at, updated_at, account_id, customer, pass, price_id, interval, amount, currency, quantity,
+		current_period_start, current_period_end, cancel_at_period_end, cancel_at, canceled_at, latest_invoice )
+		VALUES ( ?1, ?2, ?3, ?4, ( SELECT id FROM accounts WHERE id = ?5 ), ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18 )
+		ON CONFLICT ( id ) DO UPDATE SET status = excluded.status, event_at = excluded.event_at, updated_at = excluded.updated_at,
+			account_id = COALESCE( excluded.account_id, subscriptions.account_id ), customer = COALESCE( excluded.customer, subscriptions.customer ),
+			pass = COALESCE( excluded.pass, subscriptions.pass ), price_id = excluded.price_id, interval = excluded.interval, amount = excluded.amount,
+			currency = excluded.currency, quantity = excluded.quantity, current_period_start = excluded.current_period_start,
+			current_period_end = excluded.current_period_end, cancel_at_period_end = excluded.cancel_at_period_end, cancel_at = excluded.cancel_at,
+			canceled_at = excluded.canceled_at, latest_invoice = excluded.latest_invoice
+		WHERE excluded.event_at > subscriptions.event_at
+			OR ( excluded.event_at = subscriptions.event_at AND ${ statusRank( 'excluded.status' ) } >= ${ statusRank( 'subscriptions.status' ) } )` ).bind(
+		id, status, eventAt, now,
+		typeof metadata.account_id === 'string' && ACCOUNT_ID.test( metadata.account_id ) ? Number( metadata.account_id ) : null,
+		stripeId( subscription.customer ), metadata.pass === 'build' ? 'build' : null, stripeId( price.id ),
+		interval === 'month' || interval === 'year' || interval === 'week' || interval === 'day' ? interval : null,
+		Number.isSafeInteger( amount ) ? amount : null,
+		typeof price.currency === 'string' && /^[a-z]{3}$/.test( price.currency ) ? price.currency : null,
+		Number.isSafeInteger( quantity ) ? quantity : null,
+		msOf( subscription.current_period_start ?? item.current_period_start ), msOf( subscription.current_period_end ?? item.current_period_end ),
+		subscription.cancel_at_period_end === true || cancelAt !== null ? 1 : 0, cancelAt, msOf( subscription.canceled_at ), stripeId( subscription.latest_invoice ),
+	).run();
+	return 'ok';
+
+}
+
+// A subscription's invoice paid (the first or a renewal), failed, or waiting on the customer (3D
+// Secure): kept in invoices, with the charge and PaymentIntent it was paid with, which is how a
+// refund or a chargeback later finds its subscription. A paid invoice stays paid whatever arrives
+// after. Paid with money already taken back (the refund's event came first): Build Pro ends now.
+// Stripe's newer API versions put the subscription under parent and the payment under payments.
+async function invoiceChanged( env, db, invoice, type, now ) {
+
+	const id = stripeId( invoice.id );
+	const details = isObject( invoice.parent?.subscription_details ) ? invoice.parent.subscription_details : isObject( invoice.subscription_details ) ? invoice.subscription_details : {};
+	const subscription = stripeId( invoice.subscription ) ?? stripeId( details.subscription );
+	if ( ! id || ! subscription?.startsWith( 'sub_' ) ) return 'ignored';
+	const payments = Array.isArray( invoice.payments?.data ) ? invoice.payments.data : [];
+	const payment = payments.map( p => p?.payment ).find( p => isObject( p ) && ( p.charge || p.payment_intent ) ) ?? {};
+	let charge = stripeId( invoice.charge ) ?? stripeId( payment.charge );
+	let paymentIntent = stripeId( invoice.payment_intent ) ?? stripeId( payment.payment_intent );
+	const status = type === 'invoice.paid' ? 'paid' : type === 'invoice.payment_failed' ? 'payment_failed' : 'action_required';
+	const period = isObject( invoice.lines?.data?.[ 0 ]?.period ) ? invoice.lines.data[ 0 ].period : { start: invoice.period_start, end: invoice.period_end };
+	const metadata = isObject( details.metadata ) ? details.metadata : {};
+	// Since Stripe's 2025-03-31 API version a webhook's invoice has neither (payments isn't sent in
+	// events), and a charge no longer names its invoice: a Build Pro invoice paid is asked about
+	// (GET /v1/invoice_payments, Invoices: Read), or its refund or chargeback would never find it. If
+	// Stripe can't say just now, the event fails and Stripe tries it again.
+	if ( status === 'paid' && ! charge && ! paymentIntent && stripeSecret( env ) && ( metadata.pass === 'build' || await isBuild( db, subscription ) ) ) {
+
+		const found = await stripeApi( env, 'GET', `/v1/invoice_payments?invoice=${ encodeURIComponent( id ) }&limit=10` );
+		if ( ! found.ok ) throw new Error( `Couldn't look up a Build Pro invoice's payment (Stripe ${ found.status })` );
+		const paid = ( Array.isArray( found.body.data ) ? found.body.data : [] ).filter( p => p?.status === undefined || p.status === 'paid' )
+			.map( p => p?.payment ).find( p => isObject( p ) && ( p.charge || p.payment_intent ) ) ?? {};
+		charge = stripeId( paid.charge );
+		paymentIntent = stripeId( paid.payment_intent );
+
+	}
+
+	const account = typeof metadata.account_id === 'string' && ACCOUNT_ID.test( metadata.account_id ) ? Number( metadata.account_id ) : null;
+	await db.prepare( `INSERT INTO invoices ( id, subscription, account_id, amount_paid, currency, status, billing_reason, charge, payment_intent, period_start, period_end, created_at, updated_at )
+		VALUES ( ?1, ?2, COALESCE( ( SELECT id FROM accounts WHERE id = ?3 ), ( SELECT account_id FROM subscriptions WHERE id = ?2 ),
+			( SELECT account_id FROM purchases WHERE subscription = ?2 AND account_id IS NOT NULL LIMIT 1 ) ), ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13 )
+		ON CONFLICT ( id ) DO UPDATE SET status = CASE WHEN invoices.status = 'paid' THEN 'paid' ELSE excluded.status END,
+			amount_paid = COALESCE( excluded.amount_paid, invoices.amount_paid ), charge = COALESCE( excluded.charge, invoices.charge ),
+			payment_intent = COALESCE( excluded.payment_intent, invoices.payment_intent ), account_id = COALESCE( invoices.account_id, excluded.account_id ),
+			updated_at = excluded.updated_at` ).bind(
+		id, subscription, account, Number.isSafeInteger( invoice.amount_paid ) ? invoice.amount_paid : null,
+		typeof invoice.currency === 'string' && /^[a-z]{3}$/.test( invoice.currency ) ? invoice.currency : null, status,
+		typeof invoice.billing_reason === 'string' ? invoice.billing_reason.slice( 0, 40 ) : null, charge, paymentIntent,
+		msOf( period.start ), msOf( period.end ), msOf( invoice.created ) ?? now, now,
+	).run();
+	if ( status === 'paid' && paymentIntent ) {
+
+		const reversal = await db.prepare( 'SELECT status FROM reversals WHERE payment_intent = ?' ).bind( paymentIntent ).first();
+		if ( reversal ) await endBuild( env, db, { paymentIntent }, reversal.status, now );
+
+	}
+
+	return 'ok';
+
+}
+
+// Whether the subscription is Build Pro's, as its checkout or the subscription itself said.
+async function isBuild( db, subscription ) {
+
+	return !! await db.prepare( `SELECT 1 FROM subscriptions WHERE id = ?1 AND pass = 'build'
+		UNION ALL SELECT 1 FROM purchases WHERE subscription = ?1 AND pass = 'build' LIMIT 1` ).bind( subscription ).first();
+
+}
+
+// What a charge (charge.refunded's object) or a dispute (charge.dispute.*'s) names: the charge, its
+// PaymentIntent, and its invoice where Stripe's older API versions say.
+function chargeOf( charge ) {
+
+	return { charge: stripeId( charge.id ), paymentIntent: stripeId( charge.payment_intent ), invoice: stripeId( charge.invoice ) };
+
+}
+
+function disputeOf( dispute ) {
+
+	return { charge: stripeId( dispute.charge ), paymentIntent: stripeId( dispute.payment_intent ), invoice: null };
+
+}
+
+// The Build Pro subscription a charge paid for (through the invoice it paid: invoice.paid kept its
+// charge and PaymentIntent), or null: not a subscription's, not Build Pro's, or not heard of yet.
+async function buildSubscriptionOf( db, { charge = null, paymentIntent = null, invoice = null } ) {
+
+	if ( ! charge && ! paymentIntent && ! invoice ) return null;
+	const row = await db.prepare( `SELECT i.subscription FROM invoices i WHERE ( i.id = ?1 OR i.charge = ?2 OR i.payment_intent = ?3 ) AND i.subscription IS NOT NULL
+		AND ( EXISTS ( SELECT 1 FROM purchases u WHERE u.subscription = i.subscription AND u.pass = 'build' )
+		OR EXISTS ( SELECT 1 FROM subscriptions s WHERE s.id = i.subscription AND s.pass = 'build' ) ) LIMIT 1` ).bind( invoice, charge, paymentIntent ).first();
+	return row?.subscription ?? null;
+
+}
+
+// Money for Build Pro taken back (status 'refunded' or 'disputed'): Pro ends now (its purchase is
+// marked, as a pass's is), and its subscription is cancelled at Stripe so it isn't billed again
+// (refunds and chargebacks end Pro at once, docs/build.md). Kept in reversals too, so a checkout
+// that arrives later comes in taken back. Whether it was Build Pro's.
+async function endBuild( env, db, paid, status, now ) {
+
+	const subscription = await buildSubscriptionOf( db, paid );
+	if ( ! subscription ) return false;
+	const statements = [
+		db.prepare( `UPDATE purchases SET status = ?2, refunded_at = COALESCE( refunded_at, ?3 )
+			WHERE subscription = ?1 AND pass = 'build' AND ( refunded_at IS NULL OR ( ?2 = 'refunded' AND status = 'disputed' ) )` ).bind( subscription, status, now ),
+	];
+	if ( paid.paymentIntent ) {
+
+		statements.push( db.prepare( `INSERT INTO reversals ( payment_intent, status, created_at ) VALUES ( ?1, ?2, ?3 )
+			ON CONFLICT ( payment_intent ) DO UPDATE SET status = excluded.status WHERE excluded.status = 'refunded'` ).bind( paid.paymentIntent, status, now ) );
+
+	}
+
+	await db.batch( statements );
+	await cancelSubscription( env, db, subscription );
+	return true;
+
+}
+
+// A Build Pro subscription cancelled at Stripe now (not at the period's end), unless it's stopped
+// already. Needs STRIPE_SECRET_KEY; without it, it's logged and the owner cancels it in the
+// Dashboard (Pro has ended here either way). If Stripe says no (down, a timeout, too many calls, a
+// key without Subscriptions: Write), it throws: the event is marked 'error', answered 500 and
+// counted for the admin page, and Stripe's next try at it cancels again. Gone at Stripe already
+// (resource_missing) is done. Stripe then sends customer.subscription.deleted, which records it.
+async function cancelSubscription( env, db, subscription ) {
+
+	const row = await db.prepare( 'SELECT status FROM subscriptions WHERE id = ?' ).bind( subscription ).first();
+	if ( row?.status === 'canceled' || row?.status === 'incomplete_expired' ) return;
+	if ( ! stripeSecret( env ) ) {
+
+		console.error( 'Stripe', 'refunded or disputed Build Pro subscription left running: STRIPE_SECRET_KEY is not set' );
+		return;
+
+	}
+
+	const done = await stripeApi( env, 'DELETE', `/v1/subscriptions/${ encodeURIComponent( subscription ) }` );
+	const gone = done.status === 404 && done.body?.error?.code === 'resource_missing';
+	if ( ! done.ok && ! gone ) throw new Error( `Couldn't cancel a refunded or disputed Build Pro subscription (Stripe ${ done.status })` );
+
+}
+
+// A chargeback on Build Pro won: its purchase is paid again (unless it was refunded meanwhile). The
+// subscription stays cancelled, so Pro is back only through a new one (or the owner's comp).
+async function giveBuildBack( db, paid ) {
+
+	const subscription = await buildSubscriptionOf( db, paid );
+	if ( ! subscription ) return;
+	await db.prepare( 'UPDATE purchases SET status = \'paid\', refunded_at = NULL WHERE subscription = ? AND pass = \'build\' AND status = \'disputed\'' ).bind( subscription ).run();
 
 }
 
 // The money for a payment taken back (status 'refunded' or 'disputed'): its pass goes. Kept in
 // reversals too, for a purchase that hasn't arrived yet; a refund outranks a chargeback there, so a
 // late "dispute won" never undoes a refund.
-// A refund of a subscription's payment (`charge`: the refunded Charge, given for refunds only)
-// matches no purchase by its PaymentIntent: a subscription's Checkout Session has none, and each
-// renewal is paid by a new one. The Charge doesn't say which subscription it paid, if any (on this
-// API version it has no invoice, and the Worker has no Stripe API key to ask with), so this is a
-// best guess: when no purchase has that PaymentIntent, the charge has a customer, and that
-// customer has a subscription purchase (the monthly pass, or World Drive Build's Pro plan, 'build')
-// still running, not refunded, for the same amount in the same currency (a renewal charges what the
-// checkout did, tax included), that's taken back. Or one whose checkout charged nothing (it started
-// with a free trial, so there's no amount to compare). A subscription that has ended isn't touched,
-// so an old one's real money stays counted. A one-time pass of theirs never is either: its own
-// PaymentIntent is what refunds it. The guess is wrong when the refunded charge was a one-time
-// purchase's whose checkout Stripe hasn't delivered yet (out of order, as reversals is for), so
-// the purchase taken back keeps the PaymentIntent that did it (taken_back_by), and recordPurchase
-// gives it back when that checkout arrives. It can still be wrong, and stay wrong, for a charge of
-// something that isn't World Drive's (another product on the same Stripe account, a charge made by
-// hand) refunded after its checkout, from the same customer, for the same amount and currency: the
-// admin page shows each purchase's status, and the owner sets one back in the database by hand
-// (status 'paid', refunded_at and taken_back_by NULL). If a customer has a
-// monthly pass and Build's Pro plan both at the same price, a refund of either's renewal takes back
-// both. The purchase stays taken back even if the subscription goes on renewing (the Worker
-// doesn't hear of renewals, only of refunds), so the owner cancels the subscription in Stripe when
-// refunding it, as the refunds page says: a refunded monthly pass is cancelled too. Every
-// statement changes nothing the second time (Stripe retries), and the customer's look is by an
-// index, over that one customer's purchases.
-async function takeBack( db, paymentIntent, status, now, charge = null ) {
+async function takeBack( db, paymentIntent, status, now ) {
 
 	const id = stripeId( paymentIntent );
-	const payer = customerId( charge?.customer );
-	if ( ! id && ! payer ) return;
-	const statements = [];
-	if ( id ) {
-
-		statements.push(
-			db.prepare( `INSERT INTO reversals ( payment_intent, status, created_at ) VALUES ( ?1, ?2, ?3 )
-				ON CONFLICT ( payment_intent ) DO UPDATE SET status = excluded.status WHERE excluded.status = 'refunded'` ).bind( id, status, now ),
-			db.prepare( `UPDATE purchases SET status = ?2, refunded_at = COALESCE( refunded_at, ?3 )
-				WHERE payment_intent = ?1 AND ( refunded_at IS NULL OR ( ?2 = 'refunded' AND status = 'disputed' ) )` ).bind( id, status, now ),
-		);
-
-	}
-
-	const amount = Number.isSafeInteger( charge?.amount ) ? charge.amount : null;
-	const currency = typeof charge?.currency === 'string' && /^[a-z]{3}$/.test( charge.currency ) ? charge.currency : null;
-	if ( payer && status === 'refunded' && amount !== null && currency ) {
-
-		const active = ACTIVE_STATUSES.map( value => `'${ value }'` ).join( ', ' );
-		statements.push( db.prepare( `UPDATE purchases SET status = 'refunded', refunded_at = ?3, taken_back_by = ?1
-			WHERE customer = ?2 AND subscription IS NOT NULL AND ( pass IS NULL OR pass = 'build' ) AND refunded_at IS NULL
-			AND currency = ?5 AND ( amount = ?4 OR amount = 0 )
-			AND NOT EXISTS ( SELECT 1 FROM subscriptions s WHERE s.id = purchases.subscription AND s.status NOT IN ( ${ active } ) )
-			AND ( ?1 IS NULL OR NOT EXISTS ( SELECT 1 FROM purchases WHERE payment_intent = ?1 ) )` ).bind( id, payer, now, amount, currency ) );
-
-	}
-
-	if ( statements.length ) await db.batch( statements );
-
-}
-
-// A Stripe Customer's id (cus_...) from a field that holds one (or the expanded object), else null.
-function customerId( value ) {
-
-	const id = stripeId( value );
-	return id?.startsWith( 'cus_' ) ? id : null;
+	if ( ! id ) return;
+	await db.batch( [
+		db.prepare( `INSERT INTO reversals ( payment_intent, status, created_at ) VALUES ( ?1, ?2, ?3 )
+			ON CONFLICT ( payment_intent ) DO UPDATE SET status = excluded.status WHERE excluded.status = 'refunded'` ).bind( id, status, now ),
+		db.prepare( `UPDATE purchases SET status = ?2, refunded_at = COALESCE( refunded_at, ?3 )
+			WHERE payment_intent = ?1 AND ( refunded_at IS NULL OR ( ?2 = 'refunded' AND status = 'disputed' ) )` ).bind( id, status, now ),
+	] );
 
 }
 

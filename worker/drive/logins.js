@@ -526,6 +526,30 @@ async function passwordProof( context, account, sent ) {
 
 }
 
+// Fresh proof for deleting the account (World Drive Build's account page, build-account.js), as a
+// change to how it signs in asks: Google's ID token for its own Google account (`sent.credential`),
+// or its password (`sent.password`, with a robot check's `sent.token` when DriveLimits asks for
+// one). One of the visitor's changes is taken first, so a stolen session can't be used to guess the
+// password here faster than anywhere else. A 400 for proof the account can't give (a password for
+// an account with none), 401 or 403 for proof that doesn't pass.
+export async function accountProof( context, account, sent ) {
+
+	if ( ! isObject( sent ) ) throw new HttpError( 400, 'Bad request' );
+	await aChange( context );
+	if ( sent.credential !== undefined ) {
+
+		if ( ! account.google ) throw new HttpError( 400, 'This account has no Google account linked. Type your password instead' );
+		await googleProof( context.env, account, sent.credential );
+		return;
+
+	}
+
+	if ( ! account.username ) throw new HttpError( 400, 'Confirm with Google: this account has no password' );
+	checkOn( context.env );
+	await passwordProof( context, account, sent );
+
+}
+
 // The owner's accounts (admin.js's ADMIN_EMAILS) sign in with Google only, so the admin page never
 // rests on a password: none is added to one, nor is one's Google account linked to a username's.
 function notTheOwners( env, email ) {

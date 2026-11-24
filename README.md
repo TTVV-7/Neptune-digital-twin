@@ -894,8 +894,8 @@ posted with the visit's signed token and checked against what the game can score
 
 **World Drive Build** (`/build/`, [docs/build.md](docs/build.md)): this construction app offered to
 anyone on World Drive's site and accounts, at any address, with a free plan (33 everyday items, 15
-3D map views a month, one saved project) and **Build Pro** (everything, 300 views, up to 200 projects
-(`BUILD_LAYOUT_LIMIT`) and share links) sold through Stripe; World Drive's owner has everything.
+3D map views a month, one saved project) and **Build Pro** (everything, 300 views, 200 projects
+and share links; US$5/month or US$50/year) sold through Stripe; World Drive's owner has everything.
 
 **City Drive** (`/city/`, `drive/city/index.html`, `src/drive-app/city/`): a standalone page
 where you pick a city, a start spot and a ride and drive a whole city built from open data instead

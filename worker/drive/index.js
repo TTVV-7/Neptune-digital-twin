@@ -14,6 +14,8 @@ import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
 import { isAdmin } from './admin.js';
 import { buildApi, isBuildApi } from './build.js';
+import { adminComp, adminComps } from './billing.js';
+import { adminBuildCustomer, adminBuildStats } from './build-stats.js';
 import { isOAuth, oauth } from './oauth.js';
 import { isMcp, mcp } from './mcp.js';
 import { adminDropins } from './dropins.js';
@@ -59,6 +61,7 @@ export { DriveRoom } from './live.js';
 //   PER_VISITOR_DAILY_SUPPORTER   a supporter's visits a day (30 if unset), counted by account,
 //                                 and never turned away by DAILY_VISITS
 //   GOOGLE_CLIENT_ID, SUPPORTER_*, STRIPE_WEBHOOK_SECRET   the Supporter Pass (see supporter.js)
+//   STRIPE_SECRET_KEY, BUILD_PRICE_*, BUILD_PORTAL_CONFIG   selling World Drive Build Pro (see billing.js)
 //   PASSWORD_ACCOUNTS     'off' switches usernames and passwords off (logins.js); PASSWORD_ITERATIONS
 //                         tests only (or to lower PBKDF2's count, see logins.js)
 //   DB                    the D1 database binding: the leaderboard's and the accounts' tables
@@ -84,6 +87,8 @@ export { DriveRoom } from './live.js';
 //                         stats (GET /api/admin/stats and /api/admin/dropins, the page at
 //                         /admin.html; see admin.js, stats.js and dropins.js)
 //   ADMIN_LOOKS           the rate limiter binding for the admin page's asks, by account (admin.js)
+//   BUILD_VIEW_COST_USD   what Google bills a World Drive Build 3D map view, for the admin page's
+//                         Build tab's estimate (0.006 if unset; build-stats.js)
 //   STATS_POSTS           the rate limiter binding for each visit's posts of play stats (stats.js)
 //   DROPIN_PLACES_DAILY, DROPIN_PLACES_PER_VISITOR, DROPIN_PLACES_PER_VISIT   the most drop-in
 //                         places counted a day on each world for everyone (1500 if unset), each
@@ -160,6 +165,12 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/admin/requests', handler: adminRequestChange },
 	{ method: 'GET', path: '/api/admin/dropins', handler: adminDropins },
 	{ method: 'GET', path: '/api/admin/achievements', handler: adminAchievements },
+	// World Drive Build Pro given without paying, or taken back (billing.js).
+	{ method: 'GET', path: '/api/admin/build/comps', handler: adminComps },
+	{ method: 'POST', path: '/api/admin/build/comp', handler: adminComp },
+	// World Drive Build's own numbers, and one customer looked up, for the admin page's Build tab (build-stats.js).
+	{ method: 'GET', path: '/api/admin/build', handler: adminBuildStats },
+	{ method: 'GET', path: '/api/admin/build/customer', handler: adminBuildCustomer },
 	{ method: 'GET', path: '/api/challenges', handler: listChallenges },
 	{ method: 'GET', path: '/api/challenges/board', handler: challengeBoard },
 	{ method: 'POST', path: '/api/challenges/time', handler: postTime },

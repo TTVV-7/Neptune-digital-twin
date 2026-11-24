@@ -65,6 +65,12 @@
 	white-space: nowrap;
 }
 
+/* World Drive Build's link to its account page, beside Projects. */
+.cloud-account .account-link {
+	color: var( --accent );
+	font-size: 13px;
+}
+
 /* Small text buttons inside a sentence: Retry, Keep mine... */
 button.link {
 	margin-left: 6px;
@@ -297,6 +303,49 @@ button.link {
 	color: #fff;
 	font-weight: 600;
 	text-decoration: none;
+}
+
+/* World Drive Build's: a button, and monthly or yearly above it (build-plans.js). */
+.premium-dialog button.buy {
+	border: 0;
+	font: inherit;
+	cursor: pointer;
+}
+
+.premium-dialog button.buy:disabled {
+	opacity: 0.6;
+	cursor: progress;
+}
+
+.premium-dialog .intervals {
+	display: grid;
+	gap: 6px;
+	margin: 14px 0 10px;
+}
+
+.premium-dialog .intervals label {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	padding: 6px 10px;
+	border-radius: 6px;
+	border: 1px solid #2a3844;
+	cursor: pointer;
+}
+
+.premium-dialog .intervals label:has( input:checked ) {
+	border-color: var( --accent );
+}
+
+.premium-dialog .intervals input {
+	flex: none;
+	width: auto;
+	margin: 0;
+}
+
+.premium-dialog .intervals span {
+	flex: 1;
+	text-align: left;
 }
 
 .premium-dialog .sign-in .google-button {

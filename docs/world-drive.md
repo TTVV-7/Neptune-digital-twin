@@ -4768,31 +4768,14 @@ and times on every device, and driving and the leaderboard never need it.
     named by `client_reference_id`, else nobody's yet, and whoever signs in with the email paid with
     (which Google has checked is theirs) has it. With `SUPPORTER_PAYMENT_LINK_ID` set, only that
     link's checkouts count; without it any paid checkout on the account does (it's World Drive's own).
-    Each purchase also keeps the checkout's Stripe customer (`customer`, `cus_...`) and the tax in its
-    total (`tax`, `total_details.amount_tax`, in cents; `amount` includes it, as Stripe collects the
-    sales tax as merchant of record), from `0020_purchase_details.sql`; NULL when Stripe didn't say.
+    Each purchase also keeps the tax in its total (`tax`, the checkout's `total_details.amount_tax`, in
+    cents; `amount` includes it, as Stripe collects the sales tax as merchant of record), from
+    `0023_purchase_tax.sql`; NULL when Stripe didn't say. The admin page shows the money before tax.
   - `charge.refunded` with `refunded: true` (refunded in full) marks that payment's purchase refunded,
-    which takes the pass away. A partial refund keeps it. A monthly pass's payments have no purchase
-    with their PaymentIntent (a subscription's checkout has none, and each renewal is a new one), so
-    when no purchase has the charge's PaymentIntent and the charge names a customer, that customer's
-    subscription purchases still running and not refunded (the monthly pass, and Build's Pro plan)
-    for the same `amount` and currency as the charge (or whose checkout charged nothing, a free
-    trial) are marked refunded instead; one whose subscription has ended is left alone, and a
-    one-time pass of theirs is only ever refunded by its own PaymentIntent. It's a best guess (the
-    Charge doesn't say which subscription it paid), so the purchase keeps the PaymentIntent that
-    took it back (`taken_back_by`): if a checkout with that PaymentIntent arrives later (a one-time
-    purchase whose refund was delivered first), the guess was wrong and the purchase is given back.
-    A refund of something else on the Stripe account (not a World Drive link) for the same amount,
-    from the same customer, after its checkout, can still take one back wrongly: set it back by hand
-    (`status = 'paid'`, `refunded_at` and `taken_back_by` NULL). The purchase
-    stays refunded even if the subscription keeps renewing (the Worker hears of refunds, not
-    renewals): when refunding a subscriber, cancel the subscription in Stripe too.
+    which takes the pass away. A partial refund keeps it.
   - `charge.dispute.funds_withdrawn` (a chargeback: the bank has taken the money back) marks it
     `disputed`, which takes the pass away too; `charge.dispute.funds_reinstated` (the dispute won)
-    gives it back, unless it was refunded meanwhile. A Dispute names no customer and the Worker has no
-    Stripe API key to look its charge up with, so a chargeback of a monthly pass's payment can't be
-    tied to its pass: on a dispute of a subscription's payment, cancel the subscription in Stripe
-    (that takes the pass away).
+    gives it back, unless it was refunded meanwhile.
   - Stripe doesn't promise to deliver events in order, and a delivery that failed is retried for up
     to three days, so a refund or chargeback can arrive before its checkout. Each is also kept by its
     PaymentIntent (`reversals`), and a checkout arriving after it comes in already taken back.
@@ -4802,9 +4785,8 @@ and times on every device, and driving and the leaderboard never need it.
   `.updated` and `.deleted` keep each subscription's status (`subscriptions`), an older event never
   overwriting a newer one. `active`, `trialing` and `past_due` (Stripe still retrying the card) keep
   the pass; anything else (`canceled`, `unpaid`, `incomplete_expired`, `paused`) takes it away until
-  it's active again. A subscription's renewals are charged on its invoices, not its checkout; a full
-  refund of one takes the pass away (found by the customer, above), but to stop it renewing, cancel
-  the subscription in Stripe as well.
+  it's active again. A subscription's renewals are charged on its invoices, not its checkout, so to
+  refund a subscriber, cancel the subscription in Stripe (that takes the pass away), then refund.
 - **Day passes** (`0012_day_pass.sql`): a checkout through `DAY_PASS_PAYMENT_LINK_ID`'s link is kept
   with `pass = 'day'`, and gives the pass for 24 hours from when it was recorded (`DAY_PASS_MS`); any
   other (`pass` NULL) is a pass for good. The day pass's link is told apart only by its id, so the

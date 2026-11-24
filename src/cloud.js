@@ -3,7 +3,7 @@ import { SITE } from './config.js';
 import { isTyping } from './walk.js';
 import { button, createLayoutsDialog, el } from './cloud-dialog.js';
 import { createPremium } from './premium.js';
-import { BUILD_APP } from './product.js';
+import { agreeNote, BUILD_APP } from './product.js';
 
 // Your account, when the site runs on its Cloudflare Worker (worker/index.js): sign in with
 // Google, save layouts to your account, open them on another computer, and share a read-only
@@ -110,6 +110,8 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	const googleSlot = el( 'div', 'google-button' );
 	const note = el( 'p', 'note', 'Sign in to keep layouts in your account, open them on any computer and share them by link.' );
 	signedOut.append( googleSlot, note );
+	// In World Drive Build, signing in is accepting its Terms: say so by the button.
+	if ( BUILD_APP ) signedOut.append( agreeNote() );
 
 	const signedIn = el( 'div', 'signed-in' );
 	const chip = el( 'span', 'chip' );
@@ -123,6 +125,8 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	const layoutsButton = button( BUILD_APP ? 'Projects' : 'Layouts', () => dialog.open( layoutsButton ) );
 	layoutsButton.setAttribute( 'aria-haspopup', 'dialog' );
 	signedIn.append( chip, layoutsButton, button( 'Sign out', signOut ) );
+	// World Drive Build: the account page (plan and billing, sign-in, connected apps, your data).
+	if ( BUILD_APP ) layoutsButton.after( Object.assign( el( 'a', 'account-link', 'Account' ), { href: '/build/account/' } ) );
 
 	const status = el( 'p', 'cloud-status' );
 	status.setAttribute( 'role', 'status' );
@@ -181,6 +185,8 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 			premium: config.premium,
 			user,
 			fetchMe: () => call( 'GET', 'me' ),
+			// World Drive Build's: Stripe's checkout page for Build Pro, made for this account.
+			checkout: interval => call( 'POST', 'billing/checkout', { interval } ),
 			renderSignIn: renderGoogleButton,
 		} );
 
@@ -569,7 +575,7 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	function setLink( saved, print ) {
 
 		link = { id: saved.id, name: saved.name, updatedAt: saved.updatedAt, fingerprint: print };
-		storage( () => localStorage.setItem( LINK_KEY, JSON.stringify( { ...link, owner: user.email } ) ) );
+		storage( () => localStorage.setItem( LINK_KEY, JSON.stringify( { ...link, owner: ownerOf( user ) } ) ) );
 		projectInAddress( saved.id );
 
 	}
@@ -590,7 +596,16 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	function readLink() {
 
 		const saved = storage( () => JSON.parse( localStorage.getItem( LINK_KEY ) ) );
-		return user && saved?.owner === user.email && typeof saved.id === 'string' ? saved : null;
+		// One saved before the account's id was kept has its email: still the same account's.
+		return user && ( saved?.owner === ownerOf( user ) || saved?.owner === user.email ) && typeof saved.id === 'string' ? saved : null;
+
+	}
+
+	// Whose the remembered project is: the account's id where the server gives one (World Drive
+	// Build's does), so nothing in this browser's storage holds the email; else its email, as before.
+	function ownerOf( account ) {
+
+		return account.id ? `account:${ account.id }` : account.email;
 
 	}
 

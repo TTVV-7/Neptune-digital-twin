@@ -2,7 +2,11 @@ import { HttpError, checkSameOrigin, cleanText, isObject, json, jsonText, noCont
 import { accountById, currentAccount, signIn, signOut } from './accounts.js';
 import { isAdmin } from './admin.js';
 import { buildPlan } from './supporter.js';
+import { billingFor, postCheckout, postPortal, priceLabels } from './billing.js';
 import { googleClientId } from './settings.js';
+import { deleteAccount, disconnectClient, exportAccount, getAccount } from './build-account.js';
+import { countDaily } from './stats.js';
+import { METRICS } from '../../src/drive-app/stats-protocol.js';
 
 // World Drive Build (worlddrive.app/build/, docs/build.md): the construction mock-up app (the
 // Neptune digital twin's app, built for World Drive by vite.drive.config.js's buildApp) on World
@@ -13,11 +17,10 @@ import { googleClientId } from './settings.js';
 //   free   anyone signed in: the basic library (the page locks the rest), one saved project, and
 //          BUILD_FREE_MONTHLY 3D map views a month (15 if unset), while today's free views for
 //          everyone together are under BUILD_FREE_DAILY (200 if unset: Google bills each one)
-//   pro    Build Pro, bought through its Stripe Payment Link (BUILD_PAYMENT_LINK, its id
-//          BUILD_PAYMENT_LINK_ID, the price as shown BUILD_PRICE, e.g. "CA$7/month", and none shown
-//          without it: the link's own price is the only true one, in CAD; supporter.js's
-//          webhook keeps it), or BUILD_EMAILS (comma-separated, given it without paying): the whole
-//          library, BUILD_LAYOUT_LIMIT projects (200), share links, and BUILD_PRO_MONTHLY views (300)
+//   pro    Build Pro, a subscription bought through a Stripe Checkout Session (billing.js: monthly
+//          or yearly; supporter.js's webhook keeps it), given by the owner on the admin page
+//          (build_comps), or BUILD_EMAILS (comma-separated, testers): the whole library,
+//          BUILD_LAYOUT_LIMIT projects (200), share links, and BUILD_PRO_MONTHLY views (300)
 //   owner  an account in ADMIN_EMAILS (World Drive's owner, admin.js): everything, never counted
 //
 // A 3D map view is a page that's handed the Maps key (GET config): one billed Google 3D tiles
@@ -25,8 +28,9 @@ import { googleClientId } from './settings.js';
 // flat ground and asks you to sign in. A share link's viewer gets the map on its owner's views,
 // while the owner is on Pro (or is the owner); the layout opens either way.
 //
-// Buying needs GOOGLE_CLIENT_ID (an account to put it on), the link and the webhook's secret, as
-// the pass does; without them the page shows no upgrade and the plans are free and owner only.
+// Buying needs Stripe's secret key and Build Pro's two price ids, GOOGLE_CLIENT_ID (an account to
+// put it on) and the webhook's secret (billing.js); without them the page says Build Pro opens soon
+// and nothing is sold.
 
 // The dashboard's page (/build/) and the editor's (/build/app/) each ask relative to themselves.
 const PREFIXES = [ '/build/api/', '/build/app/api/' ];
@@ -37,6 +41,8 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const SHARE_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const SUMMARY = 'id, site, name, share_token, updated_at, lat, lon';
 const DAY_MS = 24 * 60 * 60 * 1000;
+// How long map views and AI app calls are kept (the Privacy Policy's 13 months, a little over).
+export const LOG_KEEP_MS = 396 * DAY_MS;
 
 const notFound = () => new HttpError( 404, 'Not found' );
 const badRequest = () => new HttpError( 400, 'Bad request' );
@@ -50,6 +56,12 @@ const ROUTES = [
 	[ 'GET', 'me', getMe ],
 	// Claude's connections to the account (oauth.js, mcp.js): all of them ended.
 	[ 'DELETE', 'connections', disconnectClaude ],
+	// The account page (/build/account/, build-account.js): one app cut off, what the page lists,
+	// everything kept about the account as a file, and the account deleted.
+	[ 'DELETE', 'connections/:client', disconnectClient ],
+	[ 'GET', 'account', getAccount ],
+	[ 'GET', 'account/export', exportAccount ],
+	[ 'DELETE', 'account', deleteAccount ],
 	[ 'GET', 'layouts', listLayouts ],
 	[ 'POST', 'layouts', createLayout ],
 	[ 'GET', 'layouts/:id', getLayout ],
@@ -63,6 +75,9 @@ const ROUTES = [
 	[ 'PUT', 'logo', putLogo ],
 	[ 'DELETE', 'logo', deleteLogo ],
 	[ 'GET', 'shared/:token/logo', getSharedLogo ],
+	// Buying Build Pro and managing it (billing.js): Stripe's checkout page, and its billing portal.
+	[ 'POST', 'billing/checkout', checkoutCounted ],
+	[ 'POST', 'billing/portal', postPortal ],
 	// The construction app's site-wide extras (saved for everyone on the Neptune site): none here.
 	[ 'GET', 'shared-items', () => json( { items: [] } ) ],
 	[ 'GET', 'placements', () => json( { placements: {} } ) ],
@@ -107,6 +122,38 @@ export async function buildApi( context ) {
 
 }
 
+// --- counts for the owner's admin page -----------------------------------------------------
+
+// World Drive Build's own counts a day in stats_daily (metrics named build_..., which the game's
+// numbers leave out), for the admin page's Build tab (build-stats.js): page visits by which page
+// and hour, the referring site's host, sign-ins and new accounts, projects made and shared,
+// checkouts started, and 3D map views turned away. Only how many: never an account, an address or
+// anything else that's someone's. A count that fails is only logged (stats.js's countDaily).
+async function countBuild( context, counts ) {
+
+	await countDaily( context.env, context.now, counts );
+
+}
+
+// A page's visit (build_visit: 'dashboard', 'editor' or 'share'), and its UTC hour.
+function visitCounts( page, now ) {
+
+	return [ [ 'build_visit', page, 1 ], [ 'build_visit_hour', String( new Date( now ).getUTCHours() ).padStart( 2, '0' ), 1 ] ];
+
+}
+
+// POST billing/checkout (billing.js's postCheckout), with each checkout started counted by its
+// interval, as Stripe's page is handed out.
+async function checkoutCounted( context ) {
+
+	const asked = await context.request.clone().json().catch( () => null );
+	const res = await postCheckout( context );
+	const interval = asked?.interval === 'month' || asked?.interval === 'year' ? asked.interval : 'other';
+	if ( res.ok ) await countBuild( context, [ [ 'build_checkout', interval, 1 ] ] );
+	return res;
+
+}
+
 // --- plans ---------------------------------------------------------------------------------
 
 function number( value, fallback ) {
@@ -127,12 +174,26 @@ export function limitsOf( env ) {
 
 }
 
-// 'owner', 'pro' or 'free' for a signed-in account, with whether Pro is a running subscription.
-export async function planOf( env, account ) {
+// A signed-in account's plan at `now` (ms): { tier: 'owner', 'pro' or 'free', subscribed, status,
+// interval, renewsAt, cancelAtPeriodEnd, pastDue, priceLabel, comped, customer } (buildPlan's, with
+// the price as shown for its interval). The owner's has no subscription.
+export async function planOf( env, account, now = Date.now() ) {
 
-	if ( isAdmin( env, account ) ) return { tier: 'owner', subscribed: false };
-	const { pro, subscribed } = await buildPlan( env, account );
-	return { tier: pro ? 'pro' : 'free', subscribed };
+	if ( isAdmin( env, account ) ) return { tier: 'owner', subscribed: false, status: null, interval: null, renewsAt: null, cancelAtPeriodEnd: false, pastDue: false, priceLabel: null, comped: false, customer: false };
+	const plan = await buildPlan( env, account, now );
+	const labels = priceLabels( env );
+	return {
+		tier: plan.pro ? 'pro' : 'free',
+		subscribed: plan.subscribed,
+		status: plan.status,
+		interval: plan.interval,
+		renewsAt: plan.renewsAt,
+		cancelAtPeriodEnd: plan.cancelAtPeriodEnd,
+		pastDue: plan.pastDue,
+		priceLabel: plan.interval === 'year' ? labels.annual : plan.interval === 'month' ? labels.monthly : null,
+		comped: plan.comped,
+		customer: plan.customer,
+	};
 
 }
 
@@ -178,65 +239,49 @@ async function takeView( env, account, tier, mapsKey, now ) {
 
 	}
 
-	await env.DB.prepare( 'INSERT INTO build_views ( account_id, tier, at ) VALUES ( ?, ?, ? )' ).bind( account.id, tier, now ).run();
+	// Views older than the Privacy Policy keeps them (LOG_KEEP_MS) go as new ones come, a few at a time.
+	await env.DB.batch( [
+		env.DB.prepare( 'INSERT INTO build_views ( account_id, tier, at ) VALUES ( ?, ?, ? )' ).bind( account.id, tier, now ),
+		env.DB.prepare( 'DELETE FROM build_views WHERE rowid IN ( SELECT rowid FROM build_views WHERE at < ? LIMIT 100 )' ).bind( now - LOG_KEEP_MS ),
+	] );
 	return { ok: true };
 
 }
 
-// What the page is told about upgrading (premium.js's premium: { enabled, link?, price?, unlocked,
-// clientReferenceId?, manage? }), for the plan an account is on (or none signed out). The gate is
-// always on (enabled): until buying is set up (the link, sign-in and the webhook's secret) there's
-// no link, and the page says Build Pro opens soon; the owner and BUILD_EMAILS have it meanwhile.
+// What the page is told about upgrading (premium.js's premium: { enabled, unlocked, billing, price? }),
+// for the plan an account is on (or none signed out). The gate is always on (enabled): until
+// buying is set up (billing.js's billingSettings) billing.enabled is false and the page says Build
+// Pro opens soon; the owner, comps and BUILD_EMAILS have it meanwhile. billing: { enabled, monthly,
+// annual, portal } (billingFor), so the page never has a price of its own; price: the monthly one,
+// for a page that shows only one.
 function premiumFor( env, account, plan ) {
 
-	const link = httpsUrl( env.BUILD_PAYMENT_LINK );
-	const buying = !! link && !! googleClientId( env ) && typeof env.STRIPE_WEBHOOK_SECRET === 'string' && env.STRIPE_WEBHOOK_SECRET.startsWith( 'whsec_' );
-	const premium = { enabled: true, unlocked: !! plan && plan.tier !== 'free' };
-	if ( buying ) {
-
-		premium.link = link;
-		// The price as the Payment Link has it, for the button. Unset, there's none rather than a made-up
-		// one: a guess in another currency would contradict the terms (prices in Canadian dollars) and
-		// the checkout, and the page just says "Go Build Pro" and leaves the price to Stripe's page.
-		const price = cleanText( env.BUILD_PRICE ?? '', 40 );
-		if ( price ) premium.price = price;
-		if ( account ) premium.clientReferenceId = String( account.id );
-		const manage = httpsUrl( env.SUPPORTER_MANAGE_LINK );
-		if ( plan?.subscribed && manage ) premium.manage = manage;
-
-	}
-
+	const billing = billingFor( env, plan );
+	const premium = { enabled: true, unlocked: !! plan && plan.tier !== 'free', billing };
+	if ( billing.enabled ) premium.price = billing.monthly;
 	return premium;
 
 }
 
-function httpsUrl( value ) {
-
-	try {
-
-		const url = new URL( typeof value === 'string' ? value.trim() : '' );
-		return url.protocol === 'https:' ? url.href : '';
-
-	} catch {
-
-		return '';
-
-	}
-
-}
-
-// The account as the page shows it ({ name, firstName, email, picture }).
+// The account as the page shows it ({ id, name, firstName, email, picture }). id: the account's,
+// as text, which the editor keeps beside its open project in place of the email (src/cloud.js).
 function userOf( account ) {
 
 	const name = account.name || account.username || '';
-	return { name, firstName: name.split( /\s+/ )[ 0 ] ?? '', email: account.email || account.username || '', picture: '' };
+	return { id: String( account.id ), name, firstName: name.split( /\s+/ )[ 0 ] ?? '', email: account.email || account.username || '', picture: '' };
 
 }
 
-// The plan as the page shows it: { tier, views: { limit, used }, layouts }.
+// The plan as the page shows it: { tier, views: { limit, used }, layouts, subscribed, status,
+// interval, renewsAt, cancelAtPeriodEnd, pastDue, priceLabel, comped } (planOf's, for "Renews on",
+// "Cancels on" and "Payment failed").
 async function planFor( env, account, plan, now ) {
 
-	return { tier: plan.tier, views: await viewsOf( env, account, plan.tier, now ), layouts: plan.tier === 'free' ? 1 : limitsOf( env ).layouts };
+	return {
+		tier: plan.tier, views: await viewsOf( env, account, plan.tier, now ), layouts: plan.tier === 'free' ? 1 : limitsOf( env ).layouts,
+		subscribed: plan.subscribed, status: plan.status, interval: plan.interval, renewsAt: plan.renewsAt, cancelAtPeriodEnd: plan.cancelAtPeriodEnd,
+		pastDue: plan.pastDue, priceLabel: plan.priceLabel, comped: plan.comped,
+	};
 
 }
 
@@ -249,7 +294,7 @@ async function getConfig( context ) {
 
 	const { env, url, now, mapsKey } = context;
 	const account = await currentAccount( context );
-	const plan = account ? await planOf( env, account ) : null;
+	const plan = account ? await planOf( env, account, now ) : null;
 	const config = { googleClientId: googleClientId( env ), signedIn: !! account, premium: premiumFor( env, account, plan ) };
 	const view = url.searchParams.get( 'view' );
 	let taken = null;
@@ -259,7 +304,7 @@ async function getConfig( context ) {
 		if ( shared ) {
 
 			const owner = await accountById( env.DB, shared.account_id );
-			const ownerPlan = owner ? await planOf( env, owner ) : null;
+			const ownerPlan = owner ? await planOf( env, owner, now ) : null;
 			taken = ownerPlan && ownerPlan.tier !== 'free' ? await takeView( env, owner, ownerPlan.tier, mapsKey, now ) : { ok: false, reason: 'owner-free' };
 
 		}
@@ -276,17 +321,31 @@ async function getConfig( context ) {
 
 	if ( taken?.ok ) config.mapsKey = mapsKey;
 	else config.mapsReason = taken?.reason ?? 'sign-in';
+	// The editor opened (once a page: cloud.js asks once), unless on a share link, counted as its
+	// view (getShared); and a 3D map view turned away for this month's or today's free ones.
+	const counts = view ? [] : visitCounts( 'editor', now );
+	if ( config.mapsReason === 'used-up' || config.mapsReason === 'busy' ) counts.push( [ 'build_map_refused', config.mapsReason, 1 ] );
+	await countBuild( context, counts );
 	return json( config );
 
 }
 
-// GET home: what the dashboard (/build/) shows, without taking a 3D map view: { googleClientId,
-// signedIn, user?, plan?, premium }.
+// GET home[?ref=<host>]: what the dashboard (/build/) shows, without taking a 3D map view: {
+// googleClientId, signedIn, user?, plan?, premium }. ref: the site the page was opened from
+// ('direct' for none), sent with its first ask only, which counts the visit and that host.
 async function getHome( context ) {
 
-	const { env, now } = context;
+	const { env, now, url } = context;
+	const ref = url.searchParams.get( 'ref' );
+	if ( ref !== null ) {
+
+		const host = METRICS.load.key( ref.toLowerCase() );
+		await countBuild( context, [ ...visitCounts( 'dashboard', now ), ...host ? [ [ 'build_ref', host, 1 ] ] : [] ] );
+
+	}
+
 	const account = await currentAccount( context );
-	const plan = account ? await planOf( env, account ) : null;
+	const plan = account ? await planOf( env, account, now ) : null;
 	const home = { googleClientId: googleClientId( env ), signedIn: !! account, premium: premiumFor( env, account, plan ) };
 	if ( account ) {
 
@@ -314,8 +373,12 @@ async function postSession( context ) {
 	const headers = new Headers( { Cookie: cookie.split( ';' )[ 0 ] } );
 	const account = await currentAccount( { ...context, request: new Request( context.request.url, { headers } ) } );
 	if ( ! account ) return res;
-	const plan = await planOf( context.env, account );
+	const plan = await planOf( context.env, account, context.now );
 	const plans = await planFor( context.env, account, plan, context.now );
+	// Signed in from Build, and whether that made the account (just now: World Drive's accounts are
+	// one, so one made on the game is counted there, not here).
+	const made = await context.env.DB.prepare( 'SELECT created_at FROM accounts WHERE id = ?' ).bind( account.id ).first();
+	await countBuild( context, [ [ 'build_signin', 'all', 1 ], ...made?.created_at >= context.now - 60 * 1000 ? [ [ 'build_signup', 'new', 1 ] ] : [] ] );
 	const hasMapsKey = !! context.mapsKey && ( plan.tier === 'owner' || plans.views.used < plans.views.limit );
 	return json( { user: userOf( account ), premium: premiumFor( context.env, account, plan ), plan: plans, hasMapsKey }, 200, { 'Set-Cookie': cookie } );
 
@@ -349,7 +412,7 @@ async function disconnectClaude( context ) {
 async function getMe( context ) {
 
 	const account = await signedInAccount( context );
-	const plan = await planOf( context.env, account );
+	const plan = await planOf( context.env, account, context.now );
 	return json( { user: userOf( account ), premium: premiumFor( context.env, account, plan ), plan: await planFor( context.env, account, plan, context.now ) } );
 
 }
@@ -372,14 +435,15 @@ async function createLayout( context ) {
 
 	const { request, env, now } = context;
 	const account = await signedInAccount( context );
-	const plan = await planOf( env, account );
+	const plan = await planOf( env, account, now );
 	const fields = readFields( await readJson( request, LAYOUT_BYTES + 4096 ), { create: true } );
 	const { count, bytes } = await env.DB.prepare( 'SELECT COUNT(*) AS count, COALESCE( SUM( LENGTH( data ) ), 0 ) AS bytes FROM build_layouts WHERE account_id = ?' ).bind( account.id ).first();
 	const most = plan.tier === 'free' ? 1 : limitsOf( env ).layouts;
-	if ( count >= most ) throw new HttpError( 403, plan.tier === 'free' ? 'The free plan saves one project. Build Pro saves as many as you like.' : 'Too many projects. Delete some first.' );
+	if ( count >= most ) throw new HttpError( 403, plan.tier === 'free' ? `The free plan saves one project. Build Pro saves up to ${ limitsOf( env ).layouts }.` : `That's ${ most } projects, the most Build Pro saves. Delete some first.` );
 	if ( bytes + fields.data.length > ACCOUNT_BYTES ) throw accountFull();
 	const row = await env.DB.prepare( `INSERT INTO build_layouts ( id, account_id, site, name, data, created_at, updated_at, lat, lon ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
 		RETURNING ${ SUMMARY }` ).bind( randomToken( 12 ), account.id, fields.site, fields.name, fields.data, now, now, fields.lat ?? null, fields.lon ?? null ).first();
+	await countBuild( context, [ [ 'build_project', 'created', 1 ] ] );
 	return json( summary( row ), 201, etag( row ) );
 
 }
@@ -436,10 +500,16 @@ async function shareLayout( context ) {
 
 	const { env, params } = context;
 	const account = await signedInAccount( context );
-	if ( ( await planOf( env, account ) ).tier === 'free' ) throw new HttpError( 403, 'Share links come with Build Pro.' );
+	if ( ( await planOf( env, account, context.now ) ).tier === 'free' ) throw new HttpError( 403, 'Share links come with Build Pro.' );
 	const row = await ownLayout( env, account, params.id, 'share_token' );
 	const shareToken = row.share_token ?? randomToken( 16 );
-	if ( ! row.share_token ) await env.DB.prepare( 'UPDATE build_layouts SET share_token = ? WHERE id = ? AND account_id = ?' ).bind( shareToken, params.id, account.id ).run();
+	if ( ! row.share_token ) {
+
+		await env.DB.prepare( 'UPDATE build_layouts SET share_token = ? WHERE id = ? AND account_id = ?' ).bind( shareToken, params.id, account.id ).run();
+		await countBuild( context, [ [ 'build_project', 'shared', 1 ] ] );
+
+	}
+
 	return json( { shared: true, shareToken } );
 
 }
@@ -453,10 +523,12 @@ async function unshareLayout( context ) {
 
 }
 
-async function getShared( { env, params } ) {
+async function getShared( context ) {
 
+	const { env, params, now } = context;
 	const row = await sharedLayout( env, params.token, 'l.name, l.site, l.data, l.updated_at, a.name AS owner_name' );
 	if ( ! row ) throw notFound();
+	await countBuild( context, visitCounts( 'share', now ) );
 	const owner = row.owner_name?.split( ' ' )[ 0 ] || 'someone';
 	return jsonWithData( { name: row.name, site: row.site, updatedAt: row.updated_at, owner }, row.data, { 'X-Robots-Tag': 'noindex' } );
 
@@ -481,7 +553,7 @@ function logoResponse( row ) {
 async function getLogo( context ) {
 
 	const account = await signedInAccount( context );
-	if ( ( await planOf( context.env, account ) ).tier === 'free' ) throw notFound();
+	if ( ( await planOf( context.env, account, context.now ) ).tier === 'free' ) throw notFound();
 	return logoResponse( await context.env.DB.prepare( 'SELECT type, data FROM build_logos WHERE account_id = ?' ).bind( account.id ).first() );
 
 }
@@ -491,7 +563,7 @@ async function putLogo( context ) {
 
 	const { env, request, now } = context;
 	const account = await signedInAccount( context );
-	if ( ( await planOf( env, account ) ).tier === 'free' ) throw new HttpError( 403, 'A company logo comes with Build Pro' );
+	if ( ( await planOf( env, account, now ) ).tier === 'free' ) throw new HttpError( 403, 'A company logo comes with Build Pro' );
 	const body = await readJson( request, Math.ceil( LOGO_BYTES * 4 / 3 ) + 1024 );
 	const match = /^data:(image\/(?:png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec( typeof body?.image === 'string' ? body.image : '' );
 	if ( ! match ) throw new HttpError( 400, 'Send a PNG or WebP image' );
@@ -529,7 +601,7 @@ async function getSharedLogo( context ) {
 	const row = await sharedLayout( env, params.token, 'a.id AS owner_id' );
 	if ( ! row ) throw notFound();
 	const owner = await env.DB.prepare( 'SELECT * FROM accounts WHERE id = ?' ).bind( row.owner_id ).first();
-	if ( ! owner || ( await planOf( env, owner ) ).tier === 'free' ) throw notFound();
+	if ( ! owner || ( await planOf( env, owner, context.now ) ).tier === 'free' ) throw notFound();
 	return logoResponse( await env.DB.prepare( 'SELECT type, data FROM build_logos WHERE account_id = ?' ).bind( row.owner_id ).first() );
 
 }

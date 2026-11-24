@@ -40,6 +40,14 @@ const KIND = u => `CASE WHEN ${ u }.status = 'granted' THEN 'granted' WHEN ${ u 
 	WHEN ${ u }.pass IS NULL AND ${ u }.subscription IS NOT NULL THEN 'monthly'
 	WHEN ${ u }.pass IS NULL AND ${ u }.status IN ( 'paid', 'refunded', 'disputed' ) THEN 'lifetime' ELSE 'other' END`;
 
+// SQL: a purchase that's the Supporter Pass's (pass NULL, for good, or 'day'), not World Drive
+// Build Pro's ('build') or a kind a later version adds.
+const SUPPORTER_KINDS = '( pass IS NULL OR pass = \'day\' )';
+
+// SQL: a stats_daily row that's the game's, not World Drive Build's (metrics named build_..., which
+// the Build tab asks for itself: build-stats.js).
+const GAME_METRICS = 'substr( metric, 1, 6 ) <> \'build_\'';
+
 // What the admin page is told of each day from the leaderboard's and the Supporter Pass's own tables,
 // counted as it asks (nothing more is kept for it): [ metric, SQL giving day, key, n for the times
 // from ?1 to before ?2 (ms) ], each grouped by the UTC day of created_at. Only counts: nobody's name,
@@ -59,20 +67,22 @@ const FACTS = [
 	// refund or a chargeback takes a purchase out of all of them. revenue is what the buyer paid, tax
 	// included (Stripe collects the tax as the merchant of record, so it was never World Drive's);
 	// tax is the tax in it, by currency, from the purchases Stripe said it of (recorded from
-	// 0020_purchase_details.sql on, so older ones have none): the page takes it off for the money
-	// before tax.
+	// 0023_purchase_tax.sql on, so older ones have none): the page takes it off for the money
+	// before tax. The Supporter Pass's only (SUPPORTER_KINDS): World Drive Build Pro's are in
+	// purchases too, and have the admin page's Build tab of their own (build-stats.js).
 	[ 'purchases', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, ${ KIND( 'purchases' ) } AS key, COUNT(*) AS n FROM purchases
-		WHERE refunded_at IS NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, key` ],
+		WHERE refunded_at IS NULL AND ${ SUPPORTER_KINDS } AND created_at >= ?1 AND created_at < ?2 GROUP BY day, key` ],
 	[ 'revenue', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, currency AS key, SUM( amount ) AS n FROM purchases
-		WHERE refunded_at IS NULL AND amount IS NOT NULL AND currency IS NOT NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, currency` ],
+		WHERE refunded_at IS NULL AND ${ SUPPORTER_KINDS } AND amount IS NOT NULL AND currency IS NOT NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, currency` ],
 	[ 'tax', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, currency AS key, SUM( tax ) AS n FROM purchases
-		WHERE refunded_at IS NULL AND amount IS NOT NULL AND tax IS NOT NULL AND currency IS NOT NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, currency` ],
+		WHERE refunded_at IS NULL AND ${ SUPPORTER_KINDS } AND amount IS NOT NULL AND tax IS NOT NULL AND currency IS NOT NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, currency` ],
 ];
 
 // How many sales the admin page is shown one by one: the period's newest.
 const SALES_SHOWN = 25;
 
-// The period's last SALES_SHOWN purchases (from ?1 to before ?2, ms), the newest first (the last
+// The period's last SALES_SHOWN Supporter Pass purchases (from ?1 to before ?2, ms; Build Pro's are
+// the Build tab's), the newest first (the last
 // recorded first of two at the same moment), taken back
 // or not, for the admin page's Recent sales: when, what (KIND), what was paid and the tax in it,
 // its status ('paid', 'refunded', 'disputed', 'granted'), its subscription's status as Stripe last
@@ -87,20 +97,20 @@ const SALES = `SELECT x.*, ( SELECT name FROM players WHERE account_id = x.owner
 		p.subscription IS NOT NULL AS subscribed, s.status AS subscription_status,
 		COALESCE( p.account_id, ( SELECT MIN( a.id ) FROM accounts a WHERE a.email = p.email AND p.email <> '' ) ) AS owner
 	FROM purchases p LEFT JOIN subscriptions s ON s.id = p.subscription
-	WHERE p.created_at >= ?1 AND p.created_at < ?2 ORDER BY p.created_at DESC, p.rowid DESC LIMIT ${ SALES_SHOWN } ) x
+	WHERE p.created_at >= ?1 AND p.created_at < ?2 AND ( p.pass IS NULL OR p.pass = 'day' ) ORDER BY p.created_at DESC, p.rowid DESC LIMIT ${ SALES_SHOWN } ) x
 	ORDER BY x.created_at DESC, x.seq DESC`;
 
 // How many there are now: players, accounts (all of them, and by how they sign in: with Google only,
 // with a username and password only, or both: logins.js), the accounts with the pass (hasPass:
-// bought and not refunded, or in SUPPORTER_EMAILS), and passes not taken back that nobody has
-// signed in for yet (bought before signing in, or given by hand, to an email no account has; an
+// bought and not refunded, or in SUPPORTER_EMAILS), and Supporter Passes not taken back that nobody
+// has signed in for yet (bought before signing in, or given by hand, to an email no account has; an
 // account with no Google account has no email, '', which claims nothing). Counts only.
 const TOTALS = `SELECT ( SELECT COUNT(*) FROM players ) AS players, ( SELECT COUNT(*) FROM accounts ) AS accounts,
 	( SELECT COUNT(*) FROM accounts a WHERE a.google_sub NOT LIKE 'none:%' AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = a.id ) ) AS google_only,
 	( SELECT COUNT(*) FROM accounts a JOIN logins l ON l.account_id = a.id WHERE a.google_sub LIKE 'none:%' ) AS password_only,
 	( SELECT COUNT(*) FROM accounts a JOIN logins l ON l.account_id = a.id WHERE a.google_sub NOT LIKE 'none:%' ) AS both_ways,
 	( SELECT COUNT(*) FROM accounts x WHERE ${ hasPass( 'x.id', '?1' ) } ) AS supporters,
-	( SELECT COUNT(*) FROM purchases p WHERE p.refunded_at IS NULL AND p.account_id IS NULL
+	( SELECT COUNT(*) FROM purchases p WHERE p.refunded_at IS NULL AND p.account_id IS NULL AND ( p.pass IS NULL OR p.pass = 'day' )
 		AND NOT EXISTS ( SELECT 1 FROM accounts WHERE email = p.email AND email <> '' ) ) AS unclaimed`;
 
 // Adds [ [ metric, key, n ] ] to `day`'s counts: one upsert a row, in one go.
@@ -173,6 +183,24 @@ export async function countVisit( env, now, kind = '', { again = false } = {} ) 
 
 }
 
+// Adds [ [ metric, key, n ] ] to the UTC day of `now`'s counts (stats_daily), for counts the Worker
+// makes itself (World Drive Build's: build.js). Never in the way of what it counts: a count that
+// fails is only logged.
+export async function countDaily( env, now, counts ) {
+
+	try {
+
+		if ( ! env.DB ) return;
+		await add( env.DB, dayOf( now ), counts );
+
+	} catch ( err ) {
+
+		console.error( 'Stats', err?.name, err?.message );
+
+	}
+
+}
+
 // GET /api/admin/stats?days=30, for the last `days` UTC days, today's (so far) included (30 if
 // unset, at most a year: admin.js's askedDays):
 //   { from, to, rows: [ [ day, metric, key, n ] ],
@@ -187,9 +215,10 @@ export async function countVisit( env, now, kind = '', { again = false } = {} ) 
 // how many days back the counts and the scores log go. 401 without a signed-in account, 403 for one
 // not in ADMIN_EMAILS, 429 past ADMIN_LOOKS a minute (admin.js). Rows older than KEEP_DAYS go as
 // it's asked. Every query is bounded by the days asked for (stats_daily by its key, the scores log
-// by its index on created_at; players, accounts and purchases have none on it, and are read
-// through, which for the owner's occasional look is a few thousand rows), but TOTALS, which counts
-// the tables whole.
+// by its index on created_at, accounts by theirs (0022_build_admin.sql); players and purchases have
+// none on it, and are read through, which for the owner's occasional look is a few thousand rows),
+// but TOTALS, which counts the tables whole. The rows are the game's only: World Drive Build's
+// counts (build_...) are the Build tab's (build-stats.js).
 export async function adminStats( context ) {
 
 	const { env, url, now } = context;
@@ -204,8 +233,8 @@ export async function adminStats( context ) {
 	const end = Date.parse( `${ to }T00:00:00Z` ) + DAY;
 	context.ctx?.waitUntil?.( db.prepare( 'DELETE FROM stats_daily WHERE day < ?' ).bind( dayOf( now - KEEP_DAYS * DAY ) ).run().catch( () => {} ) );
 	const [ counts, earlier, firsts, totals, sold, ...facts ] = await db.batch( [
-		db.prepare( 'SELECT day, metric, key, n FROM stats_daily WHERE day >= ? AND day <= ? ORDER BY day' ).bind( from, to ),
-		db.prepare( 'SELECT metric, key, SUM( n ) AS n FROM stats_daily WHERE day >= ? AND day <= ? GROUP BY metric, key' ).bind( before.from, before.to ),
+		db.prepare( `SELECT day, metric, key, n FROM stats_daily WHERE day >= ? AND day <= ? AND ${ GAME_METRICS } ORDER BY day` ).bind( from, to ),
+		db.prepare( `SELECT metric, key, SUM( n ) AS n FROM stats_daily WHERE day >= ? AND day <= ? AND ${ GAME_METRICS } GROUP BY metric, key` ).bind( before.from, before.to ),
 		db.prepare( `SELECT metric, MIN( day ) AS first FROM stats_daily WHERE day >= ? AND day <= ? AND metric IN ( 'visit', 'funnel' ) GROUP BY metric` ).bind( before.from, before.to ),
 		db.prepare( TOTALS ).bind( supporterEmails( env ) ),
 		db.prepare( SALES ).bind( Date.parse( `${ from }T00:00:00Z` ), end ),

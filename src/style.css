@@ -853,6 +853,24 @@ code {
 	font-size: 12px;
 }
 
+/* World Drive Build's legal links (product.js setUpLegalLinks: the foot of the library and of the
+   help) and the line by each sign-in button saying signing in accepts the Terms (agreeNote). */
+.legal-links,
+.agree-note {
+	margin: 0;
+	font-size: 11px;
+	color: var( --muted );
+}
+
+.legal-links a,
+.agree-note a {
+	color: inherit;
+}
+
+#help .legal-links {
+	margin-top: 12px;
+}
+
 /* World Drive Build's Site button and search (product.js): centred in the space right of the status
    readout (top left), which moves right while the library is open, as the shared-layout banner is
    (cloud.css). */

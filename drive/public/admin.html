@@ -29,6 +29,12 @@
 	And achievements (docs/world-drive.md, "Achievements and rewards"): GET /api/admin/achievements,
 	how many players have each achievement, and of how many (worker/drive/achievements.js). Counts
 	only, nothing of who.
+	And World Drive Build, on a tab of its own (docs/build.md): GET /api/admin/build, its visits by
+	page and referring site, sign-ins, who's active, projects, 3D map views and their Google cost, MCP
+	calls, logos, and Build Pro's money from its subscriptions and invoices alone (the game's money
+	leaves Build Pro out), with the latest Stripe events; and GET /api/admin/build/customer to look one
+	account up, and comp it or not (POST /api/admin/build/comp) (worker/drive/build-stats.js and
+	billing.js). Opened straight on it at /admin.html#build.
 -->
 <style>
 	:root {
@@ -165,6 +171,20 @@
 		.ch-table .act.two { white-space: normal; }
 		.ch-table .act.two button { display: block; width: 100%; margin: 0 0 4px; }
 	}
+	/* The two tabs: World Drive (the game: everything else on the page) and Build (World Drive Build,
+	   #build). On Build, only it and the period show. */
+	.tabs { margin: 0 0 12px; }
+	body.tab-build main > :not(header):not(.tabs):not(#build) { display: none !important; }
+	body.tab-build #csv { display: none; }
+	body:not(.tab-build) #build { display: none; }
+	.build-find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+	.build-find input { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); min-width: 0; flex: 1 1 220px; }
+	.build-comp { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+	.build-comp input { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); min-width: 0; }
+	.build-comp input[name="reason"] { flex: 1 1 200px; }
+	.events td { font-size: 13px; overflow-wrap: anywhere; }
+	/* Build's notes beside its figures are longer than the game's: they wrap rather than run out of the card. */
+	#build .facts td.change { white-space: normal; width: 40%; }
 	/* Quick jumps to each part. */
 	.jump { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; margin: -6px 0 12px; background: var(--bg); border-bottom: 1px solid var(--line); scrollbar-width: thin; }
 	.jump a { flex: none; font-size: 13px; text-decoration: none; color: var(--text); border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 4px 11px; }
@@ -228,6 +248,20 @@
 			<button type="button" id="csv" disabled>Download CSV</button>
 		</div>
 	</header>
+	<div class="seg tabs" id="tabs" role="group" aria-label="Which product"><button type="button" data-tab="game" aria-pressed="true">World Drive</button><button type="button" data-tab="build" aria-pressed="false">Build</button></div>
+	<section id="build" aria-label="World Drive Build">
+		<div id="build-out"><p class="muted">Loading...</p></div>
+		<div class="card" id="build-customer" style="margin-top:12px">
+			<h2>Find a customer</h2>
+			<form class="build-find" id="build-find">
+				<input id="build-q" name="q" placeholder="Email, username or account id" aria-label="Email, username or account id" autocomplete="off" spellcheck="false" required maxlength="320">
+				<button type="submit">Look up</button>
+				<span class="muted small" id="build-say" role="status"></span>
+			</form>
+			<div id="build-who"></div>
+			<p class="note">For helping someone who wrote in: their plan, comp, this month's 3D map views, projects and subscription. Comp gives Build Pro without paying (for good, or until a day), and Remove comp takes it away again; a subscription they pay for is never touched here: refunds and cancelling are Stripe's Dashboard.</p>
+		</div>
+	</section>
 	<nav class="jump" aria-label="Jump to">
 		<a href="#tiles">Numbers</a><a href="#each-day">Each day</a><a href="#places">Map</a><a href="#funnel">Funnel</a><a href="#rides">Rides</a><a href="#worlds">Worlds</a><a href="#problems">Problems</a><a href="#money">Money</a><a href="#sales">Sales</a><a href="#maps-cost">Maps cost</a><a href="#ch-played">Challenges played</a><a href="#challenges">Choose challenges</a><a href="#achievements">Achievements</a><a href="#requests">Requests</a><a href="#resets">Password resets</a><a href="#any">Any count</a><a href="#todo">To do</a>
 	</nav>
@@ -350,10 +384,10 @@
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups', ad: 'Ad on the globe (visits it showed in, and blocked in)',
 		challenge: 'Challenges (opened, started, finished, posted; the word while driving said, and its button pressed; a friend\'s link shared, opened, and a run started from it)',
 		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New accounts (Google or username)',
-		purchases: 'Purchases by what they were (24-hour, monthly, for good, Build Pro, given by hand; refunds left out)', revenue: 'Revenue, tax included (cents)', tax: 'Tax in the revenue (cents, where Stripe said it)',
+		purchases: 'Supporter Passes by what they were (24-hour, monthly, for good, given by hand; refunds left out)', revenue: 'Revenue, tax included (cents)', tax: 'Tax in the revenue (cents, where Stripe said it)',
 	};
 	// What a purchase was (stats.js's KIND): [ key, its rows' name, its short name, a Recent sales row's ].
-	const KINDS = [ [ 'day', '24-hour passes', '24 h', '24-hour pass' ], [ 'monthly', 'Monthly subscriptions started', 'monthly', 'Monthly pass' ], [ 'lifetime', 'For good', 'for good', 'Pass for good' ], [ 'build', 'Build Pro', 'Build Pro', 'Build Pro' ], [ 'granted', 'Given by hand', 'given', 'Given by hand' ], [ 'other', 'Something else', 'other', 'Something else' ] ];
+	const KINDS = [ [ 'day', '24-hour passes', '24 h', '24-hour pass' ], [ 'monthly', 'Monthly subscriptions started', 'monthly', 'Monthly pass' ], [ 'lifetime', 'For good', 'for good', 'Pass for good' ], [ 'granted', 'Given by hand', 'given', 'Given by hand' ], [ 'other', 'Something else', 'other', 'Something else' ] ];
 	const kindOf = key => KINDS.find( ( [ k ] ) => k === key ) ?? [ key, pretty( String( key ) ), String( key ), pretty( String( key ) ) ];
 
 	let shown = null;
@@ -535,7 +569,7 @@
 			[ 'Money', [
 				// Each with a line under it saying what's in it: a 99-cent day pass is one of these as much as
 				// a pass for good is, so the kinds are always said.
-				[ 'Passes bought', num( sold ), [ sold, soldIn( earlier, 'purchases' ) ], false, soldDaily(), 'Everything paid for through Stripe: 24-hour passes, monthly subscriptions started (not their renewals), passes for good and Build Pro. Refunded and charged-back ones are left out, and passes given by hand.', soldSplit ],
+				[ 'Passes bought', num( sold ), [ sold, soldIn( earlier, 'purchases' ) ], false, soldDaily(), 'Supporter Passes paid for through Stripe: 24-hour passes, monthly subscriptions started (not their renewals) and passes for good (Build Pro is the Build tab\'s). Refunded and charged-back ones are left out, and passes given by hand.', soldSplit ],
 				[ 'Revenue', moneyNow.text, null, false, null, 'What buyers paid for these, tax included, in each currency. "Before tax" takes off the tax Stripe collected (as the merchant of record) on the sales it said the tax of; Stripe\'s fees come off too before the payout.', beforeTax ],
 			] ],
 		];
@@ -952,7 +986,7 @@
 		const at = ms => new Date( ms ).toDateString() === new Date().toDateString() ? new Date( ms ).toLocaleTimeString( [], { timeStyle: 'short' } ) : when( ms );
 		const paid = s => ! Number.isFinite( s.amount ) || ! s.currency ? '-' : money( new Map( [ [ s.currency, s.amount ] ] ) ).text + ( s.tax ? ` (${ money( new Map( [ [ s.currency, s.tax ] ] ) ).text } tax)` : '' );
 		const who = s => ! Number.isFinite( s.account ) ? 'not signed in yet (unclaimed)' : s.nickname ? `${ s.nickname } · account ${ s.account }` : `account ${ s.account } (no nickname)`;
-		const what = s => kindOf( s.kind )[ 3 ] + ( s.kind === 'build' && typeof s.subscription === 'string' ? ' (monthly)' : '' );
+		const what = s => kindOf( s.kind )[ 3 ];
 		const state = s => {
 
 			if ( s.refunded ) return s.status === 'disputed' ? 'charged back' : 'refunded';
@@ -1055,6 +1089,330 @@
 		link.click();
 		link.remove();
 		setTimeout( () => URL.revokeObjectURL( link.href ), 1000 );
+
+	}
+
+
+	// --- World Drive Build ------------------------------------------------------------------
+	//
+	// The Build tab: GET /api/admin/build?days= for the period picked above (asked the first time the
+	// tab is shown, and again as the period changes while it's shown), drawn with the game's own tiles,
+	// bars, facts and charts. Its counts (rows) are Build's alone (metrics named build_..., and its
+	// tables' facts), and its money Build Pro's subscriptions and invoices alone. And a customer looked
+	// up (GET /api/admin/build/customer?q=), with Comp and Remove comp (POST /api/admin/build/comp).
+
+	const tabs = document.getElementById( 'tabs' );
+	const buildOut = document.getElementById( 'build-out' );
+	const buildWho = document.getElementById( 'build-who' );
+	const buildSay = document.getElementById( 'build-say' );
+	// Build's pages, as the Worker counts their visits (worker/drive/build.js).
+	const BUILD_PAGES = [ [ 'dashboard', 'Dashboard (/build/)' ], [ 'editor', 'Editor opened' ], [ 'share', 'Share link viewed' ] ];
+	// What each of Build's metrics is, for its chart by day.
+	const BUILD_NAMES = {
+		build_visit: 'Visits (all pages)', build_ref: 'Dashboard visits by referring site', build_signin: 'Sign-ins from Build',
+		build_signup: 'New accounts from Build', build_project: 'Projects created and shared', build_checkout: 'Checkouts started',
+		build_map_refused: '3D map views turned away', build_webhook: 'Webhook events unmatched or failed', accounts: 'New accounts (all of World Drive)',
+		build_views: '3D map views', build_mcp: 'MCP tool calls', build_paid: 'Build Pro invoices paid', build_revenue: 'Build Pro revenue (smallest unit)',
+		build_reversed: 'Build Pro refunds and chargebacks', build_ended: 'Build Pro subscriptions ended', build_logos: 'Logos uploaded or changed',
+	};
+	const usd = n => new Intl.NumberFormat( undefined, { style: 'currency', currency: 'USD' } ).format( n );
+	const dateOf = ms => ms ? new Date( ms ).toISOString().slice( 0, 10 ) : '-';
+	// The days the tab's numbers are for, once asked (null: never, or the period changed while away),
+	// and the customer looked up.
+	let buildDays = null;
+	let customer = null;
+
+	tabs.addEventListener( 'click', event => {
+
+		const button = event.target.closest( 'button[data-tab]' );
+		if ( button ) showTab( button.dataset.tab );
+
+	} );
+	select.addEventListener( 'change', () => {
+
+		if ( document.body.classList.contains( 'tab-build' ) ) loadBuild();
+		else buildDays = null;
+
+	} );
+	document.getElementById( 'build-find' ).addEventListener( 'submit', event => {
+
+		event.preventDefault();
+		findCustomer( document.getElementById( 'build-q' ).value.trim() );
+
+	} );
+	// (Its comp form is sent by its buttons: Enter in it does nothing.)
+	buildWho.addEventListener( 'submit', event => event.preventDefault() );
+	buildWho.addEventListener( 'click', event => {
+
+		const button = event.target.closest( 'button[data-comp]' );
+		if ( button ) comp( button.dataset.comp === 'remove' );
+
+	} );
+	if ( location.hash === '#build' ) showTab( 'build' );
+
+	function showTab( tab ) {
+
+		document.body.classList.toggle( 'tab-build', tab === 'build' );
+		for ( const button of tabs.querySelectorAll( 'button' ) ) button.setAttribute( 'aria-pressed', String( button.dataset.tab === tab ) );
+		history.replaceState( null, '', tab === 'build' ? '#build' : location.pathname + location.search );
+		if ( tab === 'build' && buildDays !== select.value ) loadBuild();
+
+	}
+
+	async function loadBuild() {
+
+		const days = select.value;
+		buildDays = days;
+		buildOut.innerHTML = '<p class="muted">Loading...</p>';
+		let res;
+		try {
+
+			res = await fetch( `/api/admin/build?days=${ days }`, { credentials: 'same-origin' } );
+
+		} catch {
+
+			buildOut.innerHTML = '<div class="notice">Couldn\'t reach the server. Try again in a moment.</div>';
+			buildDays = null;
+			return;
+
+		}
+
+		// A newer period asked for meanwhile: its answer is the one shown.
+		if ( days !== select.value ) return;
+		const problem = adminProblem( res.status );
+		if ( problem || ! res.ok ) {
+
+			buildOut.innerHTML = `<div class="notice">${ problem ?? `Something went wrong (${ res.status }).` }</div>`;
+			buildDays = null;
+			return;
+
+		}
+
+		showBuild( await res.json() );
+
+	}
+
+	// What to say for an admin route's 401, 403 or 429 (as load's), or null.
+	function adminProblem( status ) {
+
+		if ( status === 401 ) return 'Sign in first: open <a href="/">World Drive</a>, sign in with Google on the globe\'s panel, then come back here.';
+		if ( status === 403 ) return 'This Google account isn\'t an admin. The accounts that are go in the Worker\'s ADMIN_EMAILS setting.';
+		if ( status === 429 ) return 'Asked too often just now: try again in a minute.';
+		return null;
+
+	}
+
+	function showBuild( { from, to, rows, previous = { rows: [] }, active = {}, totals = {}, mcp = {}, cost = {}, money: subs = {}, events = [] } ) {
+
+		document.getElementById( 'range' ).textContent = `${ from } to ${ to } (today so far), UTC`;
+		// metric => key => total, metric => day => total, and 'metric:key' => day => total, as show's.
+		const byKey = new Map();
+		const byDay = new Map();
+		const keyDay = new Map();
+		for ( const [ day, metric, key, n ] of rows ) {
+
+			addTo( byKey, metric, key, n );
+			addTo( byDay, metric, day, n );
+			addTo( keyDay, `${ metric }:${ key }`, day, n );
+
+		}
+
+		const before = new Map();
+		for ( const [ metric, key, n ] of previous.rows ) addTo( before, metric, key, n );
+		const keys = metric => byKey.get( metric ) ?? new Map();
+		const total = ( metric, key ) => key === undefined ? sum( keys( metric ).values() ) : keys( metric ).get( key ) ?? 0;
+		const earlier = ( metric, key ) => key === undefined ? sum( ( before.get( metric ) ?? new Map() ).values() ) : before.get( metric )?.get( key ) ?? 0;
+		const days = [];
+		for ( let t = Date.parse( from ); t <= Date.parse( to ); t += DAY ) days.push( new Date( t ).toISOString().slice( 0, 10 ) );
+		const daily = metric => days.map( d => byDay.get( metric )?.get( d ) ?? 0 );
+		const dailyKey = ( metric, key ) => days.map( d => keyDay.get( `${ metric }:${ key }` )?.get( d ) ?? 0 );
+		const both = ( metric, key ) => [ total( metric, key ), earlier( metric, key ) ];
+		const mrr = money( new Map( Object.entries( subs.mrr ?? {} ) ) );
+		const arr = money( new Map( Object.entries( subs.mrr ?? {} ).map( ( [ currency, n ] ) => [ currency, n * 12 ] ) ) );
+		const revenue = money( keys( 'build_revenue' ) );
+		const newSubs = total( 'build_paid', 'new' );
+		const checkouts = total( 'build_checkout' );
+		// [ group, [ label, value, change, fewerIsBetter, days' values, what it means ] ], as the game's.
+		const groups = [
+			[ 'Who\'s coming', [
+				[ 'Dashboard visits', num( total( 'build_visit', 'dashboard' ) ), both( 'build_visit', 'dashboard' ), false, dailyKey( 'build_visit', 'dashboard' ), 'Loads of /build/, the dashboard and landing page.' ],
+				[ 'Editor opens', num( total( 'build_visit', 'editor' ) ), both( 'build_visit', 'editor' ), false, dailyKey( 'build_visit', 'editor' ), 'Loads of the editor (/build/app/), not on a share link.' ],
+				[ 'Share views', num( total( 'build_visit', 'share' ) ), both( 'build_visit', 'share' ), false, dailyKey( 'build_visit', 'share' ), 'Projects opened on someone\'s share link.' ],
+				[ 'Sign-ins', num( total( 'build_signin' ) ), both( 'build_signin' ), false, daily( 'build_signin' ), 'Google sign-ins on Build\'s pages.' ],
+				[ 'New accounts from Build', num( total( 'build_signup' ) ), both( 'build_signup' ), false, daily( 'build_signup' ), 'Accounts made by signing in on Build (World Drive\'s accounts are one: made on the game, they count there).' ],
+				[ 'Active: day / 7 / 30', `${ num( active.day ?? 0 ) } / ${ num( active.week ?? 0 ) } / ${ num( active.month ?? 0 ) }`, null, false, null, 'Accounts that had a 3D map view, saved a project or made an MCP call in the last day, 7 days and 30 days (now, whatever the period).' ],
+			] ],
+			[ 'Are they building?', [
+				[ 'Projects created', num( total( 'build_project', 'created' ) ), both( 'build_project', 'created' ), false, dailyKey( 'build_project', 'created' ), 'Projects saved for the first time.' ],
+				[ 'Projects shared', num( total( 'build_project', 'shared' ) ), both( 'build_project', 'shared' ), false, dailyKey( 'build_project', 'shared' ), 'Share links made (Build Pro).' ],
+				[ '3D map views', num( total( 'build_views' ) ), both( 'build_views' ), false, daily( 'build_views' ), 'Pages handed the Maps key: each one billed Google 3D tiles session (the owner\'s aren\'t kept).' ],
+				[ 'MCP calls', num( total( 'build_mcp' ) ), both( 'build_mcp' ), false, daily( 'build_mcp' ), 'Tool calls from Claude or another MCP client.' ],
+			] ],
+			[ 'Build Pro', [
+				[ 'Active Pro', num( subs.active ?? 0 ), null, false, null, 'Subscriptions running and paid, now.' ],
+				[ 'MRR', mrr.text, null, false, null, 'Monthly recurring revenue now: each running subscription\'s price brought to a month (a year\'s over 12), past due ones too, before tax and Stripe\'s fees.' ],
+				[ 'Checkouts started', num( checkouts ), both( 'build_checkout' ), false, daily( 'build_checkout' ), 'Stripe\'s checkout page handed out.' ],
+				[ 'New subscriptions', num( newSubs ), both( 'build_paid', 'new' ), false, dailyKey( 'build_paid', 'new' ), 'First invoices paid.' ],
+				[ 'Revenue', revenue.text, null, false, null, 'Build Pro\'s invoices paid in the period, new and renewals, before refunds, tax and fees.' ],
+				[ 'Refunds and chargebacks', num( total( 'build_reversed' ) ), both( 'build_reversed' ), true, daily( 'build_reversed' ), 'Money taken back, each ending Pro at once.' ],
+			] ],
+		];
+		const offset = - Math.round( new Date().getTimezoneOffset() / 60 );
+		const byHour = Array.from( { length: 24 }, ( _, h ) => keys( 'build_visit_hour' ).get( String( ( h - offset + 48 ) % 24 ).padStart( 2, '0' ) ) ?? 0 );
+		const views = key => total( 'build_views', key );
+		const reversed = key => total( 'build_reversed', key );
+		const results = [ ...keys( 'build_webhook' ) ];
+		const charted = [ 'build_visit', ...[ ...byKey.keys() ].filter( m => m !== 'build_visit' && m !== 'build_visit_hour' ).sort( ( a, b ) => ( BUILD_NAMES[ a ] ?? a ).localeCompare( BUILD_NAMES[ b ] ?? b ) ) ];
+		buildOut.innerHTML = `
+			<div class="tiles">
+				${ groups.map( ( [ group, list ] ) => `<h2 class="group">${ esc( group ) }</h2>` + list.map( ( [ label, value, change, fewerIsBetter, series, tip ] ) => `<div class="tile"><div class="label" title="${ esc( tip ?? '' ) }">${ esc( label ) }</div><div class="value">${ esc( value ) }</div>${ changeOf( change, fewerIsBetter ) }${ spark( series ) }</div>` ).join( '' ) ).join( '' ) }
+			</div>
+			<div class="grid">
+				<div class="card wide">
+					<h2>Each day</h2>
+					<div class="pickers"><select id="build-metric" aria-label="What to chart">${ charted.map( m => `<option value="${ esc( m ) }">${ esc( BUILD_NAMES[ m ] ?? m ) }</option>` ).join( '' ) }</select></div>
+					<div class="scroll" id="build-chart"></div>
+				</div>
+				<div class="card"><h2>Visits by page</h2>${ bars( new Map( BUILD_PAGES.map( ( [ key, name ] ) => [ name, total( 'build_visit', key ) ] ) ), num, 3, false ) }</div>
+				<div class="card"><h2>Where they come from</h2>${ bars( keys( 'build_ref' ), num, 10 ) }<p class="note">The dashboard's visits by the site they came from, its host name only (direct: none, or World Drive itself). Page views, countries and page speed are in Cloudflare's dashboard (Web Analytics, worlddrive.app).</p></div>
+				<div class="card"><h2>When people come <span class="muted">(your time)</span></h2>${ hourChart( byHour, offset ) }</div>
+				<div class="card"><h2>Build Pro <span class="muted">(Build only)</span></h2>${ facts( [
+					[ 'Active Pro', num( subs.active ?? 0 ), `monthly ${ num( subs.byInterval?.month ?? 0 ) } · yearly ${ num( subs.byInterval?.year ?? 0 ) }` ],
+					[ 'Past due', num( subs.pastDue ?? 0 ), 'a renewal failed; Stripe is retrying' ],
+					[ 'Set to end', num( subs.ending ?? 0 ), 'cancelled: Pro to the period\'s end' ],
+					[ 'Ended in the period', num( total( 'build_ended' ) ), [ ...keys( 'build_ended' ) ].map( ( [ status, n ] ) => `${ status } ${ num( n ) }` ).join( ' · ' ) ],
+					[ 'MRR', mrr.text, `ARR ${ arr.text }` ],
+					[ 'New subscriptions', num( newSubs ), checkouts ? `${ percent( newSubs, checkouts ) } of checkouts started` : '' ],
+					[ 'Renewals', num( total( 'build_paid', 'renewal' ) ), total( 'build_paid', 'other' ) ? `+ ${ num( total( 'build_paid', 'other' ) ) } other invoices` : '' ],
+					[ 'Revenue', revenue.text, `${ money( before.get( 'build_revenue' ) ?? new Map() ).text } before` ],
+					[ 'Refunds', num( reversed( 'refunded' ) ), changeText( both( 'build_reversed', 'refunded' ) ) ],
+					[ 'Chargebacks', num( reversed( 'disputed' ) ), changeText( both( 'build_reversed', 'disputed' ) ) ],
+					[ 'Comps running', num( totals.comps ?? 0 ), 'Pro given without paying' ],
+				] ) }<p class="note">From Build Pro's subscriptions and invoices as Stripe's webhook told the Worker; the Supporter Pass is the World Drive tab's. Revenue is invoices paid, before refunds, tax and Stripe's fees: check the payouts in <a href="https://dashboard.stripe.com/" target="_blank" rel="noopener">Stripe's Dashboard</a>.</p></div>
+				<div class="card"><h2>3D map views and Google cost <span class="muted">(estimate)</span></h2>${ facts( [
+					[ 'Free plan views', num( views( 'free' ) ), percent( views( 'free' ), total( 'build_views' ) ) ],
+					[ 'Build Pro views', num( views( 'pro' ) ), percent( views( 'pro' ), total( 'build_views' ) ) ],
+					[ 'Google\'s cost, these days', usd( cost.usd ?? 0 ), `${ num( cost.views ?? 0 ) } at US$${ cost.perView ?? 0 } each` ],
+					[ 'Turned away: month\'s used up', num( total( 'build_map_refused', 'used-up' ) ), '' ],
+					[ 'Turned away: free pool busy', num( total( 'build_map_refused', 'busy' ) ), 'today\'s free views for everyone' ],
+				] ) }<p class="note">Each view is one billed Google 3D tiles session, at the Worker's BUILD_VIEW_COST_USD each (US$0.006 if unset). Set it against the revenue beside it, and check the real bill in Google Cloud's Billing.</p></div>
+				<div class="card"><h2>Use</h2>${ facts( [
+					[ 'MCP calls', num( mcp.calls ?? 0 ), `${ num( mcp.users ?? 0 ) } accounts` ],
+					[ 'Logos uploaded or changed', num( total( 'build_logos' ) ), '' ],
+					[ 'New World Drive accounts', num( total( 'accounts' ) ), 'the game\'s and Build\'s together' ],
+				] ) }<h3>Now</h3>${ facts( [
+					[ 'Projects', num( totals.projects ?? 0 ), `${ num( totals.builders ?? 0 ) } accounts` ],
+					[ 'Shared by link', num( totals.shared ?? 0 ), '' ],
+					[ 'Logos', num( totals.logos ?? 0 ), '' ],
+				] ) }</div>
+				<div class="card wide"><h2>Stripe's webhook</h2>${ results.length ? facts( results.map( ( [ result, n ] ) => [ result === 'unmatched' ? 'Paid for nothing we sell (unmatched)' : result === 'error' ? 'Failed' : pretty( result ), num( n ), 'in the period' ] ) ) : '<p class="muted">No unmatched or failed events in the period.</p>' }
+					<h3>Latest events</h3>${ events.length ? `<table class="ch-table events"><thead><tr><th>When (UTC)</th><th>Type</th><th>Result</th><th class="wide-only">Event</th></tr></thead><tbody>${ events.map( e => `<tr><td>${ esc( new Date( e.receivedAt ).toISOString().slice( 0, 16 ).replace( 'T', ' ' ) ) }</td><td>${ esc( e.type ) }</td><td>${ esc( e.result ) }</td><td class="wide-only">${ esc( e.id ) }</td></tr>` ).join( '' ) }</tbody></table>` : '<p class="muted">None yet.</p>' }
+					<p class="note">Every signed event the webhook looked at, the Supporter Pass's too (they share it). Unmatched: a payment that matched nothing sold, which needs a look in Stripe's Dashboard; ignored: nothing to do.</p></div>
+			</div>`;
+
+		const metricPick = document.getElementById( 'build-metric' );
+		const draw = () => {
+
+			document.getElementById( 'build-chart' ).innerHTML = barChart( days, daily( metricPick.value ), BUILD_NAMES[ metricPick.value ] ?? metricPick.value );
+
+		};
+
+		metricPick.addEventListener( 'change', draw );
+		draw();
+
+	}
+
+	async function findCustomer( q ) {
+
+		if ( ! q ) return;
+		buildSay.textContent = 'Looking...';
+		let res;
+		try {
+
+			res = await fetch( `/api/admin/build/customer?q=${ encodeURIComponent( q ) }`, { credentials: 'same-origin' } );
+
+		} catch {
+
+			buildSay.textContent = 'Couldn\'t reach the server.';
+			return;
+
+		}
+
+		const answer = await res.json().catch( () => null );
+		if ( ! res.ok ) {
+
+			buildSay.innerHTML = adminProblem( res.status ) ?? esc( answer?.error ?? `Something went wrong (${ res.status }).` );
+			buildWho.innerHTML = '';
+			customer = null;
+			return;
+
+		}
+
+		buildSay.textContent = '';
+		customer = answer;
+		showCustomer();
+
+	}
+
+	function showCustomer() {
+
+		const { account, plan, comp: given, views, projects, subscriptions, payments, invoices } = customer;
+		const cents = ( n, currency ) => n === null || ! currency ? '-' : money( new Map( [ [ currency, n ] ] ) ).text;
+		const tier = { owner: 'Owner', pro: 'Build Pro', free: 'Free' }[ plan.tier ] ?? plan.tier;
+		const latest = subscriptions[ 0 ];
+		buildWho.innerHTML = `<h3>${ esc( account.name || account.username || account.email || `Account ${ account.id }` ) }</h3>${ facts( [
+			[ 'Account', `#${ account.id }`, [ account.email, account.username ? `username ${ account.username }` : '' ].filter( Boolean ).join( ' · ' ) ],
+			[ 'Plan', tier, [ plan.comped ? 'comped' : '', plan.status ?? '', plan.interval ? `${ plan.interval }ly` : '', plan.pastDue ? 'payment failed' : '', plan.renewsAt ? `${ plan.cancelAtPeriodEnd ? 'ends' : 'renews' } ${ dateOf( plan.renewsAt ) }` : '' ].filter( Boolean ).join( ' · ' ) ],
+			[ 'Comp', given ? ( given.active ? 'Yes' : 'Ended' ) : 'No', given ? `${ given.until ? `until ${ dateOf( given.until ) }` : 'for good' }${ given.reason ? ` · ${ given.reason }` : '' } · given ${ dateOf( given.createdAt ) }` : '' ],
+			[ '3D map views this month', views.limit === null ? num( views.used ) : `${ num( views.used ) } of ${ num( views.limit ) }`, '' ],
+			[ 'Projects', num( projects.count ), `${ num( projects.shared ) } shared${ projects.lastSaved ? ` · last saved ${ dateOf( projects.lastSaved ) }` : '' }` ],
+			[ 'MCP calls, 30 days', num( customer.mcpCalls ), '' ],
+			[ 'Last active', dateOf( customer.lastActive ), `signed in ${ dateOf( account.lastLoginAt ) } · joined ${ dateOf( account.createdAt ) }` ],
+			[ 'Subscription', latest ? latest.status : 'None', latest ? `${ cents( latest.amount, latest.currency ) }/${ latest.interval ?? '?' }${ latest.cancelAtPeriodEnd ? ' · set to end' : '' }${ latest.currentPeriodEnd ? ` · period ends ${ dateOf( latest.currentPeriodEnd ) }` : '' }` : '' ],
+			...payments.filter( p => p.refundedAt ).map( p => [ 'Taken back', p.status, dateOf( p.refundedAt ) ] ),
+			...invoices.map( i => [ `Invoice ${ dateOf( i.createdAt ) }`, cents( i.amountPaid, i.currency ), [ i.status, i.reason ].filter( Boolean ).join( ' · ' ) ] ),
+		] ) }${ account.stripeCustomer ? `<p class="note"><a href="https://dashboard.stripe.com/customers/${ encodeURIComponent( account.stripeCustomer ) }" target="_blank" rel="noopener">Open in Stripe's Dashboard</a> (refunds, cancelling, invoices).</p>` : '' }
+			<form class="build-comp" id="build-comp-form">
+				<input name="reason" maxlength="200" placeholder="Why (for you: a tester, a refund made good...)" aria-label="Why">
+				<label class="muted small">Until <input type="date" name="until" aria-label="Until (empty: for good)"></label>
+				<button type="button" data-comp="give">${ given?.active ? 'Change comp' : 'Comp Pro' }</button>
+				${ given ? '<button type="button" data-comp="remove">Remove comp</button>' : '' }
+			</form>`;
+
+	}
+
+	// Build Pro given to the customer shown (until the end of the day picked, UTC, or for good), or
+	// their comp taken away (remove), through billing.js's admin route.
+	async function comp( remove ) {
+
+		if ( ! customer ) return;
+		const form = document.getElementById( 'build-comp-form' );
+		const day = form.elements.until.value;
+		const account = String( customer.account.id );
+		const body = remove ? { account, remove: true } : { account, reason: form.elements.reason.value, until: day ? Date.parse( `${ day }T23:59:59.999Z` ) : null };
+		buildSay.textContent = 'Saving...';
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/build/comp', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( body ) } );
+
+		} catch {
+
+			buildSay.textContent = 'Couldn\'t reach the server.';
+			return;
+
+		}
+
+		const answer = await res.json().catch( () => null );
+		if ( ! res.ok ) {
+
+			buildSay.innerHTML = adminProblem( res.status ) ?? esc( answer?.error ?? `Something went wrong (${ res.status }).` );
+			return;
+
+		}
+
+		await findCustomer( account );
+		buildSay.textContent = remove ? 'Comp removed.' : 'Comped.';
 
 	}
 
