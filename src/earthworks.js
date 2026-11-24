@@ -16,6 +16,7 @@ import {
 	Vector3,
 } from 'three';
 import { registerKind } from './kinds.js';
+import { FENCES, buildFence } from './flatten.js';
 import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, hideUnderEarthworks, insideRect, materialIndex, rectBounds, rectFrame, spread } from './terrain.js';
 import { addHitFilter } from './walk.js';
 import { createPourStream } from './pour.js';
@@ -161,16 +162,18 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 	registerKind( EXCAVATION, {
 		label: 'Excavation',
 		build: buildPitMarker,
-		normalize: normaliseExcavation,
+		normalize: p => ( { ...normaliseExcavation( p ), ...pitFence( p ) } ),
 		// Params at what their absence means are left out, so pits saved before sides had methods
-		// save again byte for byte.
-		save: saveExcavation,
+		// (or fences) save again byte for byte.
+		save: ( { fence, gates, ...rest } ) => ( { ...saveExcavation( rest ), ...( fence === 'none' ? {} : { fence, gates } ) } ),
 		// The rim is the ground as it was, so digging doesn't drag the pit down after itself, and
 		// the lowest of it, so whatever stands in Google's mesh there (rail cars, a shed) is dug
 		// away with the pit instead of lifting the floor to its roof.
 		snap: 'lowest-original',
 		solid: false,
 		buildOnly: true,
+		// A fenced pit's fence stays in view outside build mode; its outlines don't.
+		shownOutsideBuild: params => params.fence !== 'none',
 		fields: PIT_FIELDS,
 		// Resizing keeps the depth and the sides. Digging again reworks the ground under the
 		// whole pit, so that waits until the handle is let go; meanwhile the top of the cut and the
@@ -901,6 +904,9 @@ const PIT_FIELDS = [
 	{ key: 'anchorAngle', label: 'tieback angle (° down)', min: 10, max: 45, step: 1, when: params => levelTypes( params ).includes( 'tiebacks' ) },
 	{ key: 'bondLength', label: 'bond length (m)', min: 4.5, max: 12, step: 0.5, when: params => levelTypes( params ).includes( 'tiebacks' ) },
 	{ key: 'groundwater', label: 'groundwater (m down)', min: 0, step: 0.1 },
+	// A fence round the top of the cut, PIT_FENCE_BACK back from its edge (flatten.js's kinds).
+	{ key: 'fence', label: 'fence round the pit', options: FENCES },
+	{ key: 'gates', label: 'entrances (24 ft)', min: 0, max: 8, step: 1, when: params => params.fence !== 'none' },
 	// Counted from 1, as the stage readout and the section count them. The finished pit is saved as
 	// -1 and shown as the last step, so it stays finished when the stages change (another level, a
 	// deeper floor). A pit with just before and after has no slider: the Show panel's Before /
@@ -1027,6 +1033,18 @@ function baseSize( entry, solved ) {
 // its floor has its floor outlined too, dashed; its top is round the floor, off centre when its
 // sides differ. A pit drawn by its top (as all were before) has the marker it always had, so its
 // footprint, and with it the ground it snaps to and its handles, are the same.
+// A pit's fence stands this far back from the top of the cut (m): clear of its edge, as barriers
+// round an excavation are kept.
+const PIT_FENCE_BACK = 1;
+
+// A pit's fence: none, or one of flatten.js's kinds with 0 to 8 entrances.
+function pitFence( p ) {
+
+	const fence = Object.values( FENCES ).includes( p.fence ) ? p.fence : 'none';
+	return { fence, gates: Math.min( 8, Math.max( 0, Math.round( Number( p.gates ) || 0 ) ) ) };
+
+}
+
 function buildPitMarker( params ) {
 
 	const { width, length } = params;
@@ -1053,8 +1071,19 @@ function buildPitMarker( params ) {
 	outline.position.set( x, 0.06, z );
 	const objects = [ cap, outline, floor ].filter( Boolean );
 	for ( const object of objects ) object.userData.noCollide = true;
+	for ( const object of objects ) object.userData.buildOnly = true;
 	for ( const line of [ outline, floor ] ) if ( line ) line.raycast = () => {};
 	group.add( ...objects );
+	if ( params.fence && params.fence !== 'none' ) {
+
+		// buildFence sets its line FENCE_INSET in from the rectangle it's given.
+		const back = 2 * ( PIT_FENCE_BACK + 0.3 );
+		const fence = buildFence( w + back, l + back, params.fence, params.gates );
+		fence.position.set( x, 0, z );
+		group.add( fence );
+
+	}
+
 	return group;
 
 }

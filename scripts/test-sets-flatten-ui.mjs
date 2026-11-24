@@ -279,6 +279,15 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 		}
 
 		models.setParams( old, { fence: 'none' } );
+		// A pit fenced round its top, saved with it, shown outside build mode without its outlines.
+		const pit = await models.load( { kind: 'excavation', params: { width: 12, length: 16, depth: 3, fence: 'silt', gates: 1 }, east: 60, north: 0, heading: 0, up: null } );
+		const pitFence = pit.pivot.getObjectByProperty( 'name', 'Temporary fence' );
+		document.getElementById( 'library-toggle' ).click();
+		out.pit = { fence: !! pitFence, saved: models.toConfig( pit ).params, outside: shown( pitFence ), outlines: pit.pivot.children[ 0 ].children.filter( o => o.userData.buildOnly ).some( shown ) };
+		document.getElementById( 'library-toggle' ).click();
+		models.setParams( pit, { fence: 'none' } );
+		out.pit.removed = ! ( 'fence' in models.toConfig( pit ).params ) && ! pit.pivot.getObjectByProperty( 'name', 'Temporary fence' );
+		models.remove( pit );
 		out.fence.removed = ! old.pivot.getObjectByProperty( 'name', 'Temporary fence' ) && ! ( 'fence' in models.toConfig( old ).params );
 		return out;
 
@@ -298,6 +307,7 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 	assert.deepEqual( { fence: result.fence.saved.fence, gates: result.fence.saved.gates }, { fence: 'mesh', gates: 3 } );
 	assert.equal( result.fence.outside, true, 'a fence stays in view outside build mode' );
 	assert.ok( Object.keys( result.fence.kinds ).length === 6 && Object.values( result.fence.kinds ).every( n => n > 0 ), JSON.stringify( result.fence.kinds ) );
+	assert.deepEqual( { ...result.pit, saved: { fence: result.pit.saved.fence, gates: result.pit.saved.gates } }, { fence: true, saved: { fence: 'silt', gates: 1 }, outside: true, outlines: false, removed: true } );
 	assert.equal( result.fence.removed, true, 'fence: none takes it away, and out of what\'s saved' );
 	assert.ok( Object.keys( result.types ).length >= 11 && Object.values( result.types ).every( Boolean ), JSON.stringify( result.types ) );
 	assert.equal( result.saved.surfaced.surface, 'asphalt' );
