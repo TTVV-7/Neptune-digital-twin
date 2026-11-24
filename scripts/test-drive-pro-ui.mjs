@@ -112,6 +112,8 @@ async function newPage( { viewport = { width: 1280, height: 800 }, touch = false
 		try {
 
 			if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', ride );
+			// Trick mode on (walls bounce the car off), as these tests were written for.
+			if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
 
 		} catch {
 

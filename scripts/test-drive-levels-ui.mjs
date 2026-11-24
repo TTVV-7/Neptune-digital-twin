@@ -122,6 +122,8 @@ async function levelsPage( { visit = null, live = false, player = null, touch = 
 		if ( visit ) window.worldDriveVisitTest = { visit };
 		if ( live ) window.worldDriveLiveTest = { visit };
 		localStorage.setItem( 'world-drive.pads', 'off' );
+		// Trick mode on (walls bounce the car off), as the stunt tests were written for; slide mode's own test turns it off.
+		if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
 		// The go-kart, as before the pickup (219,000 triangles, slow in the software renderer) was the
 		// default, unless a ride is picked already.
 		if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', 'go-kart' );

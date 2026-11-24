@@ -7,5 +7,9 @@ export const CITIES = [
 		name: 'Vancouver',
 		blurb: 'Downtown, Stanley Park, the North Shore to Neptune Terminals, and the bridges, on 1 m lidar terrain',
 		file: '/cities/vancouver.json',
+		// Its box (make-city.py's origin and size: metres east and north), for knowing it's here without
+		// loading it (hybrid.js).
+		origin: [ 49.3025, - 123.0975 ],
+		size: [ 9063, 7228 ],
 	},
 ];

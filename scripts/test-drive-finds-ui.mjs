@@ -76,6 +76,8 @@ describe( 'World Drive Discoveries', () => {
 
 			if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', 'go-kart' );
 			localStorage.setItem( 'world-drive.pads', 'off' );
+		// Trick mode on (walls bounce the car off), as the stunt tests were written for; slide mode's own test turns it off.
+		if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
 			// The approach to a Discovery not yet found, which the dev server leaves off for the
 			// other tests (main.js's FINDS_APPROACH).
 			window.worldDriveFindsTest = { approach: true };

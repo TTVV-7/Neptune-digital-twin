@@ -260,6 +260,8 @@ async function livePage( { token, player = null, path = '/', touch = false, view
 		// test-drive-ui.mjs's play stats are handed (their posts are answered here, below).
 		if ( stats ) window.worldDriveStatsTest = { visit: 'v1.live-stats-test' };
 		localStorage.setItem( 'world-drive.pads', 'off' );
+		// Trick mode on (walls bounce the car off), as the stunt tests were written for; slide mode's own test turns it off.
+		if ( ! localStorage.getItem( 'world-drive.tricks' ) ) localStorage.setItem( 'world-drive.tricks', 'on' );
 		// The go-kart, as before the pickup (219,000 triangles, slow in the software renderer) was the
 		// default, unless a ride is picked already.
 		if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', 'go-kart' );
