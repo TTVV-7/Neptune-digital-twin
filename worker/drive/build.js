@@ -57,6 +57,11 @@ const ROUTES = [
 	[ 'POST', 'layouts/:id/share', shareLayout ],
 	[ 'DELETE', 'layouts/:id/share', unshareLayout ],
 	[ 'GET', 'shared/:token', getShared ],
+	// Build Pro's company logo, on the equipment (src/logo.js): your own, and a share link's owner's.
+	[ 'GET', 'logo', getLogo ],
+	[ 'PUT', 'logo', putLogo ],
+	[ 'DELETE', 'logo', deleteLogo ],
+	[ 'GET', 'shared/:token/logo', getSharedLogo ],
 	// The construction app's site-wide extras (saved for everyone on the Neptune site): none here.
 	[ 'GET', 'shared-items', () => json( { items: [] } ) ],
 	[ 'GET', 'placements', () => json( { placements: {} } ) ],
@@ -285,6 +290,7 @@ async function getHome( context ) {
 		// How many apps (Claude, say) are connected through /mcp now (oauth.js's tokens).
 		const connected = await env.DB.prepare( 'SELECT COUNT( DISTINCT client_id ) AS n FROM oauth_tokens WHERE account_id = ? AND expires_at > ?' ).bind( account.id, now ).first();
 		home.connections = connected?.n ?? 0;
+		home.hasLogo = !! await env.DB.prepare( 'SELECT 1 FROM build_logos WHERE account_id = ?' ).bind( account.id ).first();
 
 	}
 
@@ -448,6 +454,78 @@ async function getShared( { env, params } ) {
 	if ( ! row ) throw notFound();
 	const owner = row.owner_name?.split( ' ' )[ 0 ] || 'someone';
 	return jsonWithData( { name: row.name, site: row.site, updatedAt: row.updated_at, owner }, row.data, { 'X-Robots-Tag': 'noindex' } );
+
+}
+
+// --- the company logo (Build Pro) ----------------------------------------------------------
+
+// At most this many bytes of image, sent as a data: URL in JSON ({ image }), PNG or WebP only (the
+// editor redraws whatever was picked as one, 512 px at most).
+const LOGO_BYTES = 256 * 1024;
+const LOGO_TYPES = { 'image/png': [ 0x89, 0x50, 0x4e, 0x47 ], 'image/webp': [ 0x52, 0x49, 0x46, 0x46 ] };
+
+function logoResponse( row ) {
+
+	if ( ! row ) throw notFound();
+	// D1 hands a BLOB back as an array of numbers (or an ArrayBuffer): bytes either way.
+	return new Response( new Uint8Array( row.data ), { headers: { 'Content-Type': row.type, 'Cache-Control': 'private, no-cache', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'" } } );
+
+}
+
+// GET logo: your logo's image, or 404. Shown while you're on Build Pro (or the owner).
+async function getLogo( context ) {
+
+	const account = await signedInAccount( context );
+	if ( ( await planOf( context.env, account ) ).tier === 'free' ) throw notFound();
+	return logoResponse( await context.env.DB.prepare( 'SELECT type, data FROM build_logos WHERE account_id = ?' ).bind( account.id ).first() );
+
+}
+
+// PUT logo { image: 'data:image/png;base64,...' }: Build Pro and the owner only.
+async function putLogo( context ) {
+
+	const { env, request, now } = context;
+	const account = await signedInAccount( context );
+	if ( ( await planOf( env, account ) ).tier === 'free' ) throw new HttpError( 403, 'A company logo comes with Build Pro' );
+	const body = await readJson( request, Math.ceil( LOGO_BYTES * 4 / 3 ) + 1024 );
+	const match = /^data:(image\/(?:png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec( typeof body?.image === 'string' ? body.image : '' );
+	if ( ! match ) throw new HttpError( 400, 'Send a PNG or WebP image' );
+	let bytes;
+	try {
+
+		bytes = Uint8Array.from( atob( match[ 2 ] ), c => c.charCodeAt( 0 ) );
+
+	} catch {
+
+		throw new HttpError( 400, 'Send a PNG or WebP image' );
+
+	}
+
+	if ( bytes.length > LOGO_BYTES ) throw new HttpError( 413, 'That logo is too large' );
+	if ( ! LOGO_TYPES[ match[ 1 ] ].every( ( b, i ) => bytes[ i ] === b ) ) throw new HttpError( 400, 'Send a PNG or WebP image' );
+	await env.DB.prepare( 'INSERT INTO build_logos ( account_id, type, data, updated_at ) VALUES ( ?1, ?2, ?3, ?4 ) ON CONFLICT ( account_id ) DO UPDATE SET type = ?2, data = ?3, updated_at = ?4' )
+		.bind( account.id, match[ 1 ], bytes, now ).run();
+	return noContent();
+
+}
+
+async function deleteLogo( context ) {
+
+	const account = await signedInAccount( context );
+	await context.env.DB.prepare( 'DELETE FROM build_logos WHERE account_id = ?' ).bind( account.id ).run();
+	return noContent();
+
+}
+
+// GET shared/:token/logo: the logo of the share link's owner, while they're on Build Pro.
+async function getSharedLogo( context ) {
+
+	const { env, params } = context;
+	const row = await sharedLayout( env, params.token, 'a.id AS owner_id' );
+	if ( ! row ) throw notFound();
+	const owner = await env.DB.prepare( 'SELECT * FROM accounts WHERE id = ?' ).bind( row.owner_id ).first();
+	if ( ! owner || ( await planOf( env, owner ) ).tier === 'free' ) throw notFound();
+	return logoResponse( await env.DB.prepare( 'SELECT type, data FROM build_logos WHERE account_id = ?' ).bind( row.owner_id ).first() );
 
 }
 

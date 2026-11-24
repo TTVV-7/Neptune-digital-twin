@@ -27,6 +27,7 @@ import { setUpTowerCranes } from './tower-crane.js';
 import { setUpRows } from './rows.js';
 import { accountMapsKey, loadConfig, setUpCloud } from './cloud.js';
 import { BUILD_APP, noMapReason, setUpSitePicker } from './product.js';
+import { setUpLogo } from './logo.js';
 import { getKind } from './kinds.js';
 import { setUpDriving } from './drive-prompt.js';
 import { createLegend } from './legend.js';
@@ -266,6 +267,8 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 		// The Show panel: layers, items hidden by hand and Before / After. Before the saved layout is
 		// restored, so what's hidden in it stays hidden as it loads.
 		layers = createLayers( { models, layout, library, flattening, isDriving: () => driver.active, legend } );
+		// Build Pro's company logo on the equipment (logo.js), from the editor's own API (api/ beside it).
+		if ( BUILD_APP ) setUpLogo( { models, layers, apiBase: 'api/' } );
 
 		// Features plug in here. Each gets this context and sets itself up: kinds (kinds.js),
 		// sidebar tools (sidebar.addTool), saved state (layout.registerExtra), per-frame work

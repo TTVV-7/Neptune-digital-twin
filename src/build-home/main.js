@@ -231,6 +231,7 @@ function showPlan() {
 
 	body.append( meter );
 	body.append( claudeCard( plan.tier ) );
+	body.append( logoCard( plan.tier ) );
 	if ( plan.tier === 'free' ) body.append( upgrade( premium ) );
 	else if ( premium.manage ) {
 
@@ -241,6 +242,101 @@ function showPlan() {
 		manage.rel = 'noopener';
 		manage.textContent = 'Manage your subscription';
 		body.append( manage );
+
+	}
+
+}
+
+// The company logo shown on the equipment in the editor (src/logo.js). Build Pro's. Whatever is
+// picked (PNG, JPEG, SVG...) is redrawn here as a PNG of LOGO_SIZE px at most before it's sent.
+const LOGO_SIZE = 512;
+function logoCard( tier ) {
+
+	const box = document.createElement( 'div' );
+	box.className = 'claude logo-card';
+	box.id = 'logo-card';
+	box.innerHTML = '<h3>Company logo</h3><p class="small"></p>';
+	const note = box.querySelector( 'p' );
+	if ( tier === 'free' ) {
+
+		note.textContent = 'With Build Pro, your logo goes on the trucks, machines and trailers in your projects.';
+		return box;
+
+	}
+
+	note.textContent = home.hasLogo ? 'On both sides of your trucks, machines, trailers and bins. The Show panel can hide it.' : 'Put your logo on the trucks, machines and trailers in your projects. A PNG with a see-through background looks best.';
+	if ( home.hasLogo ) {
+
+		const img = document.createElement( 'img' );
+		img.className = 'logo-preview';
+		img.alt = 'Your company logo';
+		img.src = `${ API }logo?at=${ Date.now() }`;
+		box.append( img );
+
+	}
+
+	const row = document.createElement( 'div' );
+	row.className = 'logo-actions';
+	const input = Object.assign( document.createElement( 'input' ), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/svg+xml', hidden: true, id: 'logo-file' } );
+	const pick = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: home.hasLogo ? 'Change' : 'Upload logo' } );
+	pick.addEventListener( 'click', () => input.click() );
+	input.addEventListener( 'change', async () => {
+
+		const file = input.files?.[ 0 ];
+		if ( ! file ) return;
+		try {
+
+			await call( 'PUT', 'logo', { image: await logoImage( file ) } );
+			await load();
+			toast( 'Logo saved. It shows on your equipment next time the editor opens.' );
+
+		} catch ( err ) {
+
+			toast( `Couldn't save the logo: ${ err.message }` );
+
+		}
+
+	} );
+	row.append( input, pick );
+	if ( home.hasLogo ) {
+
+		const remove = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Remove' } );
+		remove.addEventListener( 'click', async () => {
+
+			await call( 'DELETE', 'logo' );
+			await load();
+			toast( 'Logo removed' );
+
+		} );
+		row.append( remove );
+
+	}
+
+	box.append( row );
+	return box;
+
+}
+
+// A picked image file as a PNG data: URL, LOGO_SIZE px on its longer side at most, its transparency kept.
+async function logoImage( file ) {
+
+	const url = URL.createObjectURL( file );
+	try {
+
+		const img = new Image();
+		img.src = url;
+		await img.decode();
+		const w = img.naturalWidth || LOGO_SIZE, h = img.naturalHeight || LOGO_SIZE;
+		const k = Math.min( 1, LOGO_SIZE / Math.max( w, h ) );
+		const canvas = document.createElement( 'canvas' );
+		canvas.width = Math.max( 1, Math.round( w * k ) );
+		canvas.height = Math.max( 1, Math.round( h * k ) );
+		canvas.getContext( '2d' ).drawImage( img, 0, 0, canvas.width, canvas.height );
+		return canvas.toDataURL( 'image/png' );
+
+	} finally {
+
+		URL.revokeObjectURL( url );
 
 	}
 

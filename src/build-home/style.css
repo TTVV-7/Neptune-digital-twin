@@ -611,3 +611,18 @@ h2 {
 	border-radius: 6px;
 	background: rgba( 255, 255, 255, 0.06 );
 }
+
+.logo-preview {
+	max-width: 100%;
+	max-height: 90px;
+	object-fit: contain;
+	justify-self: start;
+	padding: 8px;
+	border-radius: 6px;
+	background: repeating-conic-gradient( rgba( 255, 255, 255, 0.08 ) 0 25%, transparent 0 50% ) 0 0 / 16px 16px;
+}
+
+.logo-actions {
+	display: flex;
+	gap: 14px;
+}

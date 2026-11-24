@@ -53,6 +53,11 @@ and the Neptune twin.
   Link. The same webhook (`supporter.js`) records it as `pass = 'build'`, which never counts as the
   Supporter Pass (and the pass never counts as Build Pro). Cancelling, a failed card, a refund or a
   chargeback take it away as they do the pass.
+- **Company logo (Build Pro):** uploaded on the dashboard (redrawn there as a PNG of 512 px at
+  most), kept in `build_logos` (`migrations/0019_build_logo.sql`), served to its owner's editor and
+  their share links (`/build/api/logo`, `/build/api/shared/<token>/logo`). `src/logo.js` lays it on
+  both long sides of every vehicle, machine, trailer, container and bin, cut from the model's outer
+  surface; the Show panel's "Company logo" hides it.
 - **Claude (MCP):** `https://worlddrive.app/mcp` is an MCP server (`worker/drive/mcp.js`), Build Pro
   and the owner only. Claude finds it as a custom connector: it registers itself, the person signs
   in on worlddrive.app and allows it (`worker/drive/oauth.js`: OAuth 2.1 with PKCE, codes and tokens

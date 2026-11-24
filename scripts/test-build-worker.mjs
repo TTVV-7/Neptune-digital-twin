@@ -295,6 +295,30 @@ describe( 'World Drive Build', () => {
 
 	} );
 
+	test( 'the company logo: Build Pro\'s, PNG or WebP only, on its share links too, removable', async () => {
+
+		// A 1 x 1 PNG.
+		const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+		const tester = await signIn( { sub: 'tester-1', email: 'tester@example.com', name: 'Tess' } );
+		assert.equal( ( await call( '/build/api/logo', { cookie: tester.cookie } ) ).status, 404, 'none yet' );
+		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: free.cookie, body: { image: `data:image/png;base64,${ png }` } } ) ).status, 403, 'not on the free plan' );
+		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: tester.cookie, body: { image: 'data:image/svg+xml;base64,PHN2Zy8+' } } ) ).status, 400, 'no SVG' );
+		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: tester.cookie, body: { image: 'data:image/png;base64,AAAAAAAA' } } ) ).status, 400, 'a PNG has to be one' );
+		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: tester.cookie, body: { image: `data:image/png;base64,${ png }` } } ) ).status, 204 );
+		const got = await fetch( `${ server.base }/build/app/api/logo`, { headers: { Cookie: tester.cookie } } );
+		assert.equal( got.headers.get( 'Content-Type' ), 'image/png' );
+		assert.equal( Buffer.from( await got.arrayBuffer() ).toString( 'base64' ), png, 'the editor gets it, as sent' );
+		assert.equal( ( await call( '/build/api/home', { cookie: tester.cookie } ) ).json.hasLogo, true );
+		// A shared project shows its owner's logo to whoever opens the link.
+		const made = await call( '/build/api/layouts', { method: 'POST', cookie: tester.cookie, body: { site: 'Somewhere', name: 'Branded', data: { version: 2, site: 'Somewhere', lat: 49, lon: - 123, items: [], extras: {} } } } );
+		const share = await call( `/build/api/layouts/${ made.json.id }/share`, { method: 'POST', cookie: tester.cookie } );
+		assert.equal( ( await call( `/build/app/api/shared/${ share.json.shareToken }/logo` ) ).status, 200 );
+		assert.equal( ( await call( `/build/api/shared/${ 'x'.repeat( 22 ) }/logo` ) ).status, 404 );
+		assert.equal( ( await call( '/build/api/logo', { method: 'DELETE', cookie: tester.cookie } ) ).status, 204 );
+		assert.equal( ( await call( `/build/app/api/shared/${ share.json.shareToken }/logo` ) ).status, 404, 'gone from the link too' );
+
+	} );
+
 	test( 'signing out', async () => {
 
 		const res = await call( '/build/api/session', { method: 'DELETE', cookie: free.cookie } );
