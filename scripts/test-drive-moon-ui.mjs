@@ -232,7 +232,7 @@ describe( 'World Drive on the Moon', () => {
 		assert.ok( Math.abs( here.above ) < 0.3, JSON.stringify( here ) );
 		assert.deepEqual( { ...here, gravity: 0, above: 0 }, {
 			world: 'moon', place: 'moon', name: 'Go-kart', gravity: 0, water: null, none: true, dry: { level: null, dry: true }, sea: false,
-			above: 0, stars: true, sky: true, rules: 0.9, grounds: [ 'moon-terrain' ], body: true, levels: 16,
+			above: 0, stars: true, sky: true, rules: 0.9, grounds: [ 'moon-terrain', 'hardware-colliders' ], body: true, levels: 16,
 		} );
 		// NASA's credit, not Google's.
 		assert.equal( await page.locator( '#attribution' ).isVisible(), false );
@@ -250,6 +250,13 @@ describe( 'World Drive on the Moon', () => {
 		await page.waitForFunction( () => window.drive.driver.speed > 4, null, { timeout: 120000 } );
 		await page.keyboard.up( 'KeyW' );
 		assert.ok( await page.evaluate( () => window.drive.driver.grounded ) );
+		// Three times the go-kart's top speed and pick-up here: the Moon's too wide for an Earth pace.
+		assert.deepEqual( await page.evaluate( () => {
+
+			const { driver: d } = window.drive;
+			return { world: d.worldSpeed, top: d.spec.topSpeed / d.baseSpec.topSpeed, accel: d.spec.accel / d.baseSpec.accel };
+
+		} ), { world: 3, top: 3, accel: 3 } );
 		await shot( page, 'moon-2-driving' );
 		assert.deepEqual( page.errors, [] );
 
@@ -396,6 +403,8 @@ describe( 'World Drive on the Moon', () => {
 			return { gravity: d.gravity, water: d.water === water, none: water.none, rules: pads.rules.tilt, grounds: ground.getColliders().length };
 
 		} ), { gravity: 1, water: true, none: false, rules: 0.96, grounds: 1 } );
+		// And the car's own pace.
+		assert.deepEqual( await page.evaluate( () => ( { world: window.drive.driver.worldSpeed, top: window.drive.driver.spec.topSpeed === window.drive.driver.baseSpec.topSpeed } ) ), { world: 1, top: true } );
 		// And its effects: air again, the Earth's gravity.
 		assert.deepEqual( await page.evaluate( () => ( { air: window.drive.driver.effects.air, gravity: window.drive.driver.effects.gravity } ) ), { air: true, gravity: 1 } );
 		assert.deepEqual( page.errors, [] );

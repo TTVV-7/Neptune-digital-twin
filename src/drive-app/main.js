@@ -2462,6 +2462,9 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// landing throws up its colour.
 		const other = offEarth();
 		driver.gravity = WORLDS[ world ].gravity ?? 1;
+		// And its speed-up: the Moon's and Mars's plains are far too wide to cross at an Earth car's
+		// pace (worlds.js's speed).
+		driver.setWorldSpeed( WORLDS[ world ].speed ?? 1 );
 		// Its effects told too, as the others' cars' share them: a world with no air (the Moon, Vesta,
 		// Ceres: no glow round them in body.js's LOOKS) has none for a boom's vapour, smoke or billowing
 		// dust (regolith thrown up instead), and the bursts' embers and the crash's sparks fall in its

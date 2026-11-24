@@ -345,6 +345,10 @@ export class Driver {
 		// The level track's upgrades (World Drive's levels.js: tuningAt), as multipliers: none till
 		// setTuning says otherwise.
 		this.tuning = NO_TUNING;
+		// The world's own speed-up (setWorldSpeed): the other worlds are big and empty, so a ride's top
+		// speed and pick-up there are this many times its own; the booster and drift boosts, shares of
+		// the top speed, go up with it.
+		this.worldSpeed = 1;
 		this.turbo = 1;
 		this.springs = 1;
 		this.getColliders = getColliders;
@@ -577,9 +581,19 @@ export class Driver {
 
 	}
 
+	// The world's speed-up (1 on the Earth): see worldSpeed.
+	setWorldSpeed( speed ) {
+
+		if ( speed === this.worldSpeed ) return;
+		this.worldSpeed = speed;
+		if ( this.baseSpec ) this.applyTuning();
+
+	}
+
 	applyTuning() {
 
-		const { engine, turbo, air, springs } = this.tuning;
+		const { turbo, air, springs } = this.tuning;
+		const engine = this.tuning.engine * this.worldSpeed;
 		const base = this.baseSpec;
 		this.spec = engine === 1 ? base : { ...base, topSpeed: base.topSpeed * engine, accel: base.accel * engine };
 		this.handling.launch = this.baseLaunch * springs;

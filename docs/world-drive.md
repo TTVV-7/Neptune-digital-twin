@@ -1691,6 +1691,12 @@ always had.
   never from further down than 1.5 km (`FALL_MOST` in drive.js: the Moon's 1.2 km and Mars's 530 m are
   under it, so only Vesta and Ceres meet it). Sparks and bits from a hit, and what falls of a boost's
   flames and bursts, fall by it too.
+- **Its own pace** (`driver.setWorldSpeed`, the world's `speed`): every ride's top speed and pick-up
+  are 3 times its own on the Moon and Mars and 2 times on Vesta and Ceres, since getting anywhere at
+  an Earth car's pace there was hopeless (the owner's ask). The booster (twice the top speed) and drift
+  boosts, shares of the top speed, go up with it. The small worlds get less: Vesta's orbital speed is
+  about 920 km/h, and a boost at three times a fast car's top speed would pass it. Back on the Earth
+  it's 1 again; the Garage's engine upgrade multiplies on top.
 - **Its own places**: its start spots and the places its search finds, all in the page (no map
   service knows them: `<world>-places.js`, gathered in `world-places.js`'s `SPOTS_ON` and
   `PLACES_ON`), searched by `place-search.js` (names and other names, accents and apostrophes not

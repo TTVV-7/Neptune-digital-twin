@@ -112,6 +112,8 @@ export const WORLDS = {
 		free: true,
 		prefix: 'moon-',
 		gravity: 1.62 / 9.81,
+		// Rides go this many times faster here (Driver.setWorldSpeed).
+		speed: 3,
 		heights: { url: '/moon/height.bin', columns: 1440, rows: 720 },
 		picture: '/moon/colour.webp',
 		lowest: - 12000,
@@ -130,6 +132,8 @@ export const WORLDS = {
 		free: true,
 		prefix: 'mars-',
 		gravity: 3.71 / 9.81,
+		// Rides go this many times faster here (Driver.setWorldSpeed).
+		speed: 3,
 		heights: { url: '/mars/height.bin', columns: 2880, rows: 1440 },
 		picture: '/mars/colour.webp',
 		// Hellas's floor is 8.2 km under the areoid, Olympus Mons 21.2 km over it.
@@ -149,6 +153,8 @@ export const WORLDS = {
 		free: true,
 		prefix: 'vesta-',
 		gravity: 0.25 / 9.81,
+		// Rides go this many times faster here (Driver.setWorldSpeed) (no more: its orbital speed is about 920 km/h, and a boost at three times would put a car in orbit).
+		speed: 2,
 		heights: { url: '/vesta/height.bin', columns: 2880, rows: 1440, step: 2 },
 		picture: '/vesta/colour.webp',
 		// From 212 to 293 km out: 50.7 km under the sphere (Rheasilvia's floor) to 30.3 over it.
@@ -170,6 +176,8 @@ export const WORLDS = {
 		free: true,
 		prefix: 'ceres-',
 		gravity: 0.284 / 9.81,
+		// Rides go this many times faster here (Driver.setWorldSpeed) (as Vesta: a small world's orbital speed isn't far past a boost).
+		speed: 2,
 		heights: { url: '/ceres/height.bin', columns: 2880, rows: 1440 },
 		picture: '/ceres/colour.webp',
 		// 27.9 km under the sphere (its poles, it's flattened) to 17.0 over it.
