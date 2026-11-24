@@ -50,13 +50,25 @@ const ceilingMaterial = new MeshBasicMaterial( { color: 0x7fd4ff, transparent: t
 for ( const material of [ fillMaterial, floorMaterial, edgeMaterial, ceilingMaterial ] ) material.userData.shared = true;
 
 // What a flattened area can be finished with. `tile` is how many metres one repeat of the texture
-// covers; `colour` is the average, close to how each looks on Google's aerial photos.
-const SURFACES = {
-	gravel: { name: 'Gravel', tile: 3, colour: '#9a958b', grain: [ '#b8b2a6', '#7d786e', '#a9a294', '#6b665d', '#c9c3b6' ], speck: 0.55, size: [ 1, 3.2 ] },
-	asphalt: { name: 'Asphalt', tile: 4, colour: '#4e5052', grain: [ '#5c5e60', '#424446', '#666769', '#393a3c' ], speck: 0.35, size: [ 0.6, 1.6 ] },
-	concrete: { name: 'Concrete', tile: 6, colour: '#b4b1aa', grain: [ '#bdbab3', '#aaa7a0', '#c4c1ba' ], speck: 0.12, size: [ 0.6, 1.4 ], joints: true },
+// covers; `colour` is the average, close to how each looks on Google's aerial photos; `grain` the
+// stones' colours, `speck` how thickly they're scattered and `size` their radius range (pixels of a
+// 256-pixel tile). `shade` gives each stone a shadow and a highlight (rounded or big stones, which
+// read as stones rather than speckle); `angular` makes them broken rock rather than rounded. `gravel` is road base, as it was before there were others.
+export const SURFACES = {
+	gravel: { name: 'Gravel', label: 'road base (¾" minus)', tile: 3, colour: '#9a958b', grain: [ '#b8b2a6', '#7d786e', '#a9a294', '#6b665d', '#c9c3b6' ], speck: 0.55, size: [ 1, 3.2 ] },
+	'clear-crush': { name: 'Clear crush', label: 'clear crush (¾" clean)', tile: 2.5, colour: '#7f7d78', grain: [ '#a7a49d', '#5f5d58', '#8f8c86', '#bdbab3', '#4e4c48' ], speck: 0.95, size: [ 1.4, 3 ], shade: true },
+	'pea-gravel': { name: 'Pea gravel', label: 'pea gravel', tile: 2, colour: '#a2927a', grain: [ '#c9b89a', '#8c7a5f', '#ddd3c2', '#6f6250', '#b5a27f', '#9a8f86' ], speck: 1.1, size: [ 1.6, 2.8 ], shade: true },
+	'drain-rock': { name: 'Drain rock', label: 'drain rock (1½")', tile: 3, colour: '#7d7870', grain: [ '#a39d93', '#66615a', '#8f877b', '#b8b1a5', '#575049' ], speck: 0.5, size: [ 2.8, 5 ], shade: true },
+	'crusher-dust': { name: 'Crusher dust', label: 'crusher dust / screenings', tile: 2, colour: '#ada490', grain: [ '#c6bead', '#958c7a', '#bdb39f', '#8a8272' ], speck: 0.8, size: [ 0.5, 1.3 ] },
+	'pit-run': { name: 'Pit run', label: 'pit run (brown, mixed)', tile: 4, colour: '#8a7a62', grain: [ '#a39177', '#6e604c', '#9a8f82', '#bba98c', '#5c5142', '#8f8a83' ], speck: 0.45, size: [ 0.8, 5 ], shade: true, angular: true },
+	'recycled-concrete': { name: 'Recycled concrete', label: 'recycled concrete', tile: 3, colour: '#a8a59d', grain: [ '#cfccc4', '#8e8b84', '#b5b2aa', '#dcd9d1', '#77746e', '#c3c0b8', '#a5a29b', '#9c5a46' ], speck: 0.6, size: [ 1, 3.6 ] },
+	'rip-rap': { name: 'Rip rap', label: 'rip rap (large rock)', tile: 5, colour: '#3f3c37', grain: [ '#7d786f', '#666159', '#8a847a', '#716c63', '#5a554e' ], speck: 0.045, size: [ 10, 19 ], shade: true, angular: true },
+	millings: { name: 'Asphalt millings', label: 'asphalt millings', tile: 2.5, colour: '#3f3e3b', grain: [ '#57544f', '#2d2c2a', '#6a665f', '#48463f' ], speck: 0.65, size: [ 0.8, 2.2 ] },
+	asphalt: { name: 'Asphalt', label: 'asphalt', tile: 4, colour: '#4e5052', grain: [ '#5c5e60', '#424446', '#666769', '#393a3c' ], speck: 0.35, size: [ 0.6, 1.6 ] },
+	concrete: { name: 'Concrete', label: 'concrete', tile: 6, colour: '#b4b1aa', grain: [ '#bdbab3', '#aaa7a0', '#c4c1ba' ], speck: 0.12, size: [ 0.6, 1.4 ], joints: true },
 };
-const SURFACE_OPTIONS = { gravel: 'gravel', asphalt: 'asphalt', concrete: 'concrete', 'none (just flatten)': 'none' };
+// The P panel's choices: label → id.
+const SURFACE_OPTIONS = { ...Object.fromEntries( Object.entries( SURFACES ).map( ( [ id, { label } ] ) => [ label, id ] ) ), 'none (just flatten)': 'none' };
 // A little above the flattened ground, so the surface covers it; the depth bias does the rest.
 const SURFACE_LIFT = 0.03;
 // How deep a surfaced pad's sides go (m): where the ground round it falls away, the pad shows as
@@ -110,7 +122,7 @@ function surfaceMaterial( id ) {
 
 // A seamless square of the surface: its average colour, then grains scattered over it (wrapped
 // round the edges so repeats don't show a seam), and saw-cut joints for concrete.
-function drawSurface( { colour, grain, speck, size, joints } ) {
+export function drawSurface( { colour, grain, speck, size, joints, shade, angular } ) {
 
 	const N = 256;
 	const canvas = document.createElement( 'canvas' );
@@ -127,13 +139,52 @@ function drawSurface( { colour, grain, speck, size, joints } ) {
 		const x = random() * N;
 		const y = random() * N;
 		const r = size[ 0 ] + random() * ( size[ 1 ] - size[ 0 ] );
-		ctx.fillStyle = grain[ Math.floor( random() * grain.length ) ];
+		const fill = grain[ Math.floor( random() * grain.length ) ];
+		// A stone a little out of round (big ones more so), the same shape each time.
+		const squash = shade || angular ? 0.75 + random() * 0.25 : 1;
+		const tilt = shade || angular ? random() * Math.PI : 0;
+		// Broken rock: six to eight corners at uneven distances.
+		const sides = angular ? 6 + Math.floor( random() * 3 ) : 0;
+		const corners = angular ? Array.from( { length: sides }, ( _, i ) => [ ( i + random() * 0.6 ) / sides * Math.PI * 2, 0.7 + random() * 0.4 ] ) : null;
 		for ( const dx of [ - N, 0, N ] ) for ( const dy of [ - N, 0, N ] ) {
 
-			if ( x + dx + r < 0 || x + dx - r > N || y + dy + r < 0 || y + dy - r > N ) continue;
-			ctx.beginPath();
-			ctx.arc( x + dx, y + dy, r, 0, Math.PI * 2 );
-			ctx.fill();
+			const cx = x + dx, cy = y + dy;
+			if ( cx + r * 1.3 < 0 || cx - r * 1.3 > N || cy + r * 1.3 < 0 || cy - r * 1.3 > N ) continue;
+			const stone = ( ox, oy, k ) => {
+
+				ctx.beginPath();
+				if ( corners ) {
+
+					for ( const [ a, d ] of corners ) {
+
+						const u = Math.cos( a + tilt ) * r * k * d, v = Math.sin( a + tilt ) * r * k * d * squash;
+						ctx.lineTo( cx + ox + u, cy + oy + v );
+
+					}
+
+					ctx.closePath();
+
+				} else ctx.ellipse( cx + ox, cy + oy, r * k, r * k * squash, tilt, 0, Math.PI * 2 );
+				ctx.fill();
+
+			};
+
+			if ( shade ) {
+
+				// Its shadow down and to the right, the stone, and light on its upper left.
+				ctx.fillStyle = 'rgba( 25, 22, 18, 0.45 )';
+				stone( r * 0.18, r * 0.22, 1.05 );
+				ctx.fillStyle = fill;
+				stone( 0, 0, 1 );
+				ctx.fillStyle = `rgba( 255, 255, 255, ${ corners ? 0.09 : 0.14 } )`;
+				stone( - r * 0.25, - r * 0.28, 0.5 );
+
+			} else {
+
+				ctx.fillStyle = fill;
+				stone( 0, 0, 1 );
+
+			}
 
 		}
 

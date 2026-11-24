@@ -26,7 +26,8 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const ITEMS = new Map( CATALOG.items.map( item => [ item.id, item ] ) );
 const SETS = new Map( CATALOG.sets.map( set => [ set.id, set ] ) );
 const MATERIALS = [ 'gravel', 'sand', 'topsoil', 'soil', 'road-base', 'riprap', 'coal', 'potash' ];
-const SURFACES = [ 'gravel', 'asphalt', 'concrete', 'none' ];
+// src/flatten.js's surfaces (gravel is road base).
+const SURFACES = [ 'gravel', 'clear-crush', 'pea-gravel', 'drain-rock', 'crusher-dust', 'pit-run', 'recycled-concrete', 'rip-rap', 'millings', 'asphalt', 'concrete', 'none' ];
 // Pieces placed touching end to end in a row; anything else a metre apart.
 const TOUCHING = [ 'Barriers & fencing', 'Temporary covers' ];
 
@@ -157,7 +158,7 @@ const TOOLS = [
 		run: placeRow,
 	},
 	{
-		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat) and surface it: gravel, asphalt, concrete, or none.',
+		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat) and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none.',
 		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
 		run: addFlatten,
 	},

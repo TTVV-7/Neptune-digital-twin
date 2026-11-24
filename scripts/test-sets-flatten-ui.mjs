@@ -248,6 +248,18 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 		out.asphaltSurface = !! surfaceOf( gravel );
 		out.next = defaultSurface();
 		out.saved = { surfaced: models.toConfig( gravel ).params, old: models.toConfig( old ).params };
+		// Every gravel and rock type builds, and is kept as chosen.
+		const { SURFACES } = await import( '/src/flatten.js' );
+		const before = gravel.params.surface;
+		out.types = {};
+		for ( const id of Object.keys( SURFACES ) ) {
+
+			models.setParams( gravel, { surface: id } );
+			out.types[ id ] = !! gravel.pivot.getObjectByProperty( 'name', `${ SURFACES[ id ].name } surface` ) && models.toConfig( gravel ).params.surface === id;
+
+		}
+
+		models.setParams( gravel, { surface: before } );
 		return out;
 
 	} );
@@ -260,6 +272,7 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 	assert.equal( result.changed, 'asphalt' );
 	assert.ok( result.asphaltSurface );
 	assert.equal( result.next, 'asphalt', 'the next area takes the surface last chosen' );
+	assert.ok( Object.keys( result.types ).length >= 11 && Object.values( result.types ).every( Boolean ), JSON.stringify( result.types ) );
 	assert.equal( result.saved.surfaced.surface, 'asphalt' );
 	assert.ok( ! ( 'surface' in result.saved.old ), 'saved again without a surface' );
 
