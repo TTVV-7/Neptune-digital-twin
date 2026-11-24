@@ -852,3 +852,145 @@ button[type='submit'] {
 code {
 	font-size: 12px;
 }
+
+/* World Drive Build's Site button and search (product.js): centred in the space right of the status
+   readout (top left), which moves right while the library is open, as the shared-layout banner is
+   (cloud.css). */
+.site-picker {
+	position: fixed;
+	top: 12px;
+	left: 272px;
+	right: 16px;
+	z-index: 20;
+	margin: 0 auto;
+	display: grid;
+	justify-items: center;
+	gap: 6px;
+	max-width: 460px;
+	pointer-events: none;
+}
+
+body.library-open .site-picker {
+	left: 572px;
+}
+
+.site-picker > * {
+	pointer-events: auto;
+}
+
+.site-picker .site-current {
+	max-width: 100%;
+	padding: 6px 12px;
+	border: 1px solid rgba( 255, 255, 255, 0.18 );
+	border-radius: 999px;
+	background: var( --panel );
+	color: inherit;
+	font: inherit;
+	font-size: 13px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.site-picker .site-label {
+	color: #ffd60a;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	font-size: 11px;
+}
+
+.site-picker .site-search {
+	width: 100%;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 6px;
+	padding: 8px;
+	box-sizing: border-box;
+	background: var( --panel );
+	border-radius: 8px;
+}
+
+.site-picker input {
+	min-width: 0;
+	padding: 7px 10px;
+	font: inherit;
+	color: inherit;
+	background: rgba( 0, 0, 0, 0.3 );
+	border: 1px solid rgba( 255, 255, 255, 0.2 );
+	border-radius: 6px;
+}
+
+.site-picker form > button {
+	padding: 7px 12px;
+	font: inherit;
+	font-weight: 600;
+	color: #10161c;
+	background: #ffd60a;
+	border: 0;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.site-picker .site-results {
+	grid-column: 1 / -1;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: 2px;
+	max-height: 50vh;
+	overflow-y: auto;
+}
+
+.site-picker .site-results button {
+	width: 100%;
+	text-align: left;
+	padding: 6px 8px;
+	font: inherit;
+	font-size: 13px;
+	color: inherit;
+	background: transparent;
+	border: 0;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.site-picker .site-results button:hover,
+.site-picker .site-results button:focus-visible {
+	background: rgba( 255, 255, 255, 0.1 );
+}
+
+.site-picker .note {
+	padding: 6px 8px;
+	font-size: 12px;
+	opacity: 0.75;
+}
+
+/* Notices go below the Site button (product.js), not over it (on narrow screens they're already
+   below the status block, lower still). */
+body.has-site-picker #banner {
+	top: 56px;
+	left: 272px;
+}
+
+body.has-site-picker.library-open #banner {
+	left: 572px;
+}
+
+@media ( max-width: 700px ) {
+
+	.site-picker,
+	body.library-open .site-picker {
+		top: 112px;
+		left: 16px;
+	}
+
+	body.has-site-picker #banner,
+	body.has-site-picker.library-open #banner {
+		top: 160px;
+		left: 16px;
+	}
+
+}

@@ -41,6 +41,8 @@
     "test:own-models-ui": "node --test scripts/test-own-models-ui.mjs",
     "test:sets-flatten-ui": "node --test scripts/test-sets-flatten-ui.mjs",
     "test:city-drive-ui": "node --test scripts/test-city-drive-ui.mjs",
+    "test:build-worker": "node --test scripts/test-build-worker.mjs",
+    "test:build-ui": "node --test scripts/test-build-ui.mjs",
     "test:drive-worker": "node --test scripts/test-drive-worker.mjs",
     "test:drive-ui": "node --test scripts/test-drive-ui.mjs",
     "test:drive-pro-ui": "node --test scripts/test-drive-pro-ui.mjs",

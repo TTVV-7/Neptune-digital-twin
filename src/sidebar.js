@@ -204,7 +204,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		dims.className = 'dims';
 		dims.textContent = `${ set.members.length } items · about ${ Math.max( set.dimensions.width, set.dimensions.length ) } × ${ Math.min( set.dimensions.width, set.dimensions.length ) } m`;
 		card.append( thumbs, name, dims );
-		card.addEventListener( 'click', () => startPlacingSet( set ) );
+		// A set with a locked piece (premium.js) is locked: picking it says what unlocks it.
+		card.addEventListener( 'click', () => {
+
+			const locked = set.members.find( m => isLocked( m.libraryItem ) );
+			if ( locked ) pickLocked( locked.libraryItem );
+			else startPlacingSet( set );
+
+		} );
 		list.append( card );
 		cards.push( { card, item: { id: set.id, name: set.name, category: 'Sets', keywords: `${ set.keywords } ${ set.names.join( ' ' ) }` }, thumb: null, badge: null, row: null } );
 

@@ -1,3 +1,5 @@
+import { BUILD_APP, buildSite } from './product.js';
+
 // Everything you are likely to tweak lives here.
 //
 // Positions are in metres in a local frame centred on SITE:
@@ -5,7 +7,8 @@
 //   north = metres north of the origin (negative = south, toward the water)
 //   up    = metres above the origin height; null means "snap to the ground"
 
-export const SITE = {
+// World Drive Build (product.js) puts it wherever the project is.
+export const SITE = BUILD_APP ? buildSite() : {
 	name: 'Neptune Terminals',
 	// Centre of the terminal footprint (OpenStreetMap way 564571990).
 	lat: 49.3054,
@@ -54,7 +57,7 @@ export const ZOOM = {
 // Your own detailed models. Put .glb / .gltf files in public/models/ and list them here.
 // Use the in-app placement panel (press P) to line a model up with the Google tiles,
 // then press "Copy config" and paste the result over the entry below.
-export const MODELS = [
+const NEPTUNE_MODELS = [
 	// Dumper 2: C31 gallery, transfer pit and C32 tunnel with the repair areas marked up in the
 	// B2D2 Repair Model artifact (scripts/b2d2-repair-model.mjs builds it). Its origin is the middle
 	// of C31 at grade, so `up: null` sets grade on the ground and the structure goes below it.
@@ -79,3 +82,5 @@ export const MODELS = [
 	// 	scale: 1,
 	// },
 ];
+// The Neptune project's own models; none in World Drive Build (product.js).
+export const MODELS = BUILD_APP ? [] : NEPTUNE_MODELS;

@@ -25,7 +25,8 @@ import { setUpExcavator } from './excavator.js';
 import { setUpLaydown } from './laydown.js';
 import { setUpTowerCranes } from './tower-crane.js';
 import { setUpRows } from './rows.js';
-import { accountMapsKey, setUpCloud } from './cloud.js';
+import { accountMapsKey, loadConfig, setUpCloud } from './cloud.js';
+import { BUILD_APP, noMapReason, setUpSitePicker } from './product.js';
 import { getKind } from './kinds.js';
 import { setUpDriving } from './drive-prompt.js';
 import { createLegend } from './legend.js';
@@ -42,6 +43,15 @@ const $ = id => document.getElementById( id );
 boot();
 
 async function boot() {
+
+	// World Drive Build: the key is the account's plan's to give (worker/drive/build.js), never asked for.
+	if ( BUILD_APP ) {
+
+		const config = await loadConfig();
+		start( config?.mapsKey ?? null, 'World Drive Build', noMapReason( config?.mapsReason, config?.plan ) );
+		return;
+
+	}
 
 	const url = new URL( window.location.href );
 	const urlKey = url.searchParams.get( 'key' );
@@ -121,7 +131,7 @@ function envTag() {
 
 }
 
-function start( apiKey, keySource ) {
+function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: flat placeholder ground only. Press H to add an API key.' ) {
 
 	const renderer = new WebGLRenderer( { antialias: true, logarithmicDepthBuffer: true } );
 	renderer.setPixelRatio( Math.min( window.devicePixelRatio, 2 ) );
@@ -181,7 +191,7 @@ function start( apiKey, keySource ) {
 	} else {
 
 		ground = createPlaceholderGround();
-		showBanner( 'Running without Google tiles: flat placeholder ground only. Press H to add an API key.', 8000 );
+		showBanner( noKeySaying, BUILD_APP ? 15000 : 8000 );
 
 	}
 
@@ -319,6 +329,8 @@ function start( apiKey, keySource ) {
 
 	// Walking as a construction worker: third person behind him, or first person (C).
 	const player = setUpPlayer( { scene, camera, controls, driver, getColliders: () => [ ...grounds, models.group ], toast } );
+	// World Drive Build: the project's site, and a search to move it.
+	if ( BUILD_APP ) setUpSitePicker( SITE, { toast } );
 	const legend = createLegend( { controls, driver, player, models, getSidebar: () => sidebar, getDriving: () => driving, getLayers: () => layers, getUnderground: () => underground, toggleHelp } );
 	setUpZoom( { canvas: renderer.domElement, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
 

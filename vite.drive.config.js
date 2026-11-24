@@ -1,4 +1,4 @@
-import { createReadStream, readFileSync } from 'node:fs';
+import { cpSync, createReadStream, readFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as viteBuild, defineConfig, loadEnv } from 'vite';
@@ -59,7 +59,7 @@ export default defineConfig( ( { command, mode } ) => {
 		// driveSite: the places' pages, /drive/, the Moon's and Mars's pages (/moon/, /mars/: each world
 		// in worlds.js's OFF_EARTH, beside its files from drive/public/<world>/) and /sitemap.xml, for
 		// search engines (drive/site/).
-		plugins: [ publishFromLibrary(), driveSite(), keyStaysOut( envKey ), ...command === 'build' ? [ cityDrive() ] : [] ],
+		plugins: [ publishFromLibrary(), driveSite(), keyStaysOut( envKey ), ...command === 'build' ? [ cityDrive(), buildApp() ] : [] ],
 	};
 
 } );
@@ -168,6 +168,44 @@ function cityDrive() {
 				define: { __DEV_MAPS_KEY__: '""' },
 				build: { outDir: join( ROOT, 'dist-drive', 'city' ), emptyOutDir: true, chunkSizeWarningLimit: 1500 },
 			} );
+
+		},
+	};
+
+}
+
+// World Drive Build (/build/, docs/build.md): the construction mock-up app (the repository's own
+// app, index.html and src/main.js) built with --mode worlddrive (src/product.js: wherever the
+// project is, Build Pro's gate, its Maps key from World Drive's server, worker/drive/build.js) into
+// dist-drive/build/, in a build of its own as City Drive is. Of public/ it takes only the library
+// and what the app itself loads (the Google Maps logo, the walking workers): never public/models'
+// own project models.
+function buildApp() {
+
+	return {
+		name: 'world-drive-build',
+		apply: 'build',
+		async closeBundle() {
+
+			const outDir = join( ROOT, 'dist-drive', 'build' );
+			await viteBuild( {
+				configFile: join( ROOT, 'vite.config.js' ),
+				root: ROOT,
+				mode: 'worlddrive',
+				base: '/build/',
+				publicDir: false,
+				logLevel: 'warn',
+				build: { outDir, emptyOutDir: true, chunkSizeWarningLimit: 1500 },
+				plugins: [ {
+					name: 'world-drive-build-page',
+					transformIndexHtml: html => html
+						.replace( /<title>[^<]*<\/title>/, '<title>World Drive Build · construction site mock-ups</title>' )
+						.replace( '<head>', '<head>\n\t\t<meta name="description" content="Lay out a construction site on a 3D map of anywhere: real-scale equipment, trailers, barriers and earthworks, in your browser." />' ),
+				} ],
+			} );
+			cpSync( join( PUBLIC, 'library' ), join( outDir, 'library' ), { recursive: true } );
+			cpSync( join( PUBLIC, 'google-maps-logo.svg' ), join( outDir, 'google-maps-logo.svg' ) );
+			for ( const file of [ 'player-worker.glb', 'player-worker-2.glb' ] ) cpSync( join( PUBLIC, 'models', file ), join( outDir, 'models', file ) );
 
 		},
 	};

@@ -1,4 +1,29 @@
 import { button, el } from './cloud-dialog.js';
+import { BUILD_APP } from './product.js';
+
+// What the dialog says: of the Pro equipment pack (bought once), or in World Drive Build (product.js)
+// of Build Pro (a monthly plan).
+const WORDS = BUILD_APP ? {
+	title: 'Build Pro',
+	paying: 'Finish subscribing in Stripe\'s tab, then come back here. Build Pro unlocks as soon as Stripe confirms it.',
+	terms: 'Stripe\'s checkout opens in a new tab. Billed monthly per seat; cancel any time.',
+	signIn: 'Sign in first, so Build Pro goes to your account.',
+	lead: name => `${ name } is part of Build Pro. Subscribe to place any of these, plus sets, 300 3D map views a month, unlimited projects and share links:`,
+	leadPlain: 'Build Pro: the whole library, sets, 300 3D map views a month, unlimited projects and share links:',
+	unlocked: 'Build Pro unlocked',
+	thanks: 'Thanks for subscribing to Build Pro! Sign in with the Google account you paid with to use it.',
+	pending: 'Stripe hasn\'t confirmed your subscription yet. Build Pro unlocks by itself once it has: reload the page in a few minutes.',
+} : {
+	title: 'Pro equipment',
+	paying: 'Finish paying in Stripe\'s tab, then come back here. The pack unlocks as soon as Stripe confirms the payment.',
+	terms: 'Stripe\'s checkout opens in a new tab. One payment; the pack stays in your account.',
+	signIn: 'Sign in first, so the pack goes to your account.',
+	lead: name => `${ name } is part of the Pro equipment pack. Buy it once to place any of these, in any layout:`,
+	leadPlain: 'Buy the Pro equipment pack once to place any of these, in any layout:',
+	unlocked: 'Premium unlocked',
+	thanks: 'Thanks for buying Pro equipment! Sign in with the Google account you paid with to use it.',
+	pending: 'Stripe hasn\'t confirmed the payment yet. The pack unlocks by itself once it has: reload the page in a few minutes.',
+};
 
 // Premium equipment, a work in progress. The library items marked "premium": true in
 // public/library/library.json make up the Pro equipment pack, bought once through a Stripe
@@ -35,7 +60,7 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 	const dialog = el( 'dialog', 'cloud-dialog premium-dialog' );
 	dialog.setAttribute( 'aria-labelledby', 'premium-dialog-title' );
 	const header = el( 'header' );
-	const title = el( 'h2', '', 'Pro equipment' );
+	const title = el( 'h2', '', WORDS.title );
 	title.id = 'premium-dialog-title';
 	const close = button( '×', () => dialog.close(), 'close' );
 	close.setAttribute( 'aria-label', 'Close' );
@@ -62,18 +87,18 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 	const price = el( 'p', 'price' );
 
 	const buying = el( 'div', 'buying' );
-	const buy = el( 'a', 'buy', 'Buy with Stripe' );
+	const buy = el( 'a', 'buy', BUILD_APP ? 'Subscribe with Stripe' : 'Buy with Stripe' );
 	buy.target = '_blank';
 	buy.rel = 'noopener';
-	buy.addEventListener( 'click', () => say( 'Finish paying in Stripe\'s tab, then come back here. The pack unlocks as soon as Stripe confirms the payment.' ) );
+	buy.addEventListener( 'click', () => say( WORDS.paying ) );
 	const again = button( 'Check again', checkAgain, 'link' );
 	const paid = el( 'p', 'small', 'Paid already?' );
 	paid.append( again );
-	buying.append( buy, el( 'p', 'small', 'Stripe\'s checkout opens in a new tab. One payment; the pack stays in your account.' ), paid );
+	buying.append( buy, el( 'p', 'small', WORDS.terms ), paid );
 
 	const signIn = el( 'div', 'sign-in' );
 	const slot = el( 'div', 'google-button' );
-	signIn.append( el( 'p', '', 'Sign in first, so the pack goes to your account.' ), slot );
+	signIn.append( el( 'p', '', WORDS.signIn ), slot );
 
 	const message = el( 'p', 'message' );
 	message.setAttribute( 'role', 'status' );
@@ -112,13 +137,16 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 	function render() {
 
 		lead.textContent = picked
-			? `${ picked.name } is part of the Pro equipment pack. Buy it once to place any of these, in any layout:`
-			: 'Buy the Pro equipment pack once to place any of these, in any layout:';
+			? WORDS.lead( picked.name )
+			: WORDS.leadPlain;
 		price.textContent = premium.price ?? '';
 		price.hidden = ! premium.price;
-		buying.hidden = ! user;
-		signIn.hidden = !! user;
-		if ( user ) buy.href = buyUrl();
+		// World Drive Build before buying is set up: no link yet (worker/drive/build.js).
+		const soon = BUILD_APP && ! premium.link;
+		buying.hidden = ! user || soon;
+		signIn.hidden = !! user || soon;
+		if ( soon ) say( 'Build Pro opens soon. Until then the free plan has these basics.' );
+		if ( user && ! soon ) buy.href = buyUrl();
 		else if ( ! signInShown ) {
 
 			signInShown = true;
@@ -186,7 +214,7 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 	function unlocked() {
 
 		if ( dialog.open ) dialog.close();
-		toast( 'Premium unlocked' );
+		toast( WORDS.unlocked );
 
 	}
 
@@ -199,7 +227,7 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 		window.history.replaceState( null, '', url.href );
 		if ( ! user ) {
 
-			showBanner( 'Thanks for buying Pro equipment! Sign in with the Google account you paid with to use it.', 10000 );
+			showBanner( WORDS.thanks, 10000 );
 			return;
 
 		}
@@ -212,7 +240,7 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 
 		}
 
-		showBanner( 'Stripe hasn\'t confirmed the payment yet. The pack unlocks by itself once it has: reload the page in a few minutes.', 10000 );
+		showBanner( WORDS.pending, 10000 );
 
 	}
 

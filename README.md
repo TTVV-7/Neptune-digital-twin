@@ -888,6 +888,11 @@ Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderb
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
 posted with the visit's signed token and checked against what the game can score.
 
+**World Drive Build** (`/build/`, [docs/build.md](docs/build.md)): this construction app offered to
+anyone on World Drive's site and accounts, at any address, with a free plan (33 everyday items, 15
+3D map views a month, one saved project) and **Build Pro** (everything, 300 views, unlimited projects
+and share links) sold through Stripe; World Drive's owner has everything.
+
 **City Drive** (`/city/`, `drive/city/index.html`, `src/drive-app/city/`): a standalone page
 where you pick a city, a start spot and a ride and drive a whole city built from open data instead
 of Google's tiles, so it costs nothing per visit and has no daily cap. The first is **Vancouver and

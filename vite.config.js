@@ -21,7 +21,8 @@ export default defineConfig( ( { command, mode } ) => {
 	// there the API hands the key to signed-in users (src/cloud.js), so it's left out of the public
 	// site. Any build on Vercel (which sets VERCEL) counts as one, so a changed build command can't
 	// put the key from the project's settings into the site.
-	const serverHasKey = mode === 'cloudflare' || mode === 'server' || !! process.env.VERCEL;
+	// World Drive Build (--mode worlddrive, vite.drive.config.js) gets it from World Drive's server.
+	const serverHasKey = mode === 'cloudflare' || mode === 'server' || mode === 'worlddrive' || !! process.env.VERCEL;
 	const keyName = serverHasKey ? null : GOOGLE_KEY_NAMES.find( name => byName.get( name.toLowerCase() ) );
 	const googleKey = keyName ? byName.get( keyName.toLowerCase() ) : '';
 	if ( keyName && command === 'build' ) {
