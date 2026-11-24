@@ -1991,32 +1991,6 @@
 		}
 	},
 	{
-		"id": "concrete-placing-boom",
-		"name": "Concrete Boom",
-		"category": "Other",
-		"file": "concrete-placing-boom.glb",
-		"thumb": "thumbs/concrete-placing-boom.webp",
-		"front": "+z",
-		"scale": 3.7037,
-		"dimensions": {
-			"length": 10,
-			"width": 109.45,
-			"height": 92.69
-		},
-		"triangles": 37055,
-		"sizeKB": 332,
-		"source": {
-			"site": "Sketchfab",
-			"id": "5b059f6bc54642b0b38adf39c9952542",
-			"url": "https://sketchfab.com/3d-models/concrete-boom-5b059f6bc54642b0b38adf39c9952542",
-			"title": "Concrete Boom",
-			"author": "doty_aecom",
-			"authorUrl": "https://sketchfab.com/doty_aecom",
-			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
-		}
-	},
-	{
 		"id": "worker-coverall-broom",
 		"name": "Construction labourer, hi-vis coveralls with broom (1.78 m)",
 		"category": "People",
