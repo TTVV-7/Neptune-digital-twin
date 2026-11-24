@@ -27,13 +27,14 @@ import { googleClientId } from './settings.js';
 // Buying needs GOOGLE_CLIENT_ID (an account to put it on), the link and the webhook's secret, as
 // the pass does; without them the page shows no upgrade and the plans are free and owner only.
 
-const PREFIX = '/build/api/';
+// The dashboard's page (/build/) and the editor's (/build/app/) each ask relative to themselves.
+const PREFIXES = [ '/build/api/', '/build/app/api/' ];
 const LAYOUT_LIMIT = 200;
 const LAYOUT_BYTES = 1024 * 1024;
 const ACCOUNT_BYTES = 25 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const SHARE_PATTERN = /^[A-Za-z0-9_-]{22}$/;
-const SUMMARY = 'id, site, name, share_token, updated_at';
+const SUMMARY = 'id, site, name, share_token, updated_at, lat, lon';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const notFound = () => new HttpError( 404, 'Not found' );
@@ -42,6 +43,7 @@ const badRequest = () => new HttpError( 400, 'Bad request' );
 // The routes, as worker/index.js has them for the app's own Worker (:name a path part).
 const ROUTES = [
 	[ 'GET', 'config', getConfig ],
+	[ 'GET', 'home', getHome ],
 	[ 'POST', 'session', postSession ],
 	[ 'DELETE', 'session', deleteSession ],
 	[ 'GET', 'me', getMe ],
@@ -60,7 +62,7 @@ const ROUTES = [
 
 export function isBuildApi( url ) {
 
-	return url.pathname.startsWith( PREFIX );
+	return PREFIXES.some( prefix => url.pathname.startsWith( prefix ) );
 
 }
 
@@ -72,7 +74,8 @@ export async function buildApi( context ) {
 	const site = request.headers.get( 'Sec-Fetch-Site' );
 	if ( site && site !== 'same-origin' && site !== 'none' ) throw new HttpError( 403, 'Forbidden' );
 	checkSameOrigin( request, url );
-	const parts = url.pathname.slice( PREFIX.length ).split( '/' );
+	const prefix = PREFIXES.find( p => url.pathname.startsWith( p ) );
+	const parts = url.pathname.slice( prefix.length ).split( '/' );
 	let allowed = [];
 	for ( const [ method, path, handler ] of ROUTES ) {
 
@@ -265,6 +268,25 @@ async function getConfig( context ) {
 
 }
 
+// GET home: what the dashboard (/build/) shows, without taking a 3D map view: { googleClientId,
+// signedIn, user?, plan?, premium }.
+async function getHome( context ) {
+
+	const { env, now } = context;
+	const account = await currentAccount( context );
+	const plan = account ? await planOf( env, account ) : null;
+	const home = { googleClientId: googleClientId( env ), signedIn: !! account, premium: premiumFor( env, account, plan ) };
+	if ( account ) {
+
+		home.user = userOf( account );
+		home.plan = await planFor( env, account, plan, now );
+
+	}
+
+	return json( home );
+
+}
+
 // POST session { credential }: World Drive's Google sign-in (accounts.js), answered as the app's
 // own Worker answers it: { user, premium, plan, hasMapsKey }, with the session cookie.
 async function postSession( context ) {
@@ -330,8 +352,8 @@ async function createLayout( context ) {
 	const most = plan.tier === 'free' ? 1 : limitsOf( env ).layouts;
 	if ( count >= most ) throw new HttpError( 403, plan.tier === 'free' ? 'The free plan saves one project. Build Pro saves as many as you like.' : 'Too many projects. Delete some first.' );
 	if ( bytes + fields.data.length > ACCOUNT_BYTES ) throw accountFull();
-	const row = await env.DB.prepare( `INSERT INTO build_layouts ( id, account_id, site, name, data, created_at, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
-		RETURNING ${ SUMMARY }` ).bind( randomToken( 12 ), account.id, fields.site, fields.name, fields.data, now, now ).first();
+	const row = await env.DB.prepare( `INSERT INTO build_layouts ( id, account_id, site, name, data, created_at, updated_at, lat, lon ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+		RETURNING ${ SUMMARY }` ).bind( randomToken( 12 ), account.id, fields.site, fields.name, fields.data, now, now, fields.lat ?? null, fields.lon ?? null ).first();
 	return json( summary( row ), 201, etag( row ) );
 
 }
@@ -365,9 +387,9 @@ async function updateLayout( context ) {
 	}
 
 	const updatedAt = Math.max( now, current.updated_at + 1 );
-	const row = await env.DB.prepare( `UPDATE build_layouts SET name = COALESCE( ?, name ), data = COALESCE( ?, data ), updated_at = ?
+	const row = await env.DB.prepare( `UPDATE build_layouts SET name = COALESCE( ?, name ), data = COALESCE( ?, data ), lat = COALESCE( ?, lat ), lon = COALESCE( ?, lon ), updated_at = ?
 		WHERE id = ? AND account_id = ? AND updated_at = ? RETURNING ${ SUMMARY }` )
-		.bind( fields.name ?? null, fields.data ?? null, updatedAt, params.id, account.id, current.updated_at ).first();
+		.bind( fields.name ?? null, fields.data ?? null, fields.lat ?? null, fields.lon ?? null, updatedAt, params.id, account.id, current.updated_at ).first();
 	if ( ! row ) throw new HttpError( 409, 'This layout was changed somewhere else', { updatedAt: current.updated_at } );
 	return json( summary( row ), 200, etag( row ) );
 
@@ -448,6 +470,9 @@ function readFields( body, { create } ) {
 		// The app's layout format: { version, items: [...], extras: {...}, ... }.
 		if ( ! isObject( body.data ) || ! Array.isArray( body.data.items ) ) throw badRequest();
 		fields.data = JSON.stringify( body.data );
+		// Where it is (layout.js puts the site's lat and lon in it), for the dashboard.
+		const { lat, lon } = body.data;
+		if ( Number.isFinite( lat ) && Number.isFinite( lon ) && Math.abs( lat ) <= 90 && Math.abs( lon ) <= 180 ) Object.assign( fields, { lat, lon } );
 		if ( fields.data.length > LAYOUT_BYTES ) throw new HttpError( 413, 'That project is too big to save' );
 
 	}
@@ -476,7 +501,7 @@ function expectedVersion( request, body ) {
 
 function summary( row ) {
 
-	return { id: row.id, site: row.site, name: row.name, shared: !! row.share_token, shareToken: row.share_token ?? null, updatedAt: row.updated_at };
+	return { id: row.id, site: row.site, name: row.name, shared: !! row.share_token, shareToken: row.share_token ?? null, updatedAt: row.updated_at, lat: row.lat ?? null, lon: row.lon ?? null };
 
 }
 

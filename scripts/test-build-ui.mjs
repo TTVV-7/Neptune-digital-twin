@@ -55,19 +55,22 @@ function assetsOf() {
 
 	};
 
+	// The dashboard (/build/) and the editor (/build/app/).
 	add( join( DIST, 'index.html' ) );
-	add( join( DIST, 'google-maps-logo.svg' ) );
-	walk( join( DIST, 'assets' ) );
-	walk( join( DIST, 'library', 'thumbs' ) );
-	add( join( DIST, 'library', 'library.json' ) );
-	for ( const model of [ 'traffic-cone.glb', 'pickup-truck.glb' ] ) add( join( DIST, 'library', model ) );
+	walk( join( DIST, 'home' ) );
+	add( join( DIST, 'app', 'index.html' ) );
+	add( join( DIST, 'app', 'google-maps-logo.svg' ) );
+	walk( join( DIST, 'app', 'assets' ) );
+	walk( join( DIST, 'app', 'library', 'thumbs' ) );
+	add( join( DIST, 'app', 'library', 'library.json' ) );
+	for ( const model of [ 'traffic-cone.glb', 'pickup-truck.glb' ] ) add( join( DIST, 'app', 'library', model ) );
 	return files;
 
 }
 
 before( async () => {
 
-	if ( ! existsSync( join( DIST, 'index.html' ) ) ) {
+	if ( ! existsSync( join( DIST, 'app', 'index.html' ) ) ) {
 
 		const built = spawnSync( process.execPath, [ join( ROOT, 'node_modules', 'vite', 'bin', 'vite.js' ), 'build', '--config', 'vite.drive.config.js', '--logLevel', 'error' ], { cwd: ROOT, encoding: 'utf8' } );
 		assert.equal( built.status, 0, built.stderr );
@@ -119,7 +122,7 @@ after( async () => {
 
 } );
 
-async function open( path = '/build/' ) {
+async function open( path = '/build/app/' ) {
 
 	await page.goto( server.base + path );
 	await page.waitForFunction( () => window.twin?.sidebar && window.twin.layout, null, { timeout: 60000 } );
@@ -259,12 +262,100 @@ test( 'moving the project\'s site by address', async () => {
 	await page.click( '.site-picker form > button' );
 	await page.waitForSelector( '.site-picker .site-results button' );
 	await Promise.all( [ page.waitForNavigation(), page.click( '.site-picker .site-results button' ) ] );
+	assert.match( page.url(), /\/build\/app\/\?/ );
 	assert.match( page.url(), /at=43\.642600%2C-79\.387100/ );
 	await page.waitForFunction( () => window.twin?.SITE );
 	const site = await page.evaluate( () => window.twin.SITE );
 	assert.equal( site.lat, 43.6426 );
 	assert.equal( site.name, 'CN Tower, Front Street West' );
 	assert.equal( await page.evaluate( () => document.querySelector( '.site-picker .site-name' ).textContent ), 'CN Tower, Front Street West' );
+
+} );
+
+// --- the dashboard (/build/) ---------------------------------------------------------------
+
+async function dashboard() {
+
+	await page.goto( `${ server.base }/build/` );
+	await page.waitForSelector( 'body[data-loaded]', { timeout: 30000 } );
+
+}
+
+test( 'the dashboard signed out: find a site, the two plans, and sign in to keep projects', async () => {
+
+	await page.context().clearCookies();
+	await dashboard();
+	const state = await page.evaluate( () => ( {
+		title: document.querySelector( 'h1' ).textContent,
+		empty: document.getElementById( 'projects-empty' ).textContent,
+		plans: [ ...document.querySelectorAll( '.compare-card .tier' ) ].map( t => t.textContent ),
+		prices: [ ...document.querySelectorAll( '.compare-card .price' ) ].map( t => t.textContent ),
+		example: document.getElementById( 'example' ).getAttribute( 'href' ),
+	} ) );
+	assert.equal( state.title, 'Where\'s the site?' );
+	assert.match( state.empty, /Sign in/ );
+	assert.deepEqual( state.plans, [ 'Free', 'Build Pro' ] );
+	assert.deepEqual( state.prices, [ 'Free', 'US$5/month' ] );
+	assert.match( state.example, /^\/build\/app\/\?at=49\.3054/ );
+	await shot( 'dashboard-signed-out' );
+
+	// An address: its places, each opening the editor there.
+	await page.fill( '#find-query', 'CN Tower' );
+	await page.click( '#find-go' );
+	await page.waitForSelector( '#results a' );
+	const href = await page.getAttribute( '#results a', 'href' );
+	assert.match( href, /\/build\/app\/\?at=43\.642600%2C-79\.387100&place=CN\+Tower%2C\+Front\+Street\+West$/ );
+	await shot( 'dashboard-search' );
+	await Promise.all( [ page.waitForNavigation(), page.click( '#results a' ) ] );
+	await page.waitForFunction( () => window.twin?.SITE );
+	assert.equal( await page.evaluate( () => window.twin.SITE.name ), 'CN Tower, Front Street West' );
+
+} );
+
+test( 'the dashboard signed in: the plan with its views, and projects that open in the editor', async () => {
+
+	await page.goto( `${ server.base }/build/` );
+	const signed = await signInAs( { sub: 'ui-dash', email: 'dash@example.com', name: 'Dana Dash' } );
+	assert.equal( signed.plan.tier, 'free' );
+	// A project saved at Toronto (as the editor saves one: the layout with its site's lat and lon).
+	const saved = await page.evaluate( async () => {
+
+		const data = { version: 2, site: 'CN Tower, Front Street West', lat: 43.6426, lon: - 79.3871, items: [ { name: 'Traffic cone', library: 'traffic-cone', url: 'library/traffic-cone.glb', east: 2, north: 3, heading: 0, up: null } ], extras: {} };
+		const res = await fetch( '/build/app/api/layouts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { site: data.site, name: 'Tower crane pad', data } ) } );
+		return { status: res.status, body: await res.json() };
+
+	} );
+	assert.equal( saved.status, 201, JSON.stringify( saved.body ) );
+	assert.equal( saved.body.lat, 43.6426 );
+	await dashboard();
+	const state = await page.evaluate( () => ( {
+		who: document.getElementById( 'who-name' ).textContent,
+		pill: document.getElementById( 'plan-pill' ).textContent,
+		tier: document.querySelector( '.plan-head .tier' ).textContent,
+		views: document.querySelector( '.meter-value' ).textContent,
+		soon: document.querySelector( '.upgrade' )?.textContent ?? '',
+		projects: [ ...document.querySelectorAll( '.project' ) ].map( p => ( { name: p.querySelector( 'strong' ).textContent, href: p.getAttribute( 'href' ) } ) ),
+		count: document.getElementById( 'project-count' ).textContent,
+	} ) );
+	assert.equal( state.who, 'Dana Dash' );
+	assert.equal( state.pill, 'Free' );
+	assert.equal( state.tier, 'Free' );
+	assert.equal( state.views, '0 / 15' );
+	assert.match( state.soon, /Go Build Pro · US\$5\/month/ );
+	assert.equal( state.count, '1 of 1' );
+	assert.equal( state.projects.length, 1 );
+	assert.equal( state.projects[ 0 ].name, 'Tower crane pad' );
+	assert.match( state.projects[ 0 ].href, new RegExp( `project=${ saved.body.id }` ) );
+	await shot( 'dashboard-signed-in' );
+
+	// Opening it: the editor at Toronto, with the project's cone.
+	await Promise.all( [ page.waitForNavigation(), page.click( '.project' ) ] );
+	await page.waitForFunction( () => window.twin?.models?.entries.some( e => e.library === 'traffic-cone' ), null, { timeout: 30000 } );
+	assert.equal( await page.evaluate( () => window.twin.SITE.lat ), 43.6426 );
+	assert.equal( await page.evaluate( () => document.querySelector( '.site-picker .site-home' ).getAttribute( 'href' ) ), '/build/' );
+	await page.goto( `${ server.base }/build/` );
+	await page.waitForSelector( 'body[data-loaded]' );
+	assert.equal( await page.evaluate( () => document.querySelector( '.meter-value' ).textContent ), '1 / 15', 'opening the editor took a view' );
 
 } );
 

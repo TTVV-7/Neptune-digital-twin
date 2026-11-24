@@ -175,8 +175,8 @@ export function driveSite() {
 		name: 'world-drive-site',
 		transformIndexHtml( html, { path } = {} ) {
 
-			// Only the game's page has the lists (not City Drive's, /city/).
-			if ( path?.startsWith( '/city/' ) ) return html;
+			// Only the game's page has the lists (not City Drive's, /city/, or World Drive Build's, /build/).
+			if ( path?.startsWith( '/city/' ) || path?.startsWith( '/build/' ) ) return html;
 			const lists = [ [ '<!-- places -->', placesList ], ...OFF_EARTH.map( id => [ `<!-- ${ id } places -->`, () => worldPlacesList( id ) ] ) ];
 			for ( const [ list ] of lists ) if ( ! html.includes( list ) ) throw new Error( `drive/index.html has lost its ${ list } list` );
 			return lists.reduce( ( text, [ list, make ] ) => text.replace( list, make() ), html );

@@ -102,7 +102,10 @@ export function setUpSitePicker( site, { toast } ) {
 	const root = document.createElement( 'div' );
 	root.className = 'site-picker';
 	root.innerHTML = `
-		<button type="button" class="site-current" aria-expanded="false" title="Where this project is: click to move it"><span class="site-label">Site</span> <span class="site-name"></span></button>
+		<div class="site-bar">
+			<a class="site-home" href="/build/" title="Your projects and plan">Projects</a>
+			<button type="button" class="site-current" aria-expanded="false" title="Where this project is: click to move it"><span class="site-label">Site</span> <span class="site-name"></span></button>
+		</div>
 		<form class="site-search" hidden>
 			<input type="search" id="site-query" placeholder="Address, city or place" autocomplete="off" aria-label="Find a site">
 			<button type="submit">Find</button>

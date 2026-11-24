@@ -994,3 +994,30 @@ body.has-site-picker.library-open #banner {
 	}
 
 }
+
+.site-picker .site-bar {
+	display: flex;
+	gap: 6px;
+	max-width: 100%;
+	min-width: 0;
+}
+
+.site-picker .site-home {
+	flex: none;
+	padding: 6px 12px;
+	border-radius: 999px;
+	background: var( --panel );
+	border: 1px solid rgba( 255, 255, 255, 0.18 );
+	color: inherit;
+	font-size: 13px;
+	text-decoration: none;
+}
+
+.site-picker .site-home:hover,
+.site-picker .site-current:hover {
+	border-color: rgba( 255, 255, 255, 0.4 );
+}
+
+.site-picker .site-current {
+	min-width: 0;
+}

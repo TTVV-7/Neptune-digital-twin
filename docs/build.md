@@ -2,7 +2,18 @@
 
 **worlddrive.app/build/**: the construction mock-up app (this repository's own app) offered to
 anyone, on World Drive's site and accounts, with a free plan and a paid one, **Build Pro**. It's a
-trial for now: the same app as the Neptune twin, built a second way.
+trial for now: the same app as the Neptune twin, built a second way, kept apart from both the game
+and the Neptune twin.
+
+- **`/build/`, the dashboard** (`drive/build/index.html`, `src/build-home/`): *Where's the site?*
+  Type an address (World Drive's place search) and pick a result to open the editor there; your
+  saved projects, each opening the editor at its site with it loaded; your plan, with the month's
+  3D map views as a gauge and Go Build Pro (or Manage your subscription); Google sign-in. It never
+  takes a 3D map view (it asks `/build/api/home`). Stripe brings buyers back here
+  (`?premium=thanks`), and it waits for Build Pro to show.
+- **`/build/app/`, the editor**: the construction app, at `?at=lat,lon&place=Name`, opening
+  `?project=<id>` from the dashboard; **Projects** (top) goes back to the dashboard and **Site**
+  moves the project.
 
 ## What people get
 
@@ -29,13 +40,15 @@ trial for now: the same app as the Neptune twin, built a second way.
 
 ## How it's put together
 
-- **Page:** `npm run build:drive` builds the app a second time with `--mode worlddrive`
-  (`vite.drive.config.js`'s `buildApp`) into `dist-drive/build/`, with the library and the walking
-  workers copied in. `src/product.js` holds everything that differs in that mode.
-- **Server:** World Drive's Worker answers the app's `/build/api/*` (`worker/drive/build.js`):
+- **Pages:** `npm run build:drive` builds the dashboard into `dist-drive/build/` and the app a
+  second time with `--mode worlddrive` (`vite.drive.config.js`'s `buildApp`) into
+  `dist-drive/build/app/`, with the library and the walking workers copied in. `src/product.js`
+  holds everything that differs in that mode.
+- **Server:** World Drive's Worker answers `/build/api/*` and `/build/app/api/*` (each page asks
+  beside itself; `worker/drive/build.js`):
   config (plan, views, the Maps key), sign-in with World Drive's accounts, saved projects and share
-  links (`build_layouts`), views counted in `build_views` (`worker/drive/migrations/0016_build.sql`,
-  applied by the deploy).
+  links (`build_layouts`, with each project's place), views counted in `build_views`
+  (`worker/drive/migrations/0016_build.sql` and `0017_build_places.sql`, applied by the deploy).
 - **Payments:** Build Pro is a Stripe purchase like the Supporter Pass, through its own Payment
   Link. The same webhook (`supporter.js`) records it as `pass = 'build'`, which never counts as the
   Supporter Pass (and the pass never counts as Build Pro). Cancelling, a failed card, a refund or a
