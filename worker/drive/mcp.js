@@ -1,6 +1,6 @@
 import { HttpError, json, randomToken } from '../http.js';
 import { bearerAccount } from './oauth.js';
-import { planOf } from './build.js';
+import { LOG_KEEP_MS, planOf } from './build.js';
 import { search } from './search.js';
 import CATALOG from './build-catalog.json' with { type: 'json' };
 
@@ -202,7 +202,11 @@ async function call( context, params ) {
 	const hourly = Number.isFinite( Number( env.MCP_HOURLY ) ) && env.MCP_HOURLY !== undefined && env.MCP_HOURLY !== '' ? Number( env.MCP_HOURLY ) : 300;
 	const used = ( await env.DB.prepare( 'SELECT COUNT(*) AS n FROM mcp_calls WHERE account_id = ? AND at > ?' ).bind( account.id, now - 3600 * 1000 ).first() )?.n ?? 0;
 	if ( used >= hourly ) return text( `That's ${ hourly } changes this hour, the most an account makes. Try again later.`, true );
-	await env.DB.prepare( 'INSERT INTO mcp_calls ( account_id, at ) VALUES ( ?, ? )' ).bind( account.id, now ).run();
+	// Calls older than the Privacy Policy keeps them (LOG_KEEP_MS) go as new ones come, a few at a time.
+	await env.DB.batch( [
+		env.DB.prepare( 'INSERT INTO mcp_calls ( account_id, at ) VALUES ( ?, ? )' ).bind( account.id, now ),
+		env.DB.prepare( 'DELETE FROM mcp_calls WHERE rowid IN ( SELECT rowid FROM mcp_calls WHERE at < ? LIMIT 100 )' ).bind( now - LOG_KEEP_MS ),
+	] );
 	try {
 
 		return await tool.run( context, params.arguments ?? {} );

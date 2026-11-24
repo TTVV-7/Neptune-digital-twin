@@ -1,15 +1,16 @@
 import { button, el } from './cloud-dialog.js';
-import { BUILD_APP } from './product.js';
+import { agreeNote, BUILD_APP } from './product.js';
+import { PRO_PHRASE, SOON, intervalChoice } from './build-plans.js';
 
 // What the dialog says: of the Pro equipment pack (bought once), or in World Drive Build (product.js)
-// of Build Pro (a monthly plan).
+// of Build Pro (a subscription, monthly or yearly, build-plans.js).
 const WORDS = BUILD_APP ? {
 	title: 'Build Pro',
-	paying: 'Finish subscribing in Stripe\'s tab, then come back here. Build Pro unlocks as soon as Stripe confirms it.',
-	terms: 'Stripe\'s checkout opens in a new tab. Billed monthly per seat; cancel any time.',
+	paying: 'Opening Stripe\'s checkout...',
+	terms: '',
 	signIn: 'Sign in first, so Build Pro goes to your account.',
-	lead: name => `${ name } is part of Build Pro. Subscribe to place any of these, plus sets, 300 3D map views a month, unlimited projects and share links:`,
-	leadPlain: 'Build Pro: the whole library, sets, 300 3D map views a month, unlimited projects and share links:',
+	lead: name => `${ name } is part of Build Pro. Subscribe to place any of these, plus ${ PRO_PHRASE }:`,
+	leadPlain: `Build Pro: ${ PRO_PHRASE }:`,
 	unlocked: 'Build Pro unlocked',
 	thanks: 'Thanks for subscribing to Build Pro! Sign in with the Google account you paid with to use it.',
 	pending: 'Stripe hasn\'t confirmed your subscription yet. Build Pro unlocks by itself once it has: reload the page in a few minutes.',
@@ -46,10 +47,12 @@ const THANKS_PARAM = 'premium';
 const RECHECK_DELAY = 3000;
 const RECHECKS = 10;
 
-// premium: the premium part of /api/config ({ enabled, link, price, unlocked, clientReferenceId });
+// premium: the premium part of /api/config ({ enabled, link, price, unlocked, clientReferenceId };
+// World Drive Build's: { enabled, unlocked, billing: { enabled, monthly, annual, portal }, price? });
 // user: who is signed in, or null; fetchMe() -> GET /api/me ({ user, premium });
+// checkout( interval ) -> World Drive Build's POST billing/checkout ({ url }, Stripe's page);
 // renderSignIn( element ) -> draws Google's sign-in button there (a promise).
-export function createPremium( { library, sidebar, toast, showBanner, premium, user, fetchMe, renderSignIn } ) {
+export function createPremium( { library, sidebar, toast, showBanner, premium, user, fetchMe, checkout, renderSignIn } ) {
 
 	const pack = library.filter( item => item.premium );
 	const gate = { isLocked: () => ! premium.unlocked, onLocked: item => open( item ) };
@@ -87,18 +90,30 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 	const price = el( 'p', 'price' );
 
 	const buying = el( 'div', 'buying' );
-	const buy = el( 'a', 'buy', BUILD_APP ? 'Subscribe with Stripe' : 'Buy with Stripe' );
-	buy.target = '_blank';
-	buy.rel = 'noopener';
-	buy.addEventListener( 'click', () => say( WORDS.paying ) );
+	// World Drive Build: monthly or yearly, then Stripe's checkout made for this account (checkout(),
+	// billing.js), in this tab, with the renewal sentence by the button. Elsewhere, the Payment Link
+	// in a new tab.
+	const choice = BUILD_APP && premium.billing ? intervalChoice( premium.billing, 'premium-interval' ) : null;
+	const buy = BUILD_APP ? button( 'Subscribe with Stripe', subscribe, 'buy' ) : el( 'a', 'buy', 'Buy with Stripe' );
+	if ( ! BUILD_APP ) {
+
+		buy.target = '_blank';
+		buy.rel = 'noopener';
+		buy.addEventListener( 'click', () => say( WORDS.paying ) );
+
+	}
+
 	const again = button( 'Check again', checkAgain, 'link' );
 	const paid = el( 'p', 'small', 'Paid already?' );
 	paid.append( again );
-	buying.append( buy, el( 'p', 'small', WORDS.terms ), paid );
+	if ( choice ) buying.append( choice.choices, buy, choice.renews, paid );
+	else buying.append( buy, el( 'p', 'small', WORDS.terms ), paid );
 
 	const signIn = el( 'div', 'sign-in' );
 	const slot = el( 'div', 'google-button' );
 	signIn.append( el( 'p', '', WORDS.signIn ), slot );
+	// In World Drive Build, signing in is accepting its Terms: say so by the button.
+	if ( BUILD_APP ) signIn.append( agreeNote() );
 
 	const message = el( 'p', 'message' );
 	message.setAttribute( 'role', 'status' );
@@ -140,14 +155,19 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 			? WORDS.lead( picked.name )
 			: WORDS.leadPlain;
 		price.textContent = premium.price ?? '';
-		price.hidden = ! premium.price;
-		// World Drive Build before buying is set up: no link yet (worker/drive/build.js).
-		const soon = BUILD_APP && ! premium.link;
+		// Signed in to World Drive Build, the monthly and yearly choices carry the prices.
+		price.hidden = ! premium.price || ( !! choice && !! user );
+		// World Drive Build before buying is set up (billing.js's billingSettings): not on sale yet.
+		const soon = BUILD_APP && ! premium.billing?.enabled;
 		buying.hidden = ! user || soon;
 		signIn.hidden = !! user || soon;
-		if ( soon ) say( 'Build Pro opens soon. Until then the free plan has these basics.' );
-		if ( user && ! soon ) buy.href = buyUrl();
-		else if ( ! signInShown ) {
+		if ( BUILD_APP ) buy.disabled = false;
+		if ( soon ) say( `${ SOON } Until then the free plan has these basics.` );
+		if ( user && ! soon ) {
+
+			if ( ! BUILD_APP ) buy.href = buyUrl();
+
+		} else if ( ! signInShown ) {
 
 			signInShown = true;
 			renderSignIn( slot ).catch( () => {
@@ -169,6 +189,29 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 		if ( premium.clientReferenceId ) url.searchParams.set( 'client_reference_id', premium.clientReferenceId );
 		url.searchParams.set( 'prefilled_email', user.email );
 		return url.href;
+
+	}
+
+	// World Drive Build: Stripe's checkout for the interval picked, made by the server for this
+	// account, opened in this tab (Stripe brings them back to the account page). The project saves
+	// as it goes, so nothing is lost by leaving.
+	async function subscribe() {
+
+		buy.disabled = true;
+		say( WORDS.paying );
+		try {
+
+			const { url } = await checkout( choice?.interval() ?? 'month' );
+			window.location.assign( url );
+
+		} catch ( err ) {
+
+			buy.disabled = false;
+			say( err.status === 409 ? err.message : `Couldn't open the checkout: ${ err.message }` );
+			// Subscribed already (in another tab, say): unlock it.
+			if ( err.status === 409 ) refresh().then( now => now && unlocked() );
+
+		}
 
 	}
 

@@ -26,7 +26,7 @@ import { setUpLaydown } from './laydown.js';
 import { setUpTowerCranes } from './tower-crane.js';
 import { setUpRows } from './rows.js';
 import { accountMapsKey, loadConfig, setUpCloud } from './cloud.js';
-import { BUILD_APP, noMapReason, setUpSitePicker } from './product.js';
+import { BUILD_APP, noMapReason, setUpLegalLinks, setUpSitePicker } from './product.js';
 import { setUpLogo } from './logo.js';
 import { getKind } from './kinds.js';
 import { setUpDriving } from './drive-prompt.js';
@@ -334,6 +334,8 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 	const player = setUpPlayer( { scene, camera, controls, driver, getColliders: () => [ ...grounds, models.group ], toast } );
 	// World Drive Build: the project's site, and a search to move it.
 	if ( BUILD_APP ) setUpSitePicker( SITE, { toast } );
+	// And links to its terms, privacy policy and the rest, in the library and the help.
+	if ( BUILD_APP ) setUpLegalLinks();
 	const legend = createLegend( { controls, driver, player, models, getSidebar: () => sidebar, getDriving: () => driving, getLayers: () => layers, getUnderground: () => underground, toggleHelp } );
 	setUpZoom( { canvas: renderer.domElement, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
 

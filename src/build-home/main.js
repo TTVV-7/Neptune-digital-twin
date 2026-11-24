@@ -1,4 +1,5 @@
 import './style.css';
+import { BILLING_PAGE, PLANS, PRO_PHRASE, SOON, dateOf, intervalChoice } from '../build-plans.js';
 
 // World Drive Build's dashboard (worlddrive.app/build/, drive/build/index.html, docs/build.md): find a
 // site by address and open the editor there (/build/app/), your saved projects, your plan, and
@@ -262,12 +263,6 @@ async function showProjects() {
 
 // --- the plan ------------------------------------------------------------------------------
 
-const PLANS = {
-	free: { name: 'Free', blurb: 'Everyday site pieces, 15 3D map views a month, one saved project.' },
-	pro: { name: 'Build Pro', blurb: 'The whole library and sets, 300 3D map views a month, unlimited projects and share links.' },
-	owner: { name: 'Owner', blurb: 'Everything, with 3D map views that are never counted.' },
-};
-
 function showPlan() {
 
 	const body = $( 'plan-body' );
@@ -276,6 +271,7 @@ function showPlan() {
 	if ( ! home?.signedIn ) {
 
 		body.append( compare( premium ) );
+		if ( premium.billing?.enabled ) body.append( upgrade( premium ) );
 		return;
 
 	}
@@ -288,6 +284,8 @@ function showPlan() {
 	head.querySelector( '.tier' ).textContent = info.name;
 	head.querySelector( '.plan-blurb' ).textContent = info.blurb;
 	body.append( head );
+	const billed = billedLine( plan );
+	if ( billed ) body.append( billed );
 
 	// 3D map views this month: a gauge, as a site's fuel or hours meter.
 	const views = plan.views;
@@ -309,17 +307,60 @@ function showPlan() {
 	body.append( claudeCard( plan.tier ) );
 	body.append( logoCard( plan.tier ) );
 	if ( plan.tier === 'free' ) body.append( upgrade( premium ) );
-	else if ( premium.manage ) {
+	else if ( plan.subscribed || premium.billing?.portal ) body.append( manage( premium ) );
 
-		const manage = document.createElement( 'a' );
-		manage.className = 'plain-link';
-		manage.href = premium.manage;
-		manage.target = '_blank';
-		manage.rel = 'noopener';
-		manage.textContent = 'Manage your subscription';
-		body.append( manage );
+}
 
-	}
+// How Build Pro is paid for, under the plan's name: "US$5/month · renews on 3 Jan 2027", "ends on",
+// or given by World Drive. null when there's nothing to say (free, the owner).
+function billedLine( plan ) {
+
+	let text = '';
+	if ( plan.subscribed ) {
+
+		const when = plan.renewsAt ? ` · ${ plan.cancelAtPeriodEnd ? 'ends' : 'renews' } on ${ dateOf( plan.renewsAt ) }` : '';
+		text = `${ plan.priceLabel ?? 'Subscribed' }${ when }`;
+
+	} else if ( plan.tier === 'pro' && plan.comped ) text = 'Given to you by World Drive';
+	if ( ! text ) return null;
+	return Object.assign( document.createElement( 'p' ), { className: 'billed', textContent: text } );
+
+}
+
+// Build Pro's: Manage billing (Stripe's billing portal for this account's customer: cancel, card,
+// monthly or yearly, invoices), and the page where billing's shown in full.
+function manage( premium ) {
+
+	const box = document.createElement( 'div' );
+	box.className = 'manage';
+	if ( premium.billing?.portal ) box.append( portalButton( 'Manage billing' ) );
+	box.append( Object.assign( document.createElement( 'a' ), { className: 'plain-link', href: BILLING_PAGE, textContent: 'Billing details' } ) );
+	return box;
+
+}
+
+// A button that opens Stripe's billing portal for this account, in this tab (Stripe brings them
+// back to the account page).
+function portalButton( label ) {
+
+	const open = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'button portal', textContent: label } );
+	open.addEventListener( 'click', async () => {
+
+		open.disabled = true;
+		try {
+
+			const { url } = await call( 'POST', 'billing/portal' );
+			location.assign( url );
+
+		} catch ( err ) {
+
+			toast( `Couldn't open billing: ${ err.message }` );
+			open.disabled = false;
+
+		}
+
+	} );
+	return open;
 
 }
 
@@ -468,27 +509,59 @@ function claudeCard( tier ) {
 
 }
 
+// Going Build Pro: monthly or yearly, then Stripe's checkout (a Checkout Session made for this
+// account, billing.js) in this tab. Signed out it asks to sign in first, so Build Pro has an
+// account to go to; until it's on sale it says it opens soon.
 function upgrade( premium ) {
 
 	const box = document.createElement( 'div' );
 	box.className = 'upgrade';
-	if ( ! premium.link ) {
+	const billing = premium.billing;
+	const lead = document.createElement( 'p' );
+	if ( ! billing?.enabled ) {
 
-		box.innerHTML = '<p><strong>Build Pro opens soon.</strong> The whole library, sets, 300 views a month, unlimited projects and share links.</p>';
+		lead.innerHTML = `<strong>${ SOON }</strong> `;
+		lead.append( `Build Pro: ${ PRO_PHRASE }.` );
+		box.append( lead );
 		return box;
 
 	}
 
-	const link = document.createElement( 'a' );
-	link.className = 'button';
-	const url = new URL( premium.link );
-	if ( premium.clientReferenceId ) url.searchParams.set( 'client_reference_id', premium.clientReferenceId );
-	if ( home.user?.email?.includes( '@' ) ) url.searchParams.set( 'prefilled_email', home.user.email );
-	link.href = url.href;
-	link.target = '_blank';
-	link.rel = 'noopener';
-	link.textContent = `Go Build Pro · ${ premium.price }`;
-	box.append( link, Object.assign( document.createElement( 'p' ), { className: 'small', textContent: 'Billed monthly through Stripe. Cancel any time.' } ) );
+	lead.innerHTML = '<strong>Build Pro:</strong> ';
+	lead.append( `${ PRO_PHRASE }.` );
+	const choice = intervalChoice( billing, 'upgrade-interval' );
+	const go = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'button go-pro', textContent: 'Go Build Pro' } );
+	const said = Object.assign( document.createElement( 'p' ), { className: 'small upgrade-note', hidden: true } );
+	go.addEventListener( 'click', async () => {
+
+		said.hidden = true;
+		if ( ! home?.signedIn ) {
+
+			said.textContent = 'Sign in first (top right), so Build Pro goes to your account.';
+			said.hidden = false;
+			$( 'google-button' ).scrollIntoView( { block: 'nearest' } );
+			return;
+
+		}
+
+		go.disabled = true;
+		try {
+
+			const { url } = await call( 'POST', 'billing/checkout', { interval: choice.interval() } );
+			location.assign( url );
+
+		} catch ( err ) {
+
+			said.textContent = err.status === 409 ? err.message : `Couldn't start the checkout: ${ err.message }`;
+			said.hidden = false;
+			go.disabled = false;
+			// Subscribed already (in another tab, say): show it.
+			if ( err.status === 409 ) load();
+
+		}
+
+	} );
+	box.append( lead, choice.choices, go, choice.renews, said );
 	return box;
 
 }
@@ -498,7 +571,8 @@ function compare( premium ) {
 
 	const wrap = document.createElement( 'div' );
 	wrap.className = 'compare';
-	for ( const [ tier, price ] of [ [ 'free', 'Free' ], [ 'pro', premium.link ? premium.price : 'Opens soon' ] ] ) {
+	const billing = premium.billing;
+	for ( const [ tier, price ] of [ [ 'free', 'Free' ], [ 'pro', billing?.enabled ? billing.monthly : 'Opens soon' ] ] ) {
 
 		const card = document.createElement( 'div' );
 		card.className = `compare-card compare-${ tier }`;
@@ -511,6 +585,54 @@ function compare( premium ) {
 	}
 
 	return wrap;
+
+}
+
+// --- notices -------------------------------------------------------------------------------
+
+// A line above the page that needs reading: a failed payment, Build Pro ending, back from Stripe's
+// checkout. One for each `key`, replaced when said again. action: an element (a button or link).
+function notice( key, text, { action = null, tone = '' } = {} ) {
+
+	const list = $( 'notices' );
+	let line = list.querySelector( `[data-notice="${ key }"]` );
+	if ( ! line ) {
+
+		line = document.createElement( 'div' );
+		line.dataset.notice = key;
+		line.setAttribute( 'role', 'status' );
+		list.append( line );
+
+	}
+
+	line.className = tone ? `notice notice-${ tone }` : 'notice';
+	const words = document.createElement( 'span' );
+	words.textContent = text;
+	line.replaceChildren( words );
+	if ( action ) line.append( action );
+	list.hidden = false;
+
+}
+
+function clearNotice( key ) {
+
+	const list = $( 'notices' );
+	list.querySelector( `[data-notice="${ key }"]` )?.remove();
+	list.hidden = ! list.children.length;
+
+}
+
+// What the subscription needs said: its card failed (Stripe retries it, and Pro stays on meanwhile),
+// or it's been cancelled and ends when the period paid for does.
+function showNotices() {
+
+	const plan = home?.plan;
+	const portal = !! home?.premium?.billing?.portal;
+	const fix = label => portal ? portalButton( label ) : Object.assign( document.createElement( 'a' ), { className: 'plain-link', href: BILLING_PAGE, textContent: label } );
+	if ( plan?.pastDue ) notice( 'past-due', 'Payment failed - update your card to keep Build Pro.', { action: fix( 'Update card' ), tone: 'warn' } );
+	else clearNotice( 'past-due' );
+	if ( plan?.cancelAtPeriodEnd && plan.renewsAt ) notice( 'ends', `Pro ends on ${ dateOf( plan.renewsAt ) }.`, { action: fix( 'Keep Build Pro' ) } );
+	else clearNotice( 'ends' );
 
 }
 
@@ -593,11 +715,33 @@ $( 'sign-out' ).addEventListener( 'click', async () => {
 
 // --- start -------------------------------------------------------------------------------
 
+// The site this page was opened from, as its host ('direct' for none, or this site): sent with the
+// first ask only, so the owner's admin page counts the visit and where it came from
+// (worker/drive/build.js), never who. Later asks (after signing in, or paying) send nothing.
+let openedFrom = referrerHost();
+
+function referrerHost() {
+
+	try {
+
+		const from = new URL( document.referrer ).hostname.toLowerCase().replace( /^www\./, '' );
+		return from && from !== location.hostname.replace( /^www\./, '' ) ? from : 'direct';
+
+	} catch {
+
+		return 'direct';
+
+	}
+
+}
+
 async function load() {
 
 	try {
 
-		home = await call( 'GET', 'home' );
+		const path = openedFrom === null ? 'home' : `home?ref=${ encodeURIComponent( openedFrom ) }`;
+		openedFrom = null;
+		home = await call( 'GET', path );
 
 	} catch {
 
@@ -608,34 +752,57 @@ async function load() {
 
 	showAccount();
 	showPlan();
+	showNotices();
 	await showProjects();
 	// All shown (for the tests).
 	document.body.dataset.loaded = 'yes';
 
 }
 
-// Back from Stripe (?premium=thanks): ask until Build Pro shows (the webhook can take a moment).
+// Back from Stripe's checkout. ?checkout=done (or ?premium=thanks, from the old Payment Link) asks
+// GET me until Build Pro shows, because the webhook can take a moment; ?checkout=cancelled says
+// nothing was bought.
+const RECHECKS = 10;
+const RECHECK_DELAY = 3000;
 async function welcomeBack() {
 
 	const url = new URL( location.href );
-	if ( url.searchParams.get( 'premium' ) !== 'thanks' ) return;
+	const back = url.searchParams.get( 'checkout' ) ?? ( url.searchParams.get( 'premium' ) === 'thanks' ? 'done' : null );
+	if ( back !== 'done' && back !== 'cancelled' ) return;
+	url.searchParams.delete( 'checkout' );
 	url.searchParams.delete( 'premium' );
 	history.replaceState( null, '', url.href );
-	for ( let i = 0; i < 10; i ++ ) {
+	if ( back === 'cancelled' ) {
 
-		if ( home?.plan && home.plan.tier !== 'free' ) {
+		notice( 'checkout', 'Checkout cancelled. Nothing was charged.' );
+		return;
 
-			toast( 'Build Pro is on. Thanks for subscribing!' );
+	}
+
+	if ( ! home?.signedIn ) {
+
+		notice( 'checkout', 'Thanks for subscribing! Sign in with the account you subscribed with to use Build Pro.' );
+		return;
+
+	}
+
+	for ( let i = 0; i < RECHECKS; i ++ ) {
+
+		const me = await call( 'GET', 'me' ).catch( () => null );
+		if ( me?.plan && me.plan.tier !== 'free' ) {
+
+			await load();
+			notice( 'checkout', 'Build Pro is on. Thanks for subscribing!', { tone: 'good' } );
 			return;
 
 		}
 
-		await new Promise( resolve => setTimeout( resolve, 3000 ) );
-		await load();
+		notice( 'checkout', 'Thanks! Waiting for Stripe to confirm your subscription...' );
+		await new Promise( resolve => setTimeout( resolve, RECHECK_DELAY ) );
 
 	}
 
-	toast( 'Stripe hasn\'t confirmed it yet. Build Pro turns on by itself once it has: reload in a few minutes.' );
+	notice( 'checkout', 'Stripe hasn\'t confirmed it yet. Build Pro turns on by itself once it has: reload in a few minutes.' );
 
 }
 

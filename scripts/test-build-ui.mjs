@@ -4,7 +4,11 @@
 // so Google's tiles never load (their key here is a test one): what's checked is what the page is
 // given and does. Signed out: no key prompt, flat ground, and why; the free plan's library open
 // and the rest locked behind Build Pro (sets too), with its dialog; signed in, the Maps key; the
-// owner with everything; and moving the project's site by address.
+// owner with everything; and moving the project's site by address. Going Build Pro: monthly or
+// yearly, then Stripe's checkout (a stand-in for Stripe's API on this machine makes it; the page
+// Stripe would show is answered here), back on the dashboard until Build Pro shows, Manage billing,
+// and the notices for a failed payment and Pro ending; and Build Pro opening soon while it isn't
+// on sale.
 //
 // Needs Playwright with Chromium. TEST_SCREENSHOTS=<folder> saves pictures.
 
@@ -15,19 +19,24 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { join, relative } from 'node:path';
 import { after, before, test } from 'node:test';
-import { CLIENT_ID, ROOT, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
+import { CLIENT_ID, ROOT, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_BUILD_UI_PORT ) || 8785;
 const SHOTS = process.env.TEST_SCREENSHOTS;
 const MAPS_KEY = 'test-maps-key-not-real';
-const BUILD_LINK = 'https://buy.stripe.com/test_build';
+const WEBHOOK_SECRET = 'whsec_test_build_ui';
+const MONTHLY = 'price_buildmonthly0001';
+const ANNUAL = 'price_buildannual0001';
+// Stripe's pages (checkout and the billing portal), answered here with a stand-in page.
+const STRIPE_PAGES = /^https:\/\/(checkout|billing)\.stripe\.com\//;
 const DIST = join( ROOT, 'dist-drive', 'build' );
 
 let server;
 let keys;
 let googleKey;
 let upstream;
+let stripe;
 let browser;
 let page;
 const errors = [];
@@ -86,6 +95,7 @@ before( async () => {
 
 	} );
 	await new Promise( resolve => upstream.listen( 0, '127.0.0.1', resolve ) );
+	stripe = await serveStripe();
 	googleKey = await makeKey( 'build-ui-key-1' );
 	keys = await serveKeys( [ googleKey.jwk ] );
 	server = await startWorker( {
@@ -95,10 +105,11 @@ before( async () => {
 			GOOGLE_MAPS_API_KEY: MAPS_KEY,
 			GOOGLE_CLIENT_ID: CLIENT_ID,
 			GOOGLE_JWKS_URL: keys.url,
-			STRIPE_WEBHOOK_SECRET: 'whsec_test_build_ui',
-			BUILD_PAYMENT_LINK: BUILD_LINK,
-			BUILD_PAYMENT_LINK_ID: 'plink_build0000000000000001',
-			BUILD_PRICE: 'US$5/month',
+			STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+			STRIPE_SECRET_KEY: [ 'rk', 'test', 'builduse0000000000000001' ].join( '_' ),
+			STRIPE_API_BASE: stripe.url,
+			BUILD_PRICE_MONTHLY: MONTHLY,
+			BUILD_PRICE_ANNUAL: ANNUAL,
 			ADMIN_EMAILS: 'boss@example.com',
 			SEARCH_UPSTREAM: `http://127.0.0.1:${ upstream.address().port }/search`,
 		},
@@ -109,7 +120,14 @@ before( async () => {
 	browser = await chromium.launch( { args: [ '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader' ] } );
 	page = await browser.newPage( { viewport: { width: 1280, height: 800 } } );
 	page.on( 'pageerror', e => errors.push( String( e ) ) );
-	await page.route( '**/*', route => route.request().url().startsWith( server.base ) ? route.continue() : route.abort() );
+	await page.route( '**/*', route => {
+
+		const url = route.request().url();
+		if ( url.startsWith( server.base ) ) return route.continue();
+		if ( STRIPE_PAGES.test( url ) ) return route.fulfill( { contentType: 'text/html', body: '<!doctype html><title>Stripe</title><p>Stripe\'s page' } );
+		return route.abort();
+
+	} );
 
 } );
 
@@ -119,8 +137,98 @@ after( async () => {
 	server?.stop();
 	keys?.close();
 	upstream?.close();
+	stripe?.close();
 
 } );
+
+// A stand-in for Stripe's API (STRIPE_API_BASE): customers, Checkout Sessions and billing portal
+// sessions, answered as Stripe does (only the fields read), each request kept: { method, path, form }.
+async function serveStripe() {
+
+	const requests = [];
+	let made = 0;
+	const stub = createServer( async ( req, res ) => {
+
+		let body = '';
+		for await ( const chunk of req ) body += chunk;
+		const form = Object.fromEntries( new URLSearchParams( body ) );
+		requests.push( { method: req.method, path: req.url, form } );
+		let status = 200;
+		let answer;
+		if ( req.method === 'POST' && req.url === '/v1/customers' ) answer = { id: `cus_ui${ ++ made }`, object: 'customer' };
+		else if ( req.method === 'POST' && req.url === '/v1/checkout/sessions' ) answer = { id: `cs_test_ui${ ++ made }`, object: 'checkout.session', url: `https://checkout.stripe.com/c/pay/cs_test_ui${ made }` };
+		else if ( req.method === 'POST' && req.url === '/v1/billing_portal/sessions' ) answer = { id: 'bps_ui', object: 'billing_portal.session', url: 'https://billing.stripe.com/p/session/test_ui' };
+		else if ( req.method === 'GET' && ( req.url.startsWith( '/v1/subscriptions?' ) || req.url.startsWith( '/v1/checkout/sessions?' ) ) ) answer = { object: 'list', data: [] };
+		else {
+
+			status = 404;
+			answer = { error: { type: 'invalid_request_error', message: 'Unrecognized request URL' } };
+
+		}
+
+		res.writeHead( status, { 'Content-Type': 'application/json' } );
+		res.end( JSON.stringify( answer ) );
+
+	} );
+	await new Promise( resolve => stub.listen( 0, '127.0.0.1', resolve ) );
+	return { url: `http://127.0.0.1:${ stub.address().port }`, requests, close: () => stub.close() };
+
+}
+
+// Stripe's webhook, signed as Stripe signs it.
+async function webhook( event ) {
+
+	const body = JSON.stringify( event );
+	const res = await fetch( `${ server.base }/api/stripe/webhook`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': stripeSignature( body, WEBHOOK_SECRET ) }, body } );
+	assert.equal( res.status, 200, await res.text() );
+
+}
+
+let events = 0;
+const now = () => Math.floor( Date.now() / 1000 );
+
+// The checkout's completed Checkout Session, as Stripe sends it for one billing.js made.
+function checkoutDone( made ) {
+
+	return { id: `evt_ui_checkout_${ ++ events }`, object: 'event', type: 'checkout.session.completed', livemode: false, created: now(), data: { object: {
+		id: `cs_test_done${ events }`, object: 'checkout.session', mode: 'subscription', payment_status: 'paid', amount_total: 5000, currency: 'usd',
+		client_reference_id: made.client_reference_id, metadata: { account_id: made.client_reference_id, pass: 'build' }, customer: made.customer,
+		customer_details: { email: '' }, customer_email: null, payment_intent: null, payment_link: null, subscription: 'sub_ui_pro',
+	} } };
+
+}
+
+// Its subscription, as customer.subscription.updated says it (yearly, renewing in 30 days).
+function subscriptionNow( made, { status = 'active', cancel = false, created = now() } = {} ) {
+
+	const end = created + 30 * 24 * 3600;
+	return { id: `evt_ui_sub_${ ++ events }`, object: 'event', type: 'customer.subscription.updated', livemode: false, created, data: { object: {
+		id: 'sub_ui_pro', object: 'subscription', status, customer: made.customer, metadata: { account_id: made.client_reference_id, pass: 'build' },
+		cancel_at_period_end: cancel, cancel_at: null, canceled_at: null, latest_invoice: null,
+		items: { data: [ { quantity: 1, current_period_start: created - 3600, current_period_end: end, price: { id: ANNUAL, unit_amount: 5000, currency: 'usd', recurring: { interval: 'year' } } } ] },
+	} } };
+
+}
+
+// The Checkout Sessions asked of Stripe since the `from`th request.
+const sessionsSince = from => stripe.requests.slice( from ).filter( r => r.path === '/v1/checkout/sessions' ).map( r => r.form );
+
+// Build Pro not on sale (no Stripe settings, say): the server's answers as they'd be then.
+const PLAN_ANSWERS = /\/build\/(app\/)?api\/(home|config|me)(\?|$)/;
+async function notOnSale( on ) {
+
+	if ( ! on ) return page.unroute( PLAN_ANSWERS );
+	await page.route( PLAN_ANSWERS, async route => {
+
+		const res = await route.fetch();
+		const body = await res.json();
+		body.premium = { ...body.premium, billing: { ...body.premium.billing, enabled: false } };
+		delete body.premium.price;
+		await route.fulfill( { response: res, json: body } );
+
+	} );
+
+}
 
 async function open( path = '/build/app/' ) {
 
@@ -205,6 +313,8 @@ test( 'a locked item or set opens Build Pro\'s dialog; signed out it asks to sig
 	assert.match( dialog.lead, /is part of Build Pro/ );
 	assert.equal( dialog.price, 'US$5/month' );
 	assert.equal( dialog.signIn, true );
+	assert.doesNotMatch( dialog.lead, /unlimited|per seat/ );
+	assert.match( dialog.lead, /300 3D map views a month, 200 projects/ );
 	await shot( 'build-pro-dialog' );
 	await page.keyboard.press( 'Escape' );
 	// A set with Pro pieces is locked too.
@@ -231,14 +341,59 @@ test( 'signed in on the free plan: the Maps key from the server, and a free item
 	await page.mouse.down();
 	await page.mouse.up();
 	await page.waitForFunction( () => window.twin.models.entries.some( e => e.library === 'traffic-cone' && ! e.placing ) );
-	// Locked for a free account: the dialog offers Stripe with this account on it.
+	// Locked for a free account: the dialog offers monthly or yearly, each saying it renews, and
+	// Stripe's checkout made for this account.
 	await page.click( '#library .card[data-item="tri-tri"]' );
 	await page.waitForSelector( '.premium-dialog[open]' );
-	const href = await page.evaluate( () => document.querySelector( '.premium-dialog a.buy' ).href );
-	assert.ok( href.startsWith( BUILD_LINK ), href );
-	assert.match( href, /client_reference_id=\d+/ );
-	assert.match( href, /prefilled_email=free%40example\.com/ );
+	const offer = () => page.evaluate( () => {
+
+		const d = document.querySelector( '.premium-dialog' );
+		return {
+			choices: [ ...d.querySelectorAll( '.intervals label' ) ].map( l => l.textContent ),
+			picked: d.querySelector( '.intervals input:checked' ).value,
+			renews: d.querySelector( '.renews' ).textContent,
+			button: d.querySelector( 'button.buy' ).textContent,
+			text: d.textContent,
+		};
+
+	} );
+	const yearly = await offer();
+	assert.deepEqual( yearly.choices, [ 'Yearly: US$50/year - 2 months free', 'Monthly: US$5/month' ] );
+	assert.equal( yearly.picked, 'year' );
+	assert.equal( yearly.renews, 'Renews automatically every year until you cancel. Cancel any time in your account.' );
+	assert.equal( yearly.button, 'Subscribe with Stripe' );
+	assert.doesNotMatch( yearly.text, /per seat|unlimited/ );
+	await page.click( '.premium-dialog .intervals input[value="month"]' );
+	assert.equal( ( await offer() ).renews, 'Renews automatically every month until you cancel. Cancel any time in your account.' );
+	await shot( 'build-pro-dialog-signed-in' );
+	const from = stripe.requests.length;
+	await Promise.all( [ page.waitForURL( STRIPE_PAGES ), page.click( '.premium-dialog button.buy' ) ] );
+	assert.match( page.url(), /^https:\/\/checkout\.stripe\.com\/c\/pay\/cs_test_ui\d+$/ );
+	const [ made ] = sessionsSince( from );
+	assert.equal( made[ 'line_items[0][price]' ], MONTHLY );
+	assert.equal( made[ 'line_items[0][quantity]' ], '1' );
+	assert.match( made.client_reference_id, /^[1-9]\d*$/ );
+
+} );
+
+test( 'the editor while Build Pro isn\'t on sale: it opens soon', async () => {
+
+	await notOnSale( true );
+	await open();
+	await library( true );
+	await page.click( '#library .card[data-item="tri-tri"]' );
+	await page.waitForSelector( '.premium-dialog[open]' );
+	const dialog = await page.evaluate( () => {
+
+		const d = document.querySelector( '.premium-dialog' );
+		return { buying: ! d.querySelector( '.buying' ).hidden, message: d.querySelector( '.message' ).textContent, price: d.querySelector( '.price' ).hidden };
+
+	} );
+	assert.equal( dialog.buying, false );
+	assert.equal( dialog.price, true );
+	assert.match( dialog.message, /Build Pro opens soon/ );
 	await page.keyboard.press( 'Escape' );
+	await notOnSale( false );
 
 } );
 
@@ -299,6 +454,12 @@ test( 'the dashboard signed out: find a site, the two plans, and sign in to keep
 	assert.match( state.example, /^\/build\/app\/\?at=49\.3054/ );
 	await shot( 'dashboard-signed-out' );
 
+	// Going Build Pro signed out: sign in first.
+	assert.equal( await page.textContent( '.upgrade .renews' ), 'Renews automatically every year until you cancel. Cancel any time in your account.' );
+	await page.click( '.upgrade .go-pro' );
+	await page.locator( '.upgrade-note', { hasText: 'Sign in first' } ).waitFor();
+	assert.doesNotMatch( await page.textContent( '#plan-body' ), /unlimited|per seat/ );
+
 	// An address: its places, each opening the editor there.
 	await page.fill( '#find-query', 'CN Tower' );
 	await page.click( '#find-go' );
@@ -341,7 +502,10 @@ test( 'the dashboard signed in: the plan with its views, and projects that open 
 	assert.equal( state.pill, 'Free' );
 	assert.equal( state.tier, 'Free' );
 	assert.equal( state.views, '0 / 15' );
-	assert.match( state.soon, /Go Build Pro · US\$5\/month/ );
+	assert.match( state.soon, /Go Build Pro/ );
+	assert.match( state.soon, /Yearly: US\$50\/year - 2 months free/ );
+	assert.match( state.soon, /Renews automatically every year until you cancel\. Cancel any time in your account\./ );
+	assert.doesNotMatch( state.soon, /unlimited|per seat/ );
 	assert.equal( state.count, '1 of 1' );
 	assert.equal( state.projects.length, 1 );
 	assert.equal( state.projects[ 0 ].name, 'Tower crane pad' );
@@ -405,6 +569,83 @@ test( 'starting a project from the dashboard, moving it, and renaming and deleti
 	page.once( 'dialog', d => d.accept() );
 	await page.click( '.project-actions button:has-text("Delete")' );
 	await page.locator( '.project' ).waitFor( { state: 'detached' } );
+
+} );
+
+test( 'going Build Pro from the dashboard: Stripe\'s checkout, back until it shows, Manage billing, and the notices', async () => {
+
+	await page.goto( `${ server.base }/build/` );
+	await page.context().clearCookies();
+	await signInAs( { sub: 'ui-buyer', email: 'buyer@example.com', name: 'Bea Buyer' } );
+	await dashboard();
+	assert.equal( await page.isVisible( '.manage' ), false );
+	const from = stripe.requests.length;
+	await Promise.all( [ page.waitForURL( STRIPE_PAGES ), page.click( '.upgrade .go-pro' ) ] );
+	const [ made ] = sessionsSince( from );
+	assert.equal( made[ 'line_items[0][price]' ], ANNUAL, 'yearly, as picked to begin with' );
+	assert.equal( made.mode, 'subscription' );
+	assert.match( made.customer, /^cus_ui\d+$/ );
+
+	// Cancelled at Stripe: back with nothing charged.
+	await page.goto( `${ server.base }/build/?checkout=cancelled` );
+	await page.locator( '.notice', { hasText: 'Checkout cancelled. Nothing was charged.' } ).waitFor();
+	assert.equal( new URL( page.url() ).search, '' );
+
+	// Paid: back on ?checkout=done, it asks until Stripe's webhook has said so.
+	await page.goto( `${ server.base }/build/?checkout=done` );
+	await page.locator( '.notice', { hasText: 'Waiting for Stripe' } ).waitFor();
+	await webhook( checkoutDone( made ) );
+	await webhook( subscriptionNow( made ) );
+	await page.locator( '.notice-good', { hasText: 'Build Pro is on' } ).waitFor( { timeout: 15000 } );
+	const pro = await page.evaluate( () => ( {
+		tier: document.querySelector( '.plan-head .tier' ).textContent,
+		billed: document.querySelector( '.billed' ).textContent,
+		manage: document.querySelector( '.manage button' )?.textContent,
+		details: document.querySelector( '.manage a' )?.getAttribute( 'href' ),
+		upgrade: !! document.querySelector( '.upgrade' ),
+	} ) );
+	assert.equal( pro.tier, 'Build Pro' );
+	assert.match( pro.billed, /^US\$50\/year · renews on \d{1,2} \w{3} \d{4}$/ );
+	assert.equal( pro.manage, 'Manage billing' );
+	assert.equal( pro.details, '/build/account/#billing' );
+	assert.equal( pro.upgrade, false );
+	await shot( 'dashboard-pro' );
+
+	// Manage billing: Stripe's billing portal for this account's customer.
+	const before = stripe.requests.length;
+	await Promise.all( [ page.waitForURL( /^https:\/\/billing\.stripe\.com\// ), page.click( '.manage button' ) ] );
+	const portal = stripe.requests.slice( before ).find( r => r.path === '/v1/billing_portal/sessions' );
+	assert.equal( portal.form.customer, made.customer );
+
+	// Cancelled in the portal: Pro ends at the period's end, and the dashboard says when.
+	await webhook( subscriptionNow( made, { cancel: true, created: now() + 1 } ) );
+	await dashboard();
+	await page.locator( '.notice', { hasText: /^Pro ends on \d{1,2} \w{3} \d{4}\./ } ).waitFor();
+	assert.match( await page.textContent( '.billed' ), /ends on/ );
+
+	// A renewal's card failed: Pro stays on while Stripe retries, and the dashboard asks for a new card.
+	await webhook( subscriptionNow( made, { status: 'past_due', created: now() + 2 } ) );
+	await dashboard();
+	await page.locator( '.notice-warn', { hasText: 'Payment failed - update your card' } ).waitFor();
+	assert.equal( await page.textContent( '.notice-warn button' ), 'Update card' );
+	assert.equal( await page.textContent( '.plan-head .tier' ), 'Build Pro' );
+	await shot( 'dashboard-past-due' );
+
+} );
+
+test( 'the dashboard while Build Pro isn\'t on sale: it opens soon', async () => {
+
+	await page.context().clearCookies();
+	await notOnSale( true );
+	await dashboard();
+	assert.deepEqual( await page.evaluate( () => [ ...document.querySelectorAll( '.compare-card .price' ) ].map( t => t.textContent ) ), [ 'Free', 'Opens soon' ] );
+	assert.equal( await page.isVisible( '.upgrade' ), false );
+	await signInAs( { sub: 'ui-soon', email: 'soon@example.com', name: 'Sue Soon' } );
+	await dashboard();
+	const upgrade = await page.textContent( '.upgrade' );
+	assert.match( upgrade, /^Build Pro opens soon\./ );
+	assert.equal( await page.isVisible( '.upgrade .go-pro' ), false );
+	await notOnSale( false );
 
 } );
 

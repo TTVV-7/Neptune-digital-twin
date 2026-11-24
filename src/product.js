@@ -182,3 +182,52 @@ export function setUpSitePicker( site, { toast } ) {
 	}
 
 }
+
+// Build's legal pages (drive/site/legal.js's BUILD_LEGAL_LINKS, which can't be imported here: it's
+// built in Node), opened in a new tab so the project stays open.
+const LEGAL_LINKS = [
+	[ 'Terms', '/build/terms/' ],
+	[ 'Privacy', '/build/privacy/' ],
+	[ 'Cookies', '/build/privacy/#cookies' ],
+	[ 'Refunds', '/build/refunds/' ],
+	[ 'Acceptable use', '/build/acceptable-use/' ],
+	[ 'Credits', '/build/credits/' ],
+];
+
+function legalLink( [ name, href ] ) {
+
+	const link = document.createElement( 'a' );
+	link.href = href;
+	link.target = '_blank';
+	link.rel = 'noopener';
+	link.textContent = name;
+	return link;
+
+}
+
+// The line beside each Google sign-in button: signing in is accepting the Terms (the clickwrap the
+// Terms of Service count on), so it has to be there wherever the button is.
+export function agreeNote() {
+
+	const note = document.createElement( 'p' );
+	note.className = 'agree-note';
+	note.append( 'By continuing you agree to the ', legalLink( [ 'Terms', '/build/terms/' ] ), ' and ', legalLink( [ 'Privacy Policy', '/build/privacy/' ] ), '.' );
+	return note;
+
+}
+
+// A small line of links to the legal pages at the foot of the library and of the help (H).
+export function setUpLegalLinks() {
+
+	for ( const place of [ document.querySelector( '#library footer' ), document.querySelector( '#help' ) ] ) {
+
+		if ( ! place ) continue;
+		const line = document.createElement( 'nav' );
+		line.className = 'legal-links';
+		line.setAttribute( 'aria-label', 'Legal' );
+		LEGAL_LINKS.forEach( ( item, i ) => line.append( ...i ? [ ' · ' ] : [], legalLink( item ) ) );
+		place.append( line );
+
+	}
+
+}

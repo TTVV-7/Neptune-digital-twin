@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>Your account · World Drive Build</title>
+		<meta name="description" content="Your World Drive Build account: plan and billing, sign-in, connected apps, share links and your data." />
+		<!-- An account's own page: never in search. -->
+		<meta name="robots" content="noindex, nofollow" />
+		<meta name="theme-color" content="#11171d" />
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	</head>
+	<body>
+		<header class="top">
+			<a class="brand" href="/build/" aria-label="World Drive Build home"><span class="brand-wd">World Drive</span><span class="brand-build">Build</span></a>
+			<div class="account">
+				<div class="who" id="who" hidden>
+					<span class="plan-pill" id="plan-pill"></span>
+					<span class="who-name" id="who-name"></span>
+					<a class="link" href="/build/">Projects</a>
+				</div>
+			</div>
+		</header>
+
+		<main class="account-page">
+			<h1>Your account</h1>
+
+			<section class="signed-out-box" id="signed-out" hidden aria-labelledby="signed-out-title">
+				<h2 id="signed-out-title">Sign in to see your account</h2>
+				<p>Your plan and billing, how you sign in, connected apps, share links and your data are here once you're signed in.</p>
+				<div id="google-button" class="google-button"></div>
+				<p class="agree-note">By continuing you agree to the <a href="/build/terms/">Terms</a> and <a href="/build/privacy/">Privacy Policy</a>.</p>
+				<p class="small">Made your account with a username? <a href="/">Sign in on World Drive</a> (the account menu), then come back here.</p>
+			</section>
+
+			<div class="account-layout" id="signed-in" hidden>
+				<nav class="account-nav" aria-label="Account sections">
+					<a href="#profile">Profile</a>
+					<a href="#security">Sign-in &amp; security</a>
+					<a href="#billing">Plan &amp; billing</a>
+					<a href="#usage">Usage</a>
+					<a href="#branding">Branding</a>
+					<a href="#apps">Connected apps</a>
+					<a href="#links">Share links</a>
+					<a href="#data">Your data</a>
+					<a href="#delete">Delete account</a>
+				</nav>
+
+				<div class="account-sections">
+					<section class="card" id="profile" aria-labelledby="profile-title">
+						<h2 id="profile-title">Profile</h2>
+						<div id="profile-body"></div>
+					</section>
+
+					<section class="card" id="security" aria-labelledby="security-title">
+						<h2 id="security-title">Sign-in &amp; security</h2>
+						<div id="security-body"></div>
+					</section>
+
+					<section class="card" id="billing" aria-labelledby="billing-title">
+						<h2 id="billing-title">Plan &amp; billing</h2>
+						<div id="billing-body"></div>
+					</section>
+
+					<section class="card" id="usage" aria-labelledby="usage-title">
+						<h2 id="usage-title">Usage</h2>
+						<div id="usage-body"></div>
+					</section>
+
+					<section class="card" id="branding" aria-labelledby="branding-title">
+						<h2 id="branding-title">Branding</h2>
+						<div id="branding-body"></div>
+					</section>
+
+					<section class="card" id="apps" aria-labelledby="apps-title">
+						<h2 id="apps-title">Connected apps</h2>
+						<div id="apps-body"></div>
+					</section>
+
+					<section class="card" id="links" aria-labelledby="links-title">
+						<h2 id="links-title">Share links</h2>
+						<div id="links-body"></div>
+					</section>
+
+					<section class="card" id="data" aria-labelledby="data-title">
+						<h2 id="data-title">Your data</h2>
+						<div id="data-body"></div>
+					</section>
+
+					<section class="card danger-card" id="delete" aria-labelledby="delete-title">
+						<h2 id="delete-title">Delete account</h2>
+						<div id="delete-body"></div>
+					</section>
+				</div>
+			</div>
+		</main>
+
+		<footer class="foot">
+			<p><a href="/build/">World Drive Build</a> · <a href="/contact/">Contact</a></p>
+			<nav class="legal-links" aria-label="Legal"><a href="/build/terms/">Terms</a> · <a href="/build/privacy/">Privacy</a> · <a href="/build/privacy/#cookies">Cookies and storage</a> · <a href="/build/refunds/">Refunds and cancelling</a> · <a href="/build/acceptable-use/">Acceptable use</a> · <a href="/build/credits/">Credits</a> · <a href="/">World Drive</a></nav>
+		</footer>
+
+		<div class="toast" id="toast" role="status" hidden></div>
+		<script type="module" src="/src/build-account/main.js"></script>
+	</body>
+</html>

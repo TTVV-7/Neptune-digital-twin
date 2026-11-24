@@ -9,24 +9,44 @@
 		<meta name="robots" content="noindex, nofollow" />
 		<meta name="theme-color" content="#11171d" />
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-		<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" />
+		<!-- No cookies but the sign-in one, and nothing that tracks: no ads, analytics tags, pixels or
+		     session replay on Build, and its fonts are its own (src/build-home/fonts/), not Google
+		     Fonts. Adding any of those needs a consent banner first (docs/build.md, "Privacy and
+		     cookies"); test-drive-seo.mjs fails the build's check if one turns up. -->
+		<script>
+			// Cloudflare Web Analytics (no cookies, nothing kept in the browser): visitors, countries,
+			// referrers, page speed, in World Drive's own site there (the game's token, drive/index.html).
+			// Only on worlddrive.app itself, so local development and tests aren't counted. The editor
+			// (/build/app/) has the same (vite.drive.config.js's buildApp).
+			if ( location.hostname === 'worlddrive.app' ) {
+
+				const beacon = document.createElement( 'script' );
+				beacon.defer = true;
+				beacon.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+				beacon.dataset.cfBeacon = '{"token": "f788bd8a2fb34dc2a64001b4ebab52c2"}';
+				document.head.append( beacon );
+
+			}
+		</script>
 	</head>
 	<body>
 		<header class="top">
 			<a class="brand" href="/build/" aria-label="World Drive Build home"><span class="brand-wd">World Drive</span><span class="brand-build">Build</span></a>
 			<div class="account" id="account">
 				<div id="google-button" class="google-button"></div>
+				<p class="agree-note">By continuing you agree to the <a href="/build/terms/">Terms</a> and <a href="/build/privacy/">Privacy Policy</a>.</p>
 				<div class="who" id="who" hidden>
 					<span class="plan-pill" id="plan-pill"></span>
 					<span class="who-name" id="who-name"></span>
+					<a class="link" id="account-link" href="/build/account/">Account</a>
 					<button type="button" class="link" id="sign-out">Sign out</button>
 				</div>
 			</div>
 		</header>
 
 		<main>
+			<div class="notices" id="notices" hidden></div>
+
 			<section class="hero" aria-labelledby="find-title">
 				<div class="hero-inner">
 					<p class="eyebrow">Site mock-ups on a 3D map</p>
@@ -61,8 +81,8 @@
 		</main>
 
 		<footer class="foot">
-			<p>Buildings, roads and terrain in the editor are Google's 3D map, credited there. Equipment models are credited in the editor's library (H).</p>
-			<p><a href="/">World Drive</a> · <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></p>
+			<p>Buildings, roads and terrain in the editor are Google's 3D map, credited there. Equipment models are credited in the editor's library (H) and on the <a href="/build/credits/">credits</a> page.</p>
+			<nav class="legal-links" aria-label="Legal"><a href="/build/terms/">Terms</a> · <a href="/build/privacy/">Privacy</a> · <a href="/build/privacy/#cookies">Cookies and storage</a> · <a href="/build/refunds/">Refunds and cancelling</a> · <a href="/build/acceptable-use/">Acceptable use</a> · <a href="/build/credits/">Credits</a> · <a href="/">World Drive</a></nav>
 		</footer>
 
 		<div class="toast" id="toast" role="status" hidden></div>
