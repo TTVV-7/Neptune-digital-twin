@@ -26,7 +26,7 @@ import { registerKind } from './kinds.js';
 // a bridge deck) is left standing while what's under it is cleared.
 // An area can also be surfaced: gravel, asphalt or concrete laid over the flattened ground, so it
 // reads as a finished pad instead of Google's photo of whatever stood there, smeared flat. The
-// surface shows all the time, not only in build mode; the red box over it only in build mode.
+// surface shows all the time, with no red box over it (a bare area's red box shows in build mode).
 // It only changes what's drawn here; Google's data isn't touched. An area is a placed kind (see
 // kinds.js), so it is saved, moved, turned and deleted like the rest.
 //
@@ -207,10 +207,11 @@ export function buildZone( width, length, height = 0, surface = 'none' ) {
 	floor.renderOrder = 1;
 
 	for ( const mesh of [ volume, edges, floor ] ) mesh.userData.noCollide = true;
-	// The red box is only for laying the area out: shown in build mode (see models.js).
+	// The red box is only for laying a bare area out: shown in build mode (see models.js). A
+	// surfaced one is just its gravel, asphalt or concrete (clicked on to select it), no box.
 	for ( const mesh of [ volume, edges, floor ] ) mesh.userData.buildOnly = true;
-	group.add( volume, edges, floor );
 	if ( SURFACES[ surface ] ) group.add( buildSurface( width, length, surface ) );
+	else group.add( volume, edges, floor );
 	if ( height > 0 ) {
 
 		const ceiling = new Mesh( new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 ), ceilingMaterial );
@@ -240,7 +241,7 @@ registerKind( ZONE_ID, {
 	snap: ( { surface } ) => SURFACES[ surface ] ? 'median-original' : 'lowest-original',
 	solid: false,
 	buildOnly: true,
-	// A surfaced area's gravel or asphalt stays in view outside build mode; its red box doesn't.
+	// A surfaced area's gravel or asphalt stays in view outside build mode (it has no red box).
 	shownOutsideBuild: params => params.surface !== 'none',
 	altersMap: true,
 	fields: [

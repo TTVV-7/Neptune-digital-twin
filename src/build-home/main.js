@@ -230,6 +230,7 @@ function showPlan() {
 	}
 
 	body.append( meter );
+	body.append( claudeCard( plan.tier ) );
 	if ( plan.tier === 'free' ) body.append( upgrade( premium ) );
 	else if ( premium.manage ) {
 
@@ -242,6 +243,56 @@ function showPlan() {
 		body.append( manage );
 
 	}
+
+}
+
+// Claude, connected through the MCP server (/mcp): how to, and the way to cut it off. Build Pro's.
+function claudeCard( tier ) {
+
+	const box = document.createElement( 'div' );
+	box.className = 'claude';
+	box.id = 'claude';
+	const address = new URL( '/mcp', location.origin ).href;
+	box.innerHTML = '<h3>Build with Claude</h3><p class="small"></p><div class="mcp-url"><code></code><button type="button" class="link copy">Copy</button></div><p class="small claude-state"></p>';
+	box.querySelector( 'code' ).textContent = address;
+	box.querySelector( 'p' ).textContent = tier === 'free'
+		? 'With Build Pro, Claude can lay out your sites for you: add this as a custom connector in Claude.'
+		: 'Add this as a custom connector in Claude (Settings, Connectors), then ask it to lay out a site.';
+	box.querySelector( '.copy' ).addEventListener( 'click', async () => {
+
+		try {
+
+			await navigator.clipboard.writeText( address );
+			toast( 'Copied' );
+
+		} catch {
+
+			toast( address );
+
+		}
+
+	} );
+	const state = box.querySelector( '.claude-state' );
+	const connected = home.connections ?? 0;
+	if ( connected ) {
+
+		state.textContent = `Connected: ${ connected === 1 ? 'one app' : `${ connected } apps` }. `;
+		const cut = document.createElement( 'button' );
+		cut.type = 'button';
+		cut.className = 'link';
+		cut.id = 'disconnect-claude';
+		cut.textContent = 'Disconnect';
+		cut.addEventListener( 'click', async () => {
+
+			await call( 'DELETE', 'connections' );
+			await load();
+			toast( 'Disconnected. Claude asks to be allowed again next time.' );
+
+		} );
+		state.append( cut );
+
+	} else state.hidden = true;
+	return box;
 
 }
 

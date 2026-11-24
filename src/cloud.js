@@ -673,8 +673,13 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	function shareLink( shareToken ) {
 
 		const url = new URL( window.location.href );
+		// World Drive Build's editor is wherever the project is: the link keeps the place.
+		const at = url.searchParams.get( 'at' );
+		const place = url.searchParams.get( 'place' );
 		url.search = '';
 		url.hash = '';
+		if ( BUILD_APP && at ) url.searchParams.set( 'at', at );
+		if ( BUILD_APP && place ) url.searchParams.set( 'place', place );
 		url.searchParams.set( 'view', shareToken );
 		return url.href;
 

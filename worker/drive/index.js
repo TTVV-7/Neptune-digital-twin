@@ -14,6 +14,8 @@ import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
 import { isAdmin } from './admin.js';
 import { buildApi, isBuildApi } from './build.js';
+import { isOAuth, oauth } from './oauth.js';
+import { isMcp, mcp } from './mcp.js';
 import { adminDropins } from './dropins.js';
 import { LINK_PATH } from '../../src/drive-app/challenge-rules.js';
 import { adminChallenges, adminChange, challengeBoard, challengeGhost, challengeLink, linkPage, listChallenges, postTime } from './challenges.js';
@@ -184,6 +186,25 @@ export default {
 
 		// AdSense's ads.txt, saying who may sell ads here: only with a publisher id set (adsTxt).
 		if ( url.pathname === ADS_TXT ) return adsTxt( request, env );
+
+		// World Drive Build's MCP server (/mcp, mcp.js) and the OAuth that connects Claude to it (oauth.js).
+		if ( isMcp( url ) || isOAuth( url ) ) {
+
+			try {
+
+				const limits = env.LIMITS.get( env.LIMITS.idFromName( 'global' ) );
+				const context = { request, env, url, ctx, limits, now: clock( request, env ) };
+				return await ( isMcp( url ) ? mcp( context ) : oauth( context ) );
+
+			} catch ( err ) {
+
+				if ( err instanceof HttpError ) return errorResponse( err );
+				console.error( 'MCP error', err?.name, err?.message );
+				return json( { error: 'Something went wrong' }, 500 );
+
+			}
+
+		}
 
 		// World Drive Build's page (/build/: the construction mock-up app) asks /build/api/* (build.js).
 		if ( isBuildApi( url ) ) {

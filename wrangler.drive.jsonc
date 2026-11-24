@@ -15,7 +15,7 @@
 	"assets": {
 		"directory": "./dist-drive",
 		"binding": "ASSETS",
-		"run_worker_first": [ "/api/*", "/build/api/*", "/build/app/api/*", "/c", "/ads.txt" ]
+		"run_worker_first": [ "/api/*", "/build/api/*", "/build/app/api/*", "/mcp", "/oauth/*", "/.well-known/oauth-*", "/c", "/ads.txt" ]
 	},
 	// Both addresses are the Worker's custom domains (Cloudflare makes their DNS records and
 	// certificates). www sends you on to worlddrive.app (worker/drive/index.js and the page itself).

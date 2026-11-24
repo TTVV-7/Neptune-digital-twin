@@ -47,6 +47,8 @@ const ROUTES = [
 	[ 'POST', 'session', postSession ],
 	[ 'DELETE', 'session', deleteSession ],
 	[ 'GET', 'me', getMe ],
+	// Claude's connections to the account (oauth.js, mcp.js): all of them ended.
+	[ 'DELETE', 'connections', disconnectClaude ],
 	[ 'GET', 'layouts', listLayouts ],
 	[ 'POST', 'layouts', createLayout ],
 	[ 'GET', 'layouts/:id', getLayout ],
@@ -120,7 +122,7 @@ export function limitsOf( env ) {
 }
 
 // 'owner', 'pro' or 'free' for a signed-in account, with whether Pro is a running subscription.
-async function planOf( env, account ) {
+export async function planOf( env, account ) {
 
 	if ( isAdmin( env, account ) ) return { tier: 'owner', subscribed: false };
 	const { pro, subscribed } = await buildPlan( env, account );
@@ -280,6 +282,9 @@ async function getHome( context ) {
 
 		home.user = userOf( account );
 		home.plan = await planFor( env, account, plan, now );
+		// How many apps (Claude, say) are connected through /mcp now (oauth.js's tokens).
+		const connected = await env.DB.prepare( 'SELECT COUNT( DISTINCT client_id ) AS n FROM oauth_tokens WHERE account_id = ? AND expires_at > ?' ).bind( account.id, now ).first();
+		home.connections = connected?.n ?? 0;
 
 	}
 
@@ -316,6 +321,16 @@ async function signedInAccount( context ) {
 	const account = await currentAccount( context );
 	if ( ! account ) throw new HttpError( 401, 'Sign in first' );
 	return account;
+
+}
+
+// DELETE connections: every app connected to the account through /mcp is cut off (its tokens deleted),
+// and has to be allowed again.
+async function disconnectClaude( context ) {
+
+	const account = await signedInAccount( context );
+	await context.env.DB.prepare( 'DELETE FROM oauth_tokens WHERE account_id = ?' ).bind( account.id ).run();
+	return noContent();
 
 }
 

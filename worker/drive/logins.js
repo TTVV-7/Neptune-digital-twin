@@ -682,6 +682,8 @@ export async function signOutEverywhere( context ) {
 	await db.batch( [
 		db.prepare( 'DELETE FROM sessions WHERE account_id = ?' ).bind( account.id ),
 		db.prepare( 'DELETE FROM player_keys WHERE account_id = ?' ).bind( account.id ),
+		// And World Drive Build's connections to Claude (oauth.js): they ask to be allowed again.
+		db.prepare( 'DELETE FROM oauth_tokens WHERE account_id = ?' ).bind( account.id ),
 	] );
 	return noContent( { 'Set-Cookie': signedOutCookie( url ) } );
 

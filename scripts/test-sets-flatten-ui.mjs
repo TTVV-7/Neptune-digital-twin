@@ -3,7 +3,7 @@
 // local server is blocked. A set is listed and found by search, follows the pointer as one,
 // turns with R about its middle, and is put down as separate items laid out as the set says. A
 // flatten area is surfaced with gravel to start, its surface stays in view when the library
-// closes (its red box doesn't), the next area takes the surface last chosen, and areas saved
+// closes (and has no red box: a bare area's shows in build mode), the next area takes the surface last chosen, and areas saved
 // without a surface load and save again without one.
 //
 // Needs Playwright with Chromium. TEST_VITE_PORT picks the port, or TEST_BASE=<url> uses a dev
@@ -236,7 +236,7 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 		const gravel = await models.load( { kind: 'flatten-zone', params: { width: 20, length: 14, surface: start }, east: - 15, north: 0, heading: 0, up: null } );
 		const old = await models.load( { kind: 'flatten-zone', params: { width: 10, length: 10 }, east: 15, north: 0, heading: 0, up: null } );
 		const out = { start, gravelSurface: !! surfaceOf( gravel ), oldSurface: old.params.surface };
-		out.inBuild = { surface: shown( surfaceOf( gravel ) ), red: red( gravel ).every( shown ), old: shown( old.pivot ) };
+		out.inBuild = { surface: shown( surfaceOf( gravel ) ), red: red( gravel ).length, oldRed: red( old ).length > 0 && red( old ).every( shown ) };
 		window.twin.sidebar.deselect();
 		document.getElementById( 'library-toggle' ).click();
 		out.outside = { surface: shown( surfaceOf( gravel ) ), red: red( gravel ).some( shown ), old: shown( old.pivot ) };
@@ -255,7 +255,7 @@ test( 'flatten areas are surfaced, the surface staying in view outside build mod
 	assert.equal( result.start, 'gravel', 'gravel to begin with' );
 	assert.ok( result.gravelSurface, 'gravel laid on the area' );
 	assert.equal( result.oldSurface, 'none', 'an area saved without a surface has none' );
-	assert.deepEqual( result.inBuild, { surface: true, red: true, old: true } );
+	assert.deepEqual( result.inBuild, { surface: true, red: 0, oldRed: true }, 'a surfaced area is just its surface; a bare one has its red box' );
 	assert.deepEqual( result.outside, { surface: true, red: false, old: false }, 'outside build mode: the surface shows, the red box and bare areas don\'t' );
 	assert.equal( result.changed, 'asphalt' );
 	assert.ok( result.asphaltSurface );

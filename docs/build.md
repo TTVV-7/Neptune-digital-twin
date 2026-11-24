@@ -53,8 +53,19 @@ and the Neptune twin.
   Link. The same webhook (`supporter.js`) records it as `pass = 'build'`, which never counts as the
   Supporter Pass (and the pass never counts as Build Pro). Cancelling, a failed card, a refund or a
   chargeback take it away as they do the pass.
-- **Tests:** `npm run test:build-worker` (the server, under wrangler dev) and
-  `npm run test:build-ui` (the built page in a browser against the Worker).
+- **Claude (MCP):** `https://worlddrive.app/mcp` is an MCP server (`worker/drive/mcp.js`), Build Pro
+  and the owner only. Claude finds it as a custom connector: it registers itself, the person signs
+  in on worlddrive.app and allows it (`worker/drive/oauth.js`: OAuth 2.1 with PKCE, codes and tokens
+  kept only as hashes, access an hour, refresh 30 days and replaced on use;
+  `migrations/0018_build_mcp.sql`). Its tools find a site, make and read projects, search the
+  library and sets (`build-catalog.json`, made by `npm run make-build-catalog` whenever the library
+  changes), place items, sets and rows, add flatten, laydown and stockpile areas, move and remove
+  things and share a project; each answer has the editor link. `MCP_HOURLY` (default 300) caps an
+  account's tool calls an hour. The dashboard's **Build with Claude** box shows the address and
+  disconnects every connected app.
+- **Tests:** `npm run test:build-worker` (the server, under wrangler dev),
+  `npm run test:build-ui` (the built page in a browser against the Worker) and
+  `npm run test:build-mcp` (connecting as Claude does, every tool, and the result in the editor).
 
 ## The owner's steps
 
@@ -77,3 +88,11 @@ on the free plan, with **Build Pro opens soon** in the upgrade dialog. To sell B
 4. **Webhook:** nothing new. World Drive's existing endpoint already sends checkouts and
    subscription changes; the new link's are told apart by its id.
 5. **Google sign-in:** nothing new. Build is on worlddrive.app, which the OAuth client allows.
+
+## Connecting Claude
+
+In Claude: *Settings → Connectors → Add custom connector*, name it "World Drive Build", URL
+`https://worlddrive.app/mcp`. Claude opens a worlddrive.app page: sign in with Google and press
+**Allow** (a free account is told it needs Build Pro). Then ask it, e.g. "lay out a staging area for
+a 3-storey build at 453 W 12th Ave, Vancouver: site office, two 40 ft containers, fencing along the
+lane, a gravel pad for trucks", and open the editor link it gives you.
