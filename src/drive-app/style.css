@@ -126,6 +126,15 @@ button.primary:active,
 	font-weight: 900;
 }
 
+/* The globe-and-road mark (public/icons/mark-128.png, the favicon's picture) before the name, as tall
+   as the name's capitals and a little more, so it scales with it wherever the name is. */
+.logo img {
+	width: auto;
+	height: 1.2em;
+	margin-right: 0.28em;
+	vertical-align: -0.24em;
+}
+
 /* --- the globe's panel ------------------------------------------------------------------- */
 
 #globe-ui .panel {
