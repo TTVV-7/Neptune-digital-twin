@@ -32,7 +32,6 @@ export const TRACKS = {
 	'countdown-groove': 'Countdown Groove',
 	'gliding-above-the-clouds': 'Gliding Above the Clouds',
 	'windows-down': 'Windows Down',
-	'gasoline-heart': 'Gasoline Heart',
 	'after-midnight-traffic': 'After Midnight Traffic',
 };
 // Each scene's tracks, in the order they're played: the globe's (with the theme song, Drive
@@ -40,7 +39,7 @@ export const TRACKS = {
 // challenge's run (from its countdown to its finish) and the plane.
 export const PLAYLISTS = {
 	globe: [ 'warm-analog-pads', 'drive-anywhere' ],
-	earth: [ 'arcade-momentum', 'golden-hour-drive', 'buant-groove', 'windows-down', 'gasoline-heart', 'after-midnight-traffic' ],
+	earth: [ 'arcade-momentum', 'golden-hour-drive', 'buant-groove', 'windows-down', 'after-midnight-traffic' ],
 	moon: [ 'moonlit-driver', 'weightless-pulse' ],
 	mars: [ 'canyon-echoes' ],
 	vesta: [ 'crystalline-waves' ],
