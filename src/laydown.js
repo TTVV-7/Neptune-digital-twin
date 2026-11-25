@@ -3,8 +3,7 @@ import { Box3, Group, Matrix4, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { registerKind } from './kinds.js';
-import { ZONE_ID } from './flatten.js';
+import { getKind, registerKind } from './kinds.js';
 import { passesHitFilters } from './walk.js';
 
 // Laydown areas: rectangles marked out on the map for where materials, trailers and equipment go.
@@ -77,7 +76,7 @@ const _toLocal = new Matrix4();
 // Ground meshes' vertices -> their version when the mesh's box was last worked out.
 const measured = new WeakMap();
 
-export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGround, onUpdate } ) {
+export function setUpLaydown( { camera, canvas, models, sidebar, panel, library = [], getGround, onUpdate } ) {
 
 	const areas = new Map(); // entry -> { content, dirty, checkedAt, ground, inside }
 	const labels = createLabels( { camera, canvas, isHidden: entry => models.isHidden( entry ) } );
@@ -159,19 +158,29 @@ export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGroun
 
 	}
 
-	// Placed library items (not other laydown or flatten areas) whose middle is inside the area.
+	// Kinds that are library items in their own right (the tower crane), as against areas and
+	// earthworks (laydowns, flattening, excavations, stockpiles), which aren't items stored here.
+	const itemKinds = new Set( library.filter( item => item.kind ).map( item => item.kind ) );
+
+	// Placed library items whose middle is inside the area; a row counts each of its copies, as
+	// the Show panel does (layers.js).
 	function countInside( area ) {
 
 		const { width, length } = area.params;
 		area.pivot.updateWorldMatrix( true, false );
 		_inverse.copy( area.pivot.matrixWorld ).invert();
-		return models.entries.filter( entry => {
+		let count = 0;
+		for ( const entry of models.entries ) {
 
-			if ( entry === area || ! entry.library || entry.placing || entry.kind === LAYDOWN || entry.kind === ZONE_ID ) return false;
+			if ( entry === area || ! entry.library || entry.placing ) continue;
+			const kind = entry.kind ? getKind( entry.kind ) : null;
+			if ( entry.kind && ! kind?.item && ! itemKinds.has( entry.kind ) ) continue;
 			entry.pivot.getWorldPosition( _point ).applyMatrix4( _inverse );
-			return Math.abs( _point.x ) <= width / 2 && Math.abs( _point.z ) <= length / 2;
+			if ( Math.abs( _point.x ) <= width / 2 && Math.abs( _point.z ) <= length / 2 ) count += kind?.count?.( entry ) ?? 1;
 
-		} ).length;
+		}
+
+		return count;
 
 	}
 

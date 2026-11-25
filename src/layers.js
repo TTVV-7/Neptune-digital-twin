@@ -171,8 +171,10 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 
 	models.addEventListener( 'add', ( { entry } ) => {
 
+		// Shared and config items (inConfig) arrive in the background, after the layout's
+		// restored: showing them mustn't undo this viewer's saved Before view or hidden layers.
 		if ( entry.placing ) placing.add( entry );
-		else if ( ! layout.loading ) reveal( entry );
+		else if ( ! layout.loading && ! entry.inConfig ) reveal( entry );
 		soon();
 
 	} );

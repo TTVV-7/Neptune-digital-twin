@@ -253,7 +253,11 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 		const drivable = getDriving()?.isDrivable( entry );
 		// Buttons other modules add (a row's Break apart, rows.js), as the toolbar shows them.
 		const extras = getSidebar()?.toolbar.labels( entry ) ?? [];
-		const buttons = [ turns && 'rotate', shape && 'size', drivable && 'drive', ...extras.map( text => text.toLowerCase() ), 'edit', 'hide', 'delete' ].filter( Boolean );
+		// A kind with fields but no handles (the tower crane) still has a Size button for its size
+		// fields (as toolbar.js's sizeFields picks them), and P is where all its settings are.
+		const sized = !! shape || !! kind?.fields?.some( f => f.size && ! f.type && ( ! f.options || f.editor ) && ( ! f.when || f.when( entry.params ) ) );
+		const settings = ! shape && kind?.fields?.length > 0;
+		const buttons = [ turns && 'rotate', sized && 'size', drivable && 'drive', ...extras.map( text => text.toLowerCase() ), 'edit', 'hide', 'delete' ].filter( Boolean );
 		const points = shape === 'points';
 		return { title: `Selected: ${ entry.state.name ?? '' }`, rows: [
 			[ [ '~Drag' ], 'Move it' ],
@@ -265,7 +269,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 			] : shape ? [ [ [ '~Drag' ], shape === 'rect' ? 'The square handles: resize' : 'The square handle: resize' ] ] : [],
 			...kind?.resize?.depth ? [ [ [ '~Drag' ], 'The arrow in the middle: depth' ] ] : [],
 			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
-			[ [ 'P' ], points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : 'Exact position' ],
+			[ [ 'P' ], points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : settings ? 'Its settings and exact position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
 			// An open section closes first (excavation-section.js).
 			[ [ 'Esc' ], window.twin?.section?.view ? 'Close the section' : 'Deselect' ],

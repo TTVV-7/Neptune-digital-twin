@@ -1,4 +1,4 @@
-import { Box3, DoubleSide, Euler, Matrix4, Mesh, MeshStandardMaterial, Raycaster, SRGBColorSpace, TextureLoader, Vector3 } from 'three';
+import { Box3, DoubleSide, Euler, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Raycaster, SRGBColorSpace, TextureLoader, Vector3 } from 'three';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { loadLibrary } from './library.js';
 
@@ -61,7 +61,15 @@ export function setUpLogo( { models, layers, apiBase } ) {
 		material = new MeshStandardMaterial( { map: texture, transparent: true, alphaTest: 0.02, roughness: 0.6, depthWrite: false, side: DoubleSide } );
 		material.userData.shared = true;
 		categories = new Map( ( await loadLibrary() ).map( item => [ item.id, item.category ] ) );
-		layers?.addLayer( LAYER, { name: 'Company logo', count: () => decals.size, setShown: on => {
+		layers?.addLayer( LAYER, { name: 'Company logo', count: () => {
+
+			// Only items that got a logo: one too small or with no flat side is kept (so it isn't
+			// re-tried on every change) but has nothing to show.
+			let n = 0;
+			for ( const { meshes } of decals.values() ) if ( meshes.length ) n ++;
+			return n;
+
+		}, setShown: on => {
 
 			shown = on;
 			for ( const { meshes } of decals.values() ) for ( const mesh of meshes ) mesh.visible = on;
@@ -94,7 +102,8 @@ export function setUpLogo( { models, layers, apiBase } ) {
 	}
 
 	// Both sides of the item: its length runs along the pivot's z (its heading), so its sides face
-	// ±x. Each decal is cut from the meshes it overlaps, in the scene, then kept in the pivot.
+	// ±x. Each decal is cut from the meshes it overlaps, in the scene, then kept beside the mesh it
+	// was cut from, so it moves with that part (an excavator's house as it swings).
 	function brand( entry ) {
 
 		unbrand( entry );
@@ -102,7 +111,12 @@ export function setUpLogo( { models, layers, apiBase } ) {
 		const content = entry.pivot.children[ 0 ];
 		if ( ! content ) return;
 		entry.pivot.updateMatrixWorld( true );
-		const toPivot = new Matrix4().copy( entry.pivot.matrixWorld ).invert();
+		// The pivot's place and heading without its scale: a library model's catalog scale can be
+		// 100 or 0.006, and every size and offset here is in metres, as DecalGeometry's are.
+		const position = new Vector3(), quaternion = new Quaternion(), scale = new Vector3();
+		entry.pivot.matrixWorld.decompose( position, quaternion, scale );
+		const frame = new Matrix4().compose( position, quaternion, new Vector3( 1, 1, 1 ) );
+		const toPivot = frame.clone().invert();
 		const box = new Box3();
 		const targets = [];
 		content.traverse( o => {
@@ -133,7 +147,7 @@ export function setUpLogo( { models, layers, apiBase } ) {
 		const raycaster = new Raycaster();
 		raycaster.far = width + 2;
 		// Pivot-frame point → world, and the outward way for each side.
-		const toWorld = v => v.applyMatrix4( entry.pivot.matrixWorld );
+		const toWorld = v => v.applyMatrix4( frame );
 		const at = ( side, a, y, out = 1 ) => alongZ
 			? new Vector3( side > 0 ? box.max.x + out : box.min.x - out, y, a )
 			: new Vector3( a, y, side > 0 ? box.max.z + out : box.min.z - out );
@@ -141,7 +155,8 @@ export function setUpLogo( { models, layers, apiBase } ) {
 		for ( const side of [ 1, - 1 ] ) {
 
 			const outward = alongZ ? new Vector3( side, 0, 0 ) : new Vector3( 0, 0, side );
-			const worldIn = outward.clone().transformDirection( entry.pivot.matrixWorld ).negate();
+			const worldOut = outward.clone().transformDirection( frame );
+			const worldIn = worldOut.clone().negate();
 			const spot = flatSpot( side );
 			if ( ! spot ) continue;
 			// Square to the panel it's on: facing along the panel's normal, upright.
@@ -157,17 +172,18 @@ export function setUpLogo( { models, layers, apiBase } ) {
 
 			}
 
-			// Into the pivot's frame, and lifted outward off the panel (some models' normals point
-			// in, so not along those).
-			geometry.applyMatrix4( toPivot );
-			geometry.translate( outward.x * LIFT, 0, outward.z * LIFT );
+			// Lifted outward off the panel, in world metres (some models' normals point in, so not
+			// along those), then into the frame of the part it was cut from.
+			const parent = spot.mesh.parent;
+			geometry.translate( worldOut.x * LIFT, worldOut.y * LIFT, worldOut.z * LIFT );
+			geometry.applyMatrix4( new Matrix4().copy( parent.matrixWorld ).invert() );
 			const mesh = new Mesh( geometry, material );
 			mesh.name = 'Company logo';
 			mesh.renderOrder = 2;
 			mesh.raycast = () => {};
 			mesh.userData.noCollide = true;
 			mesh.visible = shown;
-			entry.pivot.add( mesh );
+			parent.add( mesh );
 			meshes.push( mesh );
 
 			// The flattest place on this side for the logo, as large as fits (down to MIN_SIZE):
