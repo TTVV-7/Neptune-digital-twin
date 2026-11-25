@@ -21,7 +21,7 @@ import {
 } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { ZONE_ID } from './flatten.js';
-import { MAX_REACH, gradeOffset, gradeRange, isGraded, pressedOnly } from './grade.js';
+import { MAX_REACH, gradeOffset, gradeRange, groundOffset, isGraded, pressedOnly } from './grade.js';
 import { blocks } from './walk.js';
 
 // The ground you can dig into and pile onto: a heightfield in the scene frame, made only where
@@ -1068,8 +1068,9 @@ export class Terrain extends EventDispatcher {
 	// The ground is read from above off Google's mesh, so round an area it is as often a tree's
 	// crown or a house's roof as the ground: a cut slope climbing to that would be a wall of earth
 	// as high as the trees. So batters meet (and the earth moved is reckoned from) the bare ground:
-	// against the plane fitted through the ground under the area, carried on beyond it, no higher
-	// than the lowest ground within BARE_REACH, nor than PLANE_RISE above the plane. What stands on
+	// against the ground fitted under the area (the plane, or the ground smoothed for an area that
+	// follows it: zone.plane), carried on beyond it, no higher than the lowest ground within
+	// BARE_REACH, nor than PLANE_RISE above that. What stands on
 	// the ground beyond a batter is left as it is.
 	composeGrading( chunk, zones ) {
 
@@ -1770,9 +1771,10 @@ export class Terrain extends EventDispatcher {
 				zone.params = params;
 				zone.up = state.up;
 				zone.height = ( u, v ) => state.up + gradeOffset( params, fit, u, - v );
-				// The plane through the ground under it (models.js 'plane' snapping), carried on.
+				// The ground fitted under it (models.js 'plane' snapping: the plane, or the ground
+				// smoothed for an area that follows it), carried on beyond it.
 				const ground = entry.groundSlope ?? fit;
-				zone.plane = ( u, v ) => state.up + ( ground?.gx ?? 0 ) * u - ( ground?.gz ?? 0 ) * v;
+				zone.plane = ( u, v ) => state.up + groundOffset( ground, u, - v );
 				zone.floor = state.up + gradeRange( params, fit ).min;
 				zone.rectBounds = zone.bounds;
 				zone.reach = this.batterReach( zone, entry.groundSlope ?? fit );
@@ -1812,7 +1814,7 @@ export class Terrain extends EventDispatcher {
 				const u = nu ? nu * hw : t * hw;
 				const v = nv ? nv * hl : t * hl;
 				const [ x, z ] = zoneWorld( zone, u, v );
-				const plane = zone.up + gx * u - gz * v;
+				const plane = zone.plane( u, v );
 				const sampled = this.sample( x, z );
 				const ground = Number.isFinite( sampled ) ? Math.min( sampled, plane + PLANE_RISE ) : plane;
 				const gap = zone.height( u, v ) - ground;

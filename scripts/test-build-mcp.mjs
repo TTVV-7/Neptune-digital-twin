@@ -337,6 +337,10 @@ test( 'the tools lay out a site', async () => {
 	// unknown grades refused. Without a grade, a new area follows the ground.
 	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 20, width: 40, length: 25, grade: 'slope', fall: 3, toward: 'left', batter: 3 } ) ).text, /surfaced with gravel, falling 3% to the left, edges battered 3 : 1/ );
 	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 60, width: 20, length: 20, grade: 'terraces', steps: 40 } ) ).text, /in 8 terraces/ );
+	// Following the ground smoothed over 50 m at most; one best-fit slope through it, capped.
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 120, north: 20, width: 60, length: 40, grade: 'follow', smoothing: 99 } ) ).text, /following the ground \(smoothed over 50 m\)/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 120, north: 80, width: 30, length: 30, grade: 'plane', max_grade: 8 } ) ).text, /on one slope fitted through the ground \(no steeper than 8%\)/ );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'follow', smoothing: 'lots' } ) ).error );
 	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'bumpy' } ) ).error );
 	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'slope', toward: 'uphill' } ) ).error );
 	assert.match( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 15, length: 10, label: 'Rebar' } ) ).text, /Rebar/ );
@@ -349,13 +353,17 @@ test( 'the tools lay out a site', async () => {
 	const got = await tool( 'get_project', { project_id: project } );
 	const items = got.value.items;
 	const lane = 10; // the lane closure set: arrow board, two flaggers, seven cones
-	assert.equal( items.length, 3 + lane + 10 + 5 );
+	assert.equal( items.length, 3 + lane + 10 + 7 );
 	const panels = items.filter( i => i.item === 'fence-panel' );
 	assert.deepEqual( panels.slice( 0, 2 ).map( i => [ i.east, i.north, i.heading ] ), [ [ 10, 1.53, 270 ], [ 10, 4.58, 270 ] ] );
 	assert.deepEqual( items[ 0 ], { index: 0, item: 'office-trailer-10x40', name: items[ 0 ].name, east: 0, north: 20, heading: 180, size: items[ 0 ].size } );
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && i.params.fence === 'screened' && i.params.gates === 2 && i.params.grade === 'follow' && i.params.batter === 2 ) );
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'slope' && i.params.fall === 3 && i.params.toward === 'left' && i.params.batter === 3 ) );
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'terraces' && i.params.steps === 8 ) );
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'follow' && i.params.smoothing === 50 ) );
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'plane' && i.params.maxGrade === 8 && i.params.smoothing === undefined ) );
+	// The usual smoothing isn't saved, as the editor saves it.
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && ! ( 'smoothing' in i.params ) ) );
 	// Indexes come with the version they're from: without it, or once the project has been saved
 	// since (here by the editor, as when someone moves something), they're refused, not acted on.
 	assert.ok( ( await tool( 'move_item', { project_id: project, index: 1, east: 4 } ) ).error );

@@ -24,7 +24,7 @@ import { TileFlatteningPlugin } from '3d-tiles-renderer/plugins';
 import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 import { registerKind } from './kinds.js';
 import { fencePanel } from './fence-panel.js';
-import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, STEPS, TOWARD, describeGrade, gradeOffset, gradeRange, isGraded, normalizeGrade, pressedOnly, saveGrade } from './grade.js';
+import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, SMOOTHING, STEPS, TOWARD, describeGrade, fitKey, gradeOffset, gradeRange, isGraded, normalizeGrade, pressedOnly, sameFit, saveGrade } from './grade.js';
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
@@ -42,7 +42,9 @@ import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, STEPS, 
 // batters down to the ground (an embankment where the area is built up, a cut slope where it's dug
 // in), as the ground you walk and drive on. Areas saved before grading are level, as they were;
 // new ones follow the ground. A graded area snaps to a plane fitted through the ground under it
-// (models.js, 'plane'), whose slope is kept in its params as `fit` while it's open (never saved).
+// (models.js, 'plane'), and one that follows the ground to the ground smoothed (models.js
+// readSurface, grade.js fitSurface); what was fitted is kept in its params as `fit` while it's open
+// (never saved).
 //
 // Other modules press Google's mesh onto their own surfaces with setShape() (earthworks uses it
 // for pits), and originalHeight() reads the ground as Google made it, ignoring all of this.
@@ -616,15 +618,17 @@ export function buildZone( width, length, height = 0, surface = 'none', fence = 
 
 }
 
-// The fitted slope kept in an area's params while it's open (see the top): { gx, gz } or null.
+// What was fitted kept in an area's params while it's open (see the top): { gx, gz } and, for the
+// smoothed ground, its smoothing and grid (the same object, so what's made from it is kept), or null.
 function fitOf( fit ) {
 
-	return Number.isFinite( fit?.gx ) && Number.isFinite( fit?.gz ) ? { gx: fit.gx, gz: fit.gz } : null;
+	if ( ! Number.isFinite( fit?.gx ) || ! Number.isFinite( fit?.gz ) ) return null;
+	return Array.isArray( fit.grid?.h ) ? fit : { gx: fit.gx, gz: fit.gz };
 
 }
 
-// Grades whose shape depends on the ground under them, and so on the fitted slope.
-const FITTED = [ 'follow', 'terraces' ];
+// Grades whose shape depends on the ground under them, and so on what was fitted.
+const FITTED = [ 'follow', 'plane', 'terraces' ];
 const graded = p => isGraded( p );
 
 registerKind( ZONE_ID, {
@@ -640,16 +644,18 @@ registerKind( ZONE_ID, {
 		...normalizeGrade( p ),
 		fit: fitOf( p.fit ),
 	} ),
-	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, batter, fit, ...rest } ) => ( {
+	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter, fit, ...rest } ) => ( {
 		...rest, ...( surface === 'none' ? {} : { surface } ), ...( fence === 'none' ? {} : { fence, gates } ),
-		...saveGrade( { grade, fall, toward, ridgeAlong, steps, maxGrade, batter } ),
+		...saveGrade( { grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter } ),
 	} ),
 	// Down to the lowest ground around it as Google made it, so flattening doesn't drag it lower, and
 	// whatever stands in it is cleared. A surfaced one (a pad of gravel, asphalt or concrete) at the
 	// ground's usual height round it instead, so it isn't a pit; what stands on it is pressed flat
 	// all the same, and what's lower is under the pad. A graded one at the middle of a plane fitted
-	// through the ground under it, which a graded area that follows the ground lies along.
+	// through the ground under it, which a graded area lies along; one that follows the ground at
+	// the middle of the ground smoothed (snapSmoothing: models.js reads it on a finer grid).
 	snap: p => graded( p ) ? 'plane-original' : SURFACES[ p.surface ] ? 'median-original' : 'lowest-original',
+	snapSmoothing: p => p.grade === 'follow' ? p.smoothing : 0,
 	snapRect: ( { width, length } ) => ( { width, length } ),
 	solid: false,
 	buildOnly: true,
@@ -665,7 +671,8 @@ registerKind( ZONE_ID, {
 		// 0 flattens everything above the floor, as areas always did (and saved ones still do).
 		{ key: 'height', label: 'flatten up to (m, 0 = all)', min: 0, max: MAX_HEIGHT, step: 0.5, size: true },
 		{ key: 'grade', label: 'ground', options: GRADES, size: true, editor: true },
-		{ key: 'maxGrade', label: 'steepest (%, 0 = as the ground)', min: 0, max: MAX_GRADE, step: 0.5, size: true, when: p => p.grade === 'follow' },
+		{ key: 'smoothing', label: 'smoothing (m)', min: SMOOTHING.min, max: SMOOTHING.max, step: SMOOTHING.step, size: true, when: p => p.grade === 'follow' },
+		{ key: 'maxGrade', label: 'steepest (%, 0 = as the ground)', min: 0, max: MAX_GRADE, step: 0.5, size: true, when: p => p.grade === 'follow' || p.grade === 'plane' },
 		{ key: 'fall', label: 'fall (%)', min: FALL.min, max: FALL.max, step: FALL.step, size: true, when: p => [ 'slope', 'ridge', 'valley' ].includes( p.grade ) },
 		{ key: 'toward', label: 'falling toward', options: TOWARD, size: true, when: p => p.grade === 'slope' },
 		{ key: 'ridgeAlong', label: p => p.grade === 'valley' ? 'swale runs' : 'ridge runs', options: RIDGE_ALONG, size: true, when: p => p.grade === 'ridge' || p.grade === 'valley' },
@@ -731,7 +738,7 @@ function clampHeight( v ) {
 // What a graded area's shape depends on, to tell when it must be made again.
 function shapeKey( p ) {
 
-	return JSON.stringify( [ p.width, p.length, saveGrade( p ), FITTED.includes( p.grade ) ? p.fit : null ] );
+	return JSON.stringify( [ p.width, p.length, saveGrade( p ), FITTED.includes( p.grade ) ? fitKey( p.fit ) : null ] );
 
 }
 
@@ -918,11 +925,11 @@ export function setUpFlattening( { tiles, models } ) {
 		const grade = grades.get( entry );
 		if ( grade !== undefined && grade !== entry.params.grade ) rememberGrade( entry.params.grade );
 		grades.set( entry, entry.params.grade );
-		// The ground's slope under an area that follows it (or is terraced down it) was fitted
-		// afresh (models.js): build it on the new one. That change comes back here with them equal.
+		// The ground under an area that follows it (or is terraced down it) was fitted afresh
+		// (models.js): build it on the new fit. That change comes back here with them the same.
 		const fit = entry.groundSlope ?? null;
 		const { params } = entry;
-		if ( FITTED.includes( params.grade ) && fit && ( ! params.fit || Math.abs( params.fit.gx - fit.gx ) > 1e-4 || Math.abs( params.fit.gz - fit.gz ) > 1e-4 ) ) models.setParams( entry, { fit } );
+		if ( FITTED.includes( params.grade ) && fit && ! sameFit( params.fit, fit ) ) models.setParams( entry, { fit } );
 
 	} );
 	models.addEventListener( 'remove', ( { entry } ) => {

@@ -8,7 +8,7 @@ import { useFastRaycast } from './raycast.js';
 import { frontToYaw } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { getKind, kindParams } from './kinds.js';
-import { fitPlane, fitPoints } from './grade.js';
+import { fitPlane, fitPoints, fitSurface, sameFit, surfaceLayout, surfacePoints } from './grade.js';
 import { addHitFilter, passesHitFilters } from './walk.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
@@ -19,6 +19,8 @@ const _local = new Vector3();
 
 // Snapped models re-check the ground this often, because sharper tiles keep loading in.
 const SNAP_INTERVAL = 0.5;
+// How long (ms) a frame may spend reading the ground an area follows (readSurface).
+const SURFACE_BUDGET = 6;
 // Ground is sampled on a 3x3 grid reaching this far outside the footprint, and the median
 // height is used. A sample on the roof of Google's copy of the same building, or past the
 // berth edge in the water, is outvoted by the ones on the surrounding ground.
@@ -251,11 +253,13 @@ export class ModelManager extends EventDispatcher {
 
 		const { pivot, state } = entry;
 		const up = round( ground + ( entry.parked?.rise ?? 0 ) );
-		entry.snapped = true;
-		// Snapped to a plane through the ground ('plane' below): its slope is kept with it, and a
-		// change in that alone is a change too (a graded flatten area follows it).
+		// Still reading the ground it follows (readSurface): snapped again next frame.
+		entry.snapped = ! detail.pending;
+		// Snapped to a plane through the ground, or a smoothed surface ('plane' below): what was
+		// fitted is kept with it, and a change in that alone is a change too (a graded flatten area
+		// follows it), when it's more than a centimetre or so anywhere (grade.js sameFit).
 		const slope = detail.slope;
-		const sloped = slope && ( ! entry.groundSlope || Math.abs( slope.gx - entry.groundSlope.gx ) > 1e-4 || Math.abs( slope.gz - entry.groundSlope.gz ) > 1e-4 );
+		const sloped = slope && ! sameFit( slope, entry.groundSlope );
 		if ( sloped ) entry.groundSlope = slope;
 		if ( up !== state.up || sloped ) {
 
@@ -393,7 +397,84 @@ export class ModelManager extends EventDispatcher {
 
 		}
 
+		// A kind that follows the ground smoothed (a flatten area graded 'follow') wants the surface
+		// too: until it's read, the plane stands in (detail.pending), or what was read before while
+		// it's where it was.
+		const smoothing = getKind( entry.kind )?.snapSmoothing?.( entry.params ) ?? 0;
+		if ( smoothing > 0 ) {
+
+			const { result, pending } = this.readSurface( entry, original, { width, length, smoothing, plane, error } );
+			if ( detail && pending ) detail.pending = true;
+			if ( result ) {
+
+				if ( detail ) detail.slope = result.fit;
+				return round( result.c );
+
+			}
+
+		} else delete entry.surfaceJob;
+
 		return round( plane.c );
+
+	}
+
+	// The ground under and round an area read on surfaceLayout's grid (up to 33 × 33 readings) and
+	// smoothed (grade.js fitSurface). That's a lot of raycasts against Google's tiles, so they're
+	// read a few milliseconds' worth a frame and kept: read again only when the area is moved,
+	// turned, resized or smoothed differently, or the ground under it changes (the 7 × 7 plane
+	// through it does: sharper tiles). { result, pending }: result is { c, fit } or null.
+	readSurface( entry, original, { width, length, smoothing, plane, error } ) {
+
+		const { pivot, state } = entry;
+		const place = [ state.east, state.north, state.heading, width, length, smoothing, !! original ].join();
+		const ground = [ Math.round( plane.c * 100 ), Math.round( plane.gx * 1e4 ), Math.round( plane.gz * 1e4 ), error ].join();
+		let job = entry.surfaceJob;
+		if ( ! job || job.place !== place || ( job.done && job.ground !== ground ) ) {
+
+			// Read again where it was: what was read before stands until this is.
+			const kept = job?.place === place ? job.result : null;
+			const layout = surfaceLayout( width, length, smoothing );
+			const points = surfacePoints( layout );
+			job = entry.surfaceJob = { place, ground, layout, points, heights: new Array( points.length ).fill( null ), next: 0, done: false, result: kept };
+
+		}
+
+		if ( ! job.done ) {
+
+			const scene = this.getGround();
+			const sample = { error: 0 };
+			const end = performance.now() + SURFACE_BUDGET;
+			while ( job.next < job.points.length ) {
+
+				const [ x, z ] = job.points[ job.next ];
+				pivot.localToWorld( _origin.set( x, 0, z ) );
+				let y = null;
+				if ( original ) y = this.originalHeight( _origin.x, _origin.z, sample );
+				else {
+
+					_origin.y = 2000;
+					this.raycaster.set( _origin, DOWN );
+					const hit = this.raycaster.intersectObjects( scene, true ).find( h => h.object.isMesh && passesHitFilters( h ) );
+					y = hit ? hit.point.y : null;
+
+				}
+
+				job.heights[ job.next ++ ] = y;
+				if ( job.next % 16 === 0 && performance.now() > end ) break;
+
+			}
+
+			if ( job.next < job.points.length ) return { result: job.result, pending: true };
+			job.done = true;
+			const fitted = fitSurface( job.layout, job.heights, smoothing, width, length );
+			// Nothing to speak of changed: the same fit, so nothing is made again for it.
+			if ( fitted && job.result && sameFit( fitted.fit, job.result.fit ) && Math.abs( fitted.c - job.result.c ) < 0.01 ) job.ground = ground;
+			else if ( fitted ) job.result = fitted;
+			job.heights = null;
+
+		}
+
+		return { result: job.result, pending: false };
 
 	}
 

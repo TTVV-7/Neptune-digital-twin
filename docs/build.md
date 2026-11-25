@@ -94,7 +94,8 @@ flattening, the terrain and the surface so they agree):
 | ground | what it is | its settings |
 | --- | --- | --- |
 | level (dead flat) | one height: the ground's median under a surfaced area, its lowest under a bare one. Areas saved before grading are level and save as they did (nothing about grading is saved for a level area). | |
-| follow the ground (smoothed) | **new areas start with this** (the next area takes whatever was chosen last). A plane fitted by least squares through the ground under it (7 × 7 readings, with what stands well above a first fit, a roof or a rail car, left out): bumps and debris go, the slope stays. | steepest (%, 0 = as the ground) caps it |
+| follow the ground (smoothed) | **new areas start with this** (the next area takes whatever was chosen last). A smoothed copy of the bare ground that follows the grade as it changes across the area (steeper at one end, a hump, a bend in the hillside). The ground is read on a grid about 2 to 3 m apart reaching one smoothing radius beyond each edge (33 × 33 readings at most, wider apart on large areas); what stands on it (a roof, a car, a stand of trees) is found as in point-cloud ground filtering (a progressive morphological filter, then fit, leave out what stands more than 0.75 m above, fit again, coarse to fine) and left out; then at each grid node a plane is fitted through the readings round it, Gaussian-weighted over the smoothing (`src/grade.js` `fitSurface`), and read between nodes bilinearly. | smoothing (m, 2 to 50, 10 to start: small hugs the ground, large is gentle); steepest (%, 0 = as the ground) caps every part of it, easing the steep parts and leaving gentle ones following the ground, with as much cut as fill |
+| best-fit plane (one slope from the ground) | one plane fitted by least squares through the ground under it (7 × 7 readings, with what stands well above a first fit left out): what "follow the ground" was before it was smoothed | steepest (%) caps it |
 | one slope | one plane through the area's middle height, falling toward a side | fall (0.5 to 20 %), falling toward front, back, left or right (front is the way it faces) |
 | crowned (ridge down the middle) | a ridge along its length or width falling to both sides, set so half is above the middle height | fall (%), ridge runs along its length or width |
 | swale (valley down the middle) | the same upside down | fall (%), swale runs |
@@ -106,7 +107,8 @@ flattening, the terrain and the surface so they agree):
   30 m at most. The terrain (`src/terrain.js`, `composeGrading`) draws the graded ground and its
   batters, hides Google's mesh above them, and is what you walk and drive on. Batters meet the bare
   ground, not the tops of trees and houses round the area (read against the plane fitted under the
-  area: no higher than the lowest ground within 3 m, nor 1 m above that plane); what stands beyond
+  area, the smoothed ground for a followed one, carried on beyond it: no higher than the lowest
+  ground within 3 m, nor 1 m above that); what stands beyond
   them is left as it is.
 - **Google's mesh** is pressed down onto the graded shape inside the area (a grid shape in
   `TileFlatteningPlugin`); where the area is built up above Google's ground, the terrain's drawn
@@ -116,13 +118,27 @@ flattening, the terrain and the surface so they agree):
   ground under its two ends, gates at their hinges.
 - **Where overlapping**, the lowest graded height wins inside the areas (as the level floor always
   did); a pit dug in a graded area starts from the lowest of its shape over the pit.
-- **The P panel** says how it's graded ("follows the ground: 6.8% down to the south-west"), with the
+- **Reading the ground** for a followed area is up to 1,089 raycasts against Google's tiles, so
+  `models.js` (`readSurface`) reads a few milliseconds' worth a frame and keeps them: it reads
+  again only when the area is moved, turned, resized or smoothed differently, or the ground under
+  it changes (sharper tiles change the 7 × 7 plane). While it reads, the plane stands in (so an
+  area being dragged lies on the plane and settles onto the smoothed ground once let go), or what
+  was read before while it's where it was. What's fitted (`params.fit`, never saved) counts as a
+  change only when it moves by more than about 2 cm anywhere (`sameFit`), so it doesn't refit in a
+  loop. Areas saved with `follow` load onto the smoothed ground; the usual 10 m isn't saved.
+- **The P panel** says how it's graded ("follows the ground, smoothed over 10 m: 4-11% down to the
+  south-west", the least and most steep of its cells, leaving out the odd tenth at each end; "one
+  slope from the ground: 6.8% down to the south-west" for the plane), with the
   **cut (bank)** and **fill (compacted)** in m³ against the bare ground, batters included; the
   resize label says it in a few words.
-- **Claude (MCP):** `add_flatten_area` takes `grade` (`level`, `follow`, `slope`, `ridge`,
-  `valley`, `terraces`; `follow` if left out), `fall`, `toward`, `ridge_along`, `steps`,
-  `max_grade` and `batter`; numbers are clamped to what the editor offers, unknown words refused.
-- **Tests:** `npm run test:grading-ui` (each grade's heights on a tilted stand-in ground, the
+- **Claude (MCP):** `add_flatten_area` takes `grade` (`level`, `follow`, `plane`, `slope`,
+  `ridge`, `valley`, `terraces`; `follow` if left out), `fall`, `toward`, `ridge_along`, `steps`,
+  `smoothing` (follow), `max_grade` (follow and plane) and `batter`; numbers are clamped to what
+  the editor offers, unknown words refused.
+- **Tests:** `npm run test:grading-ui` (each grade's heights on a tilted stand-in ground; on a
+  hillside that isn't a plane, 3% steepening to 15% and turning, with a hump, a shed and a tree,
+  following the ground stays within 0.3 m of the bare ground where the best-fit plane is over 2 m
+  out, the smoothing changes how closely it hugs, the steepest caps it, it saves and loads; the
   embankment and cut slope at the batter ratio, the earth moved, saving and loading, a pit's
   floor), with `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`.
 

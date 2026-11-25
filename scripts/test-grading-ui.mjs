@@ -10,6 +10,10 @@
 // leaves the earth moved as it was; 'flatten up to' bounds what's hidden over the area; a cut slope
 // meeting another area's embankment leaves no cliff; a large area's chunks are made over the next
 // frames, and a huge one is only pressed down. The resize label names the downhill side when turned.
+// Round 1000 m east, 170 m south the ground is a hillside that isn't a plane (rising 3% to the east
+// at one end of an 80 m area, 15% at the other, turning as it goes, with a 1.2 m hump, a 2 m shed
+// and an 8 m tree on it): following the ground stays within 0.3 m of the bare ground where the best-fit plane is
+// metres out; the smoothing changes how closely it hugs it; the steepest caps it; it saves and loads.
 //
 // Needs Playwright with Chromium. TEST_VITE_PORT picks the port, or TEST_BASE=<url> uses a dev
 // server that's already running (started without a Maps key); TEST_SCREENSHOTS=<folder> saves
@@ -65,11 +69,24 @@ before( async () => {
 		// the follow area's middle, at 40 m east).
 		const flat = terrain.standIn.height.bind( terrain.standIn );
 		window.slopeAt = ( east, north ) => 0.08 * east + 0.03 * north;
+		// The hillside's bare ground: 3% up to the east at 960 m east, steepening to 15% at 1040 m,
+		// turning as it goes (6% down to the north at the west end, 6% up at the east end), with a
+		// hump 1.2 m high and about 16 m across at (1010, -165).
+		window.hillAt = ( east, north ) => {
+
+			const u = east - 960;
+			return 0.03 * u + 0.00075 * u * u + 0.0015 * ( east - 1000 ) * ( north + 170 ) + 1.2 * Math.exp( - ( ( east - 1010 ) ** 2 + ( north + 165 ) ** 2 ) / 128 );
+
+		};
+		// And what stands on it: a 2 m shed (975..979 east, -160..-156 north) and an 8 m tree 5 m
+		// across at (1025, -185).
+		window.onHill = ( east, north ) => ( east > 975 && east < 979 && north > - 160 && north < - 156 ? 2 : 0 ) + ( Math.hypot( east - 1025, north + 185 ) < 2.5 ? 8 : 0 );
 		terrain.standIn.height = ( x, z ) => {
 
 			const y = flat( x, z );
 			if ( y === null ) return null;
 			const east = - x, north = z;
+			if ( east > 900 && east < 1100 && north > - 260 && north < - 80 ) return y + window.hillAt( east, north ) + window.onHill( east, north );
 			const shed = east > 42 && east < 46 && north > 2 && north < 6 ? 2 : 0;
 			return y + window.slopeAt( east, north ) + shed;
 
@@ -181,8 +198,8 @@ test( 'new areas follow the ground: the plane through it, the shed smoothed away
 	near( out.slope.gz, - 0.03, 0.01, 'slope along' );
 	assert.deepEqual( out.fit, out.slope, 'built on the slope fitted' );
 	near( out.up, window_slope( 40, 0 ), 0.1, 'height at the middle' );
-	assert.match( out.grade, /follows the ground: 8\.5% down to the west/ );
-	assert.match( out.label, /follows the ground: 8\.5% down to the west/ );
+	assert.match( out.grade, /follows the ground, smoothed over 10 m: 8\.5% down to the west/ );
+	assert.match( out.label, /follows the ground, smoothed over 10 m: 8\.5% down to the west/ );
 	assert.ok( out.turned.includes( out.turnedGrade ), `${ out.turned } names ${ out.turnedGrade }` );
 	assert.doesNotMatch( out.turnedGrade, /to the west/ );
 	assert.deepEqual( out.saved, { width: 24, length: 16, height: 0, surface: 'gravel', grade: 'follow', batter: 2 } );
@@ -449,6 +466,174 @@ test( 'a large graded area makes its chunks over the next frames, and a huge one
 	assert.ok( out.waiting > 0 && out.waiting < out.wanted, `${ out.waiting } of ${ out.wanted } left for later` );
 	assert.ok( out.all, 'all made in the end' );
 	near( out.middle, 0, 0.05, 'the graded ground in the middle' );
+
+} );
+
+// Wait until an area changed has snapped again and the ground under it is worked out.
+async function settle( i ) {
+
+	await page.evaluate( async i => {
+
+		const { terrain } = window.twin;
+		const entry = window.areas[ i ];
+		const end = performance.now() + 15000;
+		while ( performance.now() < end ) {
+
+			terrain.flush();
+			const ready = [ ...terrain.chunks.values() ].every( c => c.ready ) && terrain.pending.length === 0;
+			if ( entry.snapped && ready && entry.gradeVolume ) break;
+			await new Promise( resolve => setTimeout( resolve, 50 ) );
+
+		}
+
+		await new Promise( resolve => setTimeout( resolve, 300 ) );
+		terrain.flush();
+
+	}, i );
+
+}
+
+// How far the drawn ground is off the hillside's bare ground over the 80 × 50 m area at (1000, -170),
+// every 2 m, away from the shed and the tree: the worst, and the worst within `inner` m of the hump.
+async function hillError() {
+
+	return page.evaluate( () => {
+
+		const { terrain } = window.twin;
+		let worst = 0, at = null, sum = 0, n = 0;
+		for ( let e = 961; e <= 1039; e += 2 ) for ( let nn = - 194; nn <= - 146; nn += 2 ) {
+
+			if ( Math.hypot( e - 977, nn + 158 ) < 5 || Math.hypot( e - 1025, nn + 185 ) < 5 ) continue;
+			const d = terrain.heightAt( - e, nn ) - window.hillAt( e, nn );
+			sum += d * d;
+			n ++;
+			if ( Math.abs( d ) > Math.abs( worst ) ) {
+
+				worst = d;
+				at = [ e, nn ];
+
+			}
+
+		}
+
+		return { worst: Math.abs( worst ), signed: worst, at, rms: Math.sqrt( sum / n ) };
+
+	} );
+
+}
+
+// The steepest the drawn ground is over the area (2 m apart, along and across it).
+async function steepest() {
+
+	return page.evaluate( () => {
+
+		const { terrain } = window.twin;
+		let worst = 0;
+		for ( let e = 961; e <= 1037; e += 2 ) for ( let nn = - 194; nn <= - 148; nn += 2 ) {
+
+			const h = terrain.heightAt( - e, nn );
+			const ge = ( terrain.heightAt( - e - 2, nn ) - h ) / 2, gn = ( terrain.heightAt( - e, nn + 2 ) - h ) / 2;
+			worst = Math.max( worst, Math.hypot( ge, gn ) );
+
+		}
+
+		return worst;
+
+	} );
+
+}
+
+test( 'on a hillside that isn\'t a plane, following the ground stays on it where one plane is metres out', async () => {
+
+	const i = await area( { params: { width: 80, length: 50, grade: 'follow' }, east: 1000, north: - 170 } );
+	const follow = await hillError();
+	const out = await page.evaluate( async i => {
+
+		const entry = window.areas[ i ];
+		const { getKind } = await import( '/src/kinds.js' );
+		const kind = getKind( 'flatten-zone' );
+		return { grade: kind.readouts[ 0 ].get( entry ), volume: { ...entry.gradeVolume }, saved: window.twin.models.toConfig( entry ).params, grid: entry.params.fit?.grid && [ entry.params.fit.grid.nx, entry.params.fit.grid.nz ], up: entry.state.up };
+
+	}, i );
+	console.log( 'follow (10 m):', JSON.stringify( { follow, ...out } ) );
+	assert.ok( follow.worst < 0.3, `follow: worst ${ follow.worst.toFixed( 3 ) } m at ${ follow.at }` );
+	assert.match( out.grade, /^follows the ground, smoothed over 10 m: \d+-\d+% down to the west$/ );
+	assert.deepEqual( out.saved, { width: 80, length: 50, height: 0, grade: 'follow', batter: 2 } );
+	assert.ok( out.grid[ 0 ] <= 33 && out.grid[ 1 ] <= 33, `read on a grid of at most 33 × 33: ${ out.grid }` );
+
+	// The best-fit plane through the same ground.
+	await page.evaluate( i => window.twin.models.setParams( window.areas[ i ], { grade: 'plane' } ), i );
+	await settle( i );
+	const plane = await hillError();
+	const planeOut = await page.evaluate( async i => {
+
+		const entry = window.areas[ i ];
+		const { getKind } = await import( '/src/kinds.js' );
+		return { grade: getKind( 'flatten-zone' ).readouts[ 0 ].get( entry ), volume: { ...entry.gradeVolume }, grid: !! entry.params.fit?.grid };
+
+	}, i );
+	console.log( 'plane:', JSON.stringify( { plane, ...planeOut } ) );
+	assert.ok( plane.worst > 1, `the plane is metres out: ${ plane.worst.toFixed( 2 ) } m` );
+	assert.match( planeOut.grade, /^one slope from the ground: [\d.]+% down to the west$/ );
+	assert.equal( planeOut.grid, false );
+	assert.ok( out.volume.cut + out.volume.fill < ( planeOut.volume.cut + planeOut.volume.fill ) / 3, `earth moved: follow ${ JSON.stringify( out.volume ) }, plane ${ JSON.stringify( planeOut.volume ) }` );
+
+	// The smoothing: 5 m hugs it closer, 40 m is gentler (further off, over the hump).
+	const errors = {};
+	for ( const smoothing of [ 5, 40 ] ) {
+
+		await page.evaluate( ( [ i, smoothing ] ) => window.twin.models.setParams( window.areas[ i ], { grade: 'follow', smoothing } ), [ i, smoothing ] );
+		await settle( i );
+		errors[ smoothing ] = await hillError();
+
+	}
+
+	console.log( 'smoothing 5 / 10 / 40 m:', [ errors[ 5 ], follow, errors[ 40 ] ].map( e => `${ e.worst.toFixed( 3 ) } (rms ${ e.rms.toFixed( 3 ) })` ).join( ', ' ) );
+	assert.ok( errors[ 5 ].rms < follow.rms && follow.rms < errors[ 40 ].rms, 'the smaller the smoothing, the closer it hugs' );
+	assert.ok( errors[ 5 ].worst < 0.15, `5 m: ${ errors[ 5 ].worst }` );
+	const saved = await page.evaluate( i => window.twin.models.toConfig( window.areas[ i ] ).params, i );
+	assert.equal( saved.smoothing, 40, 'a smoothing other than 10 m is saved' );
+
+	// No steeper than 8% anywhere: the steep end is eased, the rest still follows the ground.
+	const before = await steepest();
+	await page.evaluate( i => window.twin.models.setParams( window.areas[ i ], { smoothing: 10, maxGrade: 8 } ), i );
+	await settle( i );
+	const capped = await steepest();
+	const cappedGrade = await page.evaluate( async i => ( await import( '/src/kinds.js' ) ).getKind( 'flatten-zone' ).readouts[ 0 ].get( window.areas[ i ] ), i );
+	const gentle = await page.evaluate( () => window.twin.terrain.heightAt( - 970, - 180 ) - window.hillAt( 970, - 180 ) );
+	console.log( 'steepest:', before.toFixed( 3 ), '→', capped.toFixed( 3 ), cappedGrade, 'off the ground at the gentle end', gentle.toFixed( 2 ) );
+	assert.ok( before > 0.12, `the ground is steeper than that: ${ before }` );
+	assert.ok( capped < 0.085, `capped at 8%: ${ capped }` );
+	assert.match( cappedGrade, /smoothed over 10 m: \d+-8% down to the west/ );
+
+	// Saved and loaded again: the same surface.
+	const again = await page.evaluate( async i => {
+
+		const { models, terrain } = window.twin;
+		const { sameFit } = await import( '/src/grade.js' );
+		const entry = window.areas[ i ];
+		const config = models.toConfig( entry );
+		const before = terrain.heightAt( - 1030, - 160 );
+		models.remove( entry );
+		const loaded = await models.load( config );
+		const end = performance.now() + 15000;
+		while ( performance.now() < end && ! ( loaded.snapped && loaded.gradeVolume && terrain.pending.length === 0 ) ) {
+
+			terrain.flush();
+			await new Promise( resolve => setTimeout( resolve, 50 ) );
+
+		}
+
+		terrain.flush();
+		window.areas[ i ] = loaded;
+		return { saved: config.params, params: models.toConfig( loaded ).params, same: sameFit( entry.params.fit, loaded.params.fit ), before, after: terrain.heightAt( - 1030, - 160 ) };
+
+	}, i );
+	assert.deepEqual( again.saved, { width: 80, length: 50, height: 0, grade: 'follow', batter: 2, maxGrade: 8 } );
+	assert.deepEqual( again.params, again.saved );
+	assert.ok( again.same, 'the same surface fitted' );
+	near( again.after, again.before, 0.02, 'loaded, the ground there' );
+	await page.evaluate( i => window.twin.models.remove( window.areas[ i ] ), i );
 
 } );
 
