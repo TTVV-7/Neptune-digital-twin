@@ -174,7 +174,8 @@ function forgetTurnstile() {
 
 }
 
-// [ { name, lat, lon, type } ] for a place or address. Throws with a message to show.
+// { results: [ { name, lat, lon, type, house } ], provider, streetOnly } for a place or address
+// (worker/drive/search.js). Throws with a message to show.
 export async function searchPlaces( query ) {
 
 	let res;
@@ -193,7 +194,7 @@ export async function searchPlaces( query ) {
 	if ( res.status === 429 ) throw new Error( 'Lots of people are searching. Try again in a moment.' );
 	if ( res.status === 400 ) throw new Error( 'Type a place or an address: letters, numbers and simple punctuation.' );
 	if ( ! res.ok || ! Array.isArray( body.results ) ) throw new Error( 'Search isn\'t answering. Try again soon.' );
-	return body.results;
+	return body;
 
 }
 

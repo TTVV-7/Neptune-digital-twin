@@ -1,4 +1,5 @@
 import { searchPlaces } from './api.js';
+import { STREET_ONLY_DRIVE, rankedPlaces, searchCredit, streetOnly } from '../search-results.js';
 import { DEFAULT_RIDE } from './catalog.js';
 import { formatLatLon, parseLatLon, recentPlaces, SPOTS, storage } from './places.js';
 import { searchWorld, SPOTS_ON } from './world-places.js';
@@ -160,10 +161,14 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		onSearch( 'earth' );
 		try {
 
-			const found = await searchPlaces( text );
+			const answer = await searchPlaces( text );
 			if ( ask !== searching ) return;
+			// Houses and numbered addresses first; when only the street was found, the line above the
+			// results says so. The credit under them is whose search answered.
+			const found = rankedPlaces( answer );
 			if ( ! found.length ) onSearch( 'nothing' );
-			say( found.length ? '' : `Nothing found for "${ text }". ${ WORDS.earth.none }` );
+			say( ! found.length ? `Nothing found for "${ text }". ${ WORDS.earth.none }` : streetOnly( answer ) ? STREET_ONLY_DRIVE : '' );
+			credit( answer );
 			showResults( found );
 
 		} catch ( err ) {
@@ -173,6 +178,17 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		}
 
 	} );
+
+	// "Search © OpenStreetMap contributors" (as the page starts), or Google's credit when it answered.
+	const osm = $( '.osm' );
+	const osmCredit = osm?.cloneNode( true );
+	function credit( answer ) {
+
+		if ( ! osm ) return;
+		if ( answer?.provider === 'google' ) osm.textContent = searchCredit( answer );
+		else osm.replaceChildren( ...osmCredit.cloneNode( true ).childNodes );
+
+	}
 
 	function say( text ) {
 

@@ -125,7 +125,7 @@ function privacy( contact ) {
 		<li><b>Driving with others.</b> While <b>Show me to drivers nearby</b> is on (switch it off in the pause menu) or you're in a party, others driving there see your nickname or a guest name, your level and title, your ride and where your car is in the game. Never where you really are. There's no chat.</li>
 		<li><b>Play statistics.</b> Daily totals of how the game is played (how long people drive and where in the game, devices, load times, what went wrong). Only totals are kept, nothing that tells one visitor from another.</li>
 		<li><b>Your IP address</b> is used, without being stored with anything else about you, to hand out the free daily Earth drives fairly, limit abuse and count a visitor once a day. Those daily counts are deleted when the day ends (Cloudflare's backups can hold them up to 30 days more).</li>
-		<li><b>Place search.</b> What you type in the search box is sent to OpenStreetMap's search service to find the place; World Drive doesn't keep it.</li>
+		<li><b>Place search.</b> What you type in the search box is sent, through our server, to OpenStreetMap's search service or, for street addresses, Google's Geocoding service to find the place; World Drive doesn't keep it.</li>
 	</ul>
 	<h2>With an account</h2>
 	<p>An account is only needed for the Supporter Pass and to keep your progress on every device.</p>
@@ -142,7 +142,7 @@ function privacy( contact ) {
 		<li><b>Cloudflare</b> hosts the game and its data, checks for robots (Turnstile) and counts visits without cookies (Web Analytics).</li>
 		<li><b>Google</b> streams the 3D map of the Earth (your browser asks Google for it directly), runs Google sign-in if you use it, and shows the ad on the globe with AdSense. Google and its partners use cookies to show, count and, where you allow it, personalise the ad; in the EEA, the UK and Switzerland Google asks first. See <a href="https://policies.google.com/technologies/partner-sites">how Google uses information from sites that use its services</a>. There's no ad with the Supporter Pass.</li>
 		<li><b>Stripe</b> takes payments: the pass is sold to you through Link, Stripe's payment service, which collects what's needed to take the payment and work out the tax where you live (your card, email and billing country or address), sends your receipts, and keeps its own records under <a href="https://stripe.com/privacy">Stripe's privacy policy</a>.</li>
-		<li><b>OpenStreetMap</b> answers place searches.</li>
+		<li><b>OpenStreetMap</b> answers place searches, and <b>Google</b> street address searches, through our server, so neither sees your IP address.</li>
 	</ul>
 	<p>Nothing is sold or shared for anyone else's marketing. These services may keep data outside Canada (in the United States and elsewhere), where other laws apply.</p>
 	<h2>How long</h2>
@@ -483,7 +483,7 @@ function buildPrivacy( contact ) {
 		<li><b>Cloudflare</b> hosts Build and its database, and counts visits without cookies (Web Analytics).</li>
 		<li><b>Google</b> provides the 3D map: your browser asks Google for it directly, so Google sees your IP address and the area you're looking at. Google also runs sign-in when you press its button. Google's use is under the <a href="${ GOOGLE_PRIVACY }">Google Privacy Policy</a>.</li>
 		<li><b>Stripe</b> takes payments and works out tax, under <a href="https://stripe.com/privacy">its privacy policy</a>.</li>
-		<li><b>OpenStreetMap</b> answers address searches, through our server, so it never sees your IP address.</li>
+		<li><b>OpenStreetMap</b> answers address searches through our server, so it never sees your IP address; so does Google's Geocoding service, for street addresses OpenStreetMap can't place exactly.</li>
 		<li><b>Anthropic</b> (or another AI app's maker), only if you connect its app, under your own agreement with it.</li>
 	</ul>
 	<p>Nothing is sold, or shared for advertising. These services keep data in the United States and elsewhere outside Canada, where other laws apply; we use them under their data protection terms, including the safeguards they offer for information from the EU and the UK.</p>
@@ -590,7 +590,7 @@ function buildCredits( markdown ) {
 	return `
 	<p>World Drive Build stands on others' work.</p>
 	<h2>The 3D map</h2>
-	<p>Buildings, roads and terrain are Google's photorealistic 3D map: map data © Google and its data providers, credited in the editor as you look. Address search © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Build isn't made or endorsed by Google.</p>
+	<p>Buildings, roads and terrain are Google's photorealistic 3D map: map data © Google and its data providers, credited in the editor as you look. Address search © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, or powered by Google where the results say so. Build isn't made or endorsed by Google.</p>
 	<h2>Equipment models</h2>
 	<p>These ${ entries.length } models in the library are others' work, used under the licences named (Creative Commons Attribution 4.0, which allows commercial use with credit, and CC0); each was compressed and rescaled for Build. The library's other items are made in code or are our own. Keep these credits with anything you share that shows them.</p>
 	<ul class="credits">

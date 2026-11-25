@@ -484,11 +484,12 @@ describe( 'World Drive Worker', () => {
 
 		const res = await call( server, `/api/search?q=${ encodeURIComponent( 'Furka Pass' ) }`, { headers: { 'Sec-Fetch-Site': 'same-origin' } } );
 		assert.equal( res.status, 200 );
-		assert.deepEqual( res.json, { results: [ { name: 'Furkapass, Obergoms, Wallis, Switzerland', lat: 46.5725, lon: 8.4153, type: 'mountain_pass' } ] } );
+		assert.deepEqual( res.json, { results: [ { name: 'Furkapass, Obergoms, Wallis, Switzerland', lat: 46.5725, lon: 8.4153, type: 'mountain_pass', house: false } ], provider: 'osm', streetOnly: false } );
 		assert.equal( res.headers.get( 'X-Search-Cache' ), 'miss' );
+		assert.equal( res.headers.get( 'Cache-Control' ), 'public, max-age=86400' );
 		const sent = searches.at( - 1 );
 		assert.equal( sent.userAgent, 'WorldDrive/1.0 (+https://worlddrive.app)' );
-		assert.deepEqual( sent.params, { q: 'furka pass', format: 'jsonv2', limit: '6', 'accept-language': 'en' } );
+		assert.deepEqual( sent.params, { q: 'furka pass', format: 'jsonv2', addressdetails: '1', limit: '6', 'accept-language': 'en' } );
 
 	} );
 
@@ -4313,6 +4314,293 @@ describe( 'World Drive Worker addresses', () => {
 		const res = await worker.fetch( new Request( 'https://worlddrive.app/' ), env, {} );
 		assert.equal( await res.text(), 'site' );
 		assert.deepEqual( asked, [ 'https://worlddrive.app/' ] );
+
+	} );
+
+} );
+
+// search.js by itself (called here, the Worker's cache and DriveLimits stood in for, DriveLimits'
+// geocode count on node:sqlite): Google's Geocoding when GOOGLE_GEOCODING_KEY is set (a stand-in at
+// GEOCODING_UPSTREAM), the daily cap, the short cache when Google couldn't be asked, and
+// Nominatim's second try for an address with a house number.
+describe( 'World Drive search by itself: Google\'s Geocoding, its cap, the brief cache, Nominatim\'s second try', () => {
+
+	let stand;
+	let standBase;
+	const google = [];
+	const osm = [];
+	// What each stand-in answers: Google's (params) => body, Nominatim's (params) => array.
+	let googleAnswer = () => ( { status: 'ZERO_RESULTS', results: [] } );
+	let osmAnswer = () => [];
+	let searchModule;
+	let geocodes;
+	const KEY = 'AIzaTestGeocodingKey000000000000000000';
+	const NOON = Date.UTC( 2030, 2, 4, 12 );
+	const ROUTE = { formatted_address: 'W 12th Ave, Vancouver, BC, Canada', geometry: { location: { lat: 49.2606, lng: - 123.1144 } }, types: [ 'route' ] };
+	const HOUSE = { formatted_address: '453 W 12th Ave, Vancouver, BC V5Y 1V4, Canada', geometry: { location: { lat: 49.26105, lng: - 123.11389 } }, types: [ 'street_address' ], partial_match: false };
+	const OSM_STREET = { display_name: 'West 12th Avenue, Mount Pleasant, Vancouver, British Columbia, Canada', lat: '49.2606', lon: '-123.1144', type: 'secondary', addresstype: 'road', address: { road: 'West 12th Avenue', city: 'Vancouver' } };
+	const OSM_HOUSE = { display_name: '453, West 12th Avenue, Mount Pleasant, Vancouver, British Columbia, V5Y 1V4, Canada', lat: '49.26104', lon: '-123.11391', type: 'house', addresstype: 'place', address: { house_number: '453', road: 'West 12th Avenue', city: 'Vancouver' } };
+
+	before( async () => {
+
+		await loadWorker();
+		searchModule = await import( '../worker/drive/search.js' );
+		const { DriveLimits } = await import( '../worker/drive/limits.js' );
+		const db = new DatabaseSync( ':memory:' );
+		const sql = { exec: ( query, ...values ) => {
+
+			const rows = db.prepare( query ).all( ...values ).map( row => ( { ...row } ) );
+			return { toArray: () => rows, one: () => rows[ 0 ] };
+
+		} };
+		geocodes = new DriveLimits( { storage: { sql, transactionSync: run => run() } }, { TURNSTILE_SECRET: PASS_SECRET } );
+		stand = createServer( ( req, res ) => {
+
+			const url = new URL( req.url, 'http://stand' );
+			const params = Object.fromEntries( url.searchParams );
+			if ( url.pathname === '/geocode' ) {
+
+				google.push( params );
+				return send( res, 200, googleAnswer( params ) );
+
+			}
+
+			osm.push( params );
+			send( res, 200, osmAnswer( params ) );
+
+		} );
+		await new Promise( resolve => stand.listen( 0, '127.0.0.1', resolve ) );
+		standBase = `http://127.0.0.1:${ stand.address().port }`;
+
+	} );
+
+	after( () => stand?.close() );
+
+	// Cloudflare's cache for one run of searches: what was put in it, by key.
+	function newCache() {
+
+		const kept = new Map();
+		return {
+			kept,
+			match: async request => kept.has( request.url ) ? new Response( kept.get( request.url ).body, { headers: kept.get( request.url ).headers } ) : undefined,
+			put: async ( request, response ) => kept.set( request.url, { body: await response.text(), headers: Object.fromEntries( response.headers ) } ),
+		};
+
+	}
+
+	// A search as the Worker makes it: { status, json, text, maxAge, hit, cache }.
+	async function ask( q, { env = {}, cache = newCache(), now = NOON, slot = () => ( { wait: 0 } ) } = {} ) {
+
+		const was = globalThis.caches;
+		globalThis.caches = { default: cache };
+		const waits = [];
+		try {
+
+			const res = await searchModule.search( {
+				env: { SEARCH_UPSTREAM: `${ standBase }/search`, ...env },
+				url: new URL( `https://worlddrive.app/api/search?q=${ encodeURIComponent( q ) }` ),
+				ctx: { waitUntil: promise => waits.push( promise ) },
+				limits: { searchSlot: slot, geocodeTurn: options => geocodes.geocodeTurn( options ) },
+				now,
+			} );
+			await Promise.all( waits );
+			const text = await res.text();
+			return { status: res.status, json: JSON.parse( text ), text, maxAge: Number( /max-age=(\d+)/.exec( res.headers.get( 'Cache-Control' ) ?? '' )?.[ 1 ] ), hit: res.headers.get( 'X-Search-Cache' ) === 'hit', cache };
+
+		} finally {
+
+			globalThis.caches = was;
+
+		}
+
+	}
+
+	const withGoogle = ( more = {} ) => ( { GOOGLE_GEOCODING_KEY: KEY, GEOCODING_UPSTREAM: `${ standBase }/geocode`, ...more } );
+
+	test( 'addresses: a house number, a street written short, a postcode and a town told apart; the street written out; the second question', () => {
+
+		const { hasHouseNumber, expandStreet, retryOf } = searchModule;
+		for ( const q of [ '453 w 12th ave, vancouver', '10 downing street', '221b baker street, london', '1600 pennsylvania ave nw, washington', 'hauptstraße 5, berlin', '12-14 rue de rivoli, paris' ] ) assert.ok( hasHouseNumber( q ), q );
+		for ( const q of [ 'furka pass', '10115 berlin', 'route 66', 'w 12th ave, vancouver', 'cn tower', '46.57, 8.42' ] ) assert.ok( ! hasHouseNumber( q ), q );
+		assert.equal( expandStreet( '453 w 12th ave' ), '453 west 12th avenue' );
+		assert.equal( expandStreet( '1600 pennsylvania ave. nw' ), '1600 pennsylvania avenue northwest' );
+		assert.equal( expandStreet( '12 st clair ave e' ), '12 st clair avenue east' );
+		assert.equal( expandStreet( '5 n park blvd' ), '5 north park boulevard' );
+		assert.equal( expandStreet( '8 kings hwy' ), '8 kings highway' );
+		for ( const [ short, long ] of [ [ 'rd', 'road' ], [ 'dr', 'drive' ], [ 'cres', 'crescent' ], [ 'pl', 'place' ], [ 'ct', 'court' ], [ 'ln', 'lane' ], [ 'pkwy', 'parkway' ], [ 'sq', 'square' ], [ 'terr', 'terrace' ], [ 'st', 'street' ] ] ) assert.equal( expandStreet( `9 oak ${ short }` ), `9 oak ${ long }` );
+		assert.deepEqual( retryOf( '453 w 12th ave, vancouver, bc' ), { street: '453 west 12th avenue', city: 'vancouver' } );
+		assert.deepEqual( retryOf( '453 w 12th ave' ), { q: '453 west 12th avenue' } );
+		assert.equal( retryOf( '10 downing street' ), null, 'nothing new to ask' );
+
+	} );
+
+	test( 'with a key, Google answers an address: its street address first, credited to Google, cached a day, the key never in the answer', async () => {
+
+		google.length = 0;
+		osm.length = 0;
+		googleAnswer = () => ( { status: 'OK', results: [ ROUTE, HOUSE, { formatted_address: 'Nowhere', geometry: { location: { lat: 200, lng: 0 } }, types: [ 'route' ] } ] } );
+		const first = await ask( '453 W 12th Ave, Vancouver', { env: withGoogle() } );
+		assert.equal( first.status, 200 );
+		assert.deepEqual( first.json, {
+			results: [
+				{ name: '453 W 12th Ave, Vancouver, BC V5Y 1V4, Canada', lat: 49.26105, lon: - 123.11389, type: 'street_address', house: true },
+				{ name: 'W 12th Ave, Vancouver, BC, Canada', lat: 49.2606, lon: - 123.1144, type: 'route', house: false },
+			],
+			provider: 'google',
+			streetOnly: false,
+		} );
+		assert.equal( first.maxAge, 86400 );
+		assert.ok( ! first.text.includes( KEY ) );
+		assert.deepEqual( google, [ { address: '453 w 12th ave, vancouver', language: 'en', key: KEY } ] );
+		assert.deepEqual( osm, [], 'OpenStreetMap was asked too' );
+		// Kept by the tidied query and that Google is set up.
+		assert.deepEqual( [ ...first.cache.kept.keys() ], [ 'https://worlddrive.app/api/search?q=453%20w%2012th%20ave%2C%20vancouver&via=google' ] );
+		const again = await ask( '453  w 12TH ave, Vancouver', { env: withGoogle(), cache: first.cache } );
+		assert.ok( again.hit );
+		assert.equal( again.json.results[ 0 ].type, 'street_address' );
+		assert.equal( google.length, 1, 'a cached answer went to Google again' );
+
+	} );
+
+	test( 'Google refusing (REQUEST_DENIED and the rest) or not answering: OpenStreetMap answers, kept 10 minutes, logged once', async () => {
+
+		google.length = 0;
+		osm.length = 0;
+		googleAnswer = () => ( { status: 'REQUEST_DENIED', error_message: 'This API project is not authorized to use this API.', results: [] } );
+		osmAnswer = () => [ OSM_HOUSE ];
+		const warned = [];
+		const warn = console.warn;
+		console.warn = message => warned.push( message );
+		try {
+
+			const res = await ask( '453 W 12th Ave, Vancouver', { env: withGoogle() } );
+			assert.equal( res.json.provider, 'osm' );
+			assert.equal( res.json.results[ 0 ].house, true );
+			assert.equal( res.json.streetOnly, false );
+			assert.equal( res.maxAge, 600 );
+			assert.equal( ( await ask( '12 Main St, Vancouver', { env: withGoogle() } ) ).maxAge, 600 );
+			assert.equal( google.length, 2 );
+			assert.equal( warned.filter( m => /REQUEST_DENIED/.test( m ) ).length, 1, warned.join( '\n' ) );
+			assert.ok( ! warned.join( ' ' ).includes( KEY ) );
+			for ( const status of [ 'OVER_QUERY_LIMIT', 'INVALID_REQUEST', 'UNKNOWN_ERROR' ] ) {
+
+				googleAnswer = () => ( { status, results: [] } );
+				const refused = await ask( '7 Oak Rd, Leeds', { env: withGoogle() } );
+				assert.deepEqual( [ refused.json.provider, refused.maxAge ], [ 'osm', 600 ], status );
+
+			}
+
+			// No answer at all (nothing listening there).
+			const closed = createServer();
+			await new Promise( resolve => closed.listen( 0, '127.0.0.1', resolve ) );
+			const nobody = `http://127.0.0.1:${ closed.address().port }/geocode`;
+			await new Promise( resolve => closed.close( resolve ) );
+			const down = await ask( '7 Oak Rd, Leeds', { env: withGoogle( { GEOCODING_UPSTREAM: nobody } ) } );
+			assert.deepEqual( [ down.status, down.json.provider, down.maxAge ], [ 200, 'osm', 600 ] );
+
+		} finally {
+
+			console.warn = warn;
+
+		}
+
+	} );
+
+	test( 'Google finding nothing (ZERO_RESULTS): OpenStreetMap\'s answer, kept a day', async () => {
+
+		googleAnswer = () => ( { status: 'ZERO_RESULTS', results: [] } );
+		osmAnswer = () => [ OSM_HOUSE ];
+		const res = await ask( '453 W 12th Ave, Vancouver', { env: withGoogle() } );
+		assert.deepEqual( [ res.json.provider, res.maxAge ], [ 'osm', 86400 ] );
+
+	} );
+
+	test( 'GEOCODE_DAILY lookups a day for everyone, then OpenStreetMap (kept 10 minutes) until midnight UTC; a place\'s name goes to OpenStreetMap first', async () => {
+
+		google.length = 0;
+		osm.length = 0;
+		googleAnswer = () => ( { status: 'OK', results: [ HOUSE ] } );
+		osmAnswer = params => params.q === 'nowhere at all' ? [] : [ OSM_STREET ];
+		const day = Date.UTC( 2030, 3, 1, 9 );
+		const env = withGoogle( { GEOCODE_DAILY: '2' } );
+		assert.equal( ( await ask( '1 A St, Vancouver', { env, now: day } ) ).json.provider, 'google' );
+		// A place's name: OpenStreetMap first, and as it found something, Google isn't asked (nor counted).
+		const named = await ask( 'Vancouver', { env, now: day } );
+		assert.deepEqual( [ named.json.provider, named.maxAge ], [ 'osm', 86400 ] );
+		// Nothing there: Google is (and counted).
+		assert.equal( ( await ask( 'Nowhere at all', { env, now: day } ) ).json.provider, 'google' );
+		assert.equal( google.length, 2 );
+		const capped = await ask( '3 C St, Vancouver', { env, now: day + HOUR } );
+		assert.deepEqual( [ capped.json.provider, capped.maxAge ], [ 'osm', 600 ] );
+		assert.equal( google.length, 2, 'Google was asked past the day\'s cap' );
+		assert.deepEqual( await geocodes.geocodeTurn( { now: day + HOUR, daily: 2 } ), { ok: false, retryAfter: 14 * 60 * 60 } );
+		// The next day, Google again.
+		assert.equal( ( await ask( '3 C St, Vancouver', { env, now: day + DAY } ) ).json.provider, 'google' );
+		assert.equal( google.length, 3 );
+		// 0 keeps Google off; unset, 300.
+		assert.equal( ( await ask( '4 D St, Vancouver', { env: withGoogle( { GEOCODE_DAILY: '0' } ), now: day + 2 * DAY } ) ).json.provider, 'osm' );
+		assert.equal( google.length, 3 );
+		assert.equal( ( await ask( '4 D St, Vancouver', { env: withGoogle(), now: day + 2 * DAY } ) ).json.provider, 'google' );
+		assert.deepEqual( await geocodes.geocodeTurn( { now: day + 2 * DAY, daily: 300 } ), { ok: true, left: 298 } );
+
+	} );
+
+	test( 'no key (or one that isn\'t a key): OpenStreetMap alone, as before, kept a day', async () => {
+
+		google.length = 0;
+		osm.length = 0;
+		osmAnswer = () => [ OSM_HOUSE ];
+		for ( const env of [ {}, { GOOGLE_GEOCODING_KEY: '' }, { GOOGLE_GEOCODING_KEY: 'your key here' } ] ) {
+
+			const res = await ask( '453 W 12th Ave, Vancouver', { env } );
+			assert.deepEqual( [ res.json.provider, res.maxAge, res.json.results[ 0 ].house ], [ 'osm', 86400, true ] );
+			assert.deepEqual( [ ...res.cache.kept.keys() ], [ 'https://worlddrive.app/api/search?q=453%20w%2012th%20ave%2C%20vancouver&via=osm' ] );
+
+		}
+
+		assert.equal( google.length, 0 );
+		assert.equal( osm.length, 3 );
+
+	} );
+
+	test( 'OpenStreetMap finding only the street for a house number is asked once more, the street written out (structured, with a town); the house first, else "street only"', async () => {
+
+		osm.length = 0;
+		osmAnswer = params => params.street ? [ OSM_HOUSE ] : [ OSM_STREET ];
+		const found = await ask( '453 W 12th Ave, Vancouver' );
+		assert.deepEqual( osm.map( params => params.q ?? `${ params.street } | ${ params.city }` ), [ '453 w 12th ave, vancouver', '453 west 12th avenue | vancouver' ] );
+		assert.equal( osm[ 1 ].addressdetails, '1' );
+		assert.deepEqual( found.json.results.map( r => [ r.name, r.house ] ), [ [ OSM_HOUSE.display_name, true ], [ OSM_STREET.display_name, false ] ] );
+		assert.equal( found.json.streetOnly, false );
+
+		// No town: the whole query, written out.
+		osm.length = 0;
+		osmAnswer = params => params.q === '453 west 12th avenue' ? [ OSM_HOUSE ] : [ OSM_STREET ];
+		assert.equal( ( await ask( '453 W 12th Ave' ) ).json.results[ 0 ].house, true );
+		assert.deepEqual( osm.map( params => params.q ), [ '453 w 12th ave', '453 west 12th avenue' ] );
+
+		// Still only the street: it says so.
+		osm.length = 0;
+		osmAnswer = () => [ OSM_STREET ];
+		const street = await ask( '453 W 12th Ave, Vancouver' );
+		assert.deepEqual( [ street.json.results.length, street.json.streetOnly ], [ 1, true ] );
+		assert.equal( osm.length, 2 );
+
+		// A house the first time, or no house number: asked once.
+		osm.length = 0;
+		osmAnswer = () => [ OSM_HOUSE ];
+		await ask( '453 W 12th Ave, Vancouver' );
+		osmAnswer = () => [ OSM_STREET ];
+		await ask( 'W 12th Ave, Vancouver' );
+		assert.equal( osm.length, 2 );
+
+		// The queue full for the second question: the first answer stands; a busy first is a 429.
+		osm.length = 0;
+		let turns = 0;
+		const busySecond = () => ++ turns === 1 ? { wait: 0 } : { busy: true, retryAfter: 2 };
+		const first = await ask( '453 W 12th Ave, Vancouver', { slot: busySecond } );
+		assert.deepEqual( [ first.json.streetOnly, osm.length ], [ true, 1 ] );
+		await assert.rejects( ask( '9 Oak Rd, Leeds', { slot: () => ( { busy: true, retryAfter: 2 } ) } ), err => err.status === 429 );
 
 	} );
 

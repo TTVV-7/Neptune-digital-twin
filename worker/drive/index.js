@@ -115,8 +115,12 @@ export { DriveRoom } from './live.js';
 //   ADSENSE_CLIENT, ADSENSE_SLOT   Google AdSense on the globe (settings.js's adsense): the publisher
 //                         id (ca-pub-...) and, if wanted, a display unit's slot id; empty (or not
 //                         one), no ads and /ads.txt is a 404
-//   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
-//                         scripts/test-drive-worker.mjs)
+//   GOOGLE_GEOCODING_KEY  a secret: the server's own Google key, restricted to the Geocoding API,
+//                         for finding street addresses (search.js); never sent to a page. Unset,
+//                         search is OpenStreetMap's alone. GEOCODE_DAILY the most lookups sent to
+//                         Google a day from everyone together (300 if unset)
+//   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, GEOCODING_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests
+//                         only (see scripts/test-drive-worker.mjs)
 
 // Other names the Maps key may be set under (see mapsKey).
 const KEY_NAMES = /^google_maps_api(_key)?$/i;

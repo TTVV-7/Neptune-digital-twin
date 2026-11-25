@@ -1,6 +1,7 @@
 import './style.css';
 import { BILLING_PAGE, PLANS, PRO_PHRASE, SOON, dateOf, intervalChoice, salesHidden } from '../build-plans.js';
 import { TOLERANCE, TOLERANCE_MAX, hex, removeBackground } from '../logo-background.js';
+import { STREET_ONLY, rankedPlaces, searchCredit, streetOnly } from '../search-results.js';
 
 // World Drive Build's dashboard (worlddrive.app/build/, drive/build/index.html, docs/build.md): find a
 // site by address and open the editor there (/build/app/), your saved projects, your plan, and
@@ -79,7 +80,11 @@ $( 'find' ).addEventListener( 'submit', async e => {
 
 		}
 
-		results.replaceChildren( ...body.results.map( place => {
+		// Houses and numbered addresses first; when only the street was found, the list says so.
+		const places = rankedPlaces( body );
+		const street = streetOnly( body ) ? [ Object.assign( note( STREET_ONLY ), { className: 'note street-only' } ) ] : [];
+		const credit = Object.assign( note( searchCredit( body ) ), { className: 'note credit' } );
+		results.replaceChildren( ...street, ...places.map( place => {
 
 			const item = document.createElement( 'li' );
 			const link = document.createElement( 'a' );
@@ -97,7 +102,7 @@ $( 'find' ).addEventListener( 'submit', async e => {
 			if ( home?.signedIn ) item.append( startHere( place ) );
 			return item;
 
-		} ) );
+		} ), credit );
 		results.querySelector( 'a' )?.focus();
 
 	} catch ( err ) {

@@ -316,6 +316,20 @@ h1 {
 	font-size: 14px;
 }
 
+/* Only the street was found for an address with a house number (worker/drive/search.js). */
+.results .street-only {
+	padding: 8px 14px;
+	border-left: 3px solid var( --safety );
+	color: inherit;
+	font-size: 13px;
+}
+
+/* Whose search answered: OpenStreetMap's or Google's. */
+.results .credit {
+	padding: 2px 14px 0;
+	font-size: 11px;
+}
+
 .example {
 	margin: 16px 0 0;
 	color: var( --muted );

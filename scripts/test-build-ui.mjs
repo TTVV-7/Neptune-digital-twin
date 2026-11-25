@@ -92,10 +92,13 @@ before( async () => {
 	}
 
 	if ( SHOTS ) mkdirSync( SHOTS, { recursive: true } );
-	// Place search's upstream (Nominatim's stand-in): one place for any query.
+	// Place search's upstream (Nominatim's stand-in): one place for any query, but only the street
+	// for an address with a house number (asked twice, the second time with the street written out).
 	upstream = createServer( ( req, res ) => {
 
+		const url = new URL( req.url, 'http://upstream' );
 		res.setHeader( 'Content-Type', 'application/json' );
+		if ( /^\d/.test( url.searchParams.get( 'q' ) ?? url.searchParams.get( 'street' ) ?? '' ) ) return res.end( JSON.stringify( [ { lat: '49.2606', lon: '-123.1144', display_name: 'West 12th Avenue, Mount Pleasant, Vancouver, British Columbia, Canada', type: 'secondary', addresstype: 'road', address: { road: 'West 12th Avenue' } } ] ) );
 		res.end( JSON.stringify( [ { lat: '43.6426', lon: '-79.3871', display_name: 'CN Tower, Front Street West, Toronto, Ontario, Canada', type: 'attraction' } ] ) );
 
 	} );
@@ -420,9 +423,20 @@ test( 'moving the project\'s site by address', async () => {
 
 	await library( false );
 	await page.click( '.site-picker .site-current' );
-	await page.fill( '#site-query', 'CN Tower' );
+	// An address OpenStreetMap only finds the street of: the list says so, and credits it.
+	await page.fill( '#site-query', '453 W 12th Ave, Vancouver' );
 	await page.click( '.site-picker form > button' );
 	await page.waitForSelector( '.site-picker .site-results button' );
+	assert.deepEqual( await page.locator( '.site-picker .site-results li' ).allTextContents(), [
+		'Street only: the exact address wasn\'t found; pick it and move the site into place.',
+		'West 12th Avenue, Mount Pleasant, Vancouver, British Columbia, Canada',
+		'Search © OpenStreetMap contributors',
+	] );
+	await shot( 'build-site-street-only' );
+	await page.fill( '#site-query', 'CN Tower' );
+	await page.click( '.site-picker form > button' );
+	await page.waitForSelector( '.site-picker .site-results button:has-text("CN Tower")' );
+	assert.equal( await page.locator( '.site-picker .street-only' ).count(), 0 );
 	await Promise.all( [ page.waitForNavigation(), page.click( '.site-picker .site-results button' ) ] );
 	assert.match( page.url(), /\/build\/app\/\?/ );
 	assert.match( page.url(), /at=43\.642600%2C-79\.387100/ );
@@ -467,10 +481,20 @@ test( 'the dashboard signed out: find a site, the two plans, and sign in to keep
 	await page.locator( '.upgrade-note', { hasText: 'Sign in first' } ).waitFor();
 	assert.doesNotMatch( await page.textContent( '#plan-body' ), /unlimited|per seat/ );
 
+	// An address OpenStreetMap only finds the street of: the list says so, above the street.
+	await page.fill( '#find-query', '453 W 12th Ave, Vancouver' );
+	await page.click( '#find-go' );
+	await page.waitForSelector( '#results a' );
+	assert.equal( await page.textContent( '#results li:first-child' ), 'Street only: the exact address wasn\'t found; pick it and move the site into place.' );
+	assert.equal( await page.textContent( '#results .credit' ), 'Search © OpenStreetMap contributors' );
+	assert.match( await page.getAttribute( '#results a', 'href' ), /at=49\.260600%2C-123\.114400/ );
+	await shot( 'dashboard-search-street-only' );
+
 	// An address: its places, each opening the editor there.
 	await page.fill( '#find-query', 'CN Tower' );
 	await page.click( '#find-go' );
-	await page.waitForSelector( '#results a' );
+	await page.waitForSelector( '#results a strong:has-text("CN Tower")' );
+	assert.equal( await page.locator( '#results .street-only' ).count(), 0 );
 	const href = await page.getAttribute( '#results a', 'href' );
 	assert.match( href, /\/build\/app\/\?at=43\.642600%2C-79\.387100&place=CN\+Tower%2C\+Front\+Street\+West$/ );
 	await shot( 'dashboard-search' );

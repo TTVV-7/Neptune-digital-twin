@@ -287,6 +287,41 @@ flattening, the terrain and the surface so they agree):
   (`vite.drive.config.js`'s `withBuildBeacon`). Page views, countries and Core Web Vitals are in
   Cloudflare's dashboard; no cookie banner is needed, as nothing is kept in the browser for it.
 
+## Address search
+
+The start-a-project search and the **Site** button use World Drive's place search
+([docs/world-drive.md](world-drive.md#search)). Out of the box it's OpenStreetMap's, which finds
+towns, landmarks and streets but often only the street for an address like "453 W 12th Ave,
+Vancouver" (the list then says **Street only**: pick it and move the site into place). With a
+Google Geocoding key set, addresses are found to the building. To set it up:
+
+1. **Google Cloud Console** (the project the Maps key is in, or another with billing on):
+   *APIs & Services → Library* → **Geocoding API** → **Enable**.
+2. *APIs & Services → Credentials → Create credentials → API key*. Name it "World Drive geocoding
+   (server)".
+3. Edit the key: **API restrictions → Restrict key → Geocoding API** only. Leave **Application
+   restrictions** at *None*: it's used from Cloudflare's servers, whose addresses aren't fixed, so an
+   IP restriction isn't possible on Workers, and a website restriction doesn't apply to server
+   requests. That's why it's a key of its own, kept secret, never the Maps key (which is a browser
+   key restricted to worlddrive.app and the Map Tiles API).
+4. **Cloudflare dashboard → Workers & Pages →** the drive Worker (`world-drive`) **→ Settings →
+   Variables and Secrets → Add** → type **Secret**, name `GOOGLE_GEOCODING_KEY`, the key as its value
+   → **Deploy**. (Or `npx wrangler secret put GOOGLE_GEOCODING_KEY -c wrangler.drive.jsonc`.)
+5. Optional: `GEOCODE_DAILY` (a var in `wrangler.drive.jsonc`, 300 now) is the most Google lookups a
+   day from everyone together; past it, search is OpenStreetMap's until midnight UTC. Only searches
+   with a number in them go to Google first (and others only when OpenStreetMap finds nothing), and
+   answers are cached a day, so 300 goes a long way.
+6. **Cost.** The Geocoding API is billed per request beyond a free monthly allowance; the numbers
+   change, so check Google's [Geocoding usage and billing](https://developers.google.com/maps/documentation/geocoding/usage-and-billing)
+   page, and set a **budget alert** (*Billing → Budgets & alerts*) and, if you like, a quota cap
+   (*APIs & Services → Geocoding API → Quotas*, requests per day) a little over `GEOCODE_DAILY`.
+7. **Check it**: search "453 W 12th Ave, Vancouver" on `/build/`: the first result should be the
+   building, with "Search powered by Google" under the list. If the Worker's logs say
+   `Geocoding answered REQUEST_DENIED`, the API isn't enabled or the key's restriction doesn't
+   include it.
+
+Without the key nothing changes: search is OpenStreetMap's, with its second try for addresses.
+
 ## The owner's steps
 
 Build works as soon as it's deployed: you (in `ADMIN_EMAILS`) have everything, and everyone else is

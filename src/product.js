@@ -9,6 +9,8 @@
 //   - locks all but FREE_ITEMS of the library behind Build Pro (premium.js's gate).
 // Everywhere else (the Neptune twin), none of this applies.
 
+import { STREET_ONLY, rankedPlaces, searchCredit, streetOnly } from './search-results.js';
+
 // (No Vite in Node, where tests load some modules: not Build there.)
 export const BUILD_APP = import.meta.env?.MODE === 'worlddrive';
 
@@ -152,7 +154,9 @@ export function setUpSitePicker( site, { toast } ) {
 
 			}
 
-			results.replaceChildren( ...body.results.map( place => {
+			// Houses and numbered addresses first; when only the street was found, the list says so.
+			const line = ( textContent, className ) => Object.assign( document.createElement( 'li' ), { textContent, className } );
+			results.replaceChildren( ...( streetOnly( body ) ? [ line( STREET_ONLY, 'note street-only' ) ] : [] ), ...rankedPlaces( body ).map( place => {
 
 				const item = document.createElement( 'li' );
 				const pick = document.createElement( 'button' );
@@ -162,7 +166,7 @@ export function setUpSitePicker( site, { toast } ) {
 				item.append( pick );
 				return item;
 
-			} ) );
+			} ), line( searchCredit( body ), 'note credit' ) );
 
 		} catch ( err ) {
 

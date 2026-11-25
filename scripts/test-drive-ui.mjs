@@ -115,6 +115,8 @@ const TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 // Answers the Worker's search would give.
 const FURKA = { name: 'Furkapass, Obergoms, Goms, Valais, Switzerland', lat: 46.5725, lon: 8.4153, type: 'mountain_pass' };
 const GOLDEN_GATE = { name: 'Golden Gate Bridge, San Francisco, California, United States', lat: 37.8199, lon: - 122.4783, type: 'bridge' };
+const W12_STREET = { name: 'West 12th Avenue, Mount Pleasant, Vancouver, British Columbia, Canada', lat: 49.2606, lon: - 123.1144, type: 'secondary', house: false };
+const W12_HOUSE = { name: '455 W 12th Ave, Vancouver, BC V5Y 1V4, Canada', lat: 49.26105, lon: - 123.11389, type: 'street_address', house: true };
 // Stands in for Turnstile's script: it passes at once with the dummy token, as its test keys do.
 const TURNSTILE_STUB = `window.turnstile = { render( el, options ) { window.turnstileOptions = options; setTimeout( () => options.callback( '${ TOKEN }' ), 50 ); return 'w1'; }, remove() {}, reset() {} };`;
 
@@ -186,6 +188,10 @@ async function newPage( { viewport = { width: 1280, height: 800 }, touch = false
 		const q = new URL( route.request().url() ).searchParams.get( 'q' );
 		page.searches.push( q );
 		if ( api.search ) return api.search( route, q );
+		// An address OpenStreetMap only finds the street of ("street only"), and one Google answers (its
+		// street address after the street, which the page puts first).
+		if ( /^453 w 12th/i.test( q ) ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { results: [ W12_STREET ], provider: 'osm', streetOnly: true } ) } );
+		if ( /^455 w 12th/i.test( q ) ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { results: [ W12_STREET, W12_HOUSE ], provider: 'google', streetOnly: false } ) } );
 		const results = /furka/i.test( q ) ? [ FURKA ] : /golden/i.test( q ) ? [ GOLDEN_GATE ] : [];
 		route.fulfill( { contentType: 'application/json', body: JSON.stringify( { results } ) } );
 
@@ -327,6 +333,36 @@ describe( 'World Drive, desktop', () => {
 		await input.press( 'Enter' );
 		await page.locator( '.results button' ).first().click();
 		assert.deepEqual( await page.evaluate( () => [ window.drive.panel.pinned.name, window.drive.panel.pinned.deck ] ), [ 'Golden Gate Bridge', true ] );
+		await flown( page );
+
+	} );
+
+	test( 'search: a street found for a house number says "street only"; a house comes first; Google\'s answer is credited to Google', async () => {
+
+		const input = page.locator( '.search input' );
+		const status = page.locator( '.search-status' );
+		await input.fill( '453 W 12th Ave, Vancouver' );
+		await input.press( 'Enter' );
+		await page.locator( '.results button' ).first().waitFor();
+		assert.equal( await status.textContent(), 'Street only: the exact address wasn\'t found; pick the street and drive along to it.' );
+		assert.ok( await status.isVisible() );
+		assert.deepEqual( await page.locator( '.results button b' ).allTextContents(), [ 'West 12th Avenue' ] );
+		assert.match( await page.locator( '#globe-ui .osm' ).textContent(), /^Search © OpenStreetMap contributors$/ );
+
+		await input.fill( '455 W 12th Ave, Vancouver' );
+		await input.press( 'Enter' );
+		await page.locator( '.results button b', { hasText: '455 W 12th Ave' } ).waitFor();
+		assert.deepEqual( await page.locator( '.results button b' ).allTextContents(), [ '455 W 12th Ave', 'West 12th Avenue' ] );
+		assert.equal( await status.isVisible(), false );
+		assert.equal( await page.locator( '#globe-ui .osm' ).textContent(), 'Search powered by Google' );
+		await shot( page, 'drive-2b-search-google' );
+
+		// OpenStreetMap's again: its credit and link back.
+		await input.fill( 'Furka pass' );
+		await input.press( 'Enter' );
+		await page.locator( '.results button b', { hasText: 'Furkapass' } ).waitFor();
+		assert.equal( await page.locator( '#globe-ui .osm a' ).getAttribute( 'href' ), 'https://www.openstreetmap.org/copyright' );
+		await page.locator( '.results button' ).first().click();
 		await flown( page );
 
 	} );
