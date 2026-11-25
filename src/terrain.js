@@ -2078,6 +2078,10 @@ export class Terrain extends EventDispatcher {
 		const j = Math.round( point.z / CELL );
 		const chunk = this.owner( i, j );
 		if ( ! chunk?.shown?.[ ( j - chunk.j0 ) * NODES + i - chunk.i0 ] ) return false;
+		// Past the mask's MAX_MASK nodes (earthworks over a kilometre apart) Google's mesh isn't
+		// hidden, so it isn't passed through either: what's seen is what's clicked and stood on.
+		const { twinCutOn, twinCutOrigin: { value: origin }, twinCutSize: { value: size } } = this.mask;
+		if ( ! twinCutOn.value || i < origin.x || j < origin.y || i >= origin.x + size.x || j >= origin.y + size.y ) return false;
 		const y = this.surfaceAt( point.x, point.z );
 		return y !== null && point.y > y + COVER_TOLERANCE;
 

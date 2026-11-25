@@ -42,6 +42,7 @@
     "test:own-models-ui": "node --test scripts/test-own-models-ui.mjs",
     "test:sets-flatten-ui": "node --test scripts/test-sets-flatten-ui.mjs",
     "test:grading-ui": "node --test scripts/test-grading-ui.mjs",
+    "test:earthworks-slope-ui": "node --test scripts/test-earthworks-slope-ui.mjs",
     "test:city-drive-ui": "node --test scripts/test-city-drive-ui.mjs",
     "test:build-worker": "node --test scripts/test-build-worker.mjs",
     "test:build-admin": "node --test scripts/test-build-admin.mjs",

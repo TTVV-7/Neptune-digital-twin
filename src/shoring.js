@@ -1074,6 +1074,9 @@ export function setUpShoring( { scene, models, terrain, layers, kind, rimOf } ) 
 
 		item.stage = planExcavation( params ).stage;
 		showStage( item.group, item.stage );
+		// A hidden pit (by hand or with its layer off) has its shoring hidden too, and its walls
+		// drawn as dug (shapeGround leaves out what isn't visible).
+		if ( models.isHidden?.( entry ) ) item.group.visible = false;
 		const rim = rimOf( entry ) ?? state.up;
 		item.group.position.set( - state.east, rim, state.north );
 		item.group.rotation.y = headingToYaw( state.heading );
@@ -1119,6 +1122,14 @@ export function setUpShoring( { scene, models, terrain, layers, kind, rimOf } ) 
 		shapeGround();
 
 	} );
+	const updateAll = () => {
+
+		models.entries.forEach( update );
+		shapeGround();
+
+	};
+	models.addEventListener( 'hide', updateAll );
+	models.addEventListener( 'visibility', updateAll );
 	// A flatten area reaching a pit brings its rim down.
 	terrain.addEventListener( 'zones', () => {
 

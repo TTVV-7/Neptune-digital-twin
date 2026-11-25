@@ -270,6 +270,15 @@ in the ground it stood on.
   straight: [shoring.md](shoring.md)). Benches narrower than about 1 m, or risers under 0.5 m, are
   too fine for the grid to show well; their volumes still come out right.
 - One slope ratio and one bench size serve all of a pit's sloped and stepped sides.
+- A pit's floor is one level, its depth below the lowest ground round it. Where the ground rises
+  across the pit its uphill side is deeper than that: the cut and its volume include it, and the
+  P panel says how deep that side is, but the shoring, support levels and checks are worked out
+  for the depth set. Flatten the ground first, or plan the sides for the deeper side.
+- A ramp comes up through the front (side 1), so it isn't offered while the front is shored; the
+  **Spoil pile** button keeps the pile off the ramp. A pit's fence, stair tower and hoist stand on
+  the ground round it, and the tower and hoist go down to the dig stage shown.
+- A hidden pit or pile (by hand, or with its layer off in the Show panel) leaves the ground as it
+  was, and a hidden pit's shoring is hidden with it.
 - Excavations and ridges can be up to 200 m long; cones up to 20,000 m³ (**Spoil pile** makes a
   ridge for more).
 
@@ -298,3 +307,5 @@ set of params (`planExcavation( params )`). The terrain, the shoring and the sec
 `npm run test:excavation` checks it in Node, old pits against the surface they had bit for bit;
 `npm run test:excavation-ui` checks the pits, the P panel, the side labels, the tool and saving in a
 browser without Google's tiles.
+`npm run test:earthworks-slope-ui` checks pits on sloping ground, hidden earthworks, ramps and
+spoil piles.

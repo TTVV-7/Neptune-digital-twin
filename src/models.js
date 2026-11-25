@@ -298,9 +298,14 @@ export class ModelManager extends EventDispatcher {
 		pivot.updateMatrixWorld();
 		if ( mode.startsWith( 'plane' ) ) return this.readPlane( entry, original, detail );
 
+		// Round the kind's own rectangle where it gives one (centred at its x, z, 0 if left out), so
+		// what's built further out (a pit's fence) doesn't change the ground it's read from.
 		const margin = SNAP_MARGIN / state.scale;
-		const xs = [ footprint.min.x - margin, ( footprint.min.x + footprint.max.x ) / 2, footprint.max.x + margin ];
-		const zs = [ footprint.min.z - margin, ( footprint.min.z + footprint.max.z ) / 2, footprint.max.z + margin ];
+		const rect = getKind( entry.kind )?.snapRect?.( entry.params );
+		const [ x0, x1 ] = rect ? [ ( rect.x ?? 0 ) - rect.width / 2, ( rect.x ?? 0 ) + rect.width / 2 ] : [ footprint.min.x, footprint.max.x ];
+		const [ z0, z1 ] = rect ? [ ( rect.z ?? 0 ) - rect.length / 2, ( rect.z ?? 0 ) + rect.length / 2 ] : [ footprint.min.z, footprint.max.z ];
+		const xs = [ x0 - margin, ( x0 + x1 ) / 2, x1 + margin ];
+		const zs = [ z0 - margin, ( z0 + z1 ) / 2, z1 + margin ];
 		const ground = this.getGround();
 
 		const heights = [];
@@ -595,7 +600,7 @@ function upgradeConfig( config ) {
 // flatten area's surface (flatten.js's SURFACE_ORDER, drawn over the ground without writing depth),
 // so it stands on that surface rather than under it. Parts that set an order of their own keep it.
 export const PLACED_ORDER = 1;
-function drawnAfterGround( object ) {
+export function drawnAfterGround( object ) {
 
 	object.traverse( o => {
 
