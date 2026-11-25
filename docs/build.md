@@ -94,7 +94,7 @@ flattening, the terrain and the surface so they agree):
 | ground | what it is | its settings |
 | --- | --- | --- |
 | level (dead flat) | one height: the ground's median under a surfaced area, its lowest under a bare one. Areas saved before grading are level and save as they did (nothing about grading is saved for a level area). | |
-| follow the ground (smoothed) | **new areas start with this** (the next area takes whatever was chosen last). A smoothed copy of the bare ground that follows the grade as it changes across the area (steeper at one end, a hump, a bend in the hillside). The ground is read on a grid about 2 to 3 m apart reaching one smoothing radius beyond each edge (33 × 33 readings at most, wider apart on large areas); what stands on it (a roof, a car, a stand of trees) is found as in point-cloud ground filtering (a progressive morphological filter, then fit, leave out what stands more than 0.75 m above, fit again, coarse to fine) and left out; then at each grid node a plane is fitted through the readings round it, Gaussian-weighted over the smoothing (`src/grade.js` `fitSurface`), and read between nodes bilinearly. | smoothing (m, 2 to 50, 10 to start: small hugs the ground, large is gentle); steepest (%, 0 = as the ground) caps every part of it, easing the steep parts and leaving gentle ones following the ground, with as much cut as fill |
+| follow the ground (smoothed) | **new areas start with this** (the next area takes whatever was chosen last). A smoothed copy of the bare ground that follows the grade as it changes across the area (steeper at one end, a hump, a bend in the hillside). The ground is read on a grid about 2 to 3 m apart reaching one smoothing radius beyond each edge (33 × 33 readings at most, wider apart on large areas); what stands on it (a roof, a car, a stand of trees) is found as in point-cloud ground filtering (a progressive morphological filter whose openings may drop as far as 50% ground falls, then fit, leave out what stands more than 0.75 m above, fit again, coarse to fine) and left out, while ground that rounds over (a crest, a ridge, the rim of a cut) is kept: readings above the fit no further than it bows there, rising from the readings round them without a step bigger than ground at 50% climbs between readings (plus 0.5 m), are ground; then at each grid node a plane is fitted through the readings round it, Gaussian-weighted over the smoothing but never narrower than the readings are apart (so on a large area a small smoothing still has readings round every node; where something left out leaves too few round a node, or leaves them all to one side of it, the plane through those a little further off rather than one tipped out to it), and read between nodes bilinearly (`src/grade.js` `fitSurface`). | smoothing (m, 2 to 50, 10 to start: small hugs the ground, large is gentle); steepest (%, 0 = as the ground) caps every part of it, easing the steep parts and leaving gentle ones following the ground, with as much cut as fill |
 | best-fit plane (one slope from the ground) | one plane fitted by least squares through the ground under it (7 × 7 readings, with what stands well above a first fit left out): what "follow the ground" was before it was smoothed | steepest (%) caps it |
 | one slope | one plane through the area's middle height, falling toward a side | fall (0.5 to 20 %), falling toward front, back, left or right (front is the way it faces) |
 | crowned (ridge down the middle) | a ridge along its length or width falling to both sides, set so half is above the middle height | fall (%), ridge runs along its length or width |
@@ -140,7 +140,82 @@ flattening, the terrain and the surface so they agree):
   following the ground stays within 0.3 m of the bare ground where the best-fit plane is over 2 m
   out, the smoothing changes how closely it hugs, the steepest caps it, it saves and loads; the
   embankment and cut slope at the batter ratio, the earth moved, saving and loading, a pit's
-  floor), with `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`.
+  floor), `npm run test:grade-surface` (the smoothed ground in Node: a small smoothing on a large
+  area still on a curved hillside, a crest, a dome and a road cut's rims followed as a valley is,
+  and a shed, a car, a stand of trees and a 30 m building still left out), with
+  `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`.
+
+## Flatten areas: walking on them, and keeping what's overhead
+
+- **The floor is the ground.** `TileFlatteningPlugin` only ever presses Google's vertices *down*,
+  and only vertices: a surfaced level pad snaps to the ground's median, so about half of it is
+  built up over lower ground with nothing at its height to stand on, and Google's large triangles
+  crossing its edge kept their slope inside it (a walker climbed them, up to 3.4 m above the pad).
+  So a level area (and one too large to grade, over 300 m) now holds its floor in terrain chunks
+  of its own over its rectangle (`terrain.js` `updateZone`, `zone.height`, made over the next
+  frames by `ensureSoon`), as a graded one does: the floor is drawn, walked and driven on (the
+  walker and the driver use the same colliders), and Google's mesh above it is hidden by the mask
+  and passed through by `covers()`. With the stand-in ground too. No batters: a surfaced level pad
+  still shows its deep sides where it's built up, as before. The gravel or asphalt itself is
+  `noCollide` (3 cm above the floor). Over about 500 m square (`MAX_FLOOR_CHUNKS`) an area is only
+  pressed down, as before. The ring of terrain nodes just outside the area (drawn with it) is read
+  from above, so beside a tree or a roof it rose to that as a spike of earth off the edge; it's
+  drawn no higher than the lowest ground outside the area within 3 m, nor lower than the edge's
+  floor (`terrain.js` `zoneLips`, as `lipHeights` does round a pit), so where the area is dug into
+  a hillside the cut face still rises to the ground.
+- **Drawn over the pad.** The surface is drawn after the ground without writing depth
+  (`SURFACE_ORDER`), so anything drawn before it went under it. What's placed was already drawn
+  after it (`PLACED_ORDER`); now the walking character (`player.js`), a repair crew, a truck's load
+  and the plane's parachute are too (`src/draw-order.js`'s `drawnAfterGround`).
+- **Keep what's overhead** (P panel, `keep`): *nothing* (flatten everything, as areas always did),
+  *auto* (bridge decks, viaducts, canopies), or *everything above a height* (the old "flatten up
+  to", now shown only with that choice; areas saved with a height load as that and save as before;
+  picking it with no height sets 5 m). Auto is saved as `keep: 'auto'`.
+- **How auto works** (`flatten.js`, Overheads): over the area (and 1 m round it), on a 1 m grid
+  (coarser over big areas, 10,000 lines at most), Google's mesh *as it was* is read along vertical
+  lines (a vertical ray crosses the same triangles before and after pressing, so heights and facing
+  come from the plugin's saved original vertices): the lowest surface facing down (an underside)
+  at least 2.5 m (`CLEARANCE`) above the floor, looked for upwards from there, means open space
+  under it: kept from 0.3 m under it up. Pillars and gaps in a deck within 3 m are closed over;
+  a line with something above the clearance but no underside there (a pillar) is kept whole, so
+  pillars stand, as obstacles. Patches under 12 m² (a tree's crown) are flattened. The flattening
+  (a subclass of the plugin with a per-vertex limit, `AreaFlatteningPlugin`) keeps the lowest of
+  that within 2 m, so a deck's lumpy underside isn't dragged into spikes; the terrain's mask hides
+  Google's mesh from the floor up to the underside (per node `ceiling`, now also on the ring of
+  nodes just outside an auto area, where the ground read from above is the deck and is drawn at the
+  floor instead; not round one kept above a height, whose ring is the ground beside it, as for one
+  keeping nothing). Curtains (Google's photogrammetry hangs walls of smeared texture from a deck's
+  edge to the ground) have their feet pressed and the rest hidden, and walking and driving pass
+  through them; the deck above still stops a jump. It's read a few milliseconds a frame (a quarter
+  of the frame when frames are slow), again 3 s after more tiles load while the camera is within
+  300 m of it (`RESCAN_NEAR`; farther off the tiles over it are coarse or not loaded, and flying
+  round the city kept it busy), and from scratch when the area moves; until read, everything above
+  2.5 m is kept. A read again from coarser tiles than the last (their geometric error on average
+  along its lines over 1.1 times the last's) or seeing Google's mesh along fewer than 90 % of the
+  lines the last did doesn't replace it, so flying away and back no longer loses the decks (they
+  were pressed or cut through for about 50 s after coming back).
+- **On real tiles** (under the Georgia and Dunsmuir viaducts, a 30 × 60 m level area): flattening
+  everything presses both decks onto the floor (as level areas did before; there was no way to
+  keep a deck but a height limit, under which a curtain's part above the limit stays as a wall to
+  the deck, and these decks' undersides vary from 4 to 9 m above the floor); with *auto* both decks
+  and their pillars stay, the curtains are gone, and the walker walks in from outside under the
+  deck on the floor. Read along vertical lines, the Granville Bridge's deck over Granville Island
+  (27 m up) has its underside captured the same way. Flown 4.5 to 6 km away and back, what's kept
+  under both stays as first read throughout. What's left: small shards of curtain above the
+  underside line. A level gravel pad on the hillside at (-40, 785) has no node of its ring more
+  than 2 m above the ground there (70 before); its uphill side, dug about 8 m into the hill, shows
+  the cut face. A bare level area (surface none) holds and draws its floor too, so it shows that
+  floor rather than Google's photo pressed flat.
+- **Claude (MCP):** `add_flatten_area` takes `keep_overhead` (`off`, `auto`, `height`) and
+  `keep_above` (m, 0.5 to 200, 5 to start, for `height`); unknown choices are refused.
+- **Tests:** `test:grading-ui` (a level pad's and a bare level area's ground is their floor where
+  it's built up over the slope; the character is drawn after the pad; a stand-in overpass, a deck
+  with curtains to the ground marked as Google's mesh, over an auto area: kept from under its
+  underside, Google's mesh hidden to there, a curtain covered and walked through, a jump stopped by
+  the deck; not read again from 5 km away with the overpass gone, read again back over it with what
+  was found standing, and again with it back; round a level area kept above a height, the ground
+  0.5 and 0.75 m outside its uphill edge is the slope and nothing's hidden there up to its limit, and
+  a tree's crown read at a node just outside it is drawn at the ground), `test:build-mcp`.
 
 ## Selecting several, copy and paste
 
@@ -359,6 +434,43 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   (the twin's `index.html`) has the twin's beacon swapped for it at build time
   (`vite.drive.config.js`'s `withBuildBeacon`). Page views, countries and Core Web Vitals are in
   Cloudflare's dashboard; no cookie banner is needed, as nothing is kept in the browser for it.
+
+## Address search
+
+The start-a-project search and the **Site** button use World Drive's place search
+([docs/world-drive.md](world-drive.md#search)). Out of the box it's OpenStreetMap's, which finds
+towns, landmarks and streets but often only the street for an address like "453 W 12th Ave,
+Vancouver" (the list then says **Street only**: pick it and move the site into place). With a
+Google Geocoding key set, addresses are found to the building. To set it up:
+
+1. **Google Cloud Console** (the project the Maps key is in, or another with billing on):
+   *APIs & Services → Library* → **Geocoding API** → **Enable**.
+2. *APIs & Services → Credentials → Create credentials → API key*. Name it "World Drive geocoding
+   (server)".
+3. Edit the key: **API restrictions → Restrict key → Geocoding API** only. Leave **Application
+   restrictions** at *None*: it's used from Cloudflare's servers, whose addresses aren't fixed, so an
+   IP restriction isn't possible on Workers, and a website restriction doesn't apply to server
+   requests. That's why it's a key of its own, kept secret, never the Maps key (which is a browser
+   key restricted to worlddrive.app and the Map Tiles API).
+4. **Cloudflare dashboard → Workers & Pages →** the drive Worker (`world-drive`) **→ Settings →
+   Variables and Secrets → Add** → type **Secret**, name `GOOGLE_GEOCODING_KEY`, the key as its value
+   → **Deploy**. (Or `npx wrangler secret put GOOGLE_GEOCODING_KEY -c wrangler.drive.jsonc`.)
+5. Optional: `GEOCODE_DAILY` (a var in `wrangler.drive.jsonc`, 300 now) is the most Google lookups a
+   day from everyone together; past it, search is OpenStreetMap's until midnight UTC. Only searches
+   with a number in them go to Google first (and others only when OpenStreetMap finds nothing), and
+   answers are cached a day, so 300 goes a long way. `GEOCODE_PER_VISITOR` (30 now) is each
+   visitor's share of them (an address, an IPv6 one by its /48, or a Build account through the
+   Claude connector), so one script can't use up everyone's day.
+6. **Cost.** The Geocoding API is billed per request beyond a free monthly allowance; the numbers
+   change, so check Google's [Geocoding usage and billing](https://developers.google.com/maps/documentation/geocoding/usage-and-billing)
+   page, and set a **budget alert** (*Billing → Budgets & alerts*) and, if you like, a quota cap
+   (*APIs & Services → Geocoding API → Quotas*, requests per day) a little over `GEOCODE_DAILY`.
+7. **Check it**: search "453 W 12th Ave, Vancouver" on `/build/`: the first result should be the
+   building, with "Search powered by Google" under the list. If the Worker's logs say
+   `Geocoding answered REQUEST_DENIED`, the API isn't enabled or the key's restriction doesn't
+   include it.
+
+Without the key nothing changes: search is OpenStreetMap's, with its second try for addresses.
 
 ## The owner's steps
 

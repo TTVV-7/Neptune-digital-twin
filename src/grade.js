@@ -53,6 +53,15 @@ export const SMOOTHING = { min: 2, max: 50, step: 1, default: 10 };
 const SURFACE_CELLS = 32;
 const SURFACE_SPACING = 2;
 const LIFT = 0.75;
+// The Gaussian a surface is smoothed with is never narrower than this share of the grid's spacing.
+const SIGMA_CELLS = 0.75;
+// Readings this many times as far above a smoothed surface as it bows up round them are the ground
+// rounding over (a crest), not something standing on it (fitSurface, crown), if they rise smoothly.
+const CROWN = 6;
+// A patch of readings above the smoothed ground that meets the rest with a jump of more than this
+// (m), and more than ground as steep as MAX_GRADE climbs from one reading to the next, stands on
+// it, however the ground rounds over beneath it.
+const STEP = 0.5;
 // A batter reaches at most this far from the area's edge (m), so a pad high above a gully doesn't
 // mark the whole map.
 export const MAX_REACH = 30;
@@ -282,8 +291,10 @@ let grids = 0;
 // The bare ground smoothed, from heights read at surfacePoints( layout ) (null where there was
 // none): at each node a plane fitted through the readings round it, weighted by a Gaussian a third
 // of the smoothing wide (so most of the weight is within the smoothing across), so the grade is
-// followed as it changes and bumps narrower than the smoothing go. What stands on the ground (a
-// roof, a car, a tree) is found as a point cloud's ground is, and left out (see below). Returns { c, fit } — c the smoothed ground's height at the area's middle, fit
+// followed as it changes and bumps narrower than the smoothing go (or than about two of the grid's
+// spacings, on a large area read coarsely). What stands on the ground (a roof, a car, a tree) is
+// found as a point cloud's ground is, and left out (see below), while a crest, a ridge or the
+// rim of a cut is kept: it rises out of the ground round it without a step. Returns { c, fit } — c the smoothed ground's height at the area's middle, fit
 // { gx, gz, smoothing, grid } with grid.h the heights over the layout less c (cm) and gx, gz the
 // plane through it under the area — or null with too few readings.
 export function fitSurface( layout, heights, smoothing, width, length ) {
@@ -293,10 +304,14 @@ export function fitSurface( layout, heights, smoothing, width, length ) {
 	const valid = heights.map( y => Number.isFinite( y ) );
 	if ( valid.filter( Boolean ).length < 3 ) return null;
 	const points = surfacePoints( layout );
-	// The Gaussian's weights round a node, out to three sigmas, for a smoothing of `across` m.
-	const kernel = across => {
+	// The Gaussian's weights round a node, out to three sigmas, for a smoothing of `across` m. Never
+	// narrower than the grid is apart (SIGMA_CELLS of its spacing): on a large area the nodes are
+	// wider apart than a small smoothing, and a Gaussian that reached only the node itself (or it and
+	// two neighbours in a row) would have nothing to fit a plane through. The ground can't be
+	// followed more finely than it was read anyway.
+	const kernel = ( across, wider = 1 ) => {
 
-		const sigma = Math.max( across / 3, 0.5 );
+		const sigma = wider * Math.max( across / 3, 0.5, SIGMA_CELLS * Math.max( dx, dz ) );
 		const kx = Math.max( 1, Math.ceil( 3 * sigma / dx ) ), kz = Math.max( 1, Math.ceil( 3 * sigma / dz ) );
 		const weights = [];
 		for ( let b = - kz; b <= kz; b ++ ) for ( let a = - kx; a <= kx; a ++ ) {
@@ -306,66 +321,152 @@ export function fitSurface( layout, heights, smoothing, width, length ) {
 
 		}
 
-		return { kx, kz, weights };
+		return { kx, kz, weights, sigma };
 
 	};
 
-	const smooth = ( kept, { kx, kz, weights } ) => {
+	// The plane through the readings kept round node (i, j), weighted by the kernel: its height at
+	// the node, or NaN where there aren't readings enough round it to fit a plane through.
+	const fitNode = ( kept, i, j, { kx, kz, weights } ) => {
 
-		const fallback = planeThrough( points.flatMap( ( [ x, z ], k ) => kept[ k ] ? [ [ x, z, heights[ k ] ] ] : [] ) );
+		let sw = 0, sx = 0, sz = 0, sy = 0, sxx = 0, szz = 0, sxz = 0, sxy = 0, szy = 0, count = 0;
+		let w = 0;
+		for ( let b = - kz; b <= kz; b ++ ) {
+
+			const jj = j + b;
+			if ( jj < 0 || jj >= nz ) {
+
+				w += 2 * kx + 1;
+				continue;
+
+			}
+
+			for ( let a = - kx; a <= kx; a ++, w ++ ) {
+
+				const ii = i + a;
+				const wt = weights[ w ];
+				if ( ii < 0 || ii >= nx || wt === 0 ) continue;
+				const k = jj * nx + ii;
+				if ( ! kept[ k ] ) continue;
+				const x = a * dx, z = b * dz, y = heights[ k ];
+				count ++;
+				sw += wt; sx += wt * x; sz += wt * z; sy += wt * y;
+				sxx += wt * x * x; szz += wt * z * z; sxz += wt * x * z; sxy += wt * x * y; szy += wt * z * y;
+
+			}
+
+		}
+
+		if ( count < 3 || sw < 1e-6 ) return NaN;
+		const mx = sx / sw, mz = sz / sw, my = sy / sw;
+		const cxx = sxx / sw - mx * mx, czz = szz / sw - mz * mz, cxz = sxz / sw - mx * mz;
+		const cxy = sxy / sw - mx * my, czy = szy / sw - mz * my;
+		const det = cxx * czz - cxz * cxz;
+		// All in a row (or nearly), or all off to one side of the node, far for how spread they are
+		// (a node in a gap left by what stood on the ground, read from a strip down one side of it):
+		// a plane through them would tip wildly out to the node.
+		if ( cxx + czz < 1e-9 || det < 1e-3 * ( cxx + czz ) ** 2 ) return NaN;
+		if ( ( czz * mx * mx - 2 * cxz * mx * mz + cxx * mz * mz ) / det > 9 ) return NaN;
+		const gx = ( cxy * czz - czy * cxz ) / det;
+		const gz = ( czy * cxx - cxy * cxz ) / det;
+		return my - gx * mx - gz * mz;
+
+	};
+
+	const smooth = ( kept, k, across ) => {
+
 		const out = new Float64Array( n );
+		let fallback;
 		for ( let j = 0; j < nz; j ++ ) for ( let i = 0; i < nx; i ++ ) {
 
-			let sw = 0, sx = 0, sz = 0, sy = 0, sxx = 0, szz = 0, sxz = 0, sxy = 0, szy = 0, count = 0;
-			let w = 0;
-			for ( let b = - kz; b <= kz; b ++ ) {
+			// Where what stood on the ground left too few readings round a node, the plane through
+			// those a little further off (twice as far, then four times), and only failing that the
+			// plane through all of them: never the whole area's plane where the ground round it would do.
+			let y = fitNode( kept, i, j, k );
+			for ( let wider = 2; ! Number.isFinite( y ) && wider <= 4; wider *= 2 ) y = fitNode( kept, i, j, kernel( across, wider ) );
+			if ( ! Number.isFinite( y ) ) {
 
-				const jj = j + b;
-				if ( jj < 0 || jj >= nz ) {
+				fallback ??= planeThrough( points.flatMap( ( [ x, z ], m ) => kept[ m ] ? [ [ x, z, heights[ m ] ] ] : [] ) );
+				const [ px, pz ] = points[ j * nx + i ];
+				y = fallback ? fallback.c + fallback.gx * px + fallback.gz * pz : 0;
 
-					w += 2 * kx + 1;
-					continue;
+			}
+
+			out[ j * nx + i ] = y;
+
+		}
+
+		return out;
+
+	};
+
+	// How far a smoothed surface sits below the ground it was smoothed from where that ground rounds
+	// over (a hill's crest, a ridge, the rim of a cut): a plane fitted round a node on a crest sits
+	// below the crest, about as far as the surface itself bows up there over a sigma either side.
+	// Readings that far above it are the ground rounding over, not something standing on it, so they
+	// aren't left out for it; else each fit would leave out the crest, sink lower, and leave out more.
+	// Ground that bows the other way (a valley) gives nothing: there the fit is above the ground.
+	const crown = ( surface, sigma ) => {
+
+		const rx = Math.max( 1, Math.round( sigma / dx ) ), rz = Math.max( 1, Math.round( sigma / dz ) );
+		const out = new Float64Array( n );
+		const bow = ( a, here, b ) => here - ( a + b ) / 2;
+		for ( let j = 0; j < nz; j ++ ) for ( let i = 0; i < nx; i ++ ) {
+
+			const here = surface[ j * nx + i ];
+			const ax = Math.min( rx, i, nx - 1 - i ), az = Math.min( rz, j, nz - 1 - j );
+			const up = Math.max(
+				ax ? bow( surface[ j * nx + i - ax ], here, surface[ j * nx + i + ax ] ) * ( rx / ax ) ** 2 : 0,
+				az ? bow( surface[ ( j - az ) * nx + i ], here, surface[ ( j + az ) * nx + i ] ) * ( rz / az ) ** 2 : 0,
+			);
+			out[ j * nx + i ] = Math.max( 0, CROWN * up );
+
+		}
+
+		return out;
+
+	};
+
+	// The readings that are ground against a smoothed surface: those no more than `limit` above it,
+	// and those above it only as far as it bows up round them (crown) where they rise from the
+	// readings round them without a step: a patch of readings above the surface that meets the rest
+	// with a jump of more than `step` is something standing on the ground (a roof, a stand of trees)
+	// however the surface bows over it; one that rises out of them smoothly is the ground rounding over.
+	const ground = ( surface, sigma, limit ) => {
+
+		const rounded = crown( surface, sigma );
+		const step = STEP + MAX_GRADE / 100 * Math.max( dx, dz );
+		const over = new Float64Array( n );
+		for ( let k = 0; k < n; k ++ ) over[ k ] = valid[ k ] ? heights[ k ] - surface[ k ] : - Infinity;
+		const out = valid.map( ( v, k ) => v && over[ k ] <= limit );
+		const patch = new Int32Array( n ).fill( - 1 );
+		for ( let start = 0; start < n; start ++ ) {
+
+			if ( ! valid[ start ] || out[ start ] || patch[ start ] >= 0 ) continue;
+			// The patch of readings above the limit joined to this one, and the biggest jump from it
+			// down to the readings round it.
+			const cells = [ start ];
+			patch[ start ] = start;
+			let jump = 0;
+			for ( let q = 0; q < cells.length; q ++ ) {
+
+				const k = cells[ q ], i = k % nx, j = ( k - i ) / nx;
+				for ( const m of [ i > 0 ? k - 1 : - 1, i < nx - 1 ? k + 1 : - 1, j > 0 ? k - nx : - 1, j < nz - 1 ? k + nx : - 1 ] ) {
+
+					if ( m < 0 || ! valid[ m ] ) continue;
+					if ( out[ m ] ) jump = Math.max( jump, over[ k ] - over[ m ] );
+					else if ( patch[ m ] < 0 ) {
+
+						patch[ m ] = start;
+						cells.push( m );
+
+					}
 
 				}
 
-				for ( let a = - kx; a <= kx; a ++, w ++ ) {
-
-					const ii = i + a;
-					const wt = weights[ w ];
-					if ( ii < 0 || ii >= nx || wt === 0 ) continue;
-					const k = jj * nx + ii;
-					if ( ! kept[ k ] ) continue;
-					const x = a * dx, z = b * dz, y = heights[ k ];
-					count ++;
-					sw += wt; sx += wt * x; sz += wt * z; sy += wt * y;
-					sxx += wt * x * x; szz += wt * z * z; sxz += wt * x * z; sxy += wt * x * y; szy += wt * z * y;
-
-				}
-
 			}
 
-			const [ px, pz ] = points[ j * nx + i ];
-			if ( count < 3 || sw < 1e-6 ) {
-
-				out[ j * nx + i ] = fallback ? fallback.c + fallback.gx * px + fallback.gz * pz : 0;
-				continue;
-
-			}
-
-			const mx = sx / sw, mz = sz / sw, my = sy / sw;
-			const cxx = sxx / sw - mx * mx, czz = szz / sw - mz * mz, cxz = sxz / sw - mx * mz;
-			const cxy = sxy / sw - mx * my, czy = szy / sw - mz * my;
-			const det = cxx * czz - cxz * cxz;
-			if ( Math.abs( det ) < 1e-9 ) {
-
-				out[ j * nx + i ] = my;
-				continue;
-
-			}
-
-			const gx = ( cxy * czz - czy * cxz ) / det;
-			const gz = ( czy * cxx - cxy * cxz ) / det;
-			out[ j * nx + i ] = my - gx * mx - gz * mz;
+			if ( jump <= step ) for ( const k of cells ) out[ k ] = over[ k ] <= limit + rounded[ k ];
 
 		}
 
@@ -377,7 +478,8 @@ export function fitSurface( layout, heights, smoothing, width, length ) {
 	// roof as wide as the smoothing would lift a fit that fine right up onto it, so first against
 	// the ground smoothed over three times as far (30 m at least), leaving out what stands well above
 	// it, then half way, then at the smoothing asked for, leaving out what stands more than LIFT
-	// above. At each, fit, leave out, fit again until nothing changes. What's below is ground.
+	// above (and not merely the ground rounding over: see ground). At each, fit, leave out, fit
+	// again until nothing changes. What's below is ground.
 	const coarse = Math.max( 3 * smoothing, 30 );
 	const stages = [ coarse, Math.sqrt( coarse * smoothing ), smoothing ];
 	let kept = standing( layout, heights, valid ).map( ( up, i ) => valid[ i ] && ! up );
@@ -387,14 +489,14 @@ export function fitSurface( layout, heights, smoothing, width, length ) {
 
 		const k = kernel( across );
 		const limit = across === smoothing ? LIFT : Math.max( LIFT, Math.min( 2.5, across / 16 ) );
-		surface = smooth( kept, k );
+		surface = smooth( kept, k, across );
 		for ( let round = 0; round < 8; round ++ ) {
 
-			const next = valid.map( ( v, i ) => v && heights[ i ] - surface[ i ] <= limit );
+			const next = ground( surface, k.sigma, limit );
 			// Always some ground left: what stood on it can't be all of it.
 			if ( next.filter( Boolean ).length < 3 || next.every( ( v, i ) => v === kept[ i ] ) ) break;
 			kept = next;
-			surface = smooth( kept, k );
+			surface = smooth( kept, k, across );
 
 		}
 
@@ -421,7 +523,10 @@ export function fitSurface( layout, heights, smoothing, width, length ) {
 // narrower than the window and leaves slopes as they are; a reading more than a little above the
 // opening (more the wider the window, as the ground can round over between) stands on the ground.
 // It catches a stand of trees or a building as wide as the windows, which a smoothed fit through
-// them would climb onto.
+// them would climb onto. Each opening is measured against the last (not against the readings), and
+// allowed to drop as far as ground as steep as MAX_GRADE falls over the window's extra reach, so a
+// crest or the shoulder of a cut, which every opening rounds off a little more, isn't taken for
+// something standing on it.
 const PMF_WINDOWS = [ 5, 10, 20, 35 ];
 function standing( { nx, nz, dx, dz }, heights, valid ) {
 
@@ -451,11 +556,15 @@ function standing( { nx, nz, dx, dz }, heights, valid ) {
 
 		const rx = Math.round( w / 2 / dx ), rz = Math.round( w / 2 / dz );
 		if ( rx < 1 && rz < 1 ) continue;
+		// How far the window reaches (m), as the grid rounds it, and how far the ground could fall
+		// over the extra reach since the last one, as steep as any area may be graded.
+		const reach = Math.max( rx * dx, rz * dz );
+		if ( reach <= last ) continue;
 		const opened = pass( pass( z, rx, rz, Math.min ), rx, rz, Math.max );
-		const limit = Math.min( 4, 0.5 + 0.25 * ( w - last ) );
-		for ( let k = 0; k < n; k ++ ) if ( valid[ k ] && heights[ k ] - opened[ k ] > limit ) out[ k ] = true;
+		const limit = 0.5 + MAX_GRADE / 100 * ( reach - last );
+		for ( let k = 0; k < n; k ++ ) if ( valid[ k ] && z[ k ] - opened[ k ] > limit ) out[ k ] = true;
 		z = opened;
-		last = w;
+		last = reach;
 
 	}
 

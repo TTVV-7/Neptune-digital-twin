@@ -218,7 +218,7 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	const panel = createPlacementPanel( models, { getPlayerPosition: feetPosition } );
-	const flattening = setUpFlattening( { tiles, models } );
+	const flattening = setUpFlattening( { tiles, models, camera } );
 	models.originalHeight = ( x, z, detail ) => flattening.originalHeight( x, z, ground, detail );
 	const driver = new Driver( { camera, models, controls, getColliders: () => [ ...grounds, models.group ], hud: createDriveHud() } );
 

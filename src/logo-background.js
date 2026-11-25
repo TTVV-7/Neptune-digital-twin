@@ -10,11 +10,12 @@
 //  2. a flood fill from every edge pixel through pixels within `tolerance` of that colour, so only
 //     background joined to the edge goes: white letters inside a dark logo are kept. `enclosed`
 //     also clears every other pixel within tolerance (the hole of an O, a white box's inside);
-//  3. specks: islands of a few pixels left in the background (a noisy photo's) go too;
+//  3. specks: islands of a few pixels left in the background (a noisy photo's) go too, each
+//     island measured whole, so a big shape is never mistaken for a few;
 //  4. the boundary, within EDGE px of what was cleared: each pixel is taken as a mix of the
 //     background and the purest logo colour near it, its alpha that mix's share and its colour the
 //     logo's own (un-mixed), so no light fringe is left to show on dark paint; a ramp over a band
-//     past the tolerance fades the background's own noise out;
+//     past the tolerance fades the background's own noise out (in alpha only, never darkening it);
 //  5. trimmed to what's left, with a little padding, so the logo fills the panel it's put on.
 
 export const TOLERANCE = 40;
@@ -166,7 +167,8 @@ export function removeBackground( image, { tolerance = TOLERANCE, enclosed = fal
 
 	if ( enclosed ) for ( let i = 0; i < n; i ++ ) if ( far[ i ] <= tolerance ) cleared[ i ] = 1;
 
-	// Specks: what's kept in islands of fewer than `speck` pixels (eight ways) goes too.
+	// Specks: what's kept in islands of `speck` pixels or fewer (eight ways) goes too. Each island is
+	// followed to its end before it's judged, so a big shape is never cut into pieces that look small.
 	const speck = Math.max( 3, Math.round( n * 0.00004 ) );
 	const seen = new Uint8Array( n );
 	for ( let s = 0; s < n; s ++ ) {
@@ -175,7 +177,7 @@ export function removeBackground( image, { tolerance = TOLERANCE, enclosed = fal
 		head = tail = 0;
 		queue[ tail ++ ] = s;
 		seen[ s ] = 1;
-		while ( head < tail && tail <= speck ) {
+		while ( head < tail ) {
 
 			const i = queue[ head ++ ];
 			const x = i % width, y = ( i - x ) / width;
@@ -192,8 +194,6 @@ export function removeBackground( image, { tolerance = TOLERANCE, enclosed = fal
 
 		}
 
-		// Small enough: cleared. (A big island stops counting at speck + 1; the rest of it is
-		// found again from its other pixels, and is big from them too.)
 		if ( tail <= speck ) for ( let k = 0; k < tail; k ++ ) cleared[ queue[ k ] ] = 1;
 
 	}
@@ -245,8 +245,11 @@ export function removeBackground( image, { tolerance = TOLERANCE, enclosed = fal
 		// C = a F + ( 1 - a ) B: a is C's share along B → F.
 		const fb = [ F[ 0 ] - B[ 0 ], F[ 1 ] - B[ 1 ], F[ 2 ] - B[ 2 ] ];
 		const span = fb[ 0 ] ** 2 + fb[ 1 ] ** 2 + fb[ 2 ] ** 2;
-		let a = span > 1 ? ( ( C[ 0 ] - B[ 0 ] ) * fb[ 0 ] + ( C[ 1 ] - B[ 1 ] ) * fb[ 1 ] + ( C[ 2 ] - B[ 2 ] ) * fb[ 2 ] ) / span : 1;
-		a = Math.min( 1, Math.max( 0, a ) ) * smoothstep( tolerance, tolerance + band, far[ i ] );
+		let share = span > 1 ? ( ( C[ 0 ] - B[ 0 ] ) * fb[ 0 ] + ( C[ 1 ] - B[ 1 ] ) * fb[ 1 ] + ( C[ 2 ] - B[ 2 ] ) * fb[ 2 ] ) / span : 1;
+		share = Math.min( 1, Math.max( 0, share ) );
+		// The ramp past the tolerance fades it out (alpha only: its colour is still un-mixed by its
+		// share, so a pale logo just past the tolerance isn't given a dark rim).
+		const a = share * smoothstep( tolerance, tolerance + band, far[ i ] );
 		if ( a < 1 / 255 ) {
 
 			out[ i * 4 + 3 ] = 0;
@@ -256,8 +259,7 @@ export function removeBackground( image, { tolerance = TOLERANCE, enclosed = fal
 		}
 
 		// Its own colour, the background taken back out of it.
-		for ( let c = 0; c < 3; c ++ ) out[ i * 4 + c ] = B[ c ] + ( C[ c ] - B[ c ] ) / Math.max( a, 0.25 );
-		if ( a < 0.25 ) for ( let c = 0; c < 3; c ++ ) out[ i * 4 + c ] = F[ c ];
+		for ( let c = 0; c < 3; c ++ ) out[ i * 4 + c ] = share < 0.25 ? F[ c ] : B[ c ] + ( C[ c ] - B[ c ] ) / share;
 		out[ i * 4 + 3 ] = Math.round( data[ i * 4 + 3 ] * a );
 
 	}

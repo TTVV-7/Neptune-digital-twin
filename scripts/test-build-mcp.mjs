@@ -343,6 +343,11 @@ test( 'the tools lay out a site', async () => {
 	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'follow', smoothing: 'lots' } ) ).error );
 	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'bumpy' } ) ).error );
 	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'slope', toward: 'uphill' } ) ).error );
+	// Under an overpass: keeping what has open space under it, or everything above a height (clamped).
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 200, north: 20, width: 30, length: 20, grade: 'level', keep_overhead: 'auto' } ) ).text, /level, keeping what passes over it with open space under it/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 200, north: 60, width: 30, length: 20, grade: 'level', keep_overhead: 'height', keep_above: 900 } ) ).text, /keeping everything more than 200 m above it/ );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 200, north: 90, width: 20, length: 20, keep_overhead: 'some' } ) ).error );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 200, north: 90, width: 20, length: 20, keep_overhead: 'height', keep_above: 'high' } ) ).error );
 	assert.match( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 15, length: 10, label: 'Rebar' } ) ).text, /Rebar/ );
 	assert.match( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, material: 'road-base', volume: 80 } ) ).text, /road-base, 80 m³/ );
 	// Bigger than the editor makes them is refused, not reported and then drawn smaller.
@@ -353,7 +358,7 @@ test( 'the tools lay out a site', async () => {
 	const got = await tool( 'get_project', { project_id: project } );
 	const items = got.value.items;
 	const lane = 10; // the lane closure set: arrow board, two flaggers, seven cones
-	assert.equal( items.length, 3 + lane + 10 + 7 );
+	assert.equal( items.length, 3 + lane + 10 + 9 );
 	const panels = items.filter( i => i.item === 'fence-panel' );
 	assert.deepEqual( panels.slice( 0, 2 ).map( i => [ i.east, i.north, i.heading ] ), [ [ 10, 1.53, 270 ], [ 10, 4.58, 270 ] ] );
 	assert.deepEqual( items[ 0 ], { index: 0, item: 'office-trailer-10x40', name: items[ 0 ].name, east: 0, north: 20, heading: 180, size: items[ 0 ].size } );
@@ -362,6 +367,8 @@ test( 'the tools lay out a site', async () => {
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'terraces' && i.params.steps === 8 ) );
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'follow' && i.params.smoothing === 50 ) );
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'plane' && i.params.maxGrade === 8 && i.params.smoothing === undefined ) );
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.keep === 'auto' && i.params.height === 0 ) );
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.height === 200 && ! ( 'keep' in i.params ) ) );
 	// The usual smoothing isn't saved, as the editor saves it.
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && ! ( 'smoothing' in i.params ) ) );
 	// Indexes come with the version they're from: without it, or once the project has been saved

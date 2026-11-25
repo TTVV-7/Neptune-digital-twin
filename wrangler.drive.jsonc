@@ -99,6 +99,13 @@
 		"LIVE_VESTA_DAILY_BUDGET": "3000",
 		"LIVE_CERES_DAILY_BUDGET": "3000",
 		"LIVE_ADDRESS_FLOOR": "1000",
+		// Address search through Google's Geocoding API (worker/drive/search.js; docs/build.md, "Address
+		// search"): at most this many lookups a day from everyone together, then OpenStreetMap only
+		// until midnight UTC. Only used once the GOOGLE_GEOCODING_KEY secret is set (see below).
+		"GEOCODE_DAILY": "300",
+		// And at most this many of them for each visitor (an address, an IPv6 one by its /48, or a
+		// Build account through the MCP server), so one script can't use up everyone's day.
+		"GEOCODE_PER_VISITOR": "30",
 		// Google AdSense (docs/world-drive.md, "Ads"): one banner on the globe, never while driving and
 		// never for a supporter. ADSENSE_CLIENT is the publisher id, "ca-pub-" and 16 digits (public);
 		// empty, no ads at all: nothing about them is loaded or shown, and /ads.txt is a 404.
@@ -119,7 +126,11 @@
 	// secret named Google_maps_api, in any case, is taken too), TURNSTILE_SECRET, and for the
 	// Supporter Pass STRIPE_WEBHOOK_SECRET (the live webhook endpoint's whsec_... signing secret;
 	// buying stays off without it) and, if wanted, SUPPORTER_EMAILS (comma-separated: the pass
-	// without paying). Locally they come from .dev.vars.drive (.dev.vars.drive.example).
+	// without paying), and for finding street addresses GOOGLE_GEOCODING_KEY (a server-only Google
+	// API key restricted to the Geocoding API, never sent to a page and not the Maps key: npx
+	// wrangler secret put GOOGLE_GEOCODING_KEY -c wrangler.drive.jsonc, or the dashboard's Variables
+	// and Secrets; unset, search is OpenStreetMap's alone). Locally they come from .dev.vars.drive
+	// (.dev.vars.drive.example).
 	//
 	// The day's visit counts and the search queue: one Durable Object for everyone, on SQLite storage
 	// (on every plan, the free one too), with what driving with others has spent of today's budget.

@@ -1,4 +1,5 @@
 import { BufferGeometry, Box3, DoubleSide, Euler, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshStandardMaterial, Quaternion, Raycaster, SphereGeometry, Vector3 } from 'three';
+import { PLACED_ORDER } from './draw-order.js';
 import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from './geo.js';
 import { blocks, isTyping } from './walk.js';
 import { PLAYER } from './config.js';
@@ -1659,7 +1660,12 @@ export class Driver {
 
 			const lines = new LineSegments( new BufferGeometry().setAttribute( 'position', new Float32BufferAttribute( points, 3 ) ), new LineBasicMaterial( { color: 0xeeeeee } ) );
 			group.add( lines );
-			for ( const part of [ canopy, lines ] ) part.userData.noCollide = true;
+			for ( const part of [ canopy, lines ] ) {
+
+				part.userData.noCollide = true;
+				part.renderOrder = PLACED_ORDER;
+
+			}
 			group.userData.drop = drop;
 			( this.models.group.parent ?? this.models.group ).add( group );
 			this.chuteMesh = group;

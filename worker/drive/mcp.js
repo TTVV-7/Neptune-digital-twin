@@ -36,6 +36,8 @@ const SURFACES = [ 'gravel', 'clear-crush', 'pea-gravel', 'drain-rock', 'crusher
 const GRADES = [ 'level', 'follow', 'plane', 'slope', 'ridge', 'valley', 'terraces' ];
 const TOWARD = [ 'front', 'back', 'left', 'right' ];
 const BATTERS = [ 1.5, 2, 3 ];
+// What a flatten area keeps overhead (src/flatten.js's KEEPS).
+const KEEPS = [ 'off', 'auto', 'height' ];
 // Pieces placed touching end to end in a row; anything else a metre apart.
 const TOUCHING = [ 'Barriers & fencing', 'Temporary covers' ];
 // The largest the editor makes them (earthworks.js's normalizePile, laydown.js's clampSize): any
@@ -172,8 +174,8 @@ const TOOLS = [
 		run: placeRow,
 	},
 	{
-		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat), grade it and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none. Graded (anything but level), its edges meet the ground on batters: an embankment where it\'s built up, a cut slope where it\'s dug in; over 300 m wide or long it is only pressed down onto its shape, with no batters.',
-		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' }, grade: { type: 'string', enum: GRADES, default: 'follow', description: 'level (dead flat: at the ground\'s usual height under it when surfaced, down to the lowest ground under it with surface none), follow (a smoothed copy of the bare ground: follows the grade as it changes across the area, with what stands on it, bumps and debris taken away, smoothed over `smoothing` m; max_grade caps it), plane (one best-fit slope through the ground, as follow was before; max_grade caps it), slope (one plane falling `fall` % toward a side), ridge (a crown down the middle falling `fall` % to both sides), valley (a swale down the middle), terraces (`steps` level benches down the ground\'s slope)' }, fall: { type: 'number', minimum: 0.5, maximum: 20, default: 2, description: '%, for slope, ridge and valley' }, toward: { type: 'string', enum: TOWARD, default: 'front', description: 'the side a slope falls toward (front is the way it faces)' }, ridge_along: { type: 'string', enum: [ 'length', 'width' ], default: 'length', description: 'which way a ridge or valley runs' }, steps: { type: 'integer', minimum: 2, maximum: 8, default: 3, description: 'benches, for terraces' }, smoothing: { type: 'number', minimum: 2, maximum: 50, default: 10, description: 'm a follow area\'s ground is smoothed over: small hugs the ground, large is gentle' }, max_grade: { type: 'number', minimum: 0, maximum: 50, default: 0, description: '% steepest a follow or plane area may be anywhere, 0 for as steep as the ground' }, batter: { type: 'number', enum: BATTERS, default: 2, description: 'edge batters, horizontal to 1 vertical' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
+		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat), grade it and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none. Graded (anything but level), its edges meet the ground on batters: an embankment where it\'s built up, a cut slope where it\'s dug in; over 300 m wide or long it is only pressed down onto its shape, with no batters. Under a bridge, viaduct, overpass or canopy, keep_overhead keeps what passes over it: auto keeps what has open space under it (a deck, a canopy, and the pillars under it) and clears the rest, hiding the walls Google\'s 3D map hangs from a deck\'s edge; height keeps everything higher than keep_above m over the area\'s floor.',
+		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' }, grade: { type: 'string', enum: GRADES, default: 'follow', description: 'level (dead flat: at the ground\'s usual height under it when surfaced, down to the lowest ground under it with surface none), follow (a smoothed copy of the bare ground: follows the grade as it changes across the area, with what stands on it, bumps and debris taken away, smoothed over `smoothing` m; max_grade caps it), plane (one best-fit slope through the ground, as follow was before; max_grade caps it), slope (one plane falling `fall` % toward a side), ridge (a crown down the middle falling `fall` % to both sides), valley (a swale down the middle), terraces (`steps` level benches down the ground\'s slope)' }, fall: { type: 'number', minimum: 0.5, maximum: 20, default: 2, description: '%, for slope, ridge and valley' }, toward: { type: 'string', enum: TOWARD, default: 'front', description: 'the side a slope falls toward (front is the way it faces)' }, ridge_along: { type: 'string', enum: [ 'length', 'width' ], default: 'length', description: 'which way a ridge or valley runs' }, steps: { type: 'integer', minimum: 2, maximum: 8, default: 3, description: 'benches, for terraces' }, smoothing: { type: 'number', minimum: 2, maximum: 50, default: 10, description: 'm a follow area\'s ground is smoothed over: small hugs the ground, large is gentle' }, max_grade: { type: 'number', minimum: 0, maximum: 50, default: 0, description: '% steepest a follow or plane area may be anywhere, 0 for as steep as the ground' }, batter: { type: 'number', enum: BATTERS, default: 2, description: 'edge batters, horizontal to 1 vertical' }, keep_overhead: { type: 'string', enum: KEEPS, default: 'off', description: 'what passing over the area is kept: off (everything above the floor is flattened), auto (what has open space under it at least 2.5 m up: a bridge deck, a viaduct, a canopy, and its pillars), height (everything higher than keep_above)' }, keep_above: { type: 'number', minimum: 0.5, maximum: 200, default: 5, description: 'm above the area\'s floor, for keep_overhead height' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
 		run: addFlatten,
 	},
 	{
@@ -323,9 +325,11 @@ async function findSite( context, args ) {
 	if ( ! q ) throw new ToolError( 'query: an address, town or landmark' );
 	const url = new URL( `/api/search?q=${ encodeURIComponent( q ) }`, context.url.origin );
 	const res = await search( { ...context, url } );
-	const { results } = await res.json();
+	const { results, streetOnly } = await res.json();
 	if ( ! results?.length ) return text( 'Nothing found. Try a street address with its town, or a landmark.' );
-	return text( results.map( r => ( { place: r.name, lat: r.lat, lon: r.lon } ) ) );
+	// exact: a building or numbered address (search.js's house), not just its street; those come first.
+	const places = results.map( r => ( { place: r.name, lat: r.lat, lon: r.lon, exact: r.house === true } ) );
+	return text( streetOnly ? { note: 'Street only: the exact address wasn\'t found. Tell the person to move the site into place in the editor.', places } : places );
 
 }
 
@@ -626,14 +630,28 @@ async function addFlatten( context, args ) {
 	const fence = FENCES.includes( args.fence ) ? args.fence : 'none';
 	const gates = fence === 'none' ? 0 : Math.min( 8, Math.max( 0, Math.round( Number( args.entrances ) || 0 ) ) );
 	const grading = gradeOf( args );
-	const params = { width: size( args.width, 'width', 2000 ), length: size( args.length, 'length', 2000 ), height: 0, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params };
+	const overhead = keepOf( args );
+	const params = { width: size( args.width, 'width', 2000 ), length: size( args.length, 'length', 2000 ), height: overhead.height, ...overhead.params, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params };
 	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
 	return await change( context, args.project_id, layout => {
 
 		layout.items.push( config );
-		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }, ${ grading.text }.`;
+		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }, ${ grading.text }${ overhead.text }.`;
 
 	} );
+
+}
+
+// What a flatten area keeps overhead, as saved (src/flatten.js: a height limit as `height`, auto as
+// keep) and in words. An unknown choice is refused; the height is clamped to what the editor offers.
+function keepOf( args ) {
+
+	const keep = args.keep_overhead ?? 'off';
+	if ( ! KEEPS.includes( keep ) ) throw new ToolError( `keep_overhead must be one of ${ KEEPS.join( ', ' ) }` );
+	if ( keep === 'auto' ) return { height: 0, params: { keep }, text: ', keeping what passes over it with open space under it (decks, canopies) and its pillars' };
+	if ( keep === 'off' ) return { height: 0, params: {}, text: '' };
+	const height = args.keep_above === undefined ? 5 : Math.round( Math.min( 200, Math.max( 0.5, number( args.keep_above, 'keep_above' ) ) ) * 2 ) / 2;
+	return { height, params: {}, text: `, keeping everything more than ${ height } m above it` };
 
 }
 

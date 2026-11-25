@@ -5535,13 +5535,60 @@ worlddrive.app, only for the Map Tiles API, and only up to a daily quota.
 
 ### Search
 
-`GET /api/search?q=` passes the search to OpenStreetMap's Nominatim under its usage policy: World Drive
-names itself in the User-Agent (`WorldDrive/1.0 (+https://worlddrive.app)`), sends at most one request
-a second from everyone together (a busier queue gets "try again in a moment"), keeps each answer in
-Cloudflare's cache for a day (by the tidied query, so `Furka  Pass` and `furka pass` are one lookup),
-answers only with `{ name, lat, lon, type }`, and refuses queries over 120 characters or with
-anything but letters, numbers and an address's punctuation. The globe's panel shows
-"Search © OpenStreetMap contributors".
+`GET /api/search?q=` (`worker/drive/search.js`), used by the globe, Build's start-a-project and its
+**Site** button, answers `{ results: [ { name, lat, lon, type, house } ], provider, streetOnly }`. It
+refuses queries over 120 characters or with anything but letters, numbers and an address's
+punctuation, and keeps each answer in Cloudflare's cache for a day (by the tidied query, so
+`Furka  Pass` and `furka pass` are one lookup).
+
+**Two providers.** OpenStreetMap's Nominatim finds places well but often only the street for a
+street address with a house number ("453 W 12th Ave, Vancouver" came back as West 12th Avenue). So:
+
+- **Google's Geocoding API**, when the secret `GOOGLE_GEOCODING_KEY` is set (a server-only key
+  restricted to the Geocoding API; never sent to a page, and not `GOOGLE_MAPS_API_KEY`, which is the
+  browser's): asked **first for queries with a number in them** (house numbers, postcodes,
+  "12th Ave"), which are the addresses Nominatim misses, and for other queries **only when Nominatim
+  finds nothing**. So the daily cap is spent where it helps, and place names stay OpenStreetMap's.
+  `ZERO_RESULTS` goes on to Nominatim; `OVER_QUERY_LIMIT`, `REQUEST_DENIED`, `INVALID_REQUEST`,
+  another error or no answer is logged once (per Worker instance) and Nominatim answers instead.
+- **The cap**: at most `GEOCODE_DAILY` (300 if unset) Google lookups a day from everyone together,
+  counted in the DriveLimits object (`geocodeTurn`, a count a day and nothing else), then Nominatim
+  only until midnight UTC. Cached answers don't count. Each visitor (an address, an IPv6 one by its
+  /48, or a Build account through the MCP server) gets at most `GEOCODE_PER_VISITOR` (30 if unset) of
+  them a day (hashed with the day's salt, as the leaderboard's turns), then Nominatim for it alone: a
+  script looping over made-up addresses can't use up everyone's day.
+- **Caching**: an answer is kept a day, except a Nominatim answer given only because Google
+  couldn't be asked just then (refused, failing, the day's cap or the visitor's share reached), which is kept 10 minutes so
+  Google is tried again soon. The cache key says whether the key is set, so setting it up doesn't
+  leave a day of older answers.
+- **Nominatim** stays under its usage policy: World Drive names itself in the User-Agent
+  (`WorldDrive/1.0 (+https://worlddrive.app)`), sends at most one request a second from everyone
+  together (a busier queue gets "try again in a moment"), and asks with `addressdetails=1`. When the
+  query has a house number and no answer is a house, it asks **once more** (with another turn, and
+  only if the queue has room): with the street's abbreviations written out (`W`/`E`/`N`/`S`... at the
+  start or end of the street, but not a letter that is the street's name, "100 E St NW" or "Avenue
+  E"; `St`, `Ave`, `Rd`, `Blvd`, `Dr`, `Hwy`, `Cres`, `Pl`, `Ct`, `Ln`, `Pkwy`, `Sq`, `Terr` after the
+  street's first word, with `St` only when it ends the street, so "St Clair" and "Rue St Denis" stay
+  Saint), as a structured query (`street=453 west 12th avenue&city=vancouver`) when the query is just
+  the street and a town, else as free text (so a state, province or country after the town still
+  says which town). What that finds goes first. A number after a word like Pier, Route, Highway,
+  Studio, Area or Terminal ("Pier 39, San Francisco") is a place's name, not a house number.
+
+**Ranking and the pages.** `house` marks a building or numbered address (Google's `street_address`,
+`premise`, `subpremise`; Nominatim's with a `house_number`, or a house or building); those come
+first. `streetOnly` is true when the query has a house number but the best result isn't a house:
+Build's lists then say "Street only: the exact address wasn't found; pick it and move the site into
+place", and the globe's status line "Street only: the exact address wasn't found; pick the street
+and drive along to it". `provider` (`google` or `osm`) picks the credit: the globe's panel line and
+Build's lists say "Search © OpenStreetMap contributors", or "Search powered by Google" when Google
+answered (its results are shown on Google's own 3D map). The pages' shared bits are
+`src/search-results.js`.
+
+Google's Geocoding API is billed per request past a free monthly allowance (see Google's
+[pricing page](https://developers.google.com/maps/documentation/geocoding/usage-and-billing) for
+the current numbers); 300 a day is at most about 9,000 a month: compare that with the free
+allowance there, and set a budget alert in Google Cloud. The owner's steps for the key are in
+[docs/build.md](build.md#address-search).
 
 **A plain load's visit.** A plain load (when it opened on the orrery: now it's the globe's, also free) opens on the orrery and asks for a free visit, so none of the
 day's Earth drives is spent until someone drives on the Earth (picking it turns the page to our own
@@ -9120,7 +9167,9 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
 
 Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile and
 Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and JSON
-checks, the search's validation, cache and one-a-second limit, www, and that the key is only ever in
+checks, the search's validation, cache and one-a-second limit, its second try with the street written
+out, and Google's Geocoding stood in for (used and ranked first, refused and cached briefly, the
+daily cap, no key), www, and that the key is only ever in
 the answer to a visit that passed; and the leaderboard on a throwaway D1 database: name rules, the
 filter and uniqueness, renaming, scores with a visit token, every cheat above turned away, SQL-ish
 names and places kept as text, the top 20 and your own rank, one place's board, the cache, days and
