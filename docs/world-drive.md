@@ -8239,14 +8239,14 @@ ON CONFLICT DO NOTHING;
 The owner's own tracks, made in Suno on a paid plan (which lets World Drive use them; a free
 plan's tracks couldn't be), in `drive/public/music/` as AAC at 96 kbps (an iPhone doesn't reliably
 play the Opus Suno exports), each made -16 LUFS with ffmpeg's `loudnorm` so none is louder than
-another: about 28 MB for the twelve, each file asked for only when it's about to play.
+another: about 30 MB for the thirteen, each file asked for only when it's about to play.
 
 `src/drive-app/music.js` has a playlist for each scene (`PLAYLISTS`), each played in turn:
 
 | Scene | Tracks |
 |---|---|
 | The globe (and on through a drop-in, too short for its own) | Warm Analog Pads, Drive Anywhere (the theme song, with words) |
-| Driving on the Earth | Arcade Momentum, Golden Hour Drive, Buant Groove |
+| Driving on the Earth | Arcade Momentum, Golden Hour Drive, Buant Groove, Windows Down (with words, about a sunset drive with nowhere to be) |
 | On the Moon | Moonlit Driver (with words, about driving a grey truck on the Moon), Weightless Pulse |
 | On Mars | Canyon Echoes |
 | On Vesta | Crystalline Waves |
