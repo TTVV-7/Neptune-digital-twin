@@ -49,7 +49,7 @@ async function boot() {
 	if ( BUILD_APP ) {
 
 		const config = await loadConfig();
-		start( config?.mapsKey ?? null, 'World Drive Build', noMapReason( config?.mapsReason, config?.plan ) );
+		start( config?.mapsKey ?? null, 'World Drive Build', noMapReason( config ? config.mapsReason : 'unreachable', config?.plan ) );
 		return;
 
 	}

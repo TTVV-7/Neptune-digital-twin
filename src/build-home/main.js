@@ -55,7 +55,8 @@ function editorAt( { lat, lon, name, project } ) {
 }
 
 // A place's name as the editor shows it: its first two parts ("CN Tower, Front Street West").
-const shortName = name => name.split( ',' ).slice( 0, 2 ).join( ',' ).trim();
+// At most 100 characters: the server refuses a longer site name (build.js's readFields).
+const shortName = name => name.split( ',' ).slice( 0, 2 ).join( ',' ).trim().slice( 0, 100 ).trim();
 
 $( 'find' ).addEventListener( 'submit', async e => {
 

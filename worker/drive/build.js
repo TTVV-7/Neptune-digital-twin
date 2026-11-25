@@ -289,7 +289,8 @@ async function planFor( env, account, plan, now ) {
 
 // GET config[?view=<share token>]: { googleClientId, signedIn, user?, plan?, premium, mapsKey?,
 // mapsReason? }. mapsKey only when a view is taken (takeView); mapsReason says why not:
-// 'sign-in', 'used-up', 'busy', 'off', 'owner-free' (a share link whose owner isn't on Pro).
+// 'sign-in', 'used-up', 'busy', 'off', 'owner-free' (a share link whose owner isn't on Pro),
+// 'owner-used-up' (one whose owner has used this month's views, opened by someone with none to use).
 async function getConfig( context ) {
 
 	const { env, url, now, mapsKey } = context;
@@ -306,6 +307,8 @@ async function getConfig( context ) {
 			const owner = await accountById( env.DB, shared.account_id );
 			const ownerPlan = owner ? await planOf( env, owner, now ) : null;
 			taken = ownerPlan && ownerPlan.tier !== 'free' ? await takeView( env, owner, ownerPlan.tier, mapsKey, now ) : { ok: false, reason: 'owner-free' };
+			// The owner's month of views is used up, not the viewer's (who may have none at all).
+			if ( taken.reason === 'used-up' ) taken.reason = 'owner-used-up';
 
 		}
 
@@ -324,7 +327,7 @@ async function getConfig( context ) {
 	// The editor opened (once a page: cloud.js asks once), unless on a share link, counted as its
 	// view (getShared); and a 3D map view turned away for this month's or today's free ones.
 	const counts = view ? [] : visitCounts( 'editor', now );
-	if ( config.mapsReason === 'used-up' || config.mapsReason === 'busy' ) counts.push( [ 'build_map_refused', config.mapsReason, 1 ] );
+	if ( config.mapsReason === 'used-up' || config.mapsReason === 'owner-used-up' || config.mapsReason === 'busy' ) counts.push( [ 'build_map_refused', config.mapsReason === 'busy' ? 'busy' : 'used-up', 1 ] );
 	await countBuild( context, counts );
 	return json( config );
 

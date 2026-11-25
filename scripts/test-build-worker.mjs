@@ -423,6 +423,15 @@ describe( 'World Drive Build', () => {
 		assert.equal( viewer.json.signedIn, false );
 		assert.equal( ( await call( '/build/api/me', { cookie: pro.cookie } ) ).json.plan.views.used, 2 );
 
+		// The owner's month of views used up: someone signed out is told it's the owner's, not
+		// theirs (they never had any). The views made up for it go again after.
+		server.d1( `INSERT INTO build_views ( account_id, tier, at ) WITH RECURSIVE n( i ) AS ( SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 48 ) SELECT ${ id }, 'pro', ${ DAY + 10 * HOUR } FROM n` );
+		const late = await config( undefined, DAY + 10 * HOUR, `?view=${ share.json.shareToken }` );
+		assert.equal( late.json.mapsKey, undefined );
+		assert.equal( late.json.mapsReason, 'owner-used-up' );
+		server.d1( `DELETE FROM build_views WHERE account_id = ${ id } AND rowid NOT IN ( SELECT rowid FROM build_views WHERE account_id = ${ id } ORDER BY rowid LIMIT 2 )` );
+		assert.equal( ( await call( '/build/api/me', { cookie: pro.cookie } ) ).json.plan.views.used, 2 );
+
 		// Build Pro isn't the Supporter Pass.
 		const wd = await call( '/api/me', { cookie: pro.cookie } );
 		assert.equal( wd.json.supporter, false );

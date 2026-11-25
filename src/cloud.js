@@ -65,8 +65,10 @@ async function fetchConfig() {
 	if ( view ) url.searchParams.set( 'view', view );
 	try {
 
-		// Give a share link longer: without the server it can't be opened at all.
-		const res = await fetch( url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout( view ? CONFIG_TIMEOUT * 3 : CONFIG_TIMEOUT ) } );
+		// Give a share link longer: without the server it can't be opened at all. World Drive Build
+		// always has its server (a slow answer is a slow phone or a cold database, not static
+		// hosting), and without it no project opens or saves.
+		const res = await fetch( url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout( view || BUILD_APP ? CONFIG_TIMEOUT * 3 : CONFIG_TIMEOUT ) } );
 		if ( ! res.ok || ! res.headers.get( 'Content-Type' )?.includes( 'application/json' ) ) return null;
 		const config = await res.json();
 		return typeof config?.signedIn === 'boolean' ? config : null;
@@ -88,6 +90,9 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 		// Plain static hosting has no server and no share links; say so rather than quietly
 		// showing the viewer's own layout instead.
 		if ( new URL( window.location.href ).searchParams.has( 'view' ) ) showBanner( 'Couldn\'t reach the server to open the shared layout. Reload to try again.', 10000 );
+		// World Drive Build always has one: say the project isn't being opened or saved, rather
+		// than leaving you editing this browser's copy without knowing.
+		else if ( BUILD_APP ) showBanner( 'Couldn\'t reach the server, so your projects can\'t be opened or saved. Changes are kept in this browser. Reload to try again.', 15000 );
 		return;
 
 	}
@@ -96,7 +101,8 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	let link = readLink();
 	// { token, name, owner } while looking at someone's shared layout.
 	let viewing = null;
-	// Why the last save didn't happen: 'conflict', 'gone', 'failed' or 'signed-out'.
+	// Why the last save didn't happen: 'conflict', 'gone', 'failed' or 'signed-out' ('renamed' only
+	// for a moment, while saving again).
 	let problem = null;
 	let saving = null;
 	let timer = null;
@@ -317,7 +323,8 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 			premium?.update( res.premium, user, { announce: true } );
 			// Changes made while signed out go to the current layout now, but ask: by now the
 			// browser's layout may be something else altogether, such as a copy of a shared one.
-			if ( link && fingerprint( layout.getData() ) !== link.fingerprint ) {
+			// Not while viewing a shared layout: what's placed is the share, not changes of yours.
+			if ( link && ! viewing && fingerprint( layout.getData() ) !== link.fingerprint ) {
 
 				if ( window.confirm( `Save the changes made in this browser while you were signed out to "${ link.name }" in your account?` ) ) scheduleSave();
 				else {
@@ -449,6 +456,12 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 			if ( link === target ) problem = await whyNotSaved( err, target, print );
 			if ( problem === 'failed' ) timer = setTimeout( saveNow, RETRY_DELAY );
+			if ( problem === 'renamed' ) {
+
+				problem = null;
+				timer = setTimeout( saveNow );
+
+			}
 
 		} finally {
 
@@ -474,6 +487,15 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 		}
 
+		// It still holds what this tab last saved or opened: only its name or site moved on (renamed
+		// on the dashboard), so take those and save again on top of the version it's at now.
+		if ( latest && fingerprint( latest.data ) === ( target.stored ?? target.fingerprint ) ) {
+
+			setLink( latest, target.fingerprint, target.stored );
+			return 'renamed';
+
+		}
+
 		return 'conflict';
 
 	}
@@ -489,7 +511,7 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 		forgetLink();
 		if ( viewing ) stopViewing();
 		const failed = await layout.replace( saved.data );
-		setLink( saved, fingerprint( layout.getData() ) );
+		setLink( saved, fingerprint( layout.getData() ), fingerprint( saved.data ) );
 		render();
 		toast( failed ? `Opened "${ saved.name }". ${ failed } items could not be loaded.` : `Opened "${ saved.name }"` );
 
@@ -553,7 +575,7 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 		try {
 
 			const saved = await call( 'PUT', `layouts/${ summary.id }`, { name }, { headers: current ? { 'If-Match': `"${ link.updatedAt }"` } : {} } );
-			if ( link?.id === saved.id ) setLink( saved, link.fingerprint );
+			if ( link?.id === saved.id ) setLink( saved, link.fingerprint, link.stored );
 			renderStatus();
 			return saved;
 
@@ -572,9 +594,11 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 	}
 
-	function setLink( saved, print ) {
+	// print: what's placed, as of that version; stored: the version's data as the server holds it,
+	// which differs from what's placed when an opened layout loads a little differently.
+	function setLink( saved, print, stored = print ) {
 
-		link = { id: saved.id, name: saved.name, updatedAt: saved.updatedAt, fingerprint: print };
+		link = { id: saved.id, name: saved.name, updatedAt: saved.updatedAt, fingerprint: print, stored };
 		storage( () => localStorage.setItem( LINK_KEY, JSON.stringify( { ...link, owner: ownerOf( user ) } ) ) );
 		projectInAddress( saved.id );
 
@@ -657,15 +681,20 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 	if ( token ) await startViewing( token );
 	// World Drive Build's dashboard opens a project with ?project=<id> (once: then it's the current one).
 	const project = BUILD_APP && ! token ? new URL( window.location.href ).searchParams.get( 'project' ) : null;
-	if ( project && user && link?.id !== project ) {
+	if ( project && user ) {
 
 		try {
 
 			const opened = await call( 'GET', `layouts/${ encodeURIComponent( project ) }` );
-			await use( opened );
+			// Already the current project: this browser's copy is it, unless the project was changed
+			// somewhere else since (Claude through the MCP server, another computer). Then open that,
+			// asking first if this browser's copy has changes the project doesn't have yet.
+			const current = link?.id === opened.id;
+			const open = ! current || ( opened.updatedAt !== link.updatedAt && ( safe( localLayout() ) || window.confirm( `"${ opened.name }" was changed somewhere else. Open that version? Changes made in this browser since are lost.` ) ) );
+			if ( open ) await use( opened );
 			// Moved (the site picker opens it at the new place): the project moves with it.
 			const moved = opened.site !== SITE.name || Math.abs( ( opened.lat ?? SITE.lat ) - SITE.lat ) > 1e-6 || Math.abs( ( opened.lon ?? SITE.lon ) - SITE.lon ) > 1e-6;
-			if ( moved && link?.id === opened.id ) {
+			if ( open && moved && link?.id === opened.id ) {
 
 				const data = layout.getData();
 				setLink( await call( 'PUT', `layouts/${ opened.id }`, { data, site: SITE.name }, { headers: { 'If-Match': `"${ link.updatedAt }"` } } ), fingerprint( data ) );
@@ -762,17 +791,23 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 	}
 
-	function shareLink( shareToken ) {
+	function shareLink( summary ) {
 
 		const url = new URL( window.location.href );
-		// World Drive Build's editor is wherever the project is: the link keeps the place.
-		const at = url.searchParams.get( 'at' );
-		const place = url.searchParams.get( 'place' );
 		url.search = '';
 		url.hash = '';
-		if ( BUILD_APP && at ) url.searchParams.set( 'at', at );
-		if ( BUILD_APP && place ) url.searchParams.set( 'place', place );
-		url.searchParams.set( 'view', shareToken );
+		// World Drive Build's editor is wherever the project is: the link names the place, from the
+		// project itself, as the address may not (the editor opened with no query uses the last site).
+		if ( BUILD_APP ) {
+
+			const lat = summary.lat ?? SITE.lat;
+			const lon = summary.lon ?? SITE.lon;
+			url.searchParams.set( 'at', `${ lat.toFixed( 6 ) },${ lon.toFixed( 6 ) }` );
+			url.searchParams.set( 'place', summary.site ?? SITE.name );
+
+		}
+
+		url.searchParams.set( 'view', summary.shareToken );
 		return url.href;
 
 	}

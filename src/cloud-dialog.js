@@ -6,7 +6,7 @@ import { SITE } from './config.js';
 //   list() -> [ { id, name, updatedAt, shared, shareToken } ]
 //   open( layout ), saveAsNew( name ) and remove( layout ) -> false if you said no to the
 //   question they ask first; rename( layout, name ) -> the renamed layout; share( layout ) ->
-//   token; unshare( layout ); shareLink( token ); currentId(); email()
+//   token; unshare( layout ); shareLink( layout ); currentId(); email()
 export function createLayoutsDialog( actions ) {
 
 	const dialog = el( 'dialog', 'cloud-dialog' );
@@ -171,7 +171,7 @@ export function createLayoutsDialog( actions ) {
 
 		const box = el( 'div', 'share' );
 		const link = el( 'input' );
-		Object.assign( link, { readOnly: true, value: actions.shareLink( layout.shareToken ) } );
+		Object.assign( link, { readOnly: true, value: actions.shareLink( layout ) } );
 		link.setAttribute( 'aria-label', `Share link for ${ layout.name }` );
 		box.append(
 			link,

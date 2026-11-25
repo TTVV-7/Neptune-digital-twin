@@ -72,9 +72,11 @@ export function buildSite() {
 
 }
 
+// At most 100 characters: every save sends the site's name, and the server refuses a longer one
+// (build.js's readFields), so a long ?place would leave the project unable to save.
 function cleanName( name ) {
 
-	return typeof name === 'string' ? name.replace( /[\u0000-\u001f\u007f]/g, '' ).trim().slice( 0, 120 ) : '';
+	return typeof name === 'string' ? name.replace( /[\u0000-\u001f\u007f]/g, '' ).trim().slice( 0, 100 ).trim() : '';
 
 }
 
@@ -88,7 +90,9 @@ export function noMapReason( reason, plan ) {
 			? `You've used this month's ${ free } 3D map views. They start again on the 1st.`
 			: `You've used this month's ${ free ?? '' } free 3D map views. Build Pro gives you 300 a month. You can still lay out on flat ground.`;
 		case 'busy': return 'Today\'s free 3D map views are all taken. Try again tomorrow, or go Build Pro. You can still lay out on flat ground.';
+		case 'owner-used-up': return 'This shared project opens on flat ground: its owner has used this month\'s 3D map views.';
 		case 'owner-free': return 'This shared project opens on flat ground: the 3D map comes with its owner\'s Build Pro.';
+		case 'unreachable': return 'Couldn\'t reach the server for the 3D map. You can still lay out on flat ground; reload to try again.';
 		case 'off': return 'The 3D map is off just now. You can still lay out on flat ground.';
 		default: return 'Sign in (top right) to load the 3D map of your site: the free plan has 15 views a month. Until then, lay out on flat ground.';
 

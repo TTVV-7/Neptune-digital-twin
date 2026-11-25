@@ -24,6 +24,9 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	// Each restore or replace starts a new generation; models still arriving from an older one
 	// (a slow download when you open another layout) are dropped rather than mixed in.
 	let generation = 0;
+	// A layout replaced what's placed before the browser's own was restored (cloud.js opening a
+	// project): restoring then would load this site's local copy on top of it, and autosave the mix.
+	let replaced = false;
 	// Another tab saved a different layout; writing ours to this browser would throw that away.
 	let stale = false;
 	// What this tab last wrote or read, ignoring item order, to tell real changes from the
@@ -198,8 +201,8 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 		async restore() {
 
 			// Viewing someone's shared layout instead (cloud.js turned local saving off first and
-			// replaces what's placed itself).
-			if ( ! localSaving ) return;
+			// replaces what's placed itself), or a project already opened in its place.
+			if ( ! localSaving || replaced ) return;
 			const gen = ++ generation;
 			const saved = parse( storage( () => JSON.parse( localStorage.getItem( key ) ) ) );
 			if ( ! saved ) {
@@ -260,6 +263,7 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 			const next = parse( value );
 			if ( ! next ) throw new Error( 'not a layout' );
 			const gen = ++ generation;
+			replaced = true;
 			restoring = true;
 			clearAll();
 			const failed = await load( next.items, gen );

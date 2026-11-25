@@ -523,6 +523,68 @@ test( 'the dashboard signed in: the plan with its views, and projects that open 
 
 } );
 
+test( 'opening a project: not mixed with this browser\'s layout, the newer version when changed elsewhere, and a rename isn\'t a conflict', async () => {
+
+	// Dana's project from the test above, opened as the dashboard opens it.
+	const site = 'CN Tower, Front Street West';
+	const { id } = await page.evaluate( async () => ( await ( await fetch( '/build/api/layouts' ) ).json() ).layouts[ 0 ] );
+	const url = `${ server.base }/build/app/?${ new URLSearchParams( { at: '43.642600,-79.387100', place: site, project: id } ) }`;
+	const kinds = () => page.evaluate( () => window.twin.models.entries.filter( e => e.library && ! e.inConfig ).map( e => e.library ).sort() );
+	const items = () => page.evaluate( async id => ( await ( await fetch( `/build/api/layouts/${ id }` ) ).json() ).data.items.length, id );
+	const truck = { version: 2, site, lat: 43.6426, lon: - 79.3871, items: [ { name: 'Pickup truck', library: 'pickup-truck', url: 'library/pickup-truck.glb', east: 9, north: 9, heading: 0, up: null } ], extras: {} };
+
+	// A different layout left in this browser at the same site, and no project linked: only the
+	// project's cone is shown, and the truck isn't saved into it.
+	await page.evaluate( ( { site, truck } ) => {
+
+		localStorage.setItem( `neptune-twin.layout.${ site }`, JSON.stringify( truck ) );
+		localStorage.removeItem( `neptune-twin.cloud.${ site }` );
+
+	}, { site, truck } );
+	await page.goto( url );
+	await page.locator( '#project-status[data-state="saved"]', { hasText: 'Tower crane pad · Saved' } ).waitFor( { timeout: 30000 } );
+	await page.waitForTimeout( 3500 );
+	assert.deepEqual( await kinds(), [ 'traffic-cone' ] );
+	assert.equal( await items(), 1, 'nothing from this browser\'s layout saved into the project' );
+
+	// Changed somewhere else (Claude, another computer), then opened again: that version, not this browser's copy.
+	await page.evaluate( async id => {
+
+		const r = await fetch( `/build/api/layouts/${ id }` );
+		const { data } = await r.json();
+		data.items.push( { ...data.items[ 0 ], east: 6 } );
+		await fetch( `/build/api/layouts/${ id }`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { data } ) } );
+
+	}, id );
+	await page.goto( url );
+	await page.waitForFunction( () => window.twin?.models?.entries.filter( e => e.library === 'traffic-cone' ).length === 2, null, { timeout: 30000 } );
+	await page.locator( '#project-status[data-state="saved"]', { hasText: 'Tower crane pad · Saved' } ).waitFor( { timeout: 30000 } );
+
+	// Renamed on the dashboard (another tab), just after opening it and again after an edit saved
+	// here: each next edit still saves, under the new name.
+	const removeCone = () => page.evaluate( () => window.twin.models.remove( window.twin.models.entries.find( e => e.library === 'traffic-cone' ) ) );
+	const rename = name => page.evaluate( async ( { id, name } ) => {
+
+		await fetch( `/build/api/layouts/${ id }`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { name } ) } );
+
+	}, { id, name } );
+	const savedAs = async ( name, count ) => {
+
+		for ( let i = 0; i < 60 && ( await page.textContent( '#project-status' ) !== `${ name } · Saved` || await items() !== count ); i ++ ) await page.waitForTimeout( 500 );
+		assert.equal( await page.textContent( '#project-status' ), `${ name } · Saved` );
+		assert.equal( await items(), count );
+
+	};
+
+	await rename( 'Crane pad' );
+	await removeCone();
+	await savedAs( 'Crane pad', 1 );
+	await rename( 'North crane pad' );
+	await removeCone();
+	await savedAs( 'North crane pad', 0 );
+
+} );
+
 test( 'starting a project from the dashboard, moving it, and renaming and deleting it', async () => {
 
 	await page.goto( `${ server.base }/build/` );
