@@ -21,9 +21,10 @@ import {
 	Vector3,
 } from 'three';
 import { TileFlatteningPlugin } from '3d-tiles-renderer/plugins';
-import { acceleratedRaycast } from 'three-mesh-bvh';
+import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 import { registerKind } from './kinds.js';
 import { fencePanel } from './fence-panel.js';
+import { BATTERS, FALL, GRADES, MAX_GRADE, RIDGE_ALONG, STEPS, TOWARD, describeGrade, gradeOffset, gradeRange, isGraded, normalizeGrade, saveGrade } from './grade.js';
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
@@ -34,6 +35,14 @@ import { fencePanel } from './fence-panel.js';
 // surface shows all the time, with no red box over it (a bare area's red box shows in build mode).
 // It only changes what's drawn here; Google's data isn't touched. An area is a placed kind (see
 // kinds.js), so it is saved, moved, turned and deleted like the rest.
+//
+// An area can be graded (grade.js) rather than dead level: following the ground's slope with the
+// bumps smoothed out, one slope, a crown or a swale down the middle, or terraces. Google's mesh is
+// pressed onto that shape, the surface and the fence lie on it, and round the edge terrain.js draws
+// batters down to the ground (an embankment where the area is built up, a cut slope where it's dug
+// in), as the ground you walk and drive on. Areas saved before grading are level, as they were;
+// new ones follow the ground. A graded area snaps to a plane fitted through the ground under it
+// (models.js, 'plane'), whose slope is kept in its params as `fit` while it's open (never saved).
 //
 // Other modules press Google's mesh onto their own surfaces with setShape() (earthworks uses it
 // for pits), and originalHeight() reads the ground as Google made it, ignoring all of this.
@@ -208,13 +217,15 @@ export function drawSurface( { colour, grain, speck, size, joints, shade, angula
 }
 
 // The surface over an area's floor: one plane with its texture repeating every `tile` metres, and
-// its four sides going down SURFACE_SIDES.
-function buildSurface( width, length, id ) {
+// its four sides going down SURFACE_SIDES. On a graded area (`offset`, its height at (x, z) in the
+// area's frame) the plane is a grid lying on the graded shape, and the sides are a thin edge along
+// it: the batters terrain.js draws round it take the place of deep sides.
+function buildSurface( width, length, id, offset = null ) {
 
 	const { tile } = SURFACES[ id ];
 	const materials = surfaceMaterial( id );
 	const group = new Group();
-	const geometry = new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 );
+	const geometry = offset ? gradedPlane( width, length, offset ) : new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 );
 	const uv = geometry.attributes.uv;
 	for ( let i = 0; i < uv.count; i ++ ) uv.setXY( i, uv.getX( i ) * width / tile, uv.getY( i ) * length / tile );
 	const top = new Mesh( geometry, materials.top );
@@ -223,13 +234,14 @@ function buildSurface( width, length, id ) {
 	// After Google's tiles and before what's placed (see SURFACE_BIAS).
 	top.renderOrder = SURFACE_ORDER;
 	group.add( top );
+	const depth = offset ? GRADED_SIDES : SURFACE_SIDES;
 	for ( const [ along, across, x, z, turn ] of [ [ width, length, 0, length / 2, 0 ], [ width, length, 0, - length / 2, Math.PI ], [ length, width, width / 2, 0, Math.PI / 2 ], [ length, width, - width / 2, 0, - Math.PI / 2 ] ] ) {
 
-		const side = new PlaneGeometry( along, SURFACE_SIDES );
+		const side = offset ? gradedSide( along, depth, x, z, turn, offset ) : new PlaneGeometry( along, depth );
 		const sideUv = side.attributes.uv;
-		for ( let i = 0; i < sideUv.count; i ++ ) sideUv.setXY( i, sideUv.getX( i ) * along / tile, sideUv.getY( i ) * SURFACE_SIDES / tile );
+		for ( let i = 0; i < sideUv.count; i ++ ) sideUv.setXY( i, sideUv.getX( i ) * along / tile, sideUv.getY( i ) * depth / tile );
 		const mesh = new Mesh( side, materials.sides );
-		mesh.position.set( x, SURFACE_LIFT - SURFACE_SIDES / 2, z );
+		mesh.position.set( x, SURFACE_LIFT - ( offset ? 0 : depth / 2 ), z );
 		mesh.rotation.y = turn;
 		group.add( mesh );
 
@@ -238,6 +250,49 @@ function buildSurface( width, length, id ) {
 	// Walked and driven on like the ground under it, which is flattened to the same height.
 	group.traverse( o => o.userData.noCollide = true );
 	return group;
+
+}
+
+// How finely a graded area's surface (and the shape Google's mesh is pressed onto) follows its
+// shape: about a cell a metre, at most GRADE_CELLS a side, always an even number so a crown's ridge
+// runs along a row of vertices.
+const GRADE_CELLS = 96;
+const GRADED_SIDES = 0.25;
+function gradeCells( size ) {
+
+	return Math.min( GRADE_CELLS, Math.max( 2, Math.ceil( size / 1.5 / 2 ) * 2 ) );
+
+}
+
+// A width × length grid lying flat (x across, z along), each vertex at offset( x, z ).
+function gradedPlane( width, length, offset ) {
+
+	const geometry = new PlaneGeometry( width, length, gradeCells( width ), gradeCells( length ) ).rotateX( - Math.PI / 2 );
+	const position = geometry.attributes.position;
+	for ( let i = 0; i < position.count; i ++ ) position.setY( i, offset( position.getX( i ), position.getZ( i ) ) );
+	geometry.computeVertexNormals();
+	return geometry;
+
+}
+
+// One side of a graded surface's edge: a strip `depth` deep hanging from the edge, which runs
+// `along` metres through (x, z) turned by `turn`, as the flat sides are.
+function gradedSide( along, depth, x, z, turn, offset ) {
+
+	const geometry = new PlaneGeometry( along, depth, gradeCells( along ), 1 );
+	const position = geometry.attributes.position;
+	const c = Math.cos( turn ), sn = Math.sin( turn );
+	for ( let i = 0; i < position.count; i ++ ) {
+
+		// Where along the edge this vertex is, in the area's frame (the strip's x turned by `turn`).
+		const a = position.getX( i );
+		const top = position.getY( i ) > 0;
+		const y = offset( x + a * c, z - a * sn );
+		position.setY( i, top ? y : y - depth );
+
+	}
+
+	return geometry;
 
 }
 
@@ -403,7 +458,9 @@ function gatesBySide( gates ) {
 
 }
 
-export function buildFence( width, length, style, gates = 0 ) {
+// On a graded area `offset` gives the ground's height at (x, z) in the area's frame: each panel
+// stands on it, tilted to the ground under its two ends, and each gate leaf at its hinge.
+export function buildFence( width, length, style, gates = 0, offset = null ) {
 
 	const group = new Group();
 	group.name = 'Temporary fence';
@@ -421,9 +478,23 @@ export function buildFence( width, length, style, gates = 0 ) {
 	const placements = [];
 	const leaves = [];
 	const yAxis = new Vector3( 0, 1, 0 );
-	const place = ( x, z, yaw, stretch, into = placements ) => {
+	const zAxis = new Vector3( 0, 0, 1 );
+	const place = ( x, z, yaw, stretch, into = placements, hinge = null ) => {
 
-		into.push( new Matrix4().compose( new Vector3( x, 0, z ), new Quaternion().setFromAxisAngle( yAxis, yaw ), new Vector3( stretch, 1, 1 ) ) );
+		const turn = new Quaternion().setFromAxisAngle( yAxis, yaw );
+		let y = 0;
+		if ( offset ) {
+
+			// The piece runs along its own x, which the turn points along (cos yaw, -sin yaw).
+			const half = stretch * PANEL / 2;
+			const ex = Math.cos( yaw ) * half, ez = - Math.sin( yaw ) * half;
+			const a = offset( x - ex, z - ez ), b = offset( x + ex, z + ez );
+			y = hinge ? offset( ...hinge ) : ( a + b ) / 2;
+			if ( ! hinge ) turn.multiply( new Quaternion().setFromAxisAngle( zAxis, Math.atan2( b - a, 2 * half ) ) );
+
+		}
+
+		into.push( new Matrix4().compose( new Vector3( x, y, z ), turn, new Vector3( stretch, 1, 1 ) ) );
 
 	};
 
@@ -472,7 +543,7 @@ export function buildFence( width, length, style, gates = 0 ) {
 				const ux = dx * toward, uz = dz * toward;
 				const c = Math.cos( swing ), sn = Math.sin( swing );
 				const ox = ux * c + uz * sn, oz = - ux * sn + uz * c;
-				place( hx + ox * leaf / 2, hz + oz * leaf / 2, yaw + swing, leaf / PANEL, leaves );
+				place( hx + ox * leaf / 2, hz + oz * leaf / 2, yaw + swing, leaf / PANEL, leaves, [ hx, hz ] );
 
 			}
 
@@ -499,22 +570,27 @@ export function buildFence( width, length, style, gates = 0 ) {
 
 // The zone as drawn in build mode: a see-through volume over the area, with a floor you can
 // click to select it, up to its height limit if it has one (with a blue ceiling: what's above is
-// left alone). None of it blocks walking or driving.
-export function buildZone( width, length, height = 0, surface = 'none', fence = 'none', gates = 0 ) {
+// left alone). None of it blocks walking or driving. A graded area's floor and ceiling lie on its
+// shape (grade.js), and its volume reaches from the lowest point of it.
+export function buildZone( width, length, height = 0, surface = 'none', fence = 'none', gates = 0, grading = null ) {
 
 	const group = new Group();
 	group.name = SURFACES[ surface ] ? `${ SURFACES[ surface ].name } pad` : 'Flattened area';
 	group.userData.zone = true;
+	// grading: { params, slope } of a graded area.
+	const offset = grading && isGraded( grading.params ) ? ( x, z ) => gradeOffset( grading.params, grading.slope, x, z ) : null;
+	const range = offset ? gradeRange( grading.params, grading.slope ) : { min: 0, max: 0 };
 
-	const top = height > 0 ? height : VOLUME_HEIGHT;
+	const top = ( height > 0 ? height : VOLUME_HEIGHT ) + range.max - range.min;
 	const volume = new Mesh( new BoxGeometry( width, top, length ), fillMaterial );
-	volume.position.y = top / 2;
+	volume.position.y = range.min + top / 2;
 	volume.raycast = () => {};
 	const edges = new LineSegments( new EdgesGeometry( volume.geometry ), edgeMaterial );
 	edges.position.copy( volume.position );
 	edges.raycast = () => {};
 
-	const floor = new Mesh( new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 ), floorMaterial );
+	const sheet = () => offset ? gradedPlane( width, length, offset ) : new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 );
+	const floor = new Mesh( sheet(), floorMaterial );
 	floor.position.y = 0.05;
 	floor.renderOrder = 1;
 
@@ -522,12 +598,12 @@ export function buildZone( width, length, height = 0, surface = 'none', fence = 
 	// The red box is only for laying a bare area out: shown in build mode (see models.js). A
 	// surfaced one is just its gravel, asphalt or concrete (clicked on to select it), no box.
 	for ( const mesh of [ volume, edges, floor ] ) mesh.userData.buildOnly = true;
-	if ( SURFACES[ surface ] ) group.add( buildSurface( width, length, surface ) );
+	if ( SURFACES[ surface ] ) group.add( buildSurface( width, length, surface, offset ) );
 	else group.add( volume, edges, floor );
-	if ( fence !== 'none' ) group.add( buildFence( width, length, fence, gates ) );
+	if ( fence !== 'none' ) group.add( buildFence( width, length, fence, gates, offset ) );
 	if ( height > 0 ) {
 
-		const ceiling = new Mesh( new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 ), ceilingMaterial );
+		const ceiling = new Mesh( sheet(), ceilingMaterial );
 		ceiling.position.y = height;
 		ceiling.raycast = () => {};
 		ceiling.userData.noCollide = true;
@@ -540,22 +616,41 @@ export function buildZone( width, length, height = 0, surface = 'none', fence = 
 
 }
 
+// The fitted slope kept in an area's params while it's open (see the top): { gx, gz } or null.
+function fitOf( fit ) {
+
+	return Number.isFinite( fit?.gx ) && Number.isFinite( fit?.gz ) ? { gx: fit.gx, gz: fit.gz } : null;
+
+}
+
+// Grades whose shape depends on the ground under them, and so on the fitted slope.
+const FITTED = [ 'follow', 'terraces' ];
+const graded = p => isGraded( p );
+
 registerKind( ZONE_ID, {
 	label: 'Flattened area',
 	layer: 'Flatten areas',
-	build: ( { width, length, height, surface, fence, gates } ) => buildZone( width, length, height, surface, fence, gates ),
+	build: params => buildZone( params.width, params.length, params.height, params.surface, params.fence, params.gates, { params, slope: params.fit } ),
 	// Areas saved before surfaces existed have none, and are saved again without one.
-	// And without a fence, which areas saved without one leave out of what's saved.
+	// And without a fence, which areas saved without one leave out of what's saved. And level,
+	// as areas saved before grading were, with nothing about grading saved.
 	normalize: p => ( {
 		width: clampSize( p.width ), length: clampSize( p.length ), height: clampHeight( p.height ), surface: SURFACES[ p.surface ] ? p.surface : 'none',
 		fence: Object.values( FENCES ).includes( p.fence ) ? p.fence : 'none', gates: Math.min( MAX_GATES, Math.max( 0, Math.round( Number( p.gates ) || 0 ) ) ),
+		...normalizeGrade( p ),
+		fit: fitOf( p.fit ),
 	} ),
-	save: ( { surface, fence, gates, ...rest } ) => ( { ...rest, ...( surface === 'none' ? {} : { surface } ), ...( fence === 'none' ? {} : { fence, gates } ) } ),
+	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, batter, fit, ...rest } ) => ( {
+		...rest, ...( surface === 'none' ? {} : { surface } ), ...( fence === 'none' ? {} : { fence, gates } ),
+		...saveGrade( { grade, fall, toward, ridgeAlong, steps, maxGrade, batter } ),
+	} ),
 	// Down to the lowest ground around it as Google made it, so flattening doesn't drag it lower, and
 	// whatever stands in it is cleared. A surfaced one (a pad of gravel, asphalt or concrete) at the
 	// ground's usual height round it instead, so it isn't a pit; what stands on it is pressed flat
-	// all the same, and what's lower is under the pad.
-	snap: ( { surface } ) => SURFACES[ surface ] ? 'median-original' : 'lowest-original',
+	// all the same, and what's lower is under the pad. A graded one at the middle of a plane fitted
+	// through the ground under it, which a graded area that follows the ground lies along.
+	snap: p => graded( p ) ? 'plane-original' : SURFACES[ p.surface ] ? 'median-original' : 'lowest-original',
+	snapRect: ( { width, length } ) => ( { width, length } ),
 	solid: false,
 	buildOnly: true,
 	// A surfaced area's gravel or asphalt stays in view outside build mode (it has no red box).
@@ -569,14 +664,43 @@ registerKind( ZONE_ID, {
 		{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
 		// 0 flattens everything above the floor, as areas always did (and saved ones still do).
 		{ key: 'height', label: 'flatten up to (m, 0 = all)', min: 0, max: MAX_HEIGHT, step: 0.5, size: true },
+		{ key: 'grade', label: 'ground', options: GRADES, size: true, editor: true },
+		{ key: 'maxGrade', label: 'steepest (%, 0 = as the ground)', min: 0, max: MAX_GRADE, step: 0.5, size: true, when: p => p.grade === 'follow' },
+		{ key: 'fall', label: 'fall (%)', min: FALL.min, max: FALL.max, step: FALL.step, size: true, when: p => [ 'slope', 'ridge', 'valley' ].includes( p.grade ) },
+		{ key: 'toward', label: 'falling toward', options: TOWARD, size: true, when: p => p.grade === 'slope' },
+		{ key: 'ridgeAlong', label: p => p.grade === 'valley' ? 'swale runs' : 'ridge runs', options: RIDGE_ALONG, size: true, when: p => p.grade === 'ridge' || p.grade === 'valley' },
+		{ key: 'steps', label: 'benches', min: STEPS.min, max: STEPS.max, step: 1, size: true, when: p => p.grade === 'terraces' },
+		{ key: 'batter', label: 'edge batters (h : v)', options: BATTERS, size: true, when: graded },
+	],
+	// How it's graded, and the earth it moves (terrain.js works it out with the batters, as
+	// gradeVolume on the entry).
+	readouts: [
+		{ label: 'grade', get: entry => graded( entry.params ) ? describeGrade( entry.params, entry.params.fit ?? entry.groundSlope, entry.state.heading ) : '' },
+		{ label: 'cut (bank)', get: entry => graded( entry.params ) && entry.gradeVolume ? `${ Math.round( entry.gradeVolume.cut ).toLocaleString( 'en-CA' ) } m³` : '' },
+		{ label: 'fill (compacted)', get: entry => graded( entry.params ) && entry.gradeVolume ? `${ Math.round( entry.gradeVolume.fill ).toLocaleString( 'en-CA' ) } m³` : '' },
 	],
 	// A box is cheap to rebuild, and the flattening itself catches up a few times a second.
 	resize: {
 		shape: 'rect',
 		live: true,
-		label: ( { width, length, height, surface, fence } ) => `${ width.toFixed( 1 ) } × ${ length.toFixed( 1 ) } m · ${ Math.round( width * length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ surface ] ? ` · ${ SURFACES[ surface ].name.toLowerCase() }` : '' }${ fence !== 'none' ? ' · fenced' : '' }${ height > 0 ? ` · up to ${ height.toFixed( 1 ) } m` : '' }`,
+		label: p => `${ p.width.toFixed( 1 ) } × ${ p.length.toFixed( 1 ) } m · ${ Math.round( p.width * p.length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ p.surface ] ? ` · ${ SURFACES[ p.surface ].name.toLowerCase() }` : '' }${ graded( p ) ? ` · ${ describeGrade( p, p.fit ) }` : '' }${ p.fence !== 'none' ? ' · fenced' : '' }${ p.height > 0 ? ` · up to ${ p.height.toFixed( 1 ) } m` : '' }`,
 	},
 } );
+
+// The grading the next area drawn gets: the one last chosen for an area, following the ground to
+// begin with (areas loaded without one are level, as they were saved).
+let nextGrade = 'follow';
+export function defaultGrade() {
+
+	return nextGrade;
+
+}
+
+export function rememberGrade( grade ) {
+
+	if ( Object.values( GRADES ).includes( grade ) ) nextGrade = grade;
+
+}
 
 // The surface the next area drawn gets: the one last chosen for an area, gravel to begin with.
 let nextSurface = 'gravel';
@@ -601,6 +725,29 @@ function clampSize( v ) {
 function clampHeight( v ) {
 
 	return Math.min( MAX_HEIGHT, Math.max( 0, Number( v ) || 0 ) );
+
+}
+
+// What a graded area's shape depends on, to tell when it must be made again.
+function shapeKey( p ) {
+
+	return JSON.stringify( [ p.width, p.length, saveGrade( p ), FITTED.includes( p.grade ) ? p.fit : null ] );
+
+}
+
+// The shape Google's mesh is pressed onto under a graded area: a grid over the unit square (the
+// area's matrix scales it to its width and length, as the level square), each vertex at the graded
+// height in metres. With a bounds tree, as the plugin raycasts it once per tile vertex.
+function gradedShape( params ) {
+
+	const { width, length } = params;
+	const geometry = new PlaneGeometry( 1, 1, gradeCells( width ), gradeCells( length ) ).rotateX( - Math.PI / 2 );
+	const position = geometry.attributes.position;
+	for ( let i = 0; i < position.count; i ++ ) position.setY( i, gradeOffset( params, params.fit, position.getX( i ) * width, position.getZ( i ) * length ) );
+	geometry.computeBoundingBox();
+	geometry.computeBoundingSphere();
+	geometry.boundsTree = new MeshBVH( geometry );
+	return geometry;
 
 }
 
@@ -714,10 +861,21 @@ export function setUpFlattening( { tiles, models } ) {
 
 		const entry = key;
 		if ( ! models.entries.includes( entry ) ) return;
+		// A level area's floor is one square; a graded one's is a grid on its shape (grade.js), made
+		// again when the shape changes.
+		const form = graded( entry.params ) ? shapeKey( entry.params ) : 'level';
 		let shape = shapes.get( entry );
+		if ( shape && shape.userData.form !== form ) {
+
+			remove( entry );
+			shape = null;
+
+		}
+
 		if ( ! shape ) {
 
-			shape = new Mesh( new PlaneGeometry( 1, 1 ).rotateX( - Math.PI / 2 ) );
+			shape = form === 'level' ? new Mesh( new PlaneGeometry( 1, 1 ).rotateX( - Math.PI / 2 ) ) : new ShapeMesh( gradedShape( entry.params ) );
+			shape.userData.form = form;
 			shape.matrixAutoUpdate = false;
 
 		}
@@ -741,10 +899,12 @@ export function setUpFlattening( { tiles, models } ) {
 	// An area's surface as last seen: when it's changed in the P panel, the next area drawn
 	// gets the same (gravel, then asphalt all evening, say). Loading a layout doesn't count.
 	const surfaces = new WeakMap();
+	const grades = new WeakMap();
 	models.addEventListener( 'add', e => {
 
 		mark( e );
 		if ( e.entry.kind === ZONE_ID ) surfaces.set( e.entry, e.entry.params.surface );
+		if ( e.entry.kind === ZONE_ID ) grades.set( e.entry, e.entry.params.grade );
 
 	} );
 	models.addEventListener( 'change', e => {
@@ -755,6 +915,14 @@ export function setUpFlattening( { tiles, models } ) {
 		const before = surfaces.get( entry );
 		if ( before !== undefined && before !== entry.params.surface ) rememberSurface( entry.params.surface );
 		surfaces.set( entry, entry.params.surface );
+		const grade = grades.get( entry );
+		if ( grade !== undefined && grade !== entry.params.grade ) rememberGrade( entry.params.grade );
+		grades.set( entry, entry.params.grade );
+		// The ground's slope under an area that follows it (or is terraced down it) was fitted
+		// afresh (models.js): build it on the new one. That change comes back here with them equal.
+		const fit = entry.groundSlope ?? null;
+		const { params } = entry;
+		if ( FITTED.includes( params.grade ) && fit && ( ! params.fit || Math.abs( params.fit.gx - fit.gx ) > 1e-4 || Math.abs( params.fit.gz - fit.gz ) > 1e-4 ) ) models.setParams( entry, { fit } );
 
 	} );
 	models.addEventListener( 'remove', ( { entry } ) => {

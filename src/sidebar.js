@@ -18,7 +18,7 @@ import { itemConfig } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { localToEnu } from './geo.js';
 import { isTyping, passesHitFilters } from './walk.js';
-import { ZONE_ID, defaultSurface } from './flatten.js';
+import { ZONE_ID, defaultGrade, defaultSurface } from './flatten.js';
 import { availableSets, memberPlacement } from './sets.js';
 import { getKind } from './kinds.js';
 import { createHandles, toScreen } from './handles.js';
@@ -148,13 +148,13 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	addTool( {
 		name: 'Flatten area',
 		hint: 'Drag a rectangle to clear it and lay gravel, rock, asphalt or concrete',
-		title: 'Drag a rectangle on the ground; everything in Google\'s 3D map inside it is pressed flat and surfaced (gravel to start; change it in the P panel)',
+		title: 'Drag a rectangle on the ground; everything in Google\'s 3D map inside it is pressed flat and surfaced (gravel to start), graded to follow the ground\'s slope with batters at its edges (make it level, one slope, crowned or terraced in the P panel)',
 		icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2a3844"/><path d="M6 46h52" stroke="#8a8f86" stroke-width="3"/><rect x="14" y="30" width="18" height="16" fill="#8e3b2a" opacity=".45"/><rect x="34" y="34" width="16" height="12" fill="#2a4f8e" opacity=".45"/><rect x="10" y="20" width="44" height="28" fill="#ff5544" fill-opacity=".2" stroke="#ff3322" stroke-width="2.5" stroke-dasharray="5 3"/><path d="M32 8v10m-5-5 5 5 5-5" stroke="#eef2f5" stroke-width="2.5" fill="none"/></svg>',
 		mode: 'rect',
 		color: 0xff3322,
 		onDone: ( { east, north, heading, width, length } ) => models.load( {
 			kind: ZONE_ID,
-			params: { width, length, surface: defaultSurface() },
+			params: { width, length, surface: defaultSurface(), grade: defaultGrade() },
 			east,
 			north,
 			heading,

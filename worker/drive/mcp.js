@@ -31,6 +31,10 @@ const FENCE_NAMES = { mesh: 'chain-link', screened: 'green privacy screen', 'scr
 const FENCES = Object.keys( FENCE_NAMES );
 // src/flatten.js's surfaces (gravel is road base).
 const SURFACES = [ 'gravel', 'clear-crush', 'pea-gravel', 'drain-rock', 'crusher-dust', 'pit-run', 'recycled-concrete', 'rip-rap', 'millings', 'asphalt', 'concrete', 'none' ];
+// src/grade.js's grades, and what each takes.
+const GRADES = [ 'level', 'follow', 'slope', 'ridge', 'valley', 'terraces' ];
+const TOWARD = [ 'front', 'back', 'left', 'right' ];
+const BATTERS = [ 1.5, 2, 3 ];
 // Pieces placed touching end to end in a row; anything else a metre apart.
 const TOUCHING = [ 'Barriers & fencing', 'Temporary covers' ];
 
@@ -161,8 +165,8 @@ const TOOLS = [
 		run: placeRow,
 	},
 	{
-		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat) and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none.',
-		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
+		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat), grade it and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none. Graded (anything but level), its edges meet the ground on batters: an embankment where it\'s built up, a cut slope where it\'s dug in.',
+		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' }, grade: { type: 'string', enum: GRADES, default: 'follow', description: 'level (dead flat, at the ground\'s usual height under it), follow (the ground\'s own slope with bumps and debris smoothed away; max_grade caps it), slope (one plane falling `fall` % toward a side), ridge (a crown down the middle falling `fall` % to both sides), valley (a swale down the middle), terraces (`steps` level benches down the ground\'s slope)' }, fall: { type: 'number', minimum: 0.5, maximum: 20, default: 2, description: '%, for slope, ridge and valley' }, toward: { type: 'string', enum: TOWARD, default: 'front', description: 'the side a slope falls toward (front is the way it faces)' }, ridge_along: { type: 'string', enum: [ 'length', 'width' ], default: 'length', description: 'which way a ridge or valley runs' }, steps: { type: 'integer', minimum: 2, maximum: 8, default: 3, description: 'benches, for terraces' }, max_grade: { type: 'number', minimum: 0, maximum: 50, default: 0, description: '% steepest a follow area may be, 0 for as steep as the ground' }, batter: { type: 'number', enum: BATTERS, default: 2, description: 'edge batters, horizontal to 1 vertical' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
 		run: addFlatten,
 	},
 	{
@@ -489,14 +493,62 @@ async function addFlatten( context, args ) {
 	const surface = SURFACES.includes( args.surface ) ? args.surface : 'gravel';
 	const fence = FENCES.includes( args.fence ) ? args.fence : 'none';
 	const gates = fence === 'none' ? 0 : Math.min( 8, Math.max( 0, Math.round( Number( args.entrances ) || 0 ) ) );
-	const params = { width: size( args.width, 'width' ), length: size( args.length, 'length' ), height: 0, surface, ...( fence === 'none' ? {} : { fence, gates } ) };
+	const grading = gradeOf( args );
+	const params = { width: size( args.width, 'width' ), length: size( args.length, 'length' ), height: 0, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params };
 	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
 	return await change( context, args.project_id, layout => {
 
 		layout.items.push( config );
-		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }.`;
+		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }, ${ grading.text }.`;
 
 	} );
+
+}
+
+// A flatten area's grading as saved (src/grade.js saveGrade: nothing for level) and in words.
+// Unknown values are refused; numbers are clamped to what the editor offers.
+function gradeOf( args ) {
+
+	const grade = args.grade ?? 'follow';
+	if ( ! GRADES.includes( grade ) ) throw new ToolError( `grade must be one of ${ GRADES.join( ', ' ) }` );
+	if ( grade === 'level' ) return { params: {}, text: 'level' };
+	const clamp = ( value, name, min, max, fallback ) => value === undefined ? fallback : Math.min( max, Math.max( min, number( value, name ) ) );
+	const batter = args.batter === undefined ? 2 : BATTERS.reduce( ( best, b ) => Math.abs( b - number( args.batter, 'batter' ) ) < Math.abs( best - Number( args.batter ) ) ? b : best, 2 );
+	const params = { grade, batter };
+	let text = '';
+	if ( grade === 'follow' ) {
+
+		const maxGrade = round( clamp( args.max_grade, 'max_grade', 0, 50, 0 ) );
+		if ( maxGrade > 0 ) params.maxGrade = maxGrade;
+		text = `following the ground${ maxGrade > 0 ? ` (no steeper than ${ maxGrade }%)` : '' }`;
+
+	} else if ( grade === 'terraces' ) {
+
+		params.steps = Math.round( clamp( args.steps, 'steps', 2, 8, 3 ) );
+		text = `in ${ params.steps } terraces`;
+
+	} else {
+
+		params.fall = Math.round( clamp( args.fall, 'fall', 0.5, 20, 2 ) * 2 ) / 2;
+		if ( grade === 'slope' ) {
+
+			const toward = args.toward ?? 'front';
+			if ( ! TOWARD.includes( toward ) ) throw new ToolError( `toward must be one of ${ TOWARD.join( ', ' ) }` );
+			params.toward = toward;
+			text = `falling ${ params.fall }% to the ${ toward }`;
+
+		} else {
+
+			const along = args.ridge_along ?? 'length';
+			if ( along !== 'length' && along !== 'width' ) throw new ToolError( 'ridge_along must be length or width' );
+			params.ridgeAlong = along;
+			text = `${ grade === 'ridge' ? 'crowned' : 'with a swale' } (${ params.fall }% each way, along its ${ along })`;
+
+		}
+
+	}
+
+	return { params, text: `${ text }, edges battered ${ batter } : 1` };
 
 }
 

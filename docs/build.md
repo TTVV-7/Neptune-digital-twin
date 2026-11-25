@@ -58,6 +58,48 @@ and the Neptune twin.
 - Left out of Build: the Neptune project's own models (`public/models`, `MODELS` in config.js), the
   race pieces, and the key prompt.
 
+## Flatten areas: grading
+
+A flatten area (the library's **Flatten area** tool, `src/flatten.js`) presses whatever stands in
+Google's mesh inside it flat and can be surfaced (gravel, asphalt, concrete...) and fenced. Its
+**ground** (P panel) says what shape the finished ground takes (`src/grade.js`, shared by the
+flattening, the terrain and the surface so they agree):
+
+| ground | what it is | its settings |
+| --- | --- | --- |
+| level (dead flat) | one height: the ground's median under a surfaced area, its lowest under a bare one. Areas saved before grading are level and save as they did (nothing about grading is saved for a level area). | |
+| follow the ground (smoothed) | **new areas start with this** (the next area takes whatever was chosen last). A plane fitted by least squares through the ground under it (7 × 7 readings, with what stands well above a first fit, a roof or a rail car, left out): bumps and debris go, the slope stays. | steepest (%, 0 = as the ground) caps it |
+| one slope | one plane through the area's middle height, falling toward a side | fall (0.5 to 20 %), falling toward front, back, left or right (front is the way it faces) |
+| crowned (ridge down the middle) | a ridge along its length or width falling to both sides, set so half is above the middle height | fall (%), ridge runs along its length or width |
+| swale (valley down the middle) | the same upside down | fall (%), swale runs |
+| terraces (level benches) | 2 to 8 level benches stepping down the ground's fitted slope (along whichever side it falls more), joined by short batters | benches |
+
+- **Batters.** Graded (anything but level), the area's edge meets the ground on batters at its
+  **edge batters** ratio (1.5, 2 or 3 horizontal to 1 vertical, 2 : 1 to start): an embankment
+  falling away where the area is above the ground, a cut slope climbing where it's below, out to
+  30 m at most. The terrain (`src/terrain.js`, `composeGrading`) draws the graded ground and its
+  batters, hides Google's mesh above them, and is what you walk and drive on. Batters meet the bare
+  ground, not the tops of trees and houses round the area (read against the plane fitted under the
+  area: no higher than the lowest ground within 3 m, nor 1 m above that plane); what stands beyond
+  them is left as it is.
+- **Google's mesh** is pressed down onto the graded shape inside the area (a grid shape in
+  `TileFlatteningPlugin`); where the area is built up above Google's ground, the terrain's drawn
+  embankment and pad cover it.
+- **The surface and the fence lie on the shape:** the gravel or asphalt is a grid on it with a thin
+  edge (the batters take the place of the level pad's deep sides), each fence panel stands on the
+  ground under its two ends, gates at their hinges.
+- **Where overlapping**, the lowest graded height wins inside the areas (as the level floor always
+  did); a pit dug in a graded area starts from the lowest of its shape over the pit.
+- **The P panel** says how it's graded ("follows the ground: 6.8% down to the south-west"), with the
+  **cut (bank)** and **fill (compacted)** in m³ against the bare ground, batters included; the
+  resize label says it in a few words.
+- **Claude (MCP):** `add_flatten_area` takes `grade` (`level`, `follow`, `slope`, `ridge`,
+  `valley`, `terraces`; `follow` if left out), `fall`, `toward`, `ridge_along`, `steps`,
+  `max_grade` and `batter`; numbers are clamped to what the editor offers, unknown words refused.
+- **Tests:** `npm run test:grading-ui` (each grade's heights on a tilted stand-in ground, the
+  embankment and cut slope at the batter ratio, the earth moved, saving and loading, a pit's
+  floor), with `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`.
+
 ## How it's put together
 
 - **Pages:** `npm run build:drive` builds the dashboard into `dist-drive/build/` and the app a

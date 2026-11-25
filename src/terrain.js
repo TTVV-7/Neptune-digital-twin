@@ -21,6 +21,7 @@ import {
 } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { ZONE_ID } from './flatten.js';
+import { MAX_REACH, gradeOffset, gradeRange, isGraded } from './grade.js';
 import { blocks } from './walk.js';
 
 // The ground you can dig into and pile onto: a heightfield in the scene frame, made only where
@@ -28,7 +29,9 @@ import { blocks } from './walk.js';
 //
 //   h0       the ground as Google (or the stand-in) made it, from flattening.originalHeight(), so
 //            pits don't feed back into their own reference. Under a flatten area it is that
-//            area's floor, as that's the ground Google's mesh shows there. It only takes ground
+//            area's floor, as that's the ground Google's mesh shows there (base, below). Under a
+//            graded one (grade.js) it is the graded shape, raised or lowered, with batters round
+//            it down or up to the ground, and that ground is drawn (see composeGrading). It only takes ground
 //            from tiles at least as fine as those it already has it from (err): the coarse tiles
 //            that load first give way to finer ones, and tiles far from the camera, which are
 //            coarser, don't move the earthworks.
@@ -80,6 +83,11 @@ const HIDE_BELOW = 0.3;
 const COVER_TOLERANCE = 0.03;
 // The mask that says where the earthworks are covers at most this many nodes a side.
 const MAX_MASK = 2048;
+// Graded flatten areas' batters meet the bare ground (composeGrading): no higher than the lowest
+// ground within this many nodes (3 m), nor this far above the plane through the ground under the
+// area (m).
+const BARE_REACH = 6;
+const PLANE_RISE = 1;
 // Sharper tiles move the ground a little; the change is eased in over this long.
 const BLEND_TIME = 0.6;
 // Nodes (along each side) where a chunk checks whether finer tiles have loaded over it.
@@ -114,6 +122,8 @@ export const SWELL = 1.25;
 // What a node's top is made of, for its colour: untouched ground, the face of a cut, or a material.
 const GROUND = 0;
 export const CUT = 1;
+// Ground a graded flatten area raises (terrain.js composeGrading): compacted fill, as dug soil.
+const FILL = 2 + MATERIALS.findIndex( m => m.id === 'soil' );
 const GROUND_COLOUR = 0x8a8f86;
 const CUT_COLOUR = 0x6d5a47;
 
@@ -250,6 +260,10 @@ class Chunk {
 		this.top = new Uint8Array( COUNT );
 		// Which way each cell is split into triangles (see updateMesh).
 		this.flip = new Uint8Array( CELLS * CELLS );
+		// Where graded flatten areas shape the ground (see composeGrading): 1 inside one, 2 on its
+		// batters; and the earth each moves over the nodes this chunk owns, entry -> { cut, fill }.
+		this.graded = new Uint8Array( COUNT );
+		this.zoneContrib = new Map();
 		this.contrib = new Map(); // design key -> { cut, fill } m³ over the nodes this chunk owns
 		this.ready = false;
 		this.cutCount = 0;
@@ -278,6 +292,26 @@ class Chunk {
 		return true;
 
 	}
+
+}
+
+// A point's place across (u) and along (v) a flatten area's rectangle (see rectFrame and
+// insideRect), and back: the area's own frame has x = u and z = -v (grade.js).
+function zoneLocal( zone, x, z ) {
+
+	const r = zone.frame ?? zone;
+	const de = - x - r.east;
+	const dn = z - r.north;
+	return [ de * r.cos - dn * r.sin, de * r.sin + dn * r.cos ];
+
+}
+
+function zoneWorld( zone, u, v ) {
+
+	const r = zone.frame ?? zone;
+	const de = u * r.cos + v * r.sin;
+	const dn = - u * r.sin + v * r.cos;
+	return [ - ( r.east + de ), r.north + dn ];
 
 }
 
@@ -375,19 +409,16 @@ export class Terrain extends EventDispatcher {
 		this.raycaster = new Raycaster();
 		this.raycaster.firstHitOnly = true;
 
-		// Flatten areas press Google's mesh down to their floor, so that is the ground there.
-		this.zones = new Map(); // entry -> { frame, floor, bounds }
-		if ( tiles ) {
+		// Flatten areas press Google's mesh down to their floor, so that is the ground there. Graded
+		// ones shape the ground with or without Google's tiles (see updateZone).
+		this.zones = new Map(); // entry -> { frame, floor, bounds, ... } (see updateZone)
+		if ( tiles ) tiles.addEventListener( 'load-model', () => this.tileLoads ++ );
+		const onZone = ( { entry, type } ) => {
 
-			tiles.addEventListener( 'load-model', () => this.tileLoads ++ );
-			const onZone = ( { entry, type } ) => {
+			if ( entry.kind === ZONE_ID && ! entry.placing ) this.updateZone( entry, type === 'remove' );
 
-				if ( entry.kind === ZONE_ID && ! entry.placing ) this.updateZone( entry, type === 'remove' );
-
-			};
-			for ( const type of [ 'add', 'change', 'remove' ] ) models.addEventListener( type, onZone );
-
-		}
+		};
+		for ( const type of [ 'add', 'change', 'remove' ] ) models.addEventListener( type, onZone );
 
 	}
 
@@ -901,8 +932,30 @@ export class Terrain extends EventDispatcher {
 
 		}
 
+		// The earth each graded flatten area moves (entry.gradeVolume, m³), for its P panel.
+		const graded = [];
+		for ( const zone of this.zones.values() ) {
+
+			if ( ! zone.graded ) continue;
+			const volume = { cut: 0, fill: 0 };
+			for ( const key of zone.chunks ) {
+
+				const part = this.chunks.get( key )?.zoneContrib.get( zone.entry );
+				if ( ! part ) continue;
+				volume.cut += part.cut;
+				volume.fill += part.fill;
+
+			}
+
+			const old = zone.entry.gradeVolume;
+			if ( old && Math.abs( old.cut - volume.cut ) < 0.05 && Math.abs( old.fill - volume.fill ) < 0.05 ) continue;
+			zone.entry.gradeVolume = volume;
+			graded.push( zone.entry );
+
+		}
+
 		this.updateStandIn();
-		this.dispatchEvent( { type: 'change', designs: changed, chunks: list.length } );
+		this.dispatchEvent( { type: 'change', designs: changed, chunks: list.length, graded } );
 
 	}
 
@@ -938,10 +991,14 @@ export class Terrain extends EventDispatcher {
 
 	startCompose( chunk ) {
 
-		const { h0, base, dug, surface, cutFinal, top } = chunk;
+		const { h0, base, dug, surface, cutFinal, top, graded } = chunk;
 		base.set( h0 );
-		for ( const zone of this.untouched ? [] : this.zones.values() ) {
+		graded.fill( 0 );
+		chunk.zoneContrib.clear();
+		const zones = this.untouched ? [] : [ ...this.zones.values() ];
+		for ( const zone of zones ) {
 
+			if ( zone.graded ) continue;
 			const range = nodeRange( chunk, zone.bounds );
 			if ( ! range ) continue;
 			this.forRange( chunk, range, ( k, x, z ) => {
@@ -952,16 +1009,150 @@ export class Terrain extends EventDispatcher {
 
 		}
 
+		const grading = zones.filter( zone => zone.graded && nodeRange( chunk, zone.bounds ) );
+		if ( grading.length ) this.composeGrading( chunk, grading );
+
 		for ( let k = 0; k < COUNT; k ++ ) {
 
 			surface[ k ] = base[ k ];
 			cutFinal[ k ] = base[ k ];
-			top[ k ] = dug[ k ] < - DISTURBED && ! this.untouched ? CUT : GROUND;
+			// Graded ground: the face of a cut where it's below the ground, compacted fill elsewhere.
+			top[ k ] = dug[ k ] < - DISTURBED && ! this.untouched ? CUT : graded[ k ] ? ( base[ k ] < h0[ k ] - DISTURBED ? CUT : FILL ) : GROUND;
 
 		}
 
 		chunk.pile.fill( null );
 		chunk.contrib.clear();
+
+	}
+
+	// Graded flatten areas (grade.js): inside each the ground is its graded shape, raised or
+	// lowered, the lowest winning where they overlap (as the level floor always did); round each,
+	// batters at its batter ratio from its edge: where the edge is above the ground an embankment
+	// falls away until it meets the ground, where it's below a cut slope climbs to it. Inside a
+	// rectangle wins over another's batters, and a cut slope over an embankment. Every node inside
+	// is drawn (graded 1) and each batter node that's off the ground (graded 2), with Google's mesh
+	// hidden above them (updateMask), so the ground is the same whatever Google's mesh had on it;
+	// the earth moved over the nodes this chunk owns is kept per area.
+	//
+	// The ground is read from above off Google's mesh, so round an area it is as often a tree's
+	// crown or a house's roof as the ground: a cut slope climbing to that would be a wall of earth
+	// as high as the trees. So batters meet (and the earth moved is reckoned from) the bare ground:
+	// against the plane fitted through the ground under the area, carried on beyond it, no higher
+	// than the lowest ground within BARE_REACH, nor than PLANE_RISE above the plane. What stands on
+	// the ground beyond a batter is left as it is.
+	composeGrading( chunk, zones ) {
+
+		const { base, graded, zoneContrib } = chunk;
+		const ground = base.slice();
+		// Read against each area's plane, so the lowest within reach on a slope is not the ground
+		// downhill of it.
+		const side = NODES + 2 * BARE_REACH;
+		const lowest = new Map( zones.map( zone => [ zone, crop( filterGrid( this.padded( chunk, BARE_REACH, ( c, k ) => c.h0[ k ] - zone.plane( ...zoneLocal( zone, c.x( k ), c.z( k ) ) ), Infinity ), side, BARE_REACH, Math.min ), BARE_REACH ) ] ) );
+		const bare = new Float32Array( COUNT );
+		const bareAt = ( zone, k, u, v ) => Math.min( ground[ k ], zone.plane( u, v ) + Math.min( lowest.get( zone )[ k ], PLANE_RISE ) );
+		const inside = new Float32Array( COUNT ).fill( Infinity );
+		const lower = new Float32Array( COUNT ).fill( Infinity );
+		const raise = new Float32Array( COUNT ).fill( - Infinity );
+		const insideOf = new Array( COUNT ).fill( null );
+		const lowerOf = new Array( COUNT ).fill( null );
+		const raiseOf = new Array( COUNT ).fill( null );
+		for ( const zone of zones ) {
+
+			const range = nodeRange( chunk, zone.rectBounds );
+			if ( ! range ) continue;
+			const { hw, hl } = zone.frame;
+			this.forRange( chunk, range, ( k, x, z ) => {
+
+				const [ u, v ] = zoneLocal( zone, x, z );
+				if ( Math.abs( u ) > hw + 1e-6 || Math.abs( v ) > hl + 1e-6 ) return;
+				const y = zone.height( u, v );
+				if ( y < inside[ k ] ) {
+
+					inside[ k ] = y;
+					insideOf[ k ] = zone;
+					bare[ k ] = bareAt( zone, k, u, v );
+
+				}
+
+			} );
+
+		}
+
+		for ( const zone of zones ) {
+
+			const range = nodeRange( chunk, zone.bounds );
+			if ( ! range ) continue;
+			const { hw, hl } = zone.frame;
+			const run = zone.params.batter;
+			this.forRange( chunk, range, ( k, x, z ) => {
+
+				if ( inside[ k ] !== Infinity ) return;
+				const [ u, v ] = zoneLocal( zone, x, z );
+				const cu = MathUtils.clamp( u, - hw, hw ), cv = MathUtils.clamp( v, - hl, hl );
+				const d = Math.hypot( u - cu, v - cv );
+				if ( d > zone.reach ) return;
+				const edge = zone.height( cu, cv );
+				const g = bareAt( zone, k, u, v );
+				if ( edge > g ) {
+
+					const y = edge - d / run;
+					if ( y > g && y > raise[ k ] ) {
+
+						raise[ k ] = y;
+						raiseOf[ k ] = zone;
+						if ( lower[ k ] === Infinity ) bare[ k ] = g;
+
+					}
+
+				} else {
+
+					const y = edge + d / run;
+					if ( y < g && y < lower[ k ] ) {
+
+						lower[ k ] = y;
+						lowerOf[ k ] = zone;
+						bare[ k ] = g;
+
+					}
+
+				}
+
+			} );
+
+		}
+
+		for ( let k = 0; k < COUNT; k ++ ) {
+
+			let zone = null;
+			if ( inside[ k ] !== Infinity ) {
+
+				base[ k ] = inside[ k ];
+				graded[ k ] = 1;
+				zone = insideOf[ k ];
+
+			} else if ( lower[ k ] !== Infinity ) {
+
+				base[ k ] = lower[ k ];
+				zone = lowerOf[ k ];
+
+			} else if ( raise[ k ] !== - Infinity ) {
+
+				base[ k ] = raise[ k ];
+				zone = raiseOf[ k ];
+
+			}
+
+			if ( ! zone ) continue;
+			if ( ! graded[ k ] && Math.abs( base[ k ] - ground[ k ] ) > DISTURBED ) graded[ k ] = 2;
+			if ( ! owns( k % NODES, Math.floor( k / NODES ) ) ) continue;
+			const d = base[ k ] - bare[ k ];
+			const part = zoneContrib.get( zone.entry ) ?? { cut: 0, fill: 0 };
+			if ( d > 0 ) part.fill += d * CELL_AREA;
+			else part.cut -= d * CELL_AREA;
+			zoneContrib.set( zone.entry, part );
+
+		}
 
 	}
 
@@ -1143,6 +1334,7 @@ export class Terrain extends EventDispatcher {
 		this.collectTimer = 2;
 		const used = new Set();
 		for ( const design of this.designs.values() ) for ( const key of design.chunks ) used.add( key );
+		for ( const zone of this.zones.values() ) for ( const key of zone.chunks ?? [] ) used.add( key );
 		for ( const chunk of [ ...this.chunks.values() ] ) {
 
 			if ( used.has( chunk.key ) || chunk.fine || chunk.blend || this.dirty.has( chunk.key ) || ! chunk.isEmpty() ) continue;
@@ -1443,19 +1635,46 @@ export class Terrain extends EventDispatcher {
 	}
 
 	// Flatten areas count as the ground they press Google's mesh down to. Dispatches 'zones'.
+	// Without Google's tiles a level area changes nothing (there's nothing to press flat), but a
+	// graded one still shapes the ground. A graded area's chunks are made over its batters' reach
+	// and kept while it's there.
 	updateZone( entry, removed ) {
 
 		const old = this.zones.get( entry );
 		if ( old ) this.markBounds( old.bounds );
-		if ( removed || ! this.models.entries.includes( entry ) ) {
+		const { state, params } = entry;
+		const graded = isGraded( params );
+		if ( removed || ! this.models.entries.includes( entry ) || ( ! graded && ! this.tiles ) ) {
 
 			this.zones.delete( entry );
+			if ( removed ) delete entry.gradeVolume;
 
 		} else {
 
-			const { state, params } = entry;
 			const frame = rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 );
-			const zone = { frame, floor: state.up, bounds: rectBounds( frame, CELL ) };
+			const zone = { entry, frame, floor: state.up, graded, bounds: rectBounds( frame, CELL ) };
+			if ( graded ) {
+
+				// The design's own slope (what flatten.js built), and the ground's for the reach.
+				const fit = params.fit ?? null;
+				zone.params = params;
+				zone.up = state.up;
+				zone.height = ( u, v ) => state.up + gradeOffset( params, fit, u, - v );
+				// The plane through the ground under it (models.js 'plane' snapping), carried on.
+				const ground = entry.groundSlope ?? fit;
+				zone.plane = ( u, v ) => state.up + ( ground?.gx ?? 0 ) * u - ( ground?.gz ?? 0 ) * v;
+				zone.floor = state.up + gradeRange( params, fit ).min;
+				zone.rectBounds = zone.bounds;
+				zone.reach = this.batterReach( zone, entry.groundSlope ?? fit );
+				zone.bounds = rectBounds( frame, CELL + zone.reach );
+				zone.chunks = new Set( this.ensure( zone.bounds ) );
+
+			} else {
+
+				delete entry.gradeVolume;
+
+			}
+
 			this.zones.set( entry, zone );
 			this.markBounds( zone.bounds );
 
@@ -1465,13 +1684,87 @@ export class Terrain extends EventDispatcher {
 
 	}
 
+	// How far a graded area's batters reach from its edge before they meet the ground: worked out
+	// round its edge from the ground there (or the plane fitted through it, where it isn't read
+	// yet) and how the ground slopes away, with some to spare, but no more than MAX_REACH.
+	batterReach( zone, slope ) {
+
+		const { hw, hl } = zone.frame;
+		const run = zone.params.batter;
+		const gx = slope?.gx ?? 0, gz = slope?.gz ?? 0;
+		let reach = 1;
+		const N = 8;
+		for ( const [ nu, nv ] of [ [ 1, 0 ], [ - 1, 0 ], [ 0, 1 ], [ 0, - 1 ] ] ) {
+
+			for ( let i = 0; i <= N; i ++ ) {
+
+				const t = i / N * 2 - 1;
+				const u = nu ? nu * hw : t * hw;
+				const v = nv ? nv * hl : t * hl;
+				const [ x, z ] = zoneWorld( zone, u, v );
+				const plane = zone.up + gx * u - gz * v;
+				const sampled = this.sample( x, z );
+				const ground = Number.isFinite( sampled ) ? Math.min( sampled, plane + PLANE_RISE ) : plane;
+				const gap = zone.height( u, v ) - ground;
+				// Rise of the ground per metre outward (the area's frame has z = -v).
+				const rise = gx * nu - gz * nv;
+				const closing = gap > 0 ? 1 / run + rise : 1 / run - rise;
+				reach = Math.max( reach, ( Math.abs( gap ) + 0.5 ) / Math.max( closing, 0.02 ) );
+
+			}
+
+		}
+
+		return Math.min( MAX_REACH, reach * 1.2 + 1 );
+
+	}
+
 	// The lowest floor of the flatten areas reaching into a rectangle (see rectFrame), or Infinity
-	// if none do: that is the ground there, whatever Google's mesh had standing on it.
+	// if none do: that is the ground there, whatever Google's mesh had standing on it. For a graded
+	// area, the lowest of its shape inside the rectangle.
 	floorUnder( frame ) {
 
 		let floor = Infinity;
-		for ( const zone of this.zones.values() ) if ( rectsOverlap( zone.frame, frame ) ) floor = Math.min( floor, zone.floor );
+		for ( const zone of this.zones.values() ) {
+
+			if ( ! rectsOverlap( zone.frame, frame ) ) continue;
+			if ( ! zone.graded ) {
+
+				floor = Math.min( floor, zone.floor );
+				continue;
+
+			}
+
+			// Read on a grid over the rectangle and at the area's corners inside it.
+			let lowest = Infinity;
+			const points = [];
+			for ( let j = 0; j <= 8; j ++ ) for ( let i = 0; i <= 8; i ++ ) points.push( zoneWorld( frame, ( i / 4 - 1 ) * frame.hw, ( j / 4 - 1 ) * frame.hl ) );
+			for ( const su of [ - 1, 1 ] ) for ( const sv of [ - 1, 1 ] ) points.push( zoneWorld( zone, su * zone.frame.hw, sv * zone.frame.hl ) );
+			for ( const [ x, z ] of points ) {
+
+				if ( insideRect( zone.frame, x, z ) < - 1e-6 || insideRect( frame, x, z ) < - 1e-6 ) continue;
+				const [ u, v ] = zoneLocal( zone, x, z );
+				lowest = Math.min( lowest, zone.height( u, v ) );
+
+			}
+
+			floor = Math.min( floor, Number.isFinite( lowest ) ? lowest : zone.floor );
+
+		}
+
 		return floor;
+
+	}
+
+	// The graded ground of the flatten area of `entry` at local (x, z): its shape inside it, and
+	// along its batters outside, or null where it doesn't reach (tests and the P panel read it).
+	gradedAt( entry, x, z ) {
+
+		const zone = this.zones.get( entry );
+		if ( ! zone?.graded ) return null;
+		const [ u, v ] = zoneLocal( zone, x, z );
+		const { hw, hl } = zone.frame;
+		return Math.abs( u ) <= hw && Math.abs( v ) <= hl ? zone.height( u, v ) : null;
 
 	}
 
@@ -1547,9 +1840,11 @@ export class Terrain extends EventDispatcher {
 		for ( let k = 0; k < COUNT; k ++ ) {
 
 			position.array[ k * 3 + 1 ] = surface[ k ];
-			changed[ k ] = Math.abs( surface[ k ] - base[ k ] ) > DISTURBED ? 1 : 0;
+			// Graded ground (composeGrading) is drawn too: it's off the ground Google's mesh shows.
+			changed[ k ] = Math.abs( surface[ k ] - base[ k ] ) > DISTURBED || chunk.graded[ k ] ? 1 : 0;
 			// Eased in over the first few centimetres, so edges don't show the grid as steps.
-			disturbed.array[ k ] = MathUtils.clamp( ( Math.abs( surface[ k ] - base[ k ] ) - DISTURBED ) / COLOUR_EASE, 0, 1 );
+			const off = Math.max( Math.abs( surface[ k ] - base[ k ] ), chunk.graded[ k ] === 1 ? Infinity : chunk.graded[ k ] ? Math.abs( base[ k ] - chunk.h0[ k ] ) : 0 );
+			disturbed.array[ k ] = MathUtils.clamp( ( off - DISTURBED ) / COLOUR_EASE, 0, 1 );
 
 		}
 

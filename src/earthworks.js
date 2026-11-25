@@ -395,7 +395,7 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 		}
 
 	} );
-	terrain.addEventListener( 'change', ( { designs: changed } ) => {
+	terrain.addEventListener( 'change', ( { designs: changed, graded = [] } ) => {
 
 		for ( const entry of changed ) {
 
@@ -405,6 +405,9 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 			refreshLabel( entry );
 
 		}
+
+		// A graded flatten area's cut and fill, in its P panel.
+		for ( const entry of graded ) panel.refresh( entry );
 
 	} );
 

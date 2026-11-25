@@ -8,6 +8,7 @@ import { useFastRaycast } from './raycast.js';
 import { frontToYaw } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { getKind, kindParams } from './kinds.js';
+import { fitPlane, fitPoints } from './grade.js';
 import { addHitFilter, passesHitFilters } from './walk.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
@@ -251,7 +252,12 @@ export class ModelManager extends EventDispatcher {
 		const { pivot, state } = entry;
 		const up = round( ground + ( entry.parked?.rise ?? 0 ) );
 		entry.snapped = true;
-		if ( up !== state.up ) {
+		// Snapped to a plane through the ground ('plane' below): its slope is kept with it, and a
+		// change in that alone is a change too (a graded flatten area follows it).
+		const slope = detail.slope;
+		const sloped = slope && ( ! entry.groundSlope || Math.abs( slope.gx - entry.groundSlope.gx ) > 1e-4 || Math.abs( slope.gz - entry.groundSlope.gz ) > 1e-4 );
+		if ( sloped ) entry.groundSlope = slope;
+		if ( up !== state.up || sloped ) {
 
 			state.up = up;
 			if ( entry.parked ) entry.parked.up = up;
@@ -290,6 +296,7 @@ export class ModelManager extends EventDispatcher {
 		const mode = ( typeof snap === 'function' ? snap( entry.params ) : snap ) ?? 'median';
 		const original = mode.endsWith( '-original' ) && this.originalHeight;
 		pivot.updateMatrixWorld();
+		if ( mode.startsWith( 'plane' ) ) return this.readPlane( entry, original, detail );
 
 		const margin = SNAP_MARGIN / state.scale;
 		const xs = [ footprint.min.x - margin, ( footprint.min.x + footprint.max.x ) / 2, footprint.max.x + margin ];
@@ -332,6 +339,56 @@ export class ModelManager extends EventDispatcher {
 		const median = heights.length % 2 ? heights[ mid ] : ( heights[ mid - 1 ] + heights[ mid ] ) / 2;
 		// A flatten area goes down to the lowest ground around it, so whatever stands in it is cleared.
 		return round( mode.startsWith( 'lowest' ) ? heights[ 0 ] : median );
+
+	}
+
+	// 'plane' snapping: a plane fitted through the ground over the kind's rectangle (snapRect, or
+	// the footprint), its height at the middle returned and its slope in detail.slope, as { gx, gz }
+	// in the entry's own frame (grade.js). Seven by seven readings, so bumps and what stood on the
+	// ground don't tip it.
+	readPlane( entry, original, detail ) {
+
+		const { pivot, footprint } = entry;
+		const rect = getKind( entry.kind )?.snapRect?.( entry.params );
+		const width = rect?.width ?? footprint.max.x - footprint.min.x;
+		const length = rect?.length ?? footprint.max.z - footprint.min.z;
+		const ground = this.getGround();
+		const samples = [];
+		const sample = { error: 0 };
+		let error = 0;
+		for ( const [ x, z ] of fitPoints( width, length ) ) {
+
+			pivot.localToWorld( _origin.set( x, 0, z ) );
+			let y = null;
+			if ( original ) {
+
+				sample.error = 0;
+				y = this.originalHeight( _origin.x, _origin.z, sample );
+				error = Math.max( error, sample.error );
+
+			} else {
+
+				_origin.y = 2000;
+				this.raycaster.set( _origin, DOWN );
+				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh && passesHitFilters( h ) );
+				y = hit ? hit.point.y : null;
+
+			}
+
+			if ( y !== null ) samples.push( [ x, z, y ] );
+
+		}
+
+		const plane = fitPlane( samples );
+		if ( ! plane ) return null;
+		if ( detail ) {
+
+			detail.error = error;
+			detail.slope = { gx: Math.round( plane.gx * 1e5 ) / 1e5, gz: Math.round( plane.gz * 1e5 ) / 1e5 };
+
+		}
+
+		return round( plane.c );
 
 	}
 

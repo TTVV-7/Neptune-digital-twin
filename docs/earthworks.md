@@ -66,7 +66,8 @@ under *planning aid*.
 The rim is the lowest ground around the top of the cut as it was before anything was dug, so the
 pit doesn't sink after itself, and whatever stands inside it in Google's mesh (rail cars, a shed) is
 dug away with it rather than holding the floor up. Where a flatten area reaches the pit, its floor
-counts as the ground there. Where the ground beyond the top of a sloped side is higher, the slope
+counts as the ground there (for a graded area, the lowest of its shape over the pit; see
+build.md, *Flatten areas: grading*). Where the ground beyond the top of a sloped side is higher, the slope
 keeps climbing (up to 3 m out) until it meets it.
 
 ### Sloped, stepped or shored

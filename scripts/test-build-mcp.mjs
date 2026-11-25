@@ -317,17 +317,25 @@ test( 'the tools lay out a site', async () => {
 	const row = await tool( 'place_row', { project_id: project, item: 'fence-panel', points: [ [ 10, 0 ], [ 10, 30.5 ] ] } );
 	assert.match( row.text, /row of 9 ×/ );
 	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 0, north: 20, width: 30, length: 20, surface: 'asphalt', fence: 'screened', entrances: 2 } ) ).text, /surfaced with asphalt, fenced \(green privacy screen\) with 2 entrances/ );
+	// Graded: falling 3% to its left, edges battered 3 : 1; out-of-range numbers are clamped and
+	// unknown grades refused. Without a grade, a new area follows the ground.
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 20, width: 40, length: 25, grade: 'slope', fall: 3, toward: 'left', batter: 3 } ) ).text, /surfaced with gravel, falling 3% to the left, edges battered 3 : 1/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 60, width: 20, length: 20, grade: 'terraces', steps: 40 } ) ).text, /in 8 terraces/ );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'bumpy' } ) ).error );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'slope', toward: 'uphill' } ) ).error );
 	assert.match( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 15, length: 10, label: 'Rebar' } ) ).text, /Rebar/ );
 	assert.match( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, material: 'road-base', volume: 80 } ) ).text, /road-base, 80 m³/ );
 
 	const got = await tool( 'get_project', { project_id: project } );
 	const items = got.value.items;
 	const lane = 10; // the lane closure set: arrow board, two flaggers, seven cones
-	assert.equal( items.length, 3 + lane + 9 + 3 );
+	assert.equal( items.length, 3 + lane + 9 + 5 );
 	const panels = items.filter( i => i.item === 'fence-panel' );
 	assert.deepEqual( panels.slice( 0, 2 ).map( i => [ i.east, i.north, i.heading ] ), [ [ 10, 1.63, 270 ], [ 10, 4.88, 270 ] ] );
 	assert.deepEqual( items[ 0 ], { index: 0, item: 'office-trailer-10x40', name: items[ 0 ].name, east: 0, north: 20, heading: 180, size: items[ 0 ].size } );
-	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && i.params.fence === 'screened' && i.params.gates === 2 ) );
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && i.params.fence === 'screened' && i.params.gates === 2 && i.params.grade === 'follow' && i.params.batter === 2 ) );
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'slope' && i.params.fall === 3 && i.params.toward === 'left' && i.params.batter === 3 ) );
+	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'terraces' && i.params.steps === 8 ) );
 	assert.match( ( await tool( 'move_item', { project_id: project, index: 1, east: 4, heading: 45 } ) ).text, /Moved .* to 4 m east, 14 m north, facing 45°/ );
 	assert.match( ( await tool( 'remove_items', { project_id: project, indexes: [ 2 ] } ) ).text, /Removed 1: Traffic cone/ );
 	assert.equal( ( await tool( 'get_project', { project_id: project } ) ).value.items.length, items.length - 1 );
