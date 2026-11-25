@@ -125,9 +125,11 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 		} );
 		tiles.forEachLoadedModel( hide );
 		tiles.addEventListener( 'load-model', ( { scene } ) => hide( scene ) );
-		addHitFilter( hit => ! ( hit.object.userData.googleTile && terrain.covers( hit.point ) ) );
 
 	}
+
+	// (On the stand-in too: the tests' stand-in for an overpass is marked as Google's mesh.)
+	addHitFilter( hit => ! ( hit.object.userData.googleTile && terrain.covers( hit.point ) ) );
 
 	scene.add( terrain.group );
 	addGround( terrain.group );

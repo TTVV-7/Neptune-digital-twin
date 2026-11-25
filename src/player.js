@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PLAYER } from './config.js';
 import { blocks, isTyping } from './walk.js';
 import { viewOffset } from './view-ray.js';
+import { drawnAfterGround } from './draw-order.js';
 
 // Walking round the site as a construction worker (public/models/player-worker.glb, made by
 // scripts/add-player-model.mjs from a hi3D model): seen from behind in third person, or from his
@@ -228,6 +229,9 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders, to
 			rigged.frustumCulled = false;
 			rigged.raycast = () => {};
 			rigged.userData.noCollide = true;
+			// Drawn after the ground and a flatten area's gravel or asphalt (which is drawn over the
+			// ground without writing depth), as what's placed is: else the pad hides him.
+			drawnAfterGround( rigged );
 			rigged.visible = false;
 			return rigged;
 

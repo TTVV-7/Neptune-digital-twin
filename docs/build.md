@@ -145,6 +145,78 @@ flattening, the terrain and the surface so they agree):
   and a shed, a car, a stand of trees and a 30 m building still left out), with
   `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`.
 
+## Flatten areas: walking on them, and keeping what's overhead
+
+- **The floor is the ground.** `TileFlatteningPlugin` only ever presses Google's vertices *down*,
+  and only vertices: a surfaced level pad snaps to the ground's median, so about half of it is
+  built up over lower ground with nothing at its height to stand on, and Google's large triangles
+  crossing its edge kept their slope inside it (a walker climbed them, up to 3.4 m above the pad).
+  So a level area (and one too large to grade, over 300 m) now holds its floor in terrain chunks
+  of its own over its rectangle (`terrain.js` `updateZone`, `zone.height`, made over the next
+  frames by `ensureSoon`), as a graded one does: the floor is drawn, walked and driven on (the
+  walker and the driver use the same colliders), and Google's mesh above it is hidden by the mask
+  and passed through by `covers()`. With the stand-in ground too. No batters: a surfaced level pad
+  still shows its deep sides where it's built up, as before. The gravel or asphalt itself is
+  `noCollide` (3 cm above the floor). Over about 500 m square (`MAX_FLOOR_CHUNKS`) an area is only
+  pressed down, as before. The ring of terrain nodes just outside the area (drawn with it) is read
+  from above, so beside a tree or a roof it rose to that as a spike of earth off the edge; it's
+  drawn no higher than the lowest ground outside the area within 3 m, nor lower than the edge's
+  floor (`terrain.js` `zoneLips`, as `lipHeights` does round a pit), so where the area is dug into
+  a hillside the cut face still rises to the ground.
+- **Drawn over the pad.** The surface is drawn after the ground without writing depth
+  (`SURFACE_ORDER`), so anything drawn before it went under it. What's placed was already drawn
+  after it (`PLACED_ORDER`); now the walking character (`player.js`), a repair crew, a truck's load
+  and the plane's parachute are too (`src/draw-order.js`'s `drawnAfterGround`).
+- **Keep what's overhead** (P panel, `keep`): *nothing* (flatten everything, as areas always did),
+  *auto* (bridge decks, viaducts, canopies), or *everything above a height* (the old "flatten up
+  to", now shown only with that choice; areas saved with a height load as that and save as before;
+  picking it with no height sets 5 m). Auto is saved as `keep: 'auto'`.
+- **How auto works** (`flatten.js`, Overheads): over the area (and 1 m round it), on a 1 m grid
+  (coarser over big areas, 10,000 lines at most), Google's mesh *as it was* is read along vertical
+  lines (a vertical ray crosses the same triangles before and after pressing, so heights and facing
+  come from the plugin's saved original vertices): the lowest surface facing down (an underside)
+  at least 2.5 m (`CLEARANCE`) above the floor, looked for upwards from there, means open space
+  under it: kept from 0.3 m under it up. Pillars and gaps in a deck within 3 m are closed over;
+  a line with something above the clearance but no underside there (a pillar) is kept whole, so
+  pillars stand, as obstacles. Patches under 12 m² (a tree's crown) are flattened. The flattening
+  (a subclass of the plugin with a per-vertex limit, `AreaFlatteningPlugin`) keeps the lowest of
+  that within 2 m, so a deck's lumpy underside isn't dragged into spikes; the terrain's mask hides
+  Google's mesh from the floor up to the underside (per node `ceiling`, now also on the ring of
+  nodes just outside an auto area, where the ground read from above is the deck and is drawn at the
+  floor instead; not round one kept above a height, whose ring is the ground beside it, as for one
+  keeping nothing). Curtains (Google's photogrammetry hangs walls of smeared texture from a deck's
+  edge to the ground) have their feet pressed and the rest hidden, and walking and driving pass
+  through them; the deck above still stops a jump. It's read a few milliseconds a frame (a quarter
+  of the frame when frames are slow), again 3 s after more tiles load while the camera is within
+  300 m of it (`RESCAN_NEAR`; farther off the tiles over it are coarse or not loaded, and flying
+  round the city kept it busy), and from scratch when the area moves; until read, everything above
+  2.5 m is kept. A read again from coarser tiles than the last (their geometric error on average
+  along its lines over 1.1 times the last's) or seeing Google's mesh along fewer than 90 % of the
+  lines the last did doesn't replace it, so flying away and back no longer loses the decks (they
+  were pressed or cut through for about 50 s after coming back).
+- **On real tiles** (under the Georgia and Dunsmuir viaducts, a 30 × 60 m level area): flattening
+  everything presses both decks onto the floor (as level areas did before; there was no way to
+  keep a deck but a height limit, under which a curtain's part above the limit stays as a wall to
+  the deck, and these decks' undersides vary from 4 to 9 m above the floor); with *auto* both decks
+  and their pillars stay, the curtains are gone, and the walker walks in from outside under the
+  deck on the floor. Read along vertical lines, the Granville Bridge's deck over Granville Island
+  (27 m up) has its underside captured the same way. Flown 4.5 to 6 km away and back, what's kept
+  under both stays as first read throughout. What's left: small shards of curtain above the
+  underside line. A level gravel pad on the hillside at (-40, 785) has no node of its ring more
+  than 2 m above the ground there (70 before); its uphill side, dug about 8 m into the hill, shows
+  the cut face. A bare level area (surface none) holds and draws its floor too, so it shows that
+  floor rather than Google's photo pressed flat.
+- **Claude (MCP):** `add_flatten_area` takes `keep_overhead` (`off`, `auto`, `height`) and
+  `keep_above` (m, 0.5 to 200, 5 to start, for `height`); unknown choices are refused.
+- **Tests:** `test:grading-ui` (a level pad's and a bare level area's ground is their floor where
+  it's built up over the slope; the character is drawn after the pad; a stand-in overpass, a deck
+  with curtains to the ground marked as Google's mesh, over an auto area: kept from under its
+  underside, Google's mesh hidden to there, a curtain covered and walked through, a jump stopped by
+  the deck; not read again from 5 km away with the overpass gone, read again back over it with what
+  was found standing, and again with it back; round a level area kept above a height, the ground
+  0.5 and 0.75 m outside its uphill edge is the slope and nothing's hidden there up to its limit, and
+  a tree's crown read at a node just outside it is drawn at the ground), `test:build-mcp`.
+
 ## How it's put together
 
 - **Pages:** `npm run build:drive` builds the dashboard into `dist-drive/build/` and the app a
