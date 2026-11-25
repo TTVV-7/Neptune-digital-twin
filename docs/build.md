@@ -11,7 +11,25 @@ and the Neptune twin.
   3D map views as a gauge and Go Build Pro (or Manage billing); Google sign-in. It never
   takes a 3D map view (it asks `/build/api/home`). Stripe's checkout brings buyers back to
   `/build/account/?checkout=done#billing` (or `/build/?checkout=cancelled`).
-- **Upgrading** (the dashboard's plan box and the editor's Build Pro dialog, `src/premium.js`):
+- **Buying is hidden for now (`BUILD_SALES`).** Unless the Worker's `BUILD_SALES` setting is
+  `on` (unset by default, as now), nothing in Build offers Build Pro for sale, whatever Stripe's
+  settings: no prices, no Go Build Pro, Subscribe with Stripe or monthly/yearly choice, no "Build
+  Pro opens soon", no renewal lines, and `POST /build/api/billing/checkout` answers 404 ("Build Pro
+  isn't available to buy right now"). The plans and their limits are exactly as below: free
+  accounts keep the 33 items, 15 3D map views a month and 1 project, and Build Pro comes from the
+  owner's comps, `BUILD_EMAILS` or `ADMIN_EMAILS`. The server says so in every plan payload
+  (`/build/api/config`, `me`, `home`): `premium.billing` is `{ enabled: false, hidden: true,
+  monthly: null, annual: null, portal }`, with no `premium.price`, and `plan.priceLabel` is null.
+  The pages follow it: the editor's Build Pro dialog says the item is part of Build Pro, which
+  isn't available to buy right now, with just OK; the dashboard's plan box shows the plan, what it
+  includes and the 3D map view gauge (signed out, the Free and Build Pro cards without prices);
+  the account page's `#billing` section is titled **Plan**, with payments and the refund line only
+  for an account that has paid; the MCP server tells a free account its tools are part of Build
+  Pro, with nowhere to buy. `billing/portal` still opens for an account with a Stripe customer
+  (`portal: true`), so anyone who ever paid can cancel and see invoices. All the billing code is
+  kept: set `BUILD_SALES` to `on` (with Stripe set up, "The owner's steps") and everything below
+  about buying is back as it was.
+- **Upgrading** (with `BUILD_SALES` on; the dashboard's plan box and the editor's Build Pro dialog, `src/premium.js`):
   monthly or yearly (yearly first, shown as "US$50/year - 2 months free"), then **Go Build Pro**
   (**Subscribe with Stripe** in the editor) asks the server for a Checkout Session
   (`billing/checkout`) and goes to Stripe's page in the same tab. Every such button has "Renews
@@ -39,7 +57,7 @@ and the Neptune twin.
 
 | | Free | Build Pro | Owner |
 |---|---|---|---|
-| Who | anyone signed in with Google | a subscription bought through Stripe Checkout (US$5/month or US$50/year), given by the owner (comps), or listed in `BUILD_EMAILS` | `ADMIN_EMAILS` (World Drive's owner) |
+| Who | anyone signed in with Google | a subscription bought through Stripe Checkout (US$5/month or US$50/year; only while `BUILD_SALES` is `on`), given by the owner (comps), or listed in `BUILD_EMAILS` | `ADMIN_EMAILS` (World Drive's owner) |
 | Library | 33 everyday items (`FREE_ITEMS` in `src/product.js`) | everything, sets included | everything |
 | 3D map views a month | 15 (`BUILD_FREE_MONTHLY`) | 300 (`BUILD_PRO_MONTHLY`) | unlimited, not counted |
 | Saved projects | 1 | 200 (`BUILD_LAYOUT_LIMIT`) | 200 |
@@ -111,8 +129,8 @@ flattening, the terrain and the surface so they agree):
   config (plan, views, the Maps key), sign-in with World Drive's accounts, saved projects and share
   links (`build_layouts`, with each project's place), views counted in `build_views`
   (`worker/drive/migrations/0016_build.sql` and `0017_build_places.sql`, applied by the deploy).
-- **Payments** (`worker/drive/billing.js`, `stripe-api.js`, `migrations/0020_build_billing.sql`):
-  Build Pro is a Stripe subscription, monthly or yearly, one named person each (quantity 1, which
+- **Payments** (`worker/drive/billing.js`, `stripe-api.js`, `migrations/0020_build_billing.sql`;
+  all of it only while `BUILD_SALES` is `on`, see "Buying is hidden" above): Build Pro is a Stripe subscription, monthly or yearly, one named person each (quantity 1, which
   the buyer can't change), no trial. `POST /build/api/billing/checkout { interval: 'month' | 'year' }`
   makes a Checkout Session for the signed-in account (its own Stripe customer, made once and kept
   in `accounts.stripe_customer`; Stripe Tax and tax ids on; the Terms to accept; the auto-renewal
@@ -228,8 +246,10 @@ flattening, the terrain and the surface so they agree):
 ## The owner's steps
 
 Build works as soon as it's deployed: you (in `ADMIN_EMAILS`) have everything, and everyone else is
-on the free plan, with **Build Pro opens soon** in the upgrade dialog. Nothing is sold until every
-step below is done. Do it all in Stripe's **test mode** first (with a staging Worker, or locally),
+on the free plan. With `BUILD_SALES` unset (the default) buying is hidden altogether: nothing says
+anything about prices or subscribing, and Pro is given with comps or `BUILD_EMAILS`. To sell Build
+Pro, do every step below and then set `BUILD_SALES` to `on` (step 8); with it on but a step
+missing, the pages say **Build Pro opens soon**. Nothing is sold until every step is done. Do it all in Stripe's **test mode** first (with a staging Worker, or locally),
 then again in live mode.
 
 1. **Business details.** *Settings → Business*: your name as a sole proprietor, the PO box as the
@@ -272,13 +292,17 @@ then again in live mode.
    - `BUILD_PRICE_MONTHLY`, `BUILD_PRICE_ANNUAL`: the two price ids
    - `BUILD_PRICE_LABEL_MONTHLY`, `BUILD_PRICE_LABEL_ANNUAL`: the prices as the page shows them, if
      not `US$5/month` and `US$50/year` (change them with the prices, never one without the other)
+   - `BUILD_SALES`: `on` to put Build Pro on sale (a commented line in `wrangler.drive.jsonc`'s
+     vars, or the dashboard). Unset, buying stays hidden everywhere whatever else is set; setting
+     it back to anything else (or removing it) hides buying again, and accounts with a Stripe
+     customer can still open the billing portal to cancel.
    - optional: `BUILD_PORTAL_CONFIG` (the `bpc_...` id), `BUILD_EMAILS` (testers given Pro),
      `BUILD_FREE_MONTHLY`, `BUILD_PRO_MONTHLY`, `BUILD_FREE_DAILY`, `BUILD_LAYOUT_LIMIT`,
      `BUILD_VIEW_COST_USD` (Google's price for a 3D map view, for the admin page's estimate)
    - `BUILD_PAYMENT_LINK` and `BUILD_PRICE` aren't used any more. Leave `BUILD_PAYMENT_LINK_ID` set
      if an old Build Pro Payment Link ever sold anything (its checkouts are still recognised), and
      deactivate that link in Stripe.
-9. **Try it.** Buy Build Pro with a real card in live mode, check the account page shows it and the
+9. **Try it.** With `BUILD_SALES` on, buy Build Pro with a real card in live mode, check the account page shows it and the
    portal opens, then refund it in the Dashboard and check Pro ends and the subscription is
    cancelled. Then it's on sale.
 

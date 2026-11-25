@@ -7,7 +7,9 @@
 // deleted if Stripe says no), then everything of it gone or anonymised, foreign keys and all. Then
 // the built page in a browser: signed out, the free plan buying Build Pro (to Stripe's checkout),
 // a subscriber's renewal and billing portal, cutting off an app, revoking a share link, downloading
-// the data, and deleting the account with Google's button; and the dashboard's link to it.
+// the data, and deleting the account with Google's button; and the dashboard's link to it. All
+// that with BUILD_SALES 'on'; then, on a Worker with it unset (Stripe set up all the same), buying
+// hidden: the section is just the plan, payments only for an account that has paid.
 //
 // Needs Playwright with Chromium, and the built site (npm run build:drive; this builds it if it's
 // missing). TEST_BUILD_ACCOUNT_PORT picks the Worker's port.
@@ -179,27 +181,35 @@ before( async () => {
 	server = await startWorker( {
 		port: PORT,
 		config: 'wrangler.drive.jsonc',
-		vars: {
-			GOOGLE_CLIENT_ID: CLIENT_ID,
-			GOOGLE_JWKS_URL: keys.url,
-			STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
-			SUPPORTER_PAYMENT_LINK: 'https://buy.stripe.com/test_pass',
-			SUPPORTER_PAYMENT_LINK_ID: '',
-			DAY_PASS_PAYMENT_LINK_ID: '',
-			STRIPE_SECRET_KEY: SECRET_KEY,
-			STRIPE_API_BASE: stripe.url,
-			BUILD_PRICE_MONTHLY: MONTHLY,
-			BUILD_PRICE_ANNUAL: ANNUAL,
-			ADMIN_EMAILS: 'boss@example.com',
-			PASSWORD_ITERATIONS: '10000',
-			// Usernames and passwords are on only with Turnstile's secret (a robot check is asked for
-			// only after wrong passwords, which these tests don't make many of).
-			TURNSTILE_SECRET: 'test-turnstile-secret',
-		},
+		vars: workerVars( { BUILD_SALES: 'on' } ),
 		assets: assetsOf(),
 	} );
 
 } );
+
+// The Worker's settings, Stripe's included, with `extra` on top (BUILD_SALES).
+function workerVars( extra = {} ) {
+
+	return {
+		GOOGLE_CLIENT_ID: CLIENT_ID,
+		GOOGLE_JWKS_URL: keys.url,
+		STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+		SUPPORTER_PAYMENT_LINK: 'https://buy.stripe.com/test_pass',
+		SUPPORTER_PAYMENT_LINK_ID: '',
+		DAY_PASS_PAYMENT_LINK_ID: '',
+		STRIPE_SECRET_KEY: SECRET_KEY,
+		STRIPE_API_BASE: stripe.url,
+		BUILD_PRICE_MONTHLY: MONTHLY,
+		BUILD_PRICE_ANNUAL: ANNUAL,
+		ADMIN_EMAILS: 'boss@example.com',
+		PASSWORD_ITERATIONS: '10000',
+		// Usernames and passwords are on only with Turnstile's secret (a robot check is asked for
+		// only after wrong passwords, which these tests don't make many of).
+		TURNSTILE_SECRET: 'test-turnstile-secret',
+		...extra,
+	};
+
+}
 
 after( () => {
 
@@ -594,6 +604,138 @@ describe( 'the page', () => {
 		assert.equal( count( `SELECT COUNT(*) AS n FROM sessions WHERE account_id = ${ id }` ), 0 );
 		await open();
 		assert.equal( await page.isVisible( '#signed-out' ), true, 'signed out after' );
+		assert.deepEqual( errors, [] );
+
+	} );
+
+} );
+
+// BUILD_SALES unset (the default), Stripe set up all the same: buying hidden.
+describe( 'the page, buying hidden (BUILD_SALES unset)', () => {
+
+	const BUYING_WORDS = /US\$|\/month|\/year|Subscribe|Go Build Pro|opens soon/i;
+	let main;
+	let browser;
+	let page;
+	const errors = [];
+
+	before( async () => {
+
+		main = server;
+		server = await startWorker( { port: Number( process.env.TEST_BUILD_ACCOUNT_HIDDEN_PORT ) || PORT + 1, config: 'wrangler.drive.jsonc', vars: workerVars(), assets: assetsOf() } );
+		const { chromium } = require( 'playwright' );
+		browser = await chromium.launch();
+		page = await browser.newPage( { viewport: { width: 1280, height: 900 } } );
+		page.on( 'pageerror', e => errors.push( String( e ) ) );
+		await page.route( '**/*', route => {
+
+			const url = route.request().url();
+			if ( url.startsWith( GOOGLE_SCRIPT ) ) return route.fulfill( { contentType: 'text/javascript', body: GOOGLE_STUB } );
+			return url.startsWith( server.base ) ? route.continue() : route.abort();
+
+		} );
+
+	} );
+
+	after( async () => {
+
+		await browser?.close();
+		server?.stop();
+		server = main;
+
+	} );
+
+	async function open( hash = '' ) {
+
+		await page.goto( 'about:blank' );
+		await page.goto( `${ server.base }/build/account/${ hash }` );
+		await page.waitForFunction( () => document.body.dataset.loaded === 'yes' );
+
+	}
+
+	async function signInAs( claims ) {
+
+		await page.context().clearCookies();
+		await page.goto( `${ server.base }/build/account/` );
+		const token = await credential( claims );
+		const res = await page.evaluate( async credential => {
+
+			const r = await fetch( '/build/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { credential } ) } );
+			return { status: r.status, body: await r.json() };
+
+		}, token );
+		assert.equal( res.status, 200, JSON.stringify( res.body ) );
+		return res.body.user.id;
+
+	}
+
+	const section = () => page.evaluate( () => ( {
+		title: document.getElementById( 'billing-title' ).textContent,
+		nav: document.querySelector( 'a[href="#billing"]' ).textContent,
+		text: document.getElementById( 'billing-body' ).innerText,
+		buttons: [ ...document.querySelectorAll( '#billing-body button' ) ].map( b => b.textContent ),
+		payments: !! document.querySelector( '#billing-body .payments' ),
+	} ) );
+
+	test( 'the free plan: just the plan, what each includes, no prices or buying', async () => {
+
+		await signInAs( { sub: 'hidden-free', email: 'hiddenfree@example.com', name: 'Hidden Free' } );
+		await open( '#billing' );
+		const plan = await section();
+		assert.equal( plan.title, 'Plan' );
+		assert.equal( plan.nav, 'Plan' );
+		assert.match( plan.text, /Free/ );
+		assert.match( plan.text, /33 everyday site pieces, 15 3D map views a month, 1 saved project/ );
+		assert.match( plan.text, /300 3D map views a month, 200 projects/ );
+		assert.match( plan.text, /isn't available to buy right now/ );
+		assert.doesNotMatch( plan.text, BUYING_WORDS );
+		assert.doesNotMatch( plan.text, /14 days|Payments|renews/i );
+		assert.deepEqual( plan.buttons, [] );
+		assert.equal( plan.payments, false );
+		assert.match( await page.locator( '#usage-body' ).innerText(), /0 \/ 15/ );
+		const asked = stripe.requests.length;
+		const refused = await page.evaluate( async () => ( await fetch( '/build/api/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { interval: 'year' } ) } ) ).status );
+		assert.equal( refused, 404 );
+		assert.equal( stripe.requests.length, asked, 'Stripe never asked' );
+
+	} );
+
+	test( 'a comped account: Build Pro, given by World Drive', async () => {
+
+		const id = await signInAs( { sub: 'hidden-comp', email: 'hiddencomp@example.com', name: 'Hidden Comp' } );
+		rows( `INSERT INTO build_comps ( account_id, reason, until, created_by, created_at ) VALUES ( ${ id }, 'Friend', NULL, ${ id }, ${ NOW } )` );
+		await open( '#billing' );
+		const plan = await section();
+		assert.equal( plan.title, 'Plan' );
+		assert.match( plan.text, /Build Pro, given to you by World Drive/ );
+		assert.doesNotMatch( plan.text, BUYING_WORDS );
+		assert.deepEqual( plan.buttons, [] );
+		assert.equal( plan.payments, false );
+
+	} );
+
+	test( 'an account that has paid: Manage billing and its payments, no renewal or prices', async () => {
+
+		const id = await signInAs( { sub: 'hidden-paid', email: 'hiddenpaid@example.com', name: 'Hidden Paid' } );
+		makeSubscriber( id, 'sub_hidden', { days: 10 } );
+		await open( '#billing' );
+		const plan = await section();
+		assert.equal( plan.title, 'Plan' );
+		assert.match( plan.text, /Build Pro/ );
+		assert.deepEqual( plan.buttons, [ 'Manage billing' ] );
+		assert.equal( plan.payments, true );
+		assert.match( plan.text, /\$5\.00/ );
+		assert.doesNotMatch( plan.text, /Renews on|billed monthly|Switch to yearly|Go Build Pro|opens soon|US\$5\/month/ );
+		const [ portal ] = await Promise.all( [
+			page.waitForRequest( r => r.url().startsWith( 'https://billing.stripe.com/' ) ),
+			page.click( '#manage-billing' ),
+		] );
+		assert.equal( portal.url(), 'https://billing.stripe.com/p/session/test_acct' );
+
+	} );
+
+	test( 'no page errors', () => {
+
 		assert.deepEqual( errors, [] );
 
 	} );

@@ -5,15 +5,17 @@
 // plan), share links (Pro's, their viewers on the owner's views), and Build Pro bought through a
 // Checkout Session (against a stand-in for Stripe's API on this machine), managed in the billing
 // portal, renewed, stopped, refunded and charged back through Stripe's webhook, apart from the
-// Supporter Pass, and given by the owner (comps).
+// Supporter Pass, and given by the owner (comps). All that with BUILD_SALES 'on'; then, with it
+// unset (the default) and Stripe still set up, buying hidden: no prices, no checkout, the plans the same.
 
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
-import { billingFor, billingSettings } from '../worker/drive/billing.js';
+import { billingFor, billingSettings, salesOn } from '../worker/drive/billing.js';
 
 const PORT = Number( process.env.TEST_BUILD_WORKER_PORT ) || 8786;
+const HIDDEN_PORT = Number( process.env.TEST_BUILD_WORKER_HIDDEN_PORT ) || PORT + 1;
 const MAPS_KEY = 'test-maps-key-not-real';
 const WEBHOOK_SECRET = 'whsec_test_build_secret';
 const BUILD_LINK_ID = 'plink_build0000000000000001';
@@ -22,6 +24,7 @@ const MONTHLY = 'price_buildmonthly0001';
 const ANNUAL = 'price_buildannual0001';
 const PORTAL = 'bpc_buildportal0001';
 const BILLING = { enabled: true, monthly: 'US$5/month', annual: 'US$50/year', portal: false };
+const HIDDEN = { enabled: false, hidden: true, monthly: null, annual: null, portal: false };
 const PASS_LINK = 'https://buy.stripe.com/test_pass';
 const DAY = Date.UTC( 2026, 10, 10, 12 );
 const HOUR = 3600 * 1000;
@@ -185,6 +188,35 @@ function refundOf( id, paymentIntent ) {
 
 }
 
+// The Worker's settings: Stripe and everything else set up, with `extra` on top (BUILD_SALES).
+function workerVars( extra = {} ) {
+
+	return {
+		GOOGLE_MAPS_API_KEY: MAPS_KEY,
+		GOOGLE_CLIENT_ID: CLIENT_ID,
+		GOOGLE_JWKS_URL: keys.url,
+		TEST_CLOCK: 'header',
+		STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+		SUPPORTER_PAYMENT_LINK: PASS_LINK,
+		SUPPORTER_PAYMENT_LINK_ID: '',
+		SUPPORTER_MANAGE_LINK: 'https://billing.stripe.com/p/login/test',
+		// Build Pro's old Payment Link: its checkouts are still recorded, but it isn't sold any more.
+		BUILD_PAYMENT_LINK_ID: BUILD_LINK_ID,
+		STRIPE_SECRET_KEY: SECRET_KEY,
+		STRIPE_API_BASE: stripe.url,
+		BUILD_PRICE_MONTHLY: MONTHLY,
+		BUILD_PRICE_ANNUAL: ANNUAL,
+		BUILD_PORTAL_CONFIG: PORTAL,
+		BUILD_FREE_MONTHLY: String( FREE_MONTHLY ),
+		BUILD_FREE_DAILY: String( FREE_DAILY ),
+		BUILD_PRO_MONTHLY: '50',
+		BUILD_EMAILS: 'tester@example.com',
+		ADMIN_EMAILS: 'boss@example.com',
+		...extra,
+	};
+
+}
+
 describe( 'World Drive Build', () => {
 
 	let free;
@@ -199,28 +231,7 @@ describe( 'World Drive Build', () => {
 		server = await startWorker( {
 			port: PORT,
 			config: 'wrangler.drive.jsonc',
-			vars: {
-				GOOGLE_MAPS_API_KEY: MAPS_KEY,
-				GOOGLE_CLIENT_ID: CLIENT_ID,
-				GOOGLE_JWKS_URL: keys.url,
-				TEST_CLOCK: 'header',
-				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
-				SUPPORTER_PAYMENT_LINK: PASS_LINK,
-				SUPPORTER_PAYMENT_LINK_ID: '',
-				SUPPORTER_MANAGE_LINK: 'https://billing.stripe.com/p/login/test',
-				// Build Pro's old Payment Link: its checkouts are still recorded, but it isn't sold any more.
-				BUILD_PAYMENT_LINK_ID: BUILD_LINK_ID,
-				STRIPE_SECRET_KEY: SECRET_KEY,
-				STRIPE_API_BASE: stripe.url,
-				BUILD_PRICE_MONTHLY: MONTHLY,
-				BUILD_PRICE_ANNUAL: ANNUAL,
-				BUILD_PORTAL_CONFIG: PORTAL,
-				BUILD_FREE_MONTHLY: String( FREE_MONTHLY ),
-				BUILD_FREE_DAILY: String( FREE_DAILY ),
-				BUILD_PRO_MONTHLY: '50',
-				BUILD_EMAILS: 'tester@example.com',
-				ADMIN_EMAILS: 'boss@example.com',
-			},
+			vars: workerVars( { BUILD_SALES: 'on' } ),
 		} );
 
 	} );
@@ -717,7 +728,7 @@ describe( 'World Drive Build', () => {
 
 	test( 'never on sale unless it\'s all set up: the key, two different price ids, sign-in and the webhook', () => {
 
-		const full = { STRIPE_SECRET_KEY: SECRET_KEY, BUILD_PRICE_MONTHLY: MONTHLY, BUILD_PRICE_ANNUAL: ANNUAL, GOOGLE_CLIENT_ID: CLIENT_ID, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET };
+		const full = { STRIPE_SECRET_KEY: SECRET_KEY, BUILD_PRICE_MONTHLY: MONTHLY, BUILD_PRICE_ANNUAL: ANNUAL, GOOGLE_CLIENT_ID: CLIENT_ID, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, BUILD_SALES: 'on' };
 		assert.deepEqual( billingSettings( full ), { prices: { month: MONTHLY, year: ANNUAL } } );
 		for ( const [ why, change ] of Object.entries( {
 			'no key': { STRIPE_SECRET_KEY: '' },
@@ -737,7 +748,17 @@ describe( 'World Drive Build', () => {
 
 		}
 
-		assert.deepEqual( billingFor( { BUILD_PRICE_LABEL_MONTHLY: 'US$6/month' }, null ), { enabled: false, monthly: 'US$6/month', annual: 'US$50/year', portal: false } );
+		assert.deepEqual( billingFor( { BUILD_PRICE_LABEL_MONTHLY: 'US$6/month', BUILD_SALES: 'on' }, null ), { enabled: false, monthly: 'US$6/month', annual: 'US$50/year', portal: false } );
+		// BUILD_SALES not 'on': hidden, however set up Stripe is; the portal still for an account with a customer.
+		for ( const sales of [ undefined, '', 'off', 'yes', 'true' ] ) {
+
+			assert.equal( salesOn( { ...full, BUILD_SALES: sales } ), false, String( sales ) );
+			assert.deepEqual( billingFor( { ...full, BUILD_SALES: sales }, null ), HIDDEN, String( sales ) );
+
+		}
+
+		assert.deepEqual( billingFor( { ...full, BUILD_SALES: undefined }, { customer: true } ), { ...HIDDEN, portal: true } );
+		assert.equal( salesOn( { BUILD_SALES: 'on' } ), true );
 
 	} );
 
@@ -782,6 +803,117 @@ describe( 'World Drive Build', () => {
 		const res = await call( '/build/api/session', { method: 'DELETE', cookie: free.cookie } );
 		assert.ok( res.status === 200 || res.status === 204, res.text );
 		assert.equal( ( await config( free.cookie, DAY + 13 * HOUR ) ).json.signedIn, false );
+
+	} );
+
+} );
+
+// BUILD_SALES unset (the default), with Stripe fully set up all the same: buying is hidden. The
+// plans and their limits are as with it on; no payload carries a price, checkout is refused, and
+// the billing portal still opens for an account that has a Stripe customer.
+describe( 'World Drive Build, buying hidden (BUILD_SALES unset)', () => {
+
+	const PRICE_WORDS = /US\$|\/month|\/year|price_build/;
+
+	before( async () => {
+
+		googleKey = await makeKey( 'build-test-key-hidden' );
+		keys = await serveKeys( [ googleKey.jwk ] );
+		stripe = await serveStripe();
+		server = await startWorker( { port: HIDDEN_PORT, config: 'wrangler.drive.jsonc', vars: workerVars() } );
+
+	} );
+
+	after( () => {
+
+		server?.stop();
+		keys?.close();
+		stripe?.close();
+
+	} );
+
+	test( 'signed out: Build Pro gated, no prices', async () => {
+
+		const res = await config();
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( res.json.premium, { enabled: true, unlocked: false, billing: HIDDEN } );
+		assert.doesNotMatch( res.text, PRICE_WORDS );
+		const home = await call( '/build/api/home' );
+		assert.deepEqual( home.json.premium, { enabled: true, unlocked: false, billing: HIDDEN } );
+		assert.doesNotMatch( home.text, PRICE_WORDS );
+		const refused = await call( '/build/api/billing/checkout', { method: 'POST', body: { interval: 'month' } } );
+		assert.equal( refused.status, 404 );
+
+	} );
+
+	test( 'free plan: the same limits, no prices, and checkout refused without asking Stripe', async () => {
+
+		const free = await signIn( { sub: 'hidden-free', email: 'hfree@example.com', name: 'Hal Free' } );
+		assert.equal( free.status, 200, free.text );
+		assert.equal( free.json.plan.tier, 'free' );
+		assert.equal( free.json.plan.priceLabel, null );
+		assert.deepEqual( free.json.plan.views, { limit: FREE_MONTHLY, used: 0 } );
+		assert.equal( free.json.plan.layouts, 1 );
+		assert.deepEqual( free.json.premium, { enabled: true, unlocked: false, billing: HIDDEN } );
+		for ( const path of [ '/build/api/me', '/build/api/home', '/build/api/config', '/build/api/account' ] ) {
+
+			const res = await call( path, { cookie: free.cookie, time: DAY + HOUR } );
+			assert.equal( res.status, 200, `${ path }: ${ res.text }` );
+			assert.doesNotMatch( res.text, PRICE_WORDS, path );
+			if ( res.json.premium ) assert.deepEqual( res.json.premium.billing, HIDDEN, path );
+			assert.equal( res.json.premium?.price, undefined, path );
+
+		}
+
+		const asked = stripe.requests.length;
+		for ( const interval of [ 'month', 'year' ] ) {
+
+			const res = await call( '/build/api/billing/checkout', { method: 'POST', cookie: free.cookie, body: { interval } } );
+			assert.equal( res.status, 404, res.text );
+			assert.match( res.json.error, /isn't available to buy/ );
+
+		}
+
+		assert.equal( stripe.requests.length, asked, 'Stripe never asked' );
+		// One project, still.
+		assert.equal( ( await call( '/build/api/layouts', { method: 'POST', body: { site: 'Test site', name: 'First', data: LAYOUT }, cookie: free.cookie } ) ).status, 201 );
+		assert.equal( ( await call( '/build/api/layouts', { method: 'POST', body: { site: 'Test site', name: 'Second', data: LAYOUT }, cookie: free.cookie } ) ).status, 403 );
+
+	} );
+
+	test( 'Build Pro from the owner\'s comps and BUILD_EMAILS, still', async () => {
+
+		const owner = await signIn( { sub: 'hidden-boss', email: 'boss@example.com', name: 'Big Boss' } );
+		assert.equal( owner.json.plan.tier, 'owner' );
+		const comped = await signIn( { sub: 'hidden-comp', email: 'hcomp@example.com', name: 'Cam Comp' } );
+		assert.equal( comped.json.plan.tier, 'free' );
+		const given = await call( '/api/admin/build/comp', { method: 'POST', cookie: owner.cookie, body: { account: 'hcomp@example.com', reason: 'Friend' } } );
+		assert.equal( given.status, 200, given.text );
+		const me = await call( '/build/api/me', { cookie: comped.cookie } );
+		assert.equal( me.json.plan.tier, 'pro' );
+		assert.equal( me.json.plan.comped, true );
+		assert.deepEqual( me.json.plan.views, { limit: 50, used: 0 } );
+		assert.deepEqual( me.json.premium, { enabled: true, unlocked: true, billing: HIDDEN } );
+		const tester = await signIn( { sub: 'hidden-tester', email: 'tester@example.com', name: 'Tess' } );
+		assert.equal( tester.json.plan.tier, 'pro' );
+		assert.equal( tester.json.premium.unlocked, true );
+
+	} );
+
+	test( 'an account that once paid still gets the billing portal', async () => {
+
+		const payer = await signIn( { sub: 'hidden-payer', email: 'hpayer@example.com', name: 'Pat Payer' } );
+		assert.equal( payer.json.premium.billing.portal, false );
+		server.d1( `UPDATE accounts SET stripe_customer = 'cus_hiddenpayer1' WHERE email = 'hpayer@example.com'` );
+		const me = await call( '/build/api/me', { cookie: payer.cookie } );
+		assert.deepEqual( me.json.premium.billing, { ...HIDDEN, portal: true } );
+		const portal = await call( '/build/api/billing/portal', { method: 'POST', cookie: payer.cookie } );
+		assert.equal( portal.status, 200, portal.text );
+		assert.equal( portal.json.url, 'https://billing.stripe.com/p/session/test_portal' );
+		assert.equal( stripe.requests.at( - 1 ).form.customer, 'cus_hiddenpayer1' );
+		// No customer: nothing to open, as before.
+		const free = await signIn( { sub: 'hidden-free', email: 'hfree@example.com', name: 'Hal Free' } );
+		assert.equal( ( await call( '/build/api/billing/portal', { method: 'POST', cookie: free.cookie } ) ).status, 404 );
 
 	} );
 

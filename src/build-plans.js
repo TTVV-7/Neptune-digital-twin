@@ -9,6 +9,11 @@ import { FREE_ITEMS } from './product.js';
 // Prices aren't here. They come from the server with everything else about buying
 // (premium.billing: { enabled, monthly, annual, portal }, billing.js), so a page never shows a
 // price Stripe wouldn't charge, and says Build Pro opens soon while it isn't on sale.
+//
+// While buying is hidden (the server's BUILD_SALES isn't 'on': premium.billing.hidden, with no
+// prices), a page says nothing about buying at all: no prices, no subscribing, no "opens soon".
+// It shows the plan an account is on and what each includes, and NOT_FOR_SALE where it must say
+// why a free account can't have something.
 
 export const LIMITS = {
 	free: { items: FREE_ITEMS.size, views: 15, projects: 1 },
@@ -40,6 +45,16 @@ export const PRO_PHRASE = `the whole library and sets, ${ LIMITS.pro.views } 3D 
 export const BILLING_PAGE = '/build/account/#billing';
 
 export const SOON = 'Build Pro opens soon.';
+
+// Buying hidden (premium.billing.hidden): what's said in place of any way to buy.
+export const NOT_FOR_SALE = 'Build Pro isn\'t available to buy right now.';
+
+// Whether the server has buying hidden (billing.js's billingFor: BUILD_SALES isn't 'on').
+export function salesHidden( billing ) {
+
+	return billing?.hidden === true;
+
+}
 
 // The sentence that goes by every button that subscribes: Stripe renews it until it's cancelled,
 // and people should know that before they press.

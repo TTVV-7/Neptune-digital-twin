@@ -62,6 +62,7 @@ export { DriveRoom } from './live.js';
 //                                 and never turned away by DAILY_VISITS
 //   GOOGLE_CLIENT_ID, SUPPORTER_*, STRIPE_WEBHOOK_SECRET   the Supporter Pass (see supporter.js)
 //   STRIPE_SECRET_KEY, BUILD_PRICE_*, BUILD_PORTAL_CONFIG   selling World Drive Build Pro (see billing.js)
+//   BUILD_SALES   'on' shows buying Build Pro; unset (the default), buying is hidden (billing.js)
 //   PASSWORD_ACCOUNTS     'off' switches usernames and passwords off (logins.js); PASSWORD_ITERATIONS
 //                         tests only (or to lower PBKDF2's count, see logins.js)
 //   DB                    the D1 database binding: the leaderboard's and the accounts' tables

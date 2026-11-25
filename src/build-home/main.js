@@ -1,5 +1,5 @@
 import './style.css';
-import { BILLING_PAGE, PLANS, PRO_PHRASE, SOON, dateOf, intervalChoice } from '../build-plans.js';
+import { BILLING_PAGE, PLANS, PRO_PHRASE, SOON, dateOf, intervalChoice, salesHidden } from '../build-plans.js';
 
 // World Drive Build's dashboard (worlddrive.app/build/, drive/build/index.html, docs/build.md): find a
 // site by address and open the editor there (/build/app/), your saved projects, your plan, and
@@ -269,6 +269,9 @@ function showPlan() {
 	const body = $( 'plan-body' );
 	body.replaceChildren();
 	const premium = home?.premium ?? {};
+	// Buying hidden (the server's BUILD_SALES isn't 'on'): the plan and what it includes, never a
+	// price or a way to buy.
+	const hidden = salesHidden( premium.billing );
 	if ( ! home?.signedIn ) {
 
 		body.append( compare( premium ) );
@@ -285,7 +288,7 @@ function showPlan() {
 	head.querySelector( '.tier' ).textContent = info.name;
 	head.querySelector( '.plan-blurb' ).textContent = info.blurb;
 	body.append( head );
-	const billed = billedLine( plan );
+	const billed = billedLine( plan, hidden );
 	if ( billed ) body.append( billed );
 
 	// 3D map views this month: a gauge, as a site's fuel or hours meter.
@@ -307,16 +310,38 @@ function showPlan() {
 	body.append( meter );
 	body.append( claudeCard( plan.tier ) );
 	body.append( logoCard( plan.tier ) );
-	if ( plan.tier === 'free' ) body.append( upgrade( premium ) );
+	if ( hidden ) {
+
+		// Pro's what it includes, beside the free plan's, with no way to buy it; Manage billing only
+		// for an account that has billing to manage (one that once paid).
+		if ( plan.tier === 'free' ) body.append( proIncludes() );
+		else if ( premium.billing?.portal ) body.append( manage( premium ) );
+
+	} else if ( plan.tier === 'free' ) body.append( upgrade( premium ) );
 	else if ( plan.subscribed || premium.billing?.portal ) body.append( manage( premium ) );
 
 }
 
+// Free, with buying hidden: what Build Pro includes, without a price or a way to buy it.
+function proIncludes() {
+
+	const box = document.createElement( 'div' );
+	box.className = 'upgrade pro-includes';
+	const lead = document.createElement( 'p' );
+	lead.innerHTML = '<strong>Build Pro:</strong> ';
+	lead.append( `${ PRO_PHRASE }.` );
+	box.append( lead );
+	return box;
+
+}
+
 // How Build Pro is paid for, under the plan's name: "US$5/month · renews on 3 Jan 2027", "ends on",
-// or given by World Drive. null when there's nothing to say (free, the owner).
-function billedLine( plan ) {
+// or given by World Drive. null when there's nothing to say (free, the owner; a subscription while
+// buying is hidden: no prices, no renewals).
+function billedLine( plan, hidden = false ) {
 
 	let text = '';
+	if ( plan.subscribed && hidden ) return null;
 	if ( plan.subscribed ) {
 
 		const when = plan.renewsAt ? ` · ${ plan.cancelAtPeriodEnd ? 'ends' : 'renews' } on ${ dateOf( plan.renewsAt ) }` : '';
@@ -573,13 +598,16 @@ function compare( premium ) {
 	const wrap = document.createElement( 'div' );
 	wrap.className = 'compare';
 	const billing = premium.billing;
-	for ( const [ tier, price ] of [ [ 'free', 'Free' ], [ 'pro', billing?.enabled ? billing.monthly : 'Opens soon' ] ] ) {
+	// Buying hidden: Build Pro's card has no price, nor "opens soon".
+	const pro = salesHidden( billing ) ? '' : billing?.enabled ? billing.monthly : 'Opens soon';
+	for ( const [ tier, price ] of [ [ 'free', 'Free' ], [ 'pro', pro ] ] ) {
 
 		const card = document.createElement( 'div' );
 		card.className = `compare-card compare-${ tier }`;
 		card.innerHTML = '<span class="tier"></span><span class="price"></span><p></p>';
 		card.querySelector( '.tier' ).textContent = PLANS[ tier ].name;
 		card.querySelector( '.price' ).textContent = price;
+		card.querySelector( '.price' ).hidden = ! price;
 		card.querySelector( 'p' ).textContent = PLANS[ tier ].blurb;
 		wrap.append( card );
 
@@ -629,6 +657,16 @@ function showNotices() {
 
 	const plan = home?.plan;
 	const portal = !! home?.premium?.billing?.portal;
+	// Buying hidden: nothing about a subscription's payments or renewal, unless there's billing to
+	// manage (Stripe's portal, where it's fixed or cancelled).
+	if ( salesHidden( home?.premium?.billing ) && ! portal ) {
+
+		clearNotice( 'past-due' );
+		clearNotice( 'ends' );
+		return;
+
+	}
+
 	const fix = label => portal ? portalButton( label ) : Object.assign( document.createElement( 'a' ), { className: 'plain-link', href: BILLING_PAGE, textContent: label } );
 	if ( plan?.pastDue ) notice( 'past-due', 'Payment failed - update your card to keep Build Pro.', { action: fix( 'Update card' ), tone: 'warn' } );
 	else clearNotice( 'past-due' );

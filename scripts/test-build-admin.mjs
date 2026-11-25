@@ -117,6 +117,7 @@ describe( 'World Drive Build\'s admin numbers', () => {
 				STRIPE_API_BASE: stripe.url,
 				BUILD_PRICE_MONTHLY: 'price_buildmonthly0001',
 				BUILD_PRICE_ANNUAL: 'price_buildannual0001',
+				BUILD_SALES: 'on',
 				BUILD_FREE_MONTHLY: '1',
 				BUILD_VIEW_COST_USD: '0.01',
 				ADMIN_EMAILS: 'boss@example.com',

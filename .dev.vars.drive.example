@@ -34,3 +34,8 @@ SUPPORTER_EMAILS=
 # scripts/test-drive-ui.mjs tries the banner with Google's script stood in for.
 ADSENSE_CLIENT=
 ADSENSE_SLOT=
+
+# World Drive Build Pro on sale (docs/build.md, "Payments"): "on" shows its prices and checkout,
+# once the Stripe settings are there too. Blank (the default), buying is hidden: the plans and
+# their limits stay the same, with no prices and no checkout.
+BUILD_SALES=

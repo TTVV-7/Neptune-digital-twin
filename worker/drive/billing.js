@@ -21,9 +21,18 @@ import { cleanUsername, usernameKey } from '../../src/drive-app/password-rules.j
 //   BUILD_PRICE_LABEL_ANNUAL   the yearly price as the page shows it ('US$50/year' if unset)
 //   BUILD_PORTAL_CONFIG        optional: Build Pro's own billing portal configuration, bpc_...;
 //                              without it, the account's default portal
+//   BUILD_SALES                'on' offers Build Pro for sale; anything else (unset, the default)
+//                              hides buying everywhere (salesOn)
 // Build Pro is on sale only when the key, both price ids (two different ones), Google's sign-in
 // and the webhook's secret are all set and look right. Anything missing or wrong leaves it off,
 // and the page says Build Pro opens soon: nothing is ever sold that the webhook can't record.
+//
+// And only while BUILD_SALES is 'on'. Unset (the default), buying is hidden: no prices, no
+// checkout (POST billing/checkout is a 404), no "opens soon"; the pages show the plan an account
+// is on and what it includes, and Build Pro is had only from the owner (comps), BUILD_EMAILS or
+// ADMIN_EMAILS. The billing portal still opens for an account that has a Stripe customer, so
+// anyone who ever paid can cancel and see invoices. Everything here stays as it is for when
+// BUILD_SALES is turned back on.
 
 const PRICE_PATTERN = /^price_[A-Za-z0-9]{1,200}$/;
 const PORTAL_PATTERN = /^bpc_[A-Za-z0-9]{1,200}$/;
@@ -45,7 +54,15 @@ function label( value, fallback ) {
 
 }
 
-// { prices: { month, year } } when Build Pro can be sold, else null.
+// Whether buying Build Pro is shown at all (BUILD_SALES = 'on'). Off, the pages say nothing about
+// buying, whatever Stripe's settings are.
+export function salesOn( env ) {
+
+	return text( env.BUILD_SALES ).toLowerCase() === 'on';
+
+}
+
+// { prices: { month, year } } when Build Pro can be sold, else null (BUILD_SALES aside: salesOn).
 export function billingSettings( env ) {
 
 	const month = text( env.BUILD_PRICE_MONTHLY );
@@ -60,10 +77,14 @@ export function billingSettings( env ) {
 // enabled: Build Pro is on sale (billingSettings). monthly, annual: the prices as shown, always
 // there, so the page never has a price of its own. portal: the account has a Stripe customer and
 // the key is set, so POST billing/portal can open Stripe's billing portal for it.
+// With buying hidden (salesOn false): { enabled: false, hidden: true, monthly: null, annual: null,
+// portal }: no prices at all, and the page shows no way to buy.
 export function billingFor( env, plan ) {
 
+	const portal = !! plan?.customer && !! stripeSecret( env );
+	if ( ! salesOn( env ) ) return { enabled: false, hidden: true, monthly: null, annual: null, portal };
 	const labels = priceLabels( env );
-	return { enabled: !! billingSettings( env ), monthly: labels.monthly, annual: labels.annual, portal: !! plan?.customer && !! stripeSecret( env ) };
+	return { enabled: !! billingSettings( env ), monthly: labels.monthly, annual: labels.annual, portal };
 
 }
 
@@ -83,10 +104,12 @@ const stripeDown = () => new HttpError( 502, 'Couldn\'t reach Stripe just now. T
 // webhook knows it's Build Pro's and whose), one of Build Pro's two prices at quantity 1 (one
 // named person; the buyer can't change it), Stripe Tax with tax ids for businesses, the Terms to
 // accept (their link is set in Stripe's Dashboard), and the auto-renewal sentence by the button.
-// 503 while Build Pro isn't on sale; 409 for an account that has a subscription running.
+// 404 while buying is hidden (BUILD_SALES isn't 'on'), whatever Stripe's settings; 503 while
+// Build Pro isn't on sale; 409 for an account that has a subscription running.
 export async function postCheckout( context ) {
 
 	const { request, env, url, now } = context;
+	if ( ! salesOn( env ) ) throw new HttpError( 404, 'Build Pro isn\'t available to buy right now' );
 	const account = await signedInAccount( context );
 	const settings = billingSettings( env );
 	if ( ! settings ) throw new HttpError( 503, 'Build Pro isn\'t on sale yet' );

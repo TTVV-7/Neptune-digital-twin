@@ -80,8 +80,9 @@ function cleanName( name ) {
 
 }
 
-// Why there's no 3D map (build.js's mapsReason), as the page says it.
-export function noMapReason( reason, plan ) {
+// Why there's no 3D map (build.js's mapsReason), as the page says it. hidden: buying Build Pro is
+// hidden (premium.billing.hidden), so nothing says to go and get it.
+export function noMapReason( reason, plan, hidden = false ) {
 
 	const free = plan?.views?.limit;
 	switch ( reason ) {
@@ -89,7 +90,7 @@ export function noMapReason( reason, plan ) {
 		case 'used-up': return plan?.tier === 'pro'
 			? `You've used this month's ${ free } 3D map views. They start again on the 1st.`
 			: `You've used this month's ${ free ?? '' } free 3D map views. Build Pro gives you 300 a month. You can still lay out on flat ground.`;
-		case 'busy': return 'Today\'s free 3D map views are all taken. Try again tomorrow, or go Build Pro. You can still lay out on flat ground.';
+		case 'busy': return `Today's free 3D map views are all taken. Try again tomorrow${ hidden ? '' : ', or go Build Pro' }. You can still lay out on flat ground.`;
 		case 'owner-used-up': return 'This shared project opens on flat ground: its owner has used this month\'s 3D map views.';
 		case 'owner-free': return 'This shared project opens on flat ground: the 3D map comes with its owner\'s Build Pro.';
 		case 'unreachable': return 'Couldn\'t reach the server for the 3D map. You can still lay out on flat ground; reload to try again.';

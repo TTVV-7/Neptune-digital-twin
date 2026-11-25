@@ -1,6 +1,6 @@
 import { button, el } from './cloud-dialog.js';
 import { agreeNote, BUILD_APP } from './product.js';
-import { PRO_PHRASE, SOON, intervalChoice } from './build-plans.js';
+import { NOT_FOR_SALE, PRO_PHRASE, SOON, intervalChoice, salesHidden } from './build-plans.js';
 
 // What the dialog says: of the Pro equipment pack (bought once), or in World Drive Build (product.js)
 // of Build Pro (a subscription, monthly or yearly, build-plans.js).
@@ -11,6 +11,9 @@ const WORDS = BUILD_APP ? {
 	signIn: 'Sign in first, so Build Pro goes to your account.',
 	lead: name => `${ name } is part of Build Pro. Subscribe to place any of these, plus ${ PRO_PHRASE }:`,
 	leadPlain: `Build Pro: ${ PRO_PHRASE }:`,
+	// Buying hidden (the server's BUILD_SALES isn't 'on'): what it's part of, and nothing to buy.
+	leadHidden: name => `${ name } is part of Build Pro, which isn't available to buy right now. Build Pro has these, plus ${ PRO_PHRASE }:`,
+	leadHiddenPlain: `Build Pro: ${ PRO_PHRASE }. ${ NOT_FOR_SALE }`,
 	unlocked: 'Build Pro unlocked',
 	thanks: 'Thanks for subscribing to Build Pro! Sign in with the Google account you paid with to use it.',
 	pending: 'Stripe hasn\'t confirmed your subscription yet. Build Pro unlocks by itself once it has: reload the page in a few minutes.',
@@ -93,7 +96,8 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 	// World Drive Build: monthly or yearly, then Stripe's checkout made for this account (checkout(),
 	// billing.js), in this tab, with the renewal sentence by the button. Elsewhere, the Payment Link
 	// in a new tab.
-	const choice = BUILD_APP && premium.billing ? intervalChoice( premium.billing, 'premium-interval' ) : null;
+	// With buying hidden there are no prices to choose between: no choice (buying stays hidden).
+	const choice = BUILD_APP && premium.billing && ! salesHidden( premium.billing ) ? intervalChoice( premium.billing, 'premium-interval' ) : null;
 	const buy = BUILD_APP ? button( 'Subscribe with Stripe', subscribe, 'buy' ) : el( 'a', 'buy', 'Buy with Stripe' );
 	if ( ! BUILD_APP ) {
 
@@ -117,7 +121,12 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 
 	const message = el( 'p', 'message' );
 	message.setAttribute( 'role', 'status' );
-	dialog.append( header, lead, list, price, buying, signIn, message );
+	// World Drive Build with buying hidden: just OK, which closes the dialog.
+	const ok = button( 'OK', () => dialog.close(), 'ok' );
+	const okRow = el( 'div', 'ok-row' );
+	okRow.append( ok );
+	okRow.hidden = true;
+	dialog.append( header, lead, list, price, buying, signIn, message, okRow );
 	document.body.append( dialog );
 
 	dialog.addEventListener( 'close', () => opener?.focus() );
@@ -145,11 +154,32 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 		say( '' );
 		render();
 		dialog.showModal();
-		( user ? buy : close ).focus();
+		( hidden() ? ok : user ? buy : close ).focus();
+
+	}
+
+	// World Drive Build with buying hidden (premium.billing.hidden, BUILD_SALES not 'on').
+	function hidden() {
+
+		return BUILD_APP && salesHidden( premium.billing );
 
 	}
 
 	function render() {
+
+		okRow.hidden = ! hidden();
+		if ( hidden() ) {
+
+			// Part of Build Pro, which can't be bought: no prices, no buying, no signing in for it.
+			lead.textContent = picked ? WORDS.leadHidden( picked.name ) : WORDS.leadHiddenPlain;
+			price.textContent = '';
+			price.hidden = true;
+			buying.hidden = true;
+			signIn.hidden = true;
+			say( picked ? 'The free plan has the everyday basics.' : '' );
+			return;
+
+		}
 
 		lead.textContent = picked
 			? WORDS.lead( picked.name )

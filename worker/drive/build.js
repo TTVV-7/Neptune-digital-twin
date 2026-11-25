@@ -2,7 +2,7 @@ import { HttpError, checkSameOrigin, cleanText, isObject, json, jsonText, noCont
 import { accountById, currentAccount, signIn, signOut } from './accounts.js';
 import { isAdmin } from './admin.js';
 import { buildPlan } from './supporter.js';
-import { billingFor, postCheckout, postPortal, priceLabels } from './billing.js';
+import { billingFor, postCheckout, postPortal, priceLabels, salesOn } from './billing.js';
 import { googleClientId } from './settings.js';
 import { deleteAccount, disconnectClient, exportAccount, getAccount } from './build-account.js';
 import { countDaily } from './stats.js';
@@ -30,7 +30,8 @@ import { METRICS } from '../../src/drive-app/stats-protocol.js';
 //
 // Buying needs Stripe's secret key and Build Pro's two price ids, GOOGLE_CLIENT_ID (an account to
 // put it on) and the webhook's secret (billing.js); without them the page says Build Pro opens soon
-// and nothing is sold.
+// and nothing is sold. And it needs BUILD_SALES set to 'on': unset (the default), buying is hidden
+// everywhere (no prices, no checkout, no "opens soon"), and the plans are as above all the same.
 
 // The dashboard's page (/build/) and the editor's (/build/app/) each ask relative to themselves.
 const PREFIXES = [ '/build/api/', '/build/app/api/' ];
@@ -177,7 +178,7 @@ export function limitsOf( env ) {
 
 // A signed-in account's plan at `now` (ms): { tier: 'owner', 'pro' or 'free', subscribed, status,
 // interval, renewsAt, cancelAtPeriodEnd, pastDue, priceLabel, comped, customer } (buildPlan's, with
-// the price as shown for its interval). The owner's has no subscription.
+// the price as shown for its interval; none while buying is hidden). The owner's has no subscription.
 export async function planOf( env, account, now = Date.now() ) {
 
 	if ( isAdmin( env, account ) ) return { tier: 'owner', subscribed: false, status: null, interval: null, renewsAt: null, cancelAtPeriodEnd: false, pastDue: false, priceLabel: null, comped: false, customer: false };
@@ -191,7 +192,7 @@ export async function planOf( env, account, now = Date.now() ) {
 		renewsAt: plan.renewsAt,
 		cancelAtPeriodEnd: plan.cancelAtPeriodEnd,
 		pastDue: plan.pastDue,
-		priceLabel: plan.interval === 'year' ? labels.annual : plan.interval === 'month' ? labels.monthly : null,
+		priceLabel: ! salesOn( env ) ? null : plan.interval === 'year' ? labels.annual : plan.interval === 'month' ? labels.monthly : null,
 		comped: plan.comped,
 		customer: plan.customer,
 	};
@@ -254,7 +255,8 @@ async function takeView( env, account, tier, mapsKey, now ) {
 // buying is set up (billing.js's billingSettings) billing.enabled is false and the page says Build
 // Pro opens soon; the owner, comps and BUILD_EMAILS have it meanwhile. billing: { enabled, monthly,
 // annual, portal } (billingFor), so the page never has a price of its own; price: the monthly one,
-// for a page that shows only one.
+// for a page that shows only one. With BUILD_SALES not 'on', billing is { enabled: false, hidden:
+// true, monthly: null, annual: null, portal } and there's no price: the pages show no buying.
 function premiumFor( env, account, plan ) {
 
 	const billing = billingFor( env, plan );

@@ -1,7 +1,7 @@
 import '../build-home/style.css';
 import './style.css';
 import { robotCheck, send } from '../drive-app/api.js';
-import { PLANS } from '../build-plans.js';
+import { NOT_FOR_SALE, PLANS, salesHidden } from '../build-plans.js';
 import { PASSWORD_MAX_BYTES, PASSWORD_MIN, cleanUsername, passwordProblem } from '../drive-app/password-rules.js';
 
 // World Drive Build's account page (worlddrive.app/build/account/, drive/build/account/index.html,
@@ -588,6 +588,13 @@ function showBilling() {
 
 	const { plan, premium } = me;
 	const billing = premium.billing ?? {};
+	// Buying hidden (the server's BUILD_SALES isn't 'on'): the section is just the plan (still at
+	// #billing, for links): no prices, no buying, no renewals; payments only if there have been any.
+	const hidden = salesHidden( billing );
+	const title = hidden ? 'Plan' : 'Plan & billing';
+	$( 'billing-title' ).textContent = title;
+	const navLink = document.querySelector( 'a[href="#billing"]' );
+	if ( navLink ) navLink.textContent = title;
 	const body = $( 'billing-body' );
 	const head = el( 'div', 'plan-line' );
 	head.append( el( 'span', `tier tier-${ plan.tier }`, PLANS[ plan.tier ]?.name ?? plan.tier ) );
@@ -600,7 +607,12 @@ function showBilling() {
 
 	}
 
-	if ( plan.subscribed ) {
+	if ( plan.subscribed && hidden ) {
+
+		body.append( paragraph( 'Build Pro.' ) );
+		if ( plan.pastDue ) body.append( paragraph( 'Your last payment didn\'t go through. Update your card in Manage billing to keep Build Pro.', 'warning' ) );
+
+	} else if ( plan.subscribed ) {
 
 		const every = plan.interval === 'year' ? 'billed yearly' : plan.interval === 'month' ? 'billed monthly' : 'a subscription';
 		head.append( el( 'span', 'price', plan.priceLabel ? `${ plan.priceLabel }, ${ every }` : every ) );
@@ -646,11 +658,14 @@ function showBilling() {
 
 		if ( plan.status && ENDED[ plan.status ] ) body.append( paragraph( `Your Build Pro subscription was ${ ENDED[ plan.status ] }. You're on the free plan.`, 'notice' ) );
 		body.append( paragraph( `Free: ${ PLANS.free.blurb } Build Pro: ${ PLANS.pro.blurb }` ) );
-		body.append( buy( billing ) );
+		if ( hidden ) body.append( paragraph( NOT_FOR_SALE, 'hint' ) );
+		else body.append( buy( billing ) );
 		body.append( paragraph( 'Back on the free plan, projects past the first are kept and never deleted, and you can still open and edit them; a new one past the free plan\'s limit needs Build Pro.', 'hint' ) );
 
 	}
 
+	// Buying hidden: the payments and the refund policy only for an account that has paid.
+	if ( hidden && ! account.payments.length ) return;
 	body.append( payments() );
 	body.append( sentence( 'hint', `Full refund within 14 days of your first payment, no questions asked: write to ${ SUPPORT }. Renewals aren't refunded except for billing errors or duplicates, or where the law says so. See the `, [ 'refund policy', '/build/refunds/' ], ' and the ', [ 'terms', '/build/terms/' ], '.' ) );
 

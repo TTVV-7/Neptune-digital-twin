@@ -8,7 +8,9 @@
 // yearly, then Stripe's checkout (a stand-in for Stripe's API on this machine makes it; the page
 // Stripe would show is answered here), back on the dashboard until Build Pro shows, Manage billing,
 // and the notices for a failed payment and Pro ending; and Build Pro opening soon while it isn't
-// on sale.
+// on sale. All that with BUILD_SALES 'on'. Then, on a second Worker with BUILD_SALES unset (the
+// default) and Stripe set up all the same, buying hidden: the editor's dialog and the dashboard
+// show the plans and their limits with no prices and no way to buy, and a comped account its Pro.
 //
 // Needs Playwright with Chromium. TEST_SCREENSHOTS=<folder> saves pictures.
 
@@ -31,8 +33,11 @@ const ANNUAL = 'price_buildannual0001';
 // Stripe's pages (checkout and the billing portal), answered here with a stand-in page.
 const STRIPE_PAGES = /^https:\/\/(checkout|billing)\.stripe\.com\//;
 const DIST = join( ROOT, 'dist-drive', 'build' );
+// What no page may say while buying is hidden.
+const BUYING_WORDS = /US\$|\/month|\/year|Subscribe|Go Build Pro|opens soon/i;
 
 let server;
+let hiddenServer;
 let keys;
 let googleKey;
 let upstream;
@@ -102,6 +107,7 @@ before( async () => {
 		port: PORT,
 		config: 'wrangler.drive.jsonc',
 		vars: {
+			BUILD_SALES: 'on',
 			GOOGLE_MAPS_API_KEY: MAPS_KEY,
 			GOOGLE_CLIENT_ID: CLIENT_ID,
 			GOOGLE_JWKS_URL: keys.url,
@@ -135,6 +141,7 @@ after( async () => {
 
 	await browser?.close();
 	server?.stop();
+	hiddenServer?.stop();
 	keys?.close();
 	upstream?.close();
 	stripe?.close();
@@ -708,6 +715,158 @@ test( 'the dashboard while Build Pro isn\'t on sale: it opens soon', async () =>
 	assert.match( upgrade, /^Build Pro opens soon\./ );
 	assert.equal( await page.isVisible( '.upgrade .go-pro' ), false );
 	await notOnSale( false );
+
+} );
+
+// --- buying hidden (BUILD_SALES unset) ------------------------------------------------------
+
+test( 'buying hidden: a Worker with BUILD_SALES unset, Stripe set up all the same', async () => {
+
+	hiddenServer = await startWorker( {
+		port: Number( process.env.TEST_BUILD_UI_HIDDEN_PORT ) || PORT + 1,
+		config: 'wrangler.drive.jsonc',
+		vars: {
+			GOOGLE_MAPS_API_KEY: MAPS_KEY,
+			GOOGLE_CLIENT_ID: CLIENT_ID,
+			GOOGLE_JWKS_URL: keys.url,
+			STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+			STRIPE_SECRET_KEY: [ 'rk', 'test', 'builduse0000000000000002' ].join( '_' ),
+			STRIPE_API_BASE: stripe.url,
+			BUILD_PRICE_MONTHLY: MONTHLY,
+			BUILD_PRICE_ANNUAL: ANNUAL,
+			ADMIN_EMAILS: 'boss@example.com',
+			SEARCH_UPSTREAM: `http://127.0.0.1:${ upstream.address().port }/search`,
+		},
+		assets: assetsOf(),
+	} );
+	// The rest of the tests on it, in a fresh browser page of their own.
+	server = { ...server, base: hiddenServer.base };
+	page = await browser.newPage( { viewport: { width: 1280, height: 800 } } );
+	page.on( 'pageerror', e => errors.push( String( e ) ) );
+	await page.route( '**/*', route => route.request().url().startsWith( hiddenServer.base ) ? route.continue() : route.abort() );
+
+} );
+
+// The open Build Pro dialog as shown: its visible text, and whether its parts show.
+const hiddenDialog = () => page.evaluate( () => {
+
+	const d = document.querySelector( '.premium-dialog' );
+	const shown = sel => { const e = d.querySelector( sel ); return !! e && ! e.hidden && e.getClientRects().length > 0; };
+	return { text: d.innerText, lead: d.querySelector( 'p' ).textContent, buying: shown( '.buying' ), signIn: shown( '.sign-in' ), price: shown( '.price' ), ok: shown( '.ok-row button' ), intervals: !! d.querySelector( '.intervals' ) };
+
+} );
+
+async function checkHiddenDialog( card ) {
+
+	await page.click( card );
+	await page.waitForSelector( '.premium-dialog[open]' );
+	const dialog = await hiddenDialog();
+	assert.match( dialog.text, /Build Pro/ );
+	assert.match( dialog.text, /isn't available to buy right now/ );
+	assert.match( dialog.text, /300 3D map views a month, 200 projects/ );
+	assert.doesNotMatch( dialog.text, BUYING_WORDS );
+	assert.deepEqual( [ dialog.buying, dialog.signIn, dialog.price, dialog.ok, dialog.intervals ], [ false, false, false, true, false ] );
+	assert.equal( await page.evaluate( () => document.activeElement?.textContent ), 'OK' );
+	await page.click( '.premium-dialog .ok-row button' );
+	await page.waitForSelector( '.premium-dialog[open]', { state: 'detached' } ).catch( () => {} );
+	assert.equal( await page.evaluate( () => document.querySelector( '.premium-dialog' ).open ), false, 'OK closes it' );
+	return dialog;
+
+}
+
+test( 'buying hidden, the editor: a Pro item or set says it\'s part of Build Pro, with just OK', async () => {
+
+	await open();
+	assert.equal( await page.evaluate( () => window.twin.sidebar && true ), true );
+	await library( true );
+	const cards = await lockedCards();
+	for ( const id of [ 'crane-all-terrain', 'tri-tri' ] ) assert.ok( cards.locked.includes( id ), `${ id } is Pro, still` );
+	assert.ok( cards.open.includes( 'traffic-cone' ) );
+	// Signed out: no sign-in to buy, no prices.
+	const signedOut = await checkHiddenDialog( '#library .card[data-item="crane-all-terrain"]' );
+	assert.match( signedOut.lead, /is part of Build Pro, which isn't available to buy right now/ );
+	await checkHiddenDialog( '#library .card[data-set="set-concrete-pour"]' );
+	await shot( 'hidden-pro-dialog' );
+	// Signed in on the free plan: the same.
+	await signInAs( { sub: 'ui-hidden-free', email: 'hfree@example.com', name: 'Hal Free' } );
+	await open();
+	await library( true );
+	assert.ok( ( await lockedCards() ).locked.includes( 'tri-tri' ) );
+	await checkHiddenDialog( '#library .card[data-item="tri-tri"]' );
+	assert.equal( await page.evaluate( () => window.twin.models.entries.some( e => e.library === 'tri-tri' ) ), false, 'not placed' );
+
+} );
+
+test( 'buying hidden, the dashboard: the plans and their limits, the views gauge, no prices or upgrade', async () => {
+
+	await page.context().clearCookies();
+	await dashboard();
+	const out = await page.evaluate( () => ( {
+		plans: [ ...document.querySelectorAll( '.compare-card .tier' ) ].map( t => t.textContent ),
+		blurbs: [ ...document.querySelectorAll( '.compare-card p' ) ].map( t => t.textContent ),
+		text: document.body.innerText,
+		buy: !! document.querySelector( '.go-pro, .upgrade .intervals' ),
+	} ) );
+	assert.deepEqual( out.plans, [ 'Free', 'Build Pro' ] );
+	assert.match( out.blurbs[ 0 ], /33 everyday site pieces, 15 3D map views a month, 1 saved project/ );
+	assert.match( out.blurbs[ 1 ], /300 3D map views a month, 200 projects/ );
+	assert.doesNotMatch( out.text, BUYING_WORDS );
+	assert.equal( out.buy, false );
+	await shot( 'hidden-dashboard-signed-out' );
+
+	await signInAs( { sub: 'ui-hidden-free', email: 'hfree@example.com', name: 'Hal Free' } );
+	await dashboard();
+	const free = await page.evaluate( () => ( {
+		tier: document.querySelector( '.plan-head .tier' ).textContent,
+		blurb: document.querySelector( '.plan-blurb' ).textContent,
+		views: document.querySelector( '.meter-value' ).textContent,
+		pro: document.querySelector( '.pro-includes' )?.textContent ?? '',
+		text: document.body.innerText,
+		buy: !! document.querySelector( '.go-pro, .upgrade .intervals, .manage' ),
+	} ) );
+	assert.equal( free.tier, 'Free' );
+	assert.match( free.blurb, /33 everyday site pieces, 15 3D map views a month, 1 saved project/ );
+	assert.match( free.views, /^\d+ \/ 15$/ );
+	assert.match( free.pro, /^Build Pro: the whole library and sets, 300 3D map views a month/ );
+	assert.doesNotMatch( free.text, BUYING_WORDS );
+	assert.equal( free.buy, false );
+	await shot( 'hidden-dashboard-free' );
+
+} );
+
+test( 'buying hidden: a comped account still sees Build Pro, with no billing to manage', async () => {
+
+	await page.context().clearCookies();
+	await signInAs( { sub: 'ui-hidden-boss', email: 'boss@example.com', name: 'Big Boss' } );
+	const given = await page.evaluate( async () => {
+
+		const r = await fetch( '/api/admin/build/comp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { account: 'hfree@example.com', reason: 'Friend' } ) } );
+		return { status: r.status, body: await r.text() };
+
+	} );
+	assert.equal( given.status, 200, given.body );
+	await page.context().clearCookies();
+	await signInAs( { sub: 'ui-hidden-free', email: 'hfree@example.com', name: 'Hal Free' } );
+	await dashboard();
+	const pro = await page.evaluate( () => ( {
+		pill: document.getElementById( 'plan-pill' ).textContent,
+		tier: document.querySelector( '.plan-head .tier' ).textContent,
+		billed: document.querySelector( '.billed' )?.textContent ?? '',
+		views: document.querySelector( '.meter-value' ).textContent,
+		text: document.body.innerText,
+		buy: !! document.querySelector( '.go-pro, .upgrade, .manage' ),
+	} ) );
+	assert.equal( pro.pill, 'Build Pro' );
+	assert.equal( pro.tier, 'Build Pro' );
+	assert.equal( pro.billed, 'Given to you by World Drive' );
+	assert.match( pro.views, /^\d+ \/ 300$/ );
+	assert.doesNotMatch( pro.text, BUYING_WORDS );
+	assert.equal( pro.buy, false );
+	// And the editor has the whole library.
+	await open();
+	await library( true );
+	assert.deepEqual( ( await lockedCards() ).locked, [] );
+	await shot( 'hidden-dashboard-comped' );
 
 } );
 

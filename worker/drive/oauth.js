@@ -1,6 +1,7 @@
 import { HttpError, isObject, json, randomToken, sha256Hex } from '../http.js';
 import { accountById, currentAccount } from './accounts.js';
 import { planOf } from './build.js';
+import { salesOn } from './billing.js';
 import { googleClientId } from './settings.js';
 
 // OAuth 2.1 for World Drive Build's MCP server (mcp.js, docs/build.md): how Claude (or any MCP
@@ -167,6 +168,11 @@ async function authorizePage( context ) {
 	const name = escape( account.name || account.email || account.username || 'you' );
 	if ( plan.tier === 'free' ) {
 
+		// Buying hidden (BUILD_SALES not 'on', billing.js): what it's part of, and nowhere to buy it.
+		if ( ! salesOn( env ) ) return page( 'Build Pro needed', `
+			<p>Connecting Claude to World Drive Build is part of <strong>Build Pro</strong>. You're signed in as ${ name } on the free plan.</p>
+			<p class="small">Build Pro isn't available to buy right now.</p>
+			<p><a class="button" href="/build/">Back to World Drive Build</a></p>` );
 		return page( 'Build Pro needed', `
 			<p>Connecting Claude to World Drive Build comes with <strong>Build Pro</strong>. You're signed in as ${ name } on the free plan.</p>
 			<p><a class="button" href="/build/">Go Build Pro</a></p>

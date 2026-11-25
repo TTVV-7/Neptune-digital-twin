@@ -1,6 +1,7 @@
 import { HttpError, json, randomToken } from '../http.js';
 import { bearerAccount } from './oauth.js';
 import { ACCOUNT_BYTES, LOG_KEEP_MS, limitsOf, planOf } from './build.js';
+import { salesOn } from './billing.js';
 import { search } from './search.js';
 import CATALOG from './build-catalog.json' with { type: 'json' };
 
@@ -208,7 +209,10 @@ async function call( context, params ) {
 	const tool = TOOLS.find( t => t.name === params?.name );
 	if ( ! tool ) return text( `No tool ${ params?.name }`, true );
 	const { env, account, now } = context;
-	if ( ( await planOf( env, account ) ).tier === 'free' ) return text( 'World Drive Build\'s Claude connector comes with Build Pro. Upgrade at https://worlddrive.app/build/ and try again.', true );
+	// With buying hidden (BUILD_SALES not 'on', billing.js) it says so plainly, with nowhere to buy.
+	if ( ( await planOf( env, account ) ).tier === 'free' ) return text( salesOn( env )
+		? 'World Drive Build\'s Claude connector comes with Build Pro. Upgrade at https://worlddrive.app/build/ and try again.'
+		: 'World Drive Build\'s Claude connector is part of Build Pro, which this account isn\'t on. Build Pro isn\'t available to buy right now.', true );
 	const hourly = Number.isFinite( Number( env.MCP_HOURLY ) ) && env.MCP_HOURLY !== undefined && env.MCP_HOURLY !== '' ? Number( env.MCP_HOURLY ) : 300;
 	const used = ( await env.DB.prepare( 'SELECT COUNT(*) AS n FROM mcp_calls WHERE account_id = ? AND at > ?' ).bind( account.id, now - 3600 * 1000 ).first() )?.n ?? 0;
 	if ( used >= hourly ) return text( `That's ${ hourly } changes this hour, the most an account makes. Try again later.`, true );

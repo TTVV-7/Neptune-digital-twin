@@ -253,7 +253,10 @@ test( 'the authorize page: sign in first; the free plan can\'t; names are shown 
 	assert.match( wrongRedirect.text, /didn&#39;t register/ );
 	const free = await signIn( { sub: 'mcp-free', email: 'free@example.com', name: 'Fran Free' } );
 	const { page } = await connect( free );
-	assert.match( page.text, /comes with <strong>Build Pro<\/strong>/ );
+	// BUILD_SALES is unset here (the default): buying is hidden, so nothing offers it.
+	assert.match( page.text, /is part of <strong>Build Pro<\/strong>/ );
+	assert.match( page.text, /isn&#39;t available to buy right now|isn't available to buy right now/ );
+	assert.doesNotMatch( page.text, /Go Build Pro|Upgrade|Subscribe|US\$|\/month|\/year/ );
 
 } );
 
@@ -450,7 +453,10 @@ test( 'a plan that lapses stops the tools; the hourly limit holds', async () => 
 	await webhook( { id: 'evt_pro_end', object: 'event', type: 'customer.subscription.deleted', livemode: false, created: Math.floor( Date.now() / 1000 ) + 10, data: { object: { id: 'sub_pro', object: 'subscription', status: 'canceled' } } } );
 	const lapsed = await tool( 'list_projects', {} );
 	assert.equal( lapsed.error, true );
-	assert.match( lapsed.text, /comes with Build Pro/ );
+	// BUILD_SALES unset (the default): part of Build Pro, with nothing about buying it.
+	assert.match( lapsed.text, /is part of Build Pro/ );
+	assert.match( lapsed.text, /isn't available to buy right now/ );
+	assert.doesNotMatch( lapsed.text, /Upgrade|Subscribe|https:\/\/worlddrive\.app\/build\// );
 	// Back on Pro (a new subscription), then past the hour's calls.
 	await webhook( { id: 'evt_pro2', object: 'event', type: 'checkout.session.completed', livemode: false, data: { object: {
 		id: 'cs_test_pro2', object: 'checkout.session', mode: 'subscription', payment_status: 'paid', amount_total: 500, currency: 'usd',
