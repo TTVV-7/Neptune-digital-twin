@@ -8,7 +8,7 @@ import { useFastRaycast } from './raycast.js';
 import { frontToYaw } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { getKind, kindParams } from './kinds.js';
-import { fitPlane, fitPoints, fitSurface, sameFit, surfaceLayout, surfacePoints } from './grade.js';
+import { MAX_GROUND_ERROR, fitPlane, fitPoints, fitSurface, sameFit, surfaceLayout, surfacePoints } from './grade.js';
 import { addHitFilter, passesHitFilters } from './walk.js';
 import { PLACED_ORDER, drawnAfterGround } from './draw-order.js';
 
@@ -26,6 +26,14 @@ const SURFACE_BUDGET = 6;
 // height is used. A sample on the roof of Google's copy of the same building, or past the
 // berth edge in the water, is outvoted by the ones on the surrounding ground.
 const SNAP_MARGIN = 2;
+// The ground an area follows, smoothed (readSurface), is never this far (m) from the plane fitted
+// through the same ground: a reading that far out is something else, read again.
+const SURFACE_SANE = 50;
+// A smoothed ground read from coarser tiles than the plane through it now is read again, at most this
+// often (s).
+const SURFACE_REREAD = 5;
+// Ground from tiles coarser than MAX_GROUND_ERROR (grade.js) is never snapped to.
+const coarseHit = hit => ( hit.object.userData.tile?.geometricError ?? 0 ) > MAX_GROUND_ERROR;
 
 // Loads your own glTF/GLB models and places them in the terminal frame.
 // Each entry keeps an editable `state` that the placement panel changes.
@@ -253,7 +261,12 @@ export class ModelManager extends EventDispatcher {
 		entry.groundError = detail.error;
 
 		const { pivot, state } = entry;
-		const up = round( ground + ( entry.parked?.rise ?? 0 ) );
+		// The ground's height, and how far above it the kind puts itself (a flatten area raised or
+		// lowered, or at an exact finished height: snapLift).
+		const groundMoved = entry.groundUp !== round( ground );
+		entry.groundUp = round( ground );
+		const lift = getKind( entry.kind )?.snapLift?.( entry.params, entry.groundUp ) ?? 0;
+		const up = round( ground + ( entry.parked?.rise ?? 0 ) + lift );
 		// Still reading the ground it follows (readSurface): snapped again next frame.
 		entry.snapped = ! detail.pending;
 		// Snapped to a plane through the ground, or a smoothed surface ('plane' below): what was
@@ -262,7 +275,9 @@ export class ModelManager extends EventDispatcher {
 		const slope = detail.slope;
 		const sloped = slope && ! sameFit( slope, entry.groundSlope );
 		if ( sloped ) entry.groundSlope = slope;
-		if ( up !== state.up || sloped ) {
+		// (At an exact height the area stays put as the ground under it changes, but its batters
+		// and the earth it moves don't.)
+		if ( up !== state.up || sloped || ( groundMoved && lift ) ) {
 
 			state.up = up;
 			if ( entry.parked ) entry.parked.up = up;
@@ -325,7 +340,7 @@ export class ModelManager extends EventDispatcher {
 
 					sample.error = 0;
 					const y = this.originalHeight( _origin.x, _origin.z, sample );
-					if ( y === null ) continue;
+					if ( y === null || ! ( sample.error <= MAX_GROUND_ERROR ) ) continue;
 					heights.push( y );
 					error = Math.max( error, sample.error );
 					continue;
@@ -334,7 +349,7 @@ export class ModelManager extends EventDispatcher {
 
 				_origin.y = 2000;
 				this.raycaster.set( _origin, DOWN );
-				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh && passesHitFilters( h ) );
+				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh && ! coarseHit( h ) && passesHitFilters( h ) );
 				if ( hit ) heights.push( hit.point.y );
 
 			}
@@ -374,13 +389,14 @@ export class ModelManager extends EventDispatcher {
 
 				sample.error = 0;
 				y = this.originalHeight( _origin.x, _origin.z, sample );
-				error = Math.max( error, sample.error );
+				if ( ! ( sample.error <= MAX_GROUND_ERROR ) ) y = null;
+				else error = Math.max( error, sample.error );
 
 			} else {
 
 				_origin.y = 2000;
 				this.raycaster.set( _origin, DOWN );
-				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh && passesHitFilters( h ) );
+				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh && ! coarseHit( h ) && passesHitFilters( h ) );
 				y = hit ? hit.point.y : null;
 
 			}
@@ -408,7 +424,14 @@ export class ModelManager extends EventDispatcher {
 			if ( detail && pending ) detail.pending = true;
 			if ( result ) {
 
-				if ( detail ) detail.slope = result.fit;
+				if ( detail ) {
+
+					detail.slope = result.fit;
+					// As coarse as the coarsest it was read from, so a finer reading replaces it (snap()).
+					detail.error = Math.max( error, result.error ?? 0 );
+
+				}
+
 				return round( result.c );
 
 			}
@@ -430,13 +453,16 @@ export class ModelManager extends EventDispatcher {
 		const place = [ state.east, state.north, state.heading, width, length, smoothing, !! original ].join();
 		const ground = [ Math.round( plane.c * 100 ), Math.round( plane.gx * 1e4 ), Math.round( plane.gz * 1e4 ), error ].join();
 		let job = entry.surfaceJob;
-		if ( ! job || job.place !== place || ( job.done && job.ground !== ground ) ) {
+		// Read from coarser tiles than the plane is now (tiles changed while it read, a few
+		// milliseconds a frame, as the camera moved): read again, now and then.
+		const coarser = job?.done && job.error > error * 2 + 1 && this.clock - job.finished > SURFACE_REREAD;
+		if ( ! job || job.place !== place || ( job.done && job.ground !== ground ) || coarser ) {
 
 			// Read again where it was: what was read before stands until this is.
 			const kept = job?.place === place ? job.result : null;
 			const layout = surfaceLayout( width, length, smoothing );
 			const points = surfacePoints( layout );
-			job = entry.surfaceJob = { place, ground, layout, points, heights: new Array( points.length ).fill( null ), next: 0, done: false, result: kept };
+			job = entry.surfaceJob = { place, ground, layout, points, heights: new Array( points.length ).fill( null ), next: 0, done: false, result: kept, error: 0, finished: 0 };
 
 		}
 
@@ -450,12 +476,18 @@ export class ModelManager extends EventDispatcher {
 				const [ x, z ] = job.points[ job.next ];
 				pivot.localToWorld( _origin.set( x, 0, z ) );
 				let y = null;
-				if ( original ) y = this.originalHeight( _origin.x, _origin.z, sample );
-				else {
+				if ( original ) {
+
+					y = this.originalHeight( _origin.x, _origin.z, sample );
+					// What the coarsest of Google's tiles says isn't the ground (MAX_GROUND_ERROR).
+					if ( ! ( sample.error <= MAX_GROUND_ERROR ) ) y = null;
+					else job.error = Math.max( job.error, sample.error );
+
+				} else {
 
 					_origin.y = 2000;
 					this.raycaster.set( _origin, DOWN );
-					const hit = this.raycaster.intersectObjects( scene, true ).find( h => h.object.isMesh && passesHitFilters( h ) );
+					const hit = this.raycaster.intersectObjects( scene, true ).find( h => h.object.isMesh && ! coarseHit( h ) && passesHitFilters( h ) );
 					y = hit ? hit.point.y : null;
 
 				}
@@ -467,15 +499,30 @@ export class ModelManager extends EventDispatcher {
 
 			if ( job.next < job.points.length ) return { result: job.result, pending: true };
 			job.done = true;
-			const fitted = fitSurface( job.layout, job.heights, smoothing, width, length );
+			job.finished = this.clock;
+			let fitted = fitSurface( job.layout, job.heights, smoothing, width, length );
+			// Absurd: nowhere near the plane through the same ground. Not taken; read again.
+			if ( fitted && ! ( Math.abs( fitted.c - plane.c ) <= SURFACE_SANE + error ) ) {
+
+				fitted = null;
+				job.ground = null;
+
+			}
+
 			// Nothing to speak of changed: the same fit, so nothing is made again for it.
 			if ( fitted && job.result && sameFit( fitted.fit, job.result.fit ) && Math.abs( fitted.c - job.result.c ) < 0.01 ) job.ground = ground;
-			else if ( fitted ) job.result = fitted;
+			else if ( fitted ) {
+
+				job.result = fitted;
+				job.result.error = job.error;
+
+			}
+
 			job.heights = null;
 
 		}
 
-		return { result: job.result, pending: false };
+		return { result: job.result, pending: ! job.done || ( job.ground === null && ! job.result ) };
 
 	}
 

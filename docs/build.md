@@ -126,6 +126,39 @@ flattening, the terrain and the surface so they agree):
   was read before while it's where it was. What's fitted (`params.fit`, never saved) counts as a
   change only when it moves by more than about 2 cm anywhere (`sameFit`), so it doesn't refit in a
   loop. Areas saved with `follow` load onto the smoothed ground; the usual 10 m isn't saved.
+- **Raising and lowering** (`src/raise.js`, `flatten.js` `raise` / `finished`): a selected area
+  has an up-and-down arrow in its middle (`handles.js`); dragged up the screen it raises the whole
+  design (pad, every graded shape, batters, surface, fence) live, down lowers it, in 0.05 m steps
+  (0.01 m with Shift), and the label beside it says by how much and, for a graded area, the earth
+  that comes to ("+0.75 m (cut 120 m³ / fill 340 m³)"). **PageUp / PageDown** raise or lower it
+  0.25 m, 0.05 m with Shift, 1 m with Ctrl or Cmd (or Alt: some browsers keep Ctrl+PageUp for their
+  tabs). The P panel has **raise / lower (m)** with − and + (0.25 m), **exact finished height** (a
+  height as the panel's "up": metres above the site's origin) with its own number, − and +, and
+  **Back to the ground's height**. The raise is kept relative to the ground's height the area snaps
+  to (models.js `snap()`: `entry.groundUp`, then the kind's `snapLift`), so an area moved elsewhere
+  keeps it; an exact height stays where it is wherever the area goes, the ground under it changing
+  only its batters and earth moved. ±30 m at most. The batters meet, and the cut and fill are
+  reckoned against, the ground's height, not the raised design (`terrain.js` `zone.plane` from
+  `flatten.js` `liftNow`). A level pad raised shows its sides down to the ground (as deep as it's
+  raised). Saved with the layout only when not 0 (`raise`), or `finished`; areas saved before load
+  at the ground's height and save as before. Each change (a drag let go, a key, a field, a − or +,
+  the exact-height box, Back to the ground's height) is one undo step: **Ctrl/Cmd+Z** undoes,
+  **Ctrl/Cmd+Shift+Z** or **Ctrl+Y** redoes (`src/history.js`, in `sidebar.js`; while the library is
+  open or something is selected). With keep what's overhead, what's kept is measured from the
+  raised floor.
+- **Ground from the coarsest tiles is never used.** While the camera moves (and as tiles refine and
+  fade) Google's globe-level tiles (a geometric error of kilometres) can be all a vertical line
+  meets, or the first it meets; in North Vancouver they lie about 1,500 m above the ground. A graded
+  area's smoothed ground was read a few milliseconds a frame without asking how coarse each reading
+  was, after the plane through it had been read from fine tiles: one read while the camera moved
+  took the globe's height, was kept as if as fine as the plane (`readSurface`), and nothing finer
+  replaced it, so the pad, its batters (a brown tower) and everything on it went 1,500 m up for
+  good. Now `flatten.js` `originalHeight` takes the finest tile along the line, readings from tiles
+  coarser than `MAX_GROUND_ERROR` (300 m, `grade.js`) are left out of snapping (`models.js`), the
+  plane, the smoothed ground and the earthworks' ground (`terrain.js` `sample`), a smoothed ground
+  says how coarse the coarsest reading in it was (and is read again, every 5 s at most, while that's
+  coarser than the plane), and one more than 50 m from the plane through the same ground is
+  thrown away and read again.
 - **The P panel** says how it's graded ("follows the ground, smoothed over 10 m: 4-11% down to the
   south-west", the least and most steep of its cells, leaving out the odd tenth at each end; "one
   slope from the ground: 6.8% down to the south-west" for the plane), with the
@@ -133,8 +166,9 @@ flattening, the terrain and the surface so they agree):
   resize label says it in a few words.
 - **Claude (MCP):** `add_flatten_area` takes `grade` (`level`, `follow`, `plane`, `slope`,
   `ridge`, `valley`, `terraces`; `follow` if left out), `fall`, `toward`, `ridge_along`, `steps`,
-  `smoothing` (follow), `max_grade` (follow and plane) and `batter`; numbers are clamped to what
-  the editor offers, unknown words refused.
+  `smoothing` (follow), `max_grade` (follow and plane), `batter`, `raise` (m, −30 to 30) and
+  `finished_height` (m as the editor's "up", instead of raise); numbers are clamped to what the
+  editor offers, unknown words refused.
 - **Tests:** `npm run test:grading-ui` (each grade's heights on a tilted stand-in ground; on a
   hillside that isn't a plane, 3% steepening to 15% and turning, with a hump, a shed and a tree,
   following the ground stays within 0.3 m of the bare ground where the best-fit plane is over 2 m
@@ -143,7 +177,14 @@ flattening, the terrain and the surface so they agree):
   floor), `npm run test:grade-surface` (the smoothed ground in Node: a small smoothing on a large
   area still on a curved hillside, a crest, a dome and a road cut's rims followed as a valley is,
   and a shed, a car, a stand of trees and a 30 m building still left out), with
-  `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`.
+  `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`. Raising and lowering (`test:grading-ui`): the arrow dragged up
+  (0.05 m steps, its label, more fill and less cut), PageUp, Shift+PageDown, Ctrl+PageUp, each
+  undone and redone, the P panel's number, − and +, an exact height that stays put when moved and
+  goes back to a raise where it stood, Back to the ground's height, a raise kept when moved, saved
+  and loaded (and one saved before at the ground's height, saving as before); every shape, a level
+  floor and one keeping what's overhead shifted 1 m whole. And ground read from the coarsest tiles
+  (1,500 m up) while a follow area reads its smoothed ground: it never goes up, and settles when
+  the readings are right again.
 
 ## Flatten areas: walking on them, and keeping what's overhead
 
@@ -163,6 +204,21 @@ flattening, the terrain and the surface so they agree):
   drawn no higher than the lowest ground outside the area within 3 m, nor lower than the edge's
   floor (`terrain.js` `zoneLips`, as `lipHeights` does round a pit), so where the area is dug into
   a hillside the cut face still rises to the ground.
+- **Trees beside an area's edge** (`terrain.js` `edgeLips`). The ground round an area is read from
+  above off Google's mesh, so beside a stand of trees it is the trees' crowns. The ring of nodes
+  drawn just past what an area changes, and the drawn cells' outer corners past that, were at that
+  height: on a treed hillside (a 60 × 40 m follow pad at east −1000, north 4250) they stood round
+  the pad's back edges as brown faces of earth up to the crowns, 15 to 20 m high (the cells from the
+  batter's foot up to them, in the cut colour). Now, round every area that holds its ground in
+  chunks (graded or level): the ring round a graded area is drawn no higher than the bare ground its
+  batters meet there (`chunk.bare`, from `composeGrading`) or the highest it changed within two
+  nodes; any node there (a batter's included) whose ground as read is more than 2 m
+  (`LIP_TALL`) above that is what stands there (`chunk.standing`): a corner is drawn at the ground,
+  and Google's mesh over it isn't hidden (the mask and `covers()` leave it out), so the trees stand,
+  their crowns' sides draped down to the pad's edge as Google made them, and walking bumps into
+  them. (Google's mesh is a shell over the trees with nothing under a crown: cutting a crown off
+  cleanly would leave a hole to the sky, so they're kept.) Small slivers of sky can still show
+  where a crown hangs over a batter's foot.
 - **Drawn over the pad.** The surface is drawn after the ground without writing depth
   (`SURFACE_ORDER`), so anything drawn before it went under it. What's placed was already drawn
   after it (`PLACED_ORDER`); now the walking character (`player.js`), a repair crew, a truck's load
@@ -215,7 +271,9 @@ flattening, the terrain and the surface so they agree):
   the deck; not read again from 5 km away with the overpass gone, read again back over it with what
   was found standing, and again with it back; round a level area kept above a height, the ground
   0.5 and 0.75 m outside its uphill edge is the slope and nothing's hidden there up to its limit, and
-  a tree's crown read at a node just outside it is drawn at the ground), `test:build-mcp`.
+  a tree's crown read at a node just outside it is drawn at the ground; an 8 m tree overhanging a
+  follow area's edge on the hillside: no drawn earth there rises more than 1.5 m across a cell,
+  where 8 m before, and the tree is marked standing), `test:build-mcp`.
 
 ## How it's put together
 

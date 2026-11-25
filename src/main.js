@@ -385,7 +385,7 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 	// Handy for poking around from the browser console.
 	// startDriving( entry ) drives a placed vehicle or machine (what the selection's Drive button
 	// calls); with no entry it does what V does. isDrivable( entry ) says whether it can be driven.
-	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, legend, player, get buildStages() {
+	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, legend, player, panel, get buildStages() {
 
 		return buildStages;
 
