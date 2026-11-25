@@ -323,3 +323,139 @@
 	font-size: 12px;
 	background: var( --accent );
 }
+
+/* How many are selected, on the toolbar over several (sidebar.js). */
+.selection-toolbar .row .count {
+	align-self: center;
+	padding: 0 8px 0 6px;
+	font-size: 12px;
+	font-weight: 600;
+	color: #ffc766;
+	white-space: nowrap;
+}
+
+/* The box dragged out to select what's in it. */
+.select-box {
+	position: fixed;
+	left: 0;
+	top: 0;
+	z-index: 1001;
+	box-sizing: border-box;
+	border: 1.5px dashed #ffb02e;
+	background: rgba( 255, 176, 46, 0.12 );
+	pointer-events: none;
+}
+
+body.box-select canvas {
+	cursor: crosshair;
+}
+
+/* The edit bar (edit-bar.js): Select, how many are selected, Copy, Cut, Paste, Duplicate, Undo and
+   Redo, along the bottom in the middle of the map beside the library. */
+.edit-bar {
+	position: fixed;
+	bottom: 12px;
+	left: 50%;
+	z-index: 1002;
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	padding: 3px;
+	border-radius: 8px;
+	background: var( --panel );
+	box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.35 );
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+}
+
+/* No room along the bottom between the library and the panels on the right: along the top, under
+   the status (edit-bar.js sets how far down). */
+.edit-bar.at-top {
+	bottom: auto;
+}
+
+.edit-bar[hidden] {
+	display: none;
+}
+
+.edit-bar button {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-width: 48px;
+	padding: 5px 6px 4px;
+	border-radius: 6px;
+	background: transparent;
+	font-size: 11px;
+	line-height: 1.2;
+	white-space: nowrap;
+}
+
+.edit-bar button:hover:not( :disabled ),
+.edit-bar button:focus-visible {
+	background: rgba( 255, 255, 255, 0.1 );
+}
+
+.edit-bar button:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.edit-bar button[aria-pressed='true'] {
+	background: rgba( 255, 176, 46, 0.3 );
+	color: #ffd38a;
+}
+
+.edit-bar svg {
+	width: 18px;
+	height: 18px;
+}
+
+.edit-bar .count {
+	min-width: 92px;
+	padding: 0 8px;
+	border-left: 1px solid rgba( 255, 255, 255, 0.12 );
+	border-right: 1px solid rgba( 255, 255, 255, 0.12 );
+	font-size: 12px;
+	text-align: center;
+	color: var( --muted );
+	white-space: nowrap;
+}
+
+.edit-bar .count.some {
+	color: #ffc766;
+	font-weight: 600;
+}
+
+/* The hint over the bottom of the map steps up over the bar. */
+body.edit-bar-shown #hint {
+	bottom: 72px;
+}
+
+/* On a phone the library is a sheet along the bottom: the bar goes to the top, under the status. */
+@media ( max-width: 700px ) {
+
+	.edit-bar,
+	.edit-bar.at-top {
+		top: 64px;
+		bottom: auto;
+		left: 50% !important;
+		transform: translateX( -50% );
+		max-width: calc( 100vw - 16px );
+		overflow-x: auto;
+	}
+
+	.edit-bar button {
+		min-width: 0;
+		padding: 5px 4px 4px;
+		font-size: 10px;
+	}
+
+	.edit-bar .count {
+		min-width: 0;
+		padding: 0 4px;
+	}
+
+}

@@ -329,6 +329,67 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	}
 
+	// --- several selected together --------------------------------------------------------------
+
+	// The items selected together (sidebar.js) as one folder at the top, "N items": what they are,
+	// and what can be done to them all (actions: { label: run }). Things all of the same kind (all
+	// flatten areas, all rows of barriers) also get the kind's numbers and choices, which change
+	// every one of them; there's nothing for each on its own, whose folders fold away. null takes it
+	// away again.
+	let group = null; // { folder, entries }
+	function showGroup( entries, actions = {}, { open = false } = {} ) {
+
+		group?.folder.destroy();
+		group = null;
+		if ( ! entries || entries.length < 2 ) return;
+		const folder = gui.addFolder( `${ entries.length } items` );
+		folder.domElement.classList.add( 'group-folder' );
+		gui.$children.prepend( folder.domElement );
+		group = { folder, entries };
+		folder.add( { what: summarize( entries ) }, 'what' ).name( 'selected' ).disable();
+		const kind = getKind( entries[ 0 ].kind );
+		if ( kind && entries.every( e => e.kind === entries[ 0 ].kind ) ) {
+
+			// The first one's values to start with; a change sets that one value on every one of them.
+			const params = { ...entries[ 0 ].params };
+			for ( const field of kind.fields.filter( f => ! f.get && ! f.patch && ! f.group && f.type !== 'text' && f.type !== 'color' ) ) {
+
+				if ( field.when && ! entries.every( e => field.when( e.params, e ) ) ) continue;
+				const controller = field.options ? folder.add( params, field.key, field.options ) : folder.add( params, field.key );
+				if ( ! field.options ) {
+
+					if ( typeof field.min === 'number' ) controller.min( field.min );
+					if ( typeof field.max === 'number' ) controller.max( field.max );
+					if ( field.step !== undefined ) controller.step( field.step );
+
+				}
+
+				controller.name( typeof field.label === 'function' ? field.key : field.label ?? field.key );
+				controller.onChange( value => {
+
+					for ( const entry of entries ) if ( models.entries.includes( entry ) ) models.setParams( entry, { [ field.key ]: value } );
+
+				} );
+
+			}
+
+		}
+
+		for ( const [ label, run ] of Object.entries( actions ) ) folder.add( { run }, 'run' ).name( label );
+		for ( const f of folders.values() ) f.close();
+		if ( open ) gui.show();
+
+	}
+
+	// "3 Jersey barrier, 2 Flatten area": what's selected, by name, most first.
+	function summarize( entries ) {
+
+		const counts = new Map();
+		for ( const entry of entries ) counts.set( entry.state.name, ( counts.get( entry.state.name ) ?? 0 ) + 1 );
+		return [ ...counts ].sort( ( a, b ) => b[ 1 ] - a[ 1 ] ).map( ( [ name, n ] ) => `${ n } ${ name }` ).join( ', ' );
+
+	}
+
 	// Whether the panel is showing this entry's settings (its folder open), as when it's selected.
 	function shows( entry ) {
 
@@ -338,7 +399,13 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	}
 
 	return {
-		gui, focus, refresh, shows,
+		gui, focus, refresh, shows, showGroup,
+		// The "N items" folder's title, or null (for tests).
+		get group() {
+
+			return group ? group.folder._title : null;
+
+		},
 		// What Remove does: the toolbar's delete, with its Undo toast, once there is a toolbar.
 		set onRemove( fn ) {
 

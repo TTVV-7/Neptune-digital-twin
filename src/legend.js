@@ -112,6 +112,8 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 		const tool = library.querySelector( '.card.tool.active' );
 		if ( tool ) return drawingRows( tool.querySelector( '.name' )?.textContent ?? '' );
 		if ( library.classList.contains( 'placing' ) ) return placingRows( models.entries.find( entry => entry.placing )?.state.name ?? '' );
+		const several = sidebar?.getSelection?.() ?? [];
+		if ( several.length > 1 ) return groupRows( several.length );
 		const selected = sidebar?.getSelected();
 		if ( selected ) return selectedRows( selected );
 		if ( sidebar?.isOpen() ) return libraryRows();
@@ -183,6 +185,27 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 
 	}
 
+	// The keys for copy, paste and the rest: Ctrl, or ⌘ on a Mac.
+	const mod = /Mac|iPhone|iPad/.test( navigator.platform ?? '' ) ? '⌘' : 'Ctrl';
+
+	// Several selected together (sidebar.js).
+	function groupRows( n ) {
+
+		return { title: `Selected: ${ n } items`, rows: [
+			[ [ '~Drag' ], 'One of them: move them all' ],
+			[ [ '~Drag' ], 'The round handle: rotate them about their middle' ],
+			[ [ 'R', '/', 'Shift', '+', 'R' ], 'Turn them 15°' ],
+			[ [ 'Shift', '+', `~${ click }` ], 'Add another, or take one out' ],
+			[ [ mod, '+', 'C' ], 'Copy · X cut · V paste at the pointer' ],
+			[ [ mod, '+', 'D' ], 'Duplicate them' ],
+			[ [ 'Delete' ], 'Delete them' ],
+			[ [ mod, '+', 'Z' ], 'Undo · Shift+Z redo' ],
+			[ [ 'P' ], 'What they are, and changes to them all' ],
+			[ [ 'Esc' ], 'Deselect' ],
+		] };
+
+	}
+
 	function libraryRows() {
 
 		return { title: 'Library', rows: [
@@ -192,6 +215,8 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 			[ [ '~Row' ], 'On a card: draw a line to place many' ],
 			[ [ `~${ click }` ], 'Something placed: select it' ],
 			[ [ '~Drag' ], 'Something placed: move it' ],
+			...mouse ? [ [ [ 'Shift', '+', '~Drag' ], 'On the ground: select a box' ] ] : [ [ [ '~Select' ], 'Then drag: select a box' ] ],
+			[ [ mod, '+', 'A' ], 'Select all · V paste · Z undo' ],
 			...mouse ? [ [ [ '~Right-drag' ], 'Look around' ] ] : [],
 			...zoom,
 			[ [ 'W', 'A', 'S', 'D' ], 'Move' ],
@@ -271,6 +296,8 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
 			[ [ 'P' ], points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : settings ? 'Its settings and exact position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
+			[ [ 'Shift', '+', `~${ click }` ], 'Another: select it too' ],
+			[ [ mod, '+', 'C' ], 'Copy · D duplicate · Z undo' ],
 			// An open section closes first (excavation-section.js).
 			[ [ 'Esc' ], window.twin?.section?.view ? 'Close the section' : 'Deselect' ],
 		] };

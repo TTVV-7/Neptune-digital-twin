@@ -67,7 +67,12 @@ export function toScreen( point, camera, rect, target = {} ) {
 
 }
 
-export function createHandles( { scene, camera, canvas, models } ) {
+// onPress( entry ) and onEnd( entry ) are told when a handle is pressed and let go (or the drag is
+// cancelled), for undo (history.js). An entry with an apply() of its own (several items selected
+// together, turned about their middle: sidebar.js) is applied with that instead of models.apply.
+export function createHandles( { scene, camera, canvas, models, onPress = () => {}, onEnd = () => {} } ) {
+
+	const applyTo = entry => entry.apply ? entry.apply() : models.apply( entry );
 
 	const root = document.createElement( 'div' );
 	root.className = 'handles';
@@ -183,6 +188,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 			applied: 0,
 			press: { x: e.clientX, y: e.clientY },
 		};
+		onPress( target );
 		if ( handle.type === 'depth' ) measureDepthDrag( drag );
 		// A point is moved on a level plane through where it is, rather than the item's base.
 		if ( handle.type === 'point' || handle.type === 'insert' ) drag.base = handle.world.y;
@@ -229,7 +235,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 			if ( heading !== entry.state.heading ) {
 
 				entry.state.heading = heading;
-				models.apply( entry );
+				applyTo( entry );
 
 			}
 
@@ -314,6 +320,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		end();
 		if ( draft ) place( entry, draft );
+		onEnd( entry );
 
 	}
 
@@ -323,6 +330,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		const { entry, kind, start } = drag;
 		end();
+		onEnd( entry );
 		const list = kind.resize.points( start.params );
 		const now = performance.now();
 		if ( handle.type === 'insert' ) {
@@ -374,7 +382,8 @@ export function createHandles( { scene, camera, canvas, models } ) {
 		if ( ! drag || ( e?.pointerId !== undefined && e.pointerId !== drag.pointerId ) ) return;
 		const { entry, start } = drag;
 		end();
-		if ( models.entries.includes( entry ) ) place( entry, start );
+		if ( entry.apply || models.entries.includes( entry ) ) place( entry, start );
+		onEnd( entry );
 
 	}
 
@@ -393,7 +402,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 	function place( entry, { east, north, heading, params } ) {
 
 		Object.assign( entry.state, { east, north, heading } );
-		if ( JSON.stringify( params ) === JSON.stringify( entry.params ) ) models.apply( entry );
+		if ( JSON.stringify( params ) === JSON.stringify( entry.params ) ) applyTo( entry );
 		else models.setParams( entry, params );
 
 	}

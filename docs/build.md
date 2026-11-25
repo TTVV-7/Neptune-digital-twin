@@ -142,6 +142,65 @@ flattening, the terrain and the surface so they agree):
   embankment and cut slope at the batter ratio, the earth moved, saving and loading, a pit's
   floor), with `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`.
 
+## Selecting several, copy and paste
+
+The editor selects more than one thing at a time (`src/sidebar.js`), and copies and pastes them
+(`src/clipboard.js`), with undo and redo for what's done to them (`src/history.js`).
+
+- **Selecting.** A click selects one; **Shift+click** (or Ctrl/Cmd+click) adds another or takes one
+  out. **Shift+drag on the ground** (library open) selects everything whose footprint is in the box
+  or crosses it (a row by its line, not the empty ground in its box); on touch or a trackpad,
+  **Select** on the edit bar turns a plain drag into a box. **Ctrl/Cmd+A** selects everything shown
+  (not what's hidden by hand or by the Show panel, nor what loads for everyone: models from
+  `config.js` and items saved for everyone, which Shift+click can still add). **Esc** selects nothing.
+- **Seen as selected:** each one outlined in amber, one ring round them all with the turn knob,
+  and the toolbar over them saying **N items** with Rotate left/right, Copy, Duplicate, Edit, Hide
+  and Delete. The **edit bar** along the bottom (while the library is open, or several are
+  selected; `src/edit-bar.js`) says how many are selected, with Select, Copy, Cut, Paste, Duplicate,
+  Undo and Redo for touch. It keeps between the library and the Show and Controls panels, or goes
+  to the top (under the status) where there's no room, and across the top on a phone.
+- **Together:** dragging any of them moves them all, keeping where they are from each other, each
+  settling on the ground where it lands (a flatten area with what stands on it moves with it, and
+  they settle on the new ground). The knob, **R** / **Shift+R** and the toolbar turn them all about
+  their middle (the mean of where they stand). **Delete** deletes them all, with one Undo. Hide
+  hides them all. The **P panel** has them as one folder, **N items**: what they are ("2 Shipping
+  container, 1 Flattened area"), the common actions, and, only when they're all the same kind (all
+  flatten areas, all rows), that kind's numbers and choices, which change every one. Rows are moved
+  and turned whole; nothing breaks one apart (a row saved for everyone never could be).
+- **Copy, Cut, Paste, Duplicate:** **Ctrl/Cmd+C** copies what's selected (one or many), **X** cuts
+  it, **V** pastes at the point on the ground under the pointer (from the edit bar, the middle of
+  the view), laid out as copied and facing as they did, each snapped to the ground there; pasting
+  again where the last went puts the next 2 m east and 2 m south of it, so they don't stack.
+  **Ctrl/Cmd+D** duplicates in place, 2 m east and south. Pasted and duplicated things are new
+  items, saved with the layout like anything placed (never shared or from `config.js`), and come
+  out selected.
+- **The clipboard** is kept in localStorage (`world-drive-build.clipboard`, listed in the Privacy
+  Policy's `BUILD_STORAGE`): the items as saved (`toConfig`) with each one's offset from their
+  middle, nothing about the project or account. So copying in one project and pasting in another,
+  another tab, or at another site works. It also goes on the system clipboard as JSON (the copy
+  event, or `navigator.clipboard` from the buttons) where the browser allows it, and Ctrl/Cmd+V
+  takes the system clipboard's when it's newer (copied in another browser).
+- **Build Pro:** a free account (or signed out) can't paste or duplicate Pro items: they're left
+  out, with a toast saying how many ("2 Pro items weren't pasted: they need Build Pro"); the rest
+  are pasted. Pro is judged as picking a card is (`sidebar.isLocked`), by the item, a row's item or
+  a kind's own card.
+- **Keys are left alone** while typing in a field (search, the P panel, a dialog), while text on
+  the page is selected (Ctrl+C copies that), while a dialog is open and while driving.
+- **Undo and redo** (**Ctrl/Cmd+Z**, **Shift+Ctrl/Cmd+Z** or **Ctrl+Y**, the edit bar, and the
+  Undo toasts after Delete and Cut) cover moving (by dragging), turning (keys, knob, toolbar; R
+  pressed again and again is one step), resizing with a handle, deleting, cutting, pasting and
+  duplicating, each one step however many things it touched; up to 100 steps. Something deleted and
+  put back is loaded again as a new entry, and steps before it follow it (`history.replace`).
+  Hiding keeps its own Undo toast, and changes typed in the P panel, breaking a row apart and
+  digging aren't steps.
+- Saving, autosave, share links and the MCP server are unchanged: what's pasted or moved is saved
+  as any placed item is.
+- **Tests:** `npm run test:multiselect-ui` (Shift+click and box selecting, a row by its line,
+  Ctrl+A leaving hidden things out; moving several keeps their offsets, turning keeps their
+  distances from the middle, each one step to undo and redo; Delete and one Undo; copy and paste at
+  the pointer, again beside it; pasting in another tab from localStorage; duplicate and cut; a free
+  account's paste leaving Pro items out; keys in a field and with text selected left alone).
+
 ## How it's put together
 
 - **Pages:** `npm run build:drive` builds the dashboard into `dist-drive/build/` and the app a

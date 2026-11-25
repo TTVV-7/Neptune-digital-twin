@@ -270,6 +270,7 @@ export const BUILD_STORAGE = [
 	[ 'world-drive-build.site', 'the site the editor last opened (its name and where it is), so it opens there again' ],
 	[ 'neptune-twin.cloud.<site>', 'which of your saved projects this browser has open at that site, and which account it\'s saved to' ],
 	[ 'neptune-twin.layout.<site>', 'your layout at that site as you work, so nothing is lost if the page closes' ],
+	[ 'world-drive-build.clipboard', 'what you last copied or cut in the editor (the items and how they were laid out), so you can paste it in another project or tab' ],
 	[ 'neptune-twin.layers', 'what the Show panel hides, and whether it\'s open' ],
 	[ 'neptune-twin.legend', 'whether the Controls panel is open' ],
 	[ 'neptune-twin.rows', 'the spacing you last used for each kind of row' ],

@@ -1,7 +1,6 @@
 import { Vector3 } from 'three';
 import { getKind, resizeShape } from './kinds.js';
 import { toScreen } from './handles.js';
-import { toast as showToast } from './placement.js';
 
 // The selection toolbar (sidebar.js): a row of buttons over the selected item that follows it on
 // screen, to turn it, type in an area's size, drive it, open its settings, hide it or delete it.
@@ -30,13 +29,21 @@ const ICONS = {
 	edit: icon( '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>' ),
 	hide: icon( '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 20 20 4"/>' ),
 	remove: icon( '<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/><path d="M10 11v5M14 11v5"/>' ),
+	copy: icon( '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>' ),
+	duplicate: icon( '<rect x="4" y="4" width="11" height="11" rx="2"/><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M14.5 12.5v5M12 15h5"/>' ),
 };
 
 const _anchor = new Vector3();
 
 // rotate( degrees ) turns the selected item, select( entry ) selects one, drive( entry ) gets in,
-// canDrive( entry ) says whether it's a vehicle or a machine, hide( entry ) hides it.
-export function createToolbar( { camera, canvas, models, panel, select, rotate, drive, canDrive, hide } ) {
+// canDrive( entry ) says whether it's a vehicle or a machine, hide( entry ) hides it, and
+// deleteItems( entries ) deletes them (with Undo), copy() and duplicate() copy or duplicate what's
+// selected, and edit( entry ) opens its settings in the P panel.
+//
+// Several things selected together (sidebar.js) show as one: an entry with `group: true` and its
+// `members`, which the toolbar sits over with how many there are and what can be done to them all:
+// rotate, copy, duplicate, edit (the P panel's "N items"), hide and delete.
+export function createToolbar( { camera, canvas, models, panel, select, rotate, drive, canDrive, hide, deleteItems, copy, duplicate, edit } ) {
 
 	const root = document.createElement( 'div' );
 	root.className = 'selection-toolbar';
@@ -47,6 +54,11 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 	const row = document.createElement( 'div' );
 	row.className = 'row';
 	root.append( row );
+	// How many are selected, when it's more than one.
+	const count = document.createElement( 'span' );
+	count.className = 'count';
+	count.hidden = true;
+	row.append( count );
 	// A long press on touch would otherwise bring up the browser's menu.
 	root.addEventListener( 'contextmenu', e => e.preventDefault() );
 	// Wheel over the toolbar still reaches the scene.
@@ -73,6 +85,8 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		right: button( 'right', 'Rotate right', 'Rotate right 15° (R). Hold, or Shift+click, for 90°' ),
 		size: button( 'size', 'Size', 'Type in the size' ),
 		drive: button( 'drive', 'Drive', 'Get in and drive it (V)' ),
+		copy: button( 'copy', 'Copy', 'Copy them (Ctrl+C), to paste here or in another project (Ctrl+V)' ),
+		duplicate: button( 'duplicate', 'Duplicate', 'Duplicate them beside themselves (Ctrl+D)' ),
 		edit: button( 'edit', 'Edit', 'All its settings (P)' ),
 		hide: button( 'hide', 'Hide', 'Hide it: it stays in the plan, and the Show panel (bottom right) shows it again' ),
 		remove: button( 'remove', 'Delete', 'Delete it (Delete key). You can undo it for a few seconds' ),
@@ -124,23 +138,42 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		if ( ! entry ) return;
 		// Unfolded too, if it was folded away by its title.
 		panel.gui.open();
-		panel.focus( entry, true );
+		edit( entry );
+
+	} );
+	buttons.copy.addEventListener( 'click', () => {
+
+		done( buttons.copy );
+		copy();
+
+	} );
+	buttons.duplicate.addEventListener( 'click', () => {
+
+		done( buttons.duplicate );
+		duplicate();
 
 	} );
 	buttons.hide.addEventListener( 'click', () => {
 
 		done( buttons.hide );
-		if ( ! entry ) return;
-		const target = entry;
-		hide( target );
+		if ( entry ) hideTarget( entry );
+
+	} );
+
+	// Hide an entry, or all of several selected together, with an Undo toast that shows them again.
+	function hideTarget( target ) {
+
+		const members = target.group ? [ ...target.members ] : [ target ];
+		for ( const member of members ) hide( member );
 		offerUndo( `Hid ${ target.state.name }`, () => {
 
-			models.setHidden( target, false );
-			if ( ! models.isHidden( target ) ) select( target );
+			for ( const member of members ) if ( models.entries.includes( member ) ) models.setHidden( member, false );
+			const shown = members.filter( member => models.entries.includes( member ) && ! models.isHidden( member ) );
+			if ( shown.length ) select( shown.length === 1 ? shown[ 0 ] : shown );
 
 		} );
 
-	} );
+	}
 	buttons.remove.addEventListener( 'click', () => {
 
 		done( buttons.remove );
@@ -318,27 +351,11 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 	let undoToast = null;
 
-	// Remove an entry, with an Undo toast that puts it back as it was.
+	// Remove an entry, or the items selected together, with an Undo toast that puts them back
+	// (deleteItems, in sidebar.js, which makes it a step to undo with Ctrl+Z as well).
 	function remove( target ) {
 
-		// sharedId too: without it the item put back would no longer be the record saved for everyone,
-		// so its panel couldn't update or remove that record.
-		const config = { ...models.toConfig( target ), inConfig: target.inConfig, sharedId: target.sharedId };
-		const name = target.state.name;
-		models.remove( target );
-		offerUndo( `Deleted ${ name }`, async () => {
-
-			try {
-
-				select( await models.load( config ) );
-
-			} catch ( err ) {
-
-				showToast( `Could not put ${ name } back: ${ err.message }` );
-
-			}
-
-		} );
+		deleteItems( target.group ? [ ...target.members ] : [ target ] );
 
 	}
 
@@ -415,11 +432,16 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		if ( ! visible ) return;
 
 		const kind = getKind( entry.kind );
+		const group = !! entry.group;
+		setHidden( count, ! group );
+		if ( group && count.textContent !== entry.state.name ) count.textContent = entry.state.name;
 		setHidden( buttons.left, resizeShape( kind, entry.params ) === 'circle' );
 		setHidden( buttons.right, resizeShape( kind, entry.params ) === 'circle' );
-		setHidden( buttons.size, sizeFields( entry ).length === 0 );
-		setHidden( buttons.drive, ! canDrive( entry ) );
-		for ( const { element, shown } of extras ) setHidden( element, ! shown( entry ) );
+		setHidden( buttons.size, group || sizeFields( entry ).length === 0 );
+		setHidden( buttons.drive, group || ! canDrive( entry ) );
+		setHidden( buttons.copy, ! group );
+		setHidden( buttons.duplicate, ! group );
+		for ( const { element, shown } of extras ) setHidden( element, group || ! shown( entry ) );
 		if ( ! editor.hidden && entry.params !== editing?.params ) fillEditor( false );
 
 		// Measured again only when it changes size (other buttons, the size editor).
@@ -460,6 +482,7 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 	return {
 		update,
 		remove,
+		hideTarget,
 		addButton,
 		// The text of the buttons added with addButton() that show for an entry.
 		labels: target => extras.filter( ( { shown } ) => shown( target ) ).map( ( { element } ) => element.textContent ),

@@ -24,6 +24,12 @@ import { availableSets, memberPlacement } from './sets.js';
 import { getKind } from './kinds.js';
 import { createHandles, toScreen } from './handles.js';
 import { createToolbar } from './toolbar.js';
+import { createHistory } from './history.js';
+import { createEditBar } from './edit-bar.js';
+import { clipboardOf, clipboardText, libraryIdsOf, middleOf, parseClipboard, pastedConfig, readStoredClipboard, storeClipboard } from './clipboard.js';
+import { resolveItem } from './layout.js';
+import { toast } from './placement.js';
+import { BUILD_APP } from './product.js';
 
 const ROTATE_STEP = 15;
 // The wheel turns what's being placed or moved by ROTATE_STEP per notch of a mouse wheel; a
@@ -42,6 +48,17 @@ const LINE_DRAG = 24;
 // The pointer this close to the first point (pixels; a finger: twice that) is on it: a click there
 // closes the line into a loop.
 const CLOSE_RADIUS = 12;
+// Several selected together: their outlines (one box each), and at most this many of them.
+const GROUP_COLOR = 0xffb02e;
+const MAX_OUTLINES = 300;
+// Duplicating puts the copies this far east and south (metres), and pasting again where the last
+// paste went steps each one on as far again, so they don't land exactly on top of each other.
+const PASTE_STEP = 2;
+// Ctrl/Cmd+V waits this long (ms) for the browser's paste event, which brings what's on the system
+// clipboard, before pasting what this browser keeps.
+const PASTE_WAIT = 60;
+// Why a Pro item copied by someone with Pro isn't pasted for someone without.
+const BUILD_PRO_SAYING = BUILD_APP ? 'they need Build Pro' : 'they\'re in the Pro equipment pack';
 // A phone: the library is a sheet over the bottom of the screen there (style.css).
 const PHONE = window.matchMedia( '( max-width: 700px )' );
 // The padlock on a locked premium item's Pro badge.
@@ -68,6 +85,15 @@ const _box = new Box3();
 //
 // Each card can also have a Row button (setRowMaker, from rows.js), which places a row of the item
 // along a line drawn on the ground: startLine() draws the line, clicking point after point.
+//
+// Several things can be selected together: Shift+click (or Ctrl/Cmd+click) adds or takes out one,
+// Shift+drag on the ground (or a drag with the edit bar's Select on) selects everything in the box,
+// Ctrl/Cmd+A everything shown, Esc nothing. They're outlined, moved together by dragging any of
+// them, turned together about their middle (the ring's knob, R, the toolbar), hidden and deleted
+// together; the P panel has them as "N items". Copy, Cut, Paste and Duplicate (Ctrl/Cmd+C, X, V,
+// D, and the edit bar's buttons) work on what's selected, through clipboard.js, and moving,
+// turning, resizing, deleting, cutting, pasting and duplicating are steps to undo and redo
+// (Ctrl/Cmd+Z, Shift+Z or Ctrl+Y; history.js).
 export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, isDriving, onError } ) {
 
 	const root = document.getElementById( 'library' );
@@ -83,6 +109,23 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let open = false;
 	let placing = null; // { item, entry, heading, cancelled }
 	let selected = null;
+	// Everything selected: [ selected ] or [], or several (selected is then the one picked last).
+	let selection = [];
+	// Several selected: one stand-in for them all, for the handles and the toolbar (see makeGroup).
+	let group = null;
+	const outlines = [];
+	// A box being dragged out to select what's in it: { start: { x, y }, end, add, element, pointerId }.
+	let boxing = null;
+	// The edit bar's Select: a drag on the ground selects a box, without Shift.
+	let boxMode = false;
+	// Where the last paste went ({ east, north, step }), so pasting there again steps aside.
+	let lastPaste = null;
+	// Ctrl/Cmd+V waiting for the browser's paste event: { timer, at }.
+	let pasting = null;
+	// What Ctrl/Cmd+C or X has just copied, for the copy event to put on the system clipboard.
+	let copying = null;
+	// This tab's clipboard, should the browser not keep it (clipboard.js).
+	let clipboard = null;
 	let dragging = null; // { entry, offset, press, slop, moved }
 	let suppressClick = false;
 	let pointer = null; // last pointer position over the scene, in client pixels
@@ -91,7 +134,31 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let rowMaker = null; // item => starts a row of it (rows.js)
 	let wheel = 0; // trackpad scrolling not yet turned into a turn, in pixels
 
-	const handles = createHandles( { scene, camera, canvas, models } );
+	const history = createHistory( { models, onError } );
+	// What a handle (turn, resize, a row's points) was pressed on, as it was then: a step once let go.
+	let handleStart = null;
+	const handles = createHandles( {
+		scene,
+		camera,
+		canvas,
+		models,
+		onPress: target => {
+
+			const members = target.group ? target.members : [ target ];
+			if ( target.group ) target.base = groupBase( target );
+			handleStart = { target, members, before: members.map( stateOf ) };
+
+		},
+		onEnd: target => {
+
+			if ( handleStart?.target !== target ) return;
+			const { members, before } = handleStart;
+			handleStart = null;
+			if ( target.group ) target.base = null;
+			recordTransform( target.group ? `turn ${ members.length } items` : `change ${ target.state.name }`, members, before );
+
+		},
+	} );
 	const vehicles = new Set( library.filter( item => item.category === 'Vehicles' || item.drive ).map( item => item.id ) );
 	const toolbar = createToolbar( {
 		camera,
@@ -103,9 +170,22 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		drive,
 		canDrive: entry => vehicles.has( entry.library ),
 		hide: entry => models.setHidden( entry, true ),
+		deleteItems: entries => deleteItems( entries ),
+		copy: () => copySelection(),
+		duplicate: () => duplicateSelection(),
+		edit: target => target.group ? showGroupPanel( true ) : panel.focus( target, true ),
 	} );
 	// The P panel's Remove deletes as the toolbar does, with Undo, so a misclick there isn't final.
 	panel.onRemove = entry => toolbar.remove( entry );
+	const editBar = createEditBar( {
+		toggleBox: () => setBoxMode( ! boxMode ),
+		copy: () => copySelection(),
+		cut: () => cutSelection(),
+		paste: () => paste( null ),
+		duplicate: () => duplicateSelection(),
+		undo: () => history.undo(),
+		redo: () => history.redo(),
+	} );
 
 	// --- the list ------------------------------------------------------------------------
 
@@ -370,7 +450,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			cancelDrawing();
 			// What only shows with the library open (an excavation, say) doesn't stay selected out of
 			// sight, with its keys in the Controls panel and Delete removing it unseen.
-			if ( selected && ! isVisible( selected.pivot ) ) select( null );
+			if ( selection.length > 1 ) setSelection( selection.filter( e => isVisible( e.pivot ) ), selected );
+			else if ( selected && ! isVisible( selected.pivot ) ) select( null );
+			setBoxMode( false );
 
 		}
 
@@ -409,7 +491,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	} );
 	models.addEventListener( 'remove', ( { entry } ) => {
 
-		if ( entry === selected ) select( null );
+		if ( selection.length > 1 && selection.includes( entry ) ) setSelection( selection.filter( e => e !== entry ), selected === entry ? null : selected );
+		else if ( entry === selected ) select( null );
 		// The preview was removed some other way, e.g. from the P panel.
 		if ( entry === placing?.entry ) {
 
@@ -425,7 +508,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// Hidden things can't stay selected (the Show panel, the toolbar's Hide, Before).
 	models.addEventListener( 'visibility', () => {
 
-		if ( selected && models.isHidden( selected ) ) select( null );
+		if ( selection.length > 1 && selection.some( e => models.isHidden( e ) ) ) setSelection( selection.filter( e => ! models.isHidden( e ) ), selected );
+		else if ( selected && models.isHidden( selected ) ) select( null );
 
 	} );
 
@@ -685,7 +769,18 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// opens once that click has gone by (and on a phone not at all).
 	function select( entry, touch = false ) {
 
+		// Several: as one selection.
+		if ( Array.isArray( entry ) ) {
+
+			setSelection( entry );
+			return;
+
+		}
+
+		const was = selection;
 		selected = entry;
+		selection = entry ? [ entry ] : [];
+		if ( was.length > 1 ) groupChanged();
 		// A row of items (rows.js) shows as its line with dots on it instead: a box round all of a
 		// long or bent row would be mostly empty ground.
 		highlight.visible = !! entry && getKind( entry.kind )?.resize?.shape !== 'points';
@@ -716,8 +811,554 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	function rotateSelected( degrees, entry = selected ) {
 
 		if ( ! entry ) return;
+		// Several selected: all of them, about their middle.
+		if ( group && selection.includes( entry ) ) {
+
+			const before = selection.map( stateOf );
+			turnGroup( groupBase( group ), degrees );
+			group.state.heading = ( group.state.heading + degrees + 360 ) % 360;
+			if ( ! dragging ) recordTransform( `turn ${ selection.length } items`, selection, before, true );
+			return;
+
+		}
+
+		const before = [ stateOf( entry ) ];
 		entry.state.heading = ( entry.state.heading + degrees + 360 ) % 360;
 		models.apply( entry );
+		// Unless it's following the mouse (the wheel while it's dragged: the move is the step).
+		if ( ! dragging ) recordTransform( `turn ${ entry.state.name }`, [ entry ], before, true );
+
+	}
+
+	// --- several selected together -----------------------------------------------------------
+
+	// Select these (several, or one or none as select() does). `primary`: the one picked last.
+	function setSelection( entries, primary = null ) {
+
+		const list = [ ...new Set( entries ) ].filter( e => e && models.entries.includes( e ) && ! e.placing );
+		if ( list.length <= 1 ) {
+
+			select( list[ 0 ] ?? null );
+			return;
+
+		}
+
+		selection = list;
+		selected = primary && list.includes( primary ) ? primary : list[ list.length - 1 ];
+		highlight.visible = false;
+		groupChanged();
+
+	}
+
+	// Shift+click: add it to what's selected, or take it out.
+	function toggleSelected( entry ) {
+
+		if ( selection.includes( entry ) ) setSelection( selection.filter( e => e !== entry ) );
+		else setSelection( [ ...selection, entry ], entry );
+
+	}
+
+	// What's selected has changed between one or none and several, or which several.
+	function groupChanged() {
+
+		const several = selection.length > 1;
+		const shown = several ? Math.min( selection.length, MAX_OUTLINES ) : 0;
+		for ( let i = 0; i < Math.max( outlines.length, shown ); i ++ ) {
+
+			if ( ! outlines[ i ] ) {
+
+				outlines[ i ] = new BoxHelper( undefined, GROUP_COLOR );
+				// Seen through what stands in front, like the handles.
+				outlines[ i ].material.depthTest = false;
+				outlines[ i ].material.transparent = true;
+				outlines[ i ].renderOrder = 999;
+				outlines[ i ].userData.noCollide = true;
+				outlines[ i ].raycast = () => {};
+				scene.add( outlines[ i ] );
+
+			}
+
+			outlines[ i ].visible = i < shown;
+
+		}
+
+		group = several ? makeGroup( selection ) : null;
+		showGroupPanel( false );
+
+	}
+
+	// The P panel's "N items", with what can be done to them all.
+	function showGroupPanel( show ) {
+
+		if ( ! group ) {
+
+			panel.showGroup( null );
+			return;
+
+		}
+
+		panel.showGroup( selection, {
+			'Rotate left 15°': () => rotateSelected( - ROTATE_STEP ),
+			'Rotate right 15°': () => rotateSelected( ROTATE_STEP ),
+			'Copy': () => copySelection(),
+			'Cut': () => cutSelection(),
+			'Duplicate': () => duplicateSelection(),
+			'Hide them': () => toolbar.hideTarget( group ),
+			'Delete them': () => deleteItems( selection ),
+		}, { open: show } );
+
+	}
+
+	// Several selected, as one for the handles (a ring round them all with a knob to turn them about
+	// their middle) and the toolbar (over them all). Its heading is the knob's: turning the knob
+	// turns every one of them by as much, about the middle of where they stand (base, while turning).
+	function makeGroup( members ) {
+
+		const stand = {
+			group: true,
+			members,
+			kind: null,
+			params: null,
+			footprint: new Box3(),
+			state: { name: `${ members.length } items`, east: 0, north: 0, up: 0, heading: 0, scale: 1 },
+			base: null,
+			apply() {
+
+				if ( stand.base ) turnGroup( stand.base, stand.state.heading - stand.base.heading );
+
+			},
+		};
+		return stand;
+
+	}
+
+	// The middle of the group (the mean of where they stand: turning about it leaves it where it is)
+	// and how far out they reach, and the box round them all in the scene (into `box`).
+	function measureGroup( stand, box ) {
+
+		box.makeEmpty();
+		let east = 0;
+		let north = 0;
+		for ( const member of stand.members ) {
+
+			box.expandByObject( member.pivot );
+			east += member.state.east;
+			north += member.state.north;
+
+		}
+
+		if ( ! stand.base ) {
+
+			stand.state.east = east / stand.members.length;
+			stand.state.north = north / stand.members.length;
+
+		}
+
+		// The furthest corner of the box from the middle, as the corner of a square footprint.
+		const cx = - stand.state.east;
+		const cz = stand.state.north;
+		const reach = Math.max( ...[ [ box.min.x, box.min.z ], [ box.max.x, box.min.z ], [ box.max.x, box.max.z ], [ box.min.x, box.max.z ] ].map( ( [ x, z ] ) => Math.hypot( x - cx, z - cz ) ) );
+		const half = Number.isFinite( reach ) ? reach / Math.SQRT2 : 1;
+		stand.footprint.min.set( - half, 0, - half );
+		stand.footprint.max.set( half, 1, half );
+		stand.state.up = box.min.y;
+
+	}
+
+	// Where each of the group stands now, and the middle and heading they're turned from.
+	function groupBase( stand ) {
+
+		return {
+			heading: stand.state.heading,
+			east: stand.state.east,
+			north: stand.state.north,
+			members: stand.members.map( entry => ( { entry, east: entry.state.east, north: entry.state.north, heading: entry.state.heading } ) ),
+		};
+
+	}
+
+	// Turn the group from where it stood (base) by `degrees` about its middle: each one goes round
+	// the middle, turned by as much itself, and settles on the ground where it lands.
+	function turnGroup( base, degrees ) {
+
+		const rad = degrees * Math.PI / 180;
+		const cos = Math.cos( rad );
+		const sin = Math.sin( rad );
+		for ( const { entry, east, north, heading } of base.members ) {
+
+			if ( ! models.entries.includes( entry ) ) continue;
+			const de = east - base.east;
+			const dn = north - base.north;
+			entry.state.east = round2( base.east + de * cos + dn * sin );
+			entry.state.north = round2( base.north - de * sin + dn * cos );
+			entry.state.heading = round2( ( ( heading + degrees ) % 360 + 360 ) % 360 );
+			models.apply( entry );
+
+		}
+
+	}
+
+	// --- undo and redo -----------------------------------------------------------------------
+
+	// What undo puts back: where it stands, which way it faces, its height and its params (a size).
+	function stateOf( entry ) {
+
+		const { east, north, heading, up, snap } = entry.state;
+		return { east, north, heading, up, snap, params: entry.params ? { ...entry.params } : null };
+
+	}
+
+	function putState( entry, { east, north, heading, up, snap, params } ) {
+
+		Object.assign( entry.state, { east, north, heading, up, snap } );
+		if ( params && JSON.stringify( params ) !== JSON.stringify( entry.params ) ) models.setParams( entry, params );
+		else models.apply( entry );
+
+	}
+
+	// A step for having moved, turned or resized these from `before` to where they are now, if they
+	// changed at all (snapped heights aside: they follow the ground). `merge`: one straight after
+	// another on the same items (R, R, R) is one step.
+	function recordTransform( label, entries, before, merge = false ) {
+
+		const after = entries.map( stateOf );
+		const moved = ( a, b ) => JSON.stringify( { ...a, up: a.snap ? 0 : a.up } ) !== JSON.stringify( { ...b, up: b.snap ? 0 : b.up } );
+		if ( ! after.some( ( state, i ) => moved( state, before[ i ] ) ) ) return;
+		const refs = [ ...entries ];
+		const step = {
+			label,
+			refs,
+			before,
+			after,
+			undo: () => putStates( refs, step.before ),
+			redo: () => putStates( refs, step.after ),
+		};
+		if ( merge ) step.merge = top => {
+
+			if ( top.label !== label || top.refs?.length !== refs.length || ! top.refs.every( ( e, i ) => history.resolve( e ) === refs[ i ] ) ) return false;
+			step.before = top.before;
+			return true;
+
+		};
+		history.push( step );
+
+	}
+
+	function putStates( refs, states ) {
+
+		const entries = [];
+		refs.forEach( ( ref, i ) => {
+
+			const entry = history.resolve( ref );
+			if ( ! entry ) return;
+			putState( entry, states[ i ] );
+			entries.push( entry );
+
+		} );
+		// Selected again, to see what moved back.
+		if ( entries.length && ! entries.every( e => selection.includes( e ) ) ) setSelection( entries );
+
+	}
+
+	// Delete these, as one step with an Undo toast: undoing loads each back as it was.
+	function deleteItems( entries ) {
+
+		const targets = entries.filter( e => models.entries.includes( e ) );
+		if ( targets.length === 0 ) return;
+		const name = targets.length === 1 ? targets[ 0 ].state.name : itemCount( targets.length );
+		const step = removalStep( `delete ${ name }`, targets );
+		history.push( step );
+		step.redo();
+		toolbar.offerUndo( `Deleted ${ name }`, () => history.undo( step ) );
+
+	}
+
+	// A step that takes entries away (redo) and loads them back (undo). Configs are taken as each
+	// goes, so it comes back as it was then; sharedId and inConfig too: without them an item put back
+	// would no longer be the record saved for everyone, so its panel couldn't update or remove it.
+	function removalStep( label, entries ) {
+
+		const refs = [ ...entries ];
+		let configs = [];
+		return {
+			label,
+			refs,
+			async undo() {
+
+				const results = await Promise.allSettled( configs.map( config => models.load( config ) ) );
+				const back = [];
+				results.forEach( ( r, i ) => {
+
+					if ( r.status !== 'fulfilled' ) return;
+					history.replace( refs[ i ], r.value );
+					back.push( r.value );
+
+				} );
+				updateCount();
+				const failed = results.length - back.length;
+				if ( failed ) onError( `${ failed } could not be put back: ${ results.find( r => r.status === 'rejected' ).reason?.message ?? '' }` );
+				if ( back.length ) setSelection( back );
+
+			},
+			redo() {
+
+				const gone = refs.map( ref => history.resolve( ref ) );
+				// Deselected first, not one by one as each goes.
+				if ( gone.some( e => e && selection.includes( e ) ) ) select( null );
+				configs = gone.map( entry => entry ? { ...models.toConfig( entry ), inConfig: entry.inConfig, sharedId: entry.sharedId } : null );
+				for ( const entry of gone ) if ( entry ) models.remove( entry );
+				// Those already gone (deleted some other way) aren't put back.
+				for ( let i = refs.length - 1; i >= 0; i -- ) if ( ! configs[ i ] ) {
+
+					refs.splice( i, 1 );
+					configs.splice( i, 1 );
+
+				}
+
+			},
+		};
+
+	}
+
+	// --- copy and paste ----------------------------------------------------------------------
+
+	function copySelection( { quiet = false } = {} ) {
+
+		if ( selection.length === 0 ) return null;
+		const data = clipboardOf( selection, models );
+		clipboard = data;
+		const kept = storeClipboard( data );
+		copying = clipboardText( data );
+		// The system clipboard too, where the browser lets it (for the keys, the copy event does it).
+		navigator.clipboard?.writeText( copying ).catch( () => {} );
+		if ( ! quiet ) toast( `Copied ${ itemCount( data.items.length ) }${ kept ? '' : ' (this tab only: the browser isn\'t keeping it)' }` );
+		return data;
+
+	}
+
+	function cutSelection() {
+
+		const entries = [ ...selection ];
+		if ( ! copySelection( { quiet: true } ) ) return;
+		const step = removalStep( `cut ${ itemCount( entries.length ) }`, entries );
+		history.push( step );
+		step.redo();
+		toolbar.offerUndo( `Cut ${ itemCount( entries.length ) }`, () => history.undo( step ) );
+
+	}
+
+	// Duplicate: what's selected again, PASTE_STEP metres east and south, not on the clipboard.
+	function duplicateSelection() {
+
+		if ( selection.length === 0 ) return Promise.resolve( [] );
+		const data = clipboardOf( selection, models );
+		const middle = middleOf( selection );
+		return placeCopies( data, { east: middle.east + PASTE_STEP, north: middle.north - PASTE_STEP }, 'duplicate' );
+
+	}
+
+	// The clipboard: what this browser keeps, or the system clipboard's if that's newer (copied in
+	// another browser, say). `text`: what the paste event brought from the system clipboard.
+	function currentClipboard( text = '' ) {
+
+		const stored = readStoredClipboard();
+		const system = text ? parseClipboard( text ) : null;
+		const mine = [ stored, clipboard ].filter( Boolean ).sort( ( a, b ) => b.copiedAt - a.copiedAt )[ 0 ] ?? null;
+		return system && ( ! mine || system.copiedAt > mine.copiedAt ) ? system : mine;
+
+	}
+
+	// Paste at a point on the screen ({ x, y }: the pointer), or with none in the middle of the view.
+	function paste( at, text = '' ) {
+
+		const data = currentClipboard( text );
+		if ( ! data ) {
+
+			toast( 'Nothing to paste: select something and copy it first (Ctrl+C)' );
+			return Promise.resolve( [] );
+
+		}
+
+		const rect = canvas.getBoundingClientRect();
+		const spot = at ?? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+		const point = groundPoint( spot.x, spot.y );
+		let middle;
+		if ( point ) middle = localToEnu( point );
+		else {
+
+			const player = getPlayer();
+			const rad = player.heading * Math.PI / 180;
+			middle = { east: player.east + Math.sin( rad ) * 15, north: player.north + Math.cos( rad ) * 15 };
+
+		}
+
+		// Again where the last paste went: a step further along each time.
+		if ( lastPaste && Math.hypot( middle.east - lastPaste.at.east, middle.north - lastPaste.at.north ) < 0.5 ) {
+
+			lastPaste.step ++;
+			middle = { east: lastPaste.at.east + PASTE_STEP * lastPaste.step, north: lastPaste.at.north - PASTE_STEP * lastPaste.step };
+
+		} else lastPaste = { at: middle, step: 0 };
+
+		return placeCopies( data, middle, 'paste' );
+
+	}
+
+	// Load the clipboard's items round `middle` as new items, as one step, and select them. Pro
+	// items are left out while they're locked (premium.js's gate), saying how many.
+	async function placeCopies( data, middle, verb ) {
+
+		const allowed = [];
+		let locked = 0;
+		for ( const item of data.items ) {
+
+			const ids = libraryIdsOf( item.config );
+			if ( ids.some( id => isLocked( library.find( i => i.id === id ) ?? {} ) ) ) locked ++;
+			else allowed.push( item );
+
+		}
+
+		const pasted = verb === 'paste' ? 'pasted' : 'duplicated';
+		if ( locked ) toast( `${ locked === 1 ? '1 Pro item wasn\'t' : `${ locked } Pro items weren't` } ${ pasted }: ${ BUILD_PRO_SAYING }` );
+		if ( allowed.length === 0 ) return [];
+		cancelPlacing();
+		cancelDrawing();
+		const configs = allowed.map( item => resolveItem( pastedConfig( item, { east: middle.east + item.east, north: middle.north + item.north } ), library ) );
+		const results = await Promise.allSettled( configs.map( config => models.load( config ) ) );
+		const placed = results.filter( r => r.status === 'fulfilled' ).map( r => r.value );
+		const failed = results.length - placed.length;
+		if ( failed ) onError( `${ failed } of ${ results.length } couldn't be ${ pasted }: ${ results.find( r => r.status === 'rejected' ).reason?.message ?? '' }` );
+		if ( placed.length === 0 ) return [];
+		updateCount();
+		setSelection( placed );
+		// Undone, they're taken away; redone, loaded again as they were.
+		const removal = removalStep( '', placed );
+		history.push( {
+			label: `${ verb } ${ itemCount( placed.length ) }`,
+			undo: () => removal.redo(),
+			redo: () => removal.undo(),
+		} );
+		if ( verb === 'paste' && ! locked ) toast( `Pasted ${ itemCount( placed.length ) }` );
+		return placed;
+
+	}
+
+	// --- selecting with a box ------------------------------------------------------------------
+
+	function setBoxMode( on ) {
+
+		boxMode = on;
+		document.body.classList.toggle( 'box-select', on );
+
+	}
+
+	function startBox( e, add ) {
+
+		const element = document.createElement( 'div' );
+		element.className = 'select-box';
+		document.body.append( element );
+		boxing = { start: { x: e.clientX, y: e.clientY }, end: { x: e.clientX, y: e.clientY }, add, element };
+		canvas.setPointerCapture( e.pointerId );
+		drawBox();
+
+	}
+
+	function drawBox() {
+
+		const { start, end, element } = boxing;
+		element.style.transform = `translate( ${ Math.min( start.x, end.x ) }px, ${ Math.min( start.y, end.y ) }px )`;
+		element.style.width = `${ Math.abs( end.x - start.x ) }px`;
+		element.style.height = `${ Math.abs( end.y - start.y ) }px`;
+
+	}
+
+	// Let go: everything whose footprint is in the box or crosses it is selected (added to what was,
+	// with Shift). A box too small to be one is a click on the ground: nothing selected, without Shift.
+	function finishBox( e ) {
+
+		const { start, add, element } = boxing;
+		boxing = null;
+		element.remove();
+		const end = e ? { x: e.clientX, y: e.clientY } : start;
+		const slop = e?.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP;
+		if ( Math.hypot( end.x - start.x, end.y - start.y ) < slop ) {
+
+			if ( ! add ) select( null );
+			return;
+
+		}
+
+		const box = { left: Math.min( start.x, end.x ), right: Math.max( start.x, end.x ), top: Math.min( start.y, end.y ), bottom: Math.max( start.y, end.y ) };
+		const found = selectable().filter( entry => inScreenBox( entry, box ) );
+		setSelection( add ? [ ...selection, ...found ] : found );
+
+	}
+
+	function cancelBox() {
+
+		boxing?.element.remove();
+		boxing = null;
+
+	}
+
+	// What a box or Ctrl/Cmd+A can select: what's shown and placed in this layout, not what loads for
+	// everyone (models from config.js, items saved for everyone), which Shift+click can still pick.
+	function selectable() {
+
+		return models.entries.filter( entry => ! entry.placing && ! entry.inConfig && ! models.isHidden( entry ) && isVisible( entry.pivot ) );
+
+	}
+
+	// Whether an entry's footprint on screen is in a box or crosses it: the rectangle round its box's
+	// corners overlapping it, or for a row of items (rows.js) a point along its line in it, as a
+	// row's box is mostly the ground between.
+	function inScreenBox( entry, box ) {
+
+		const rect = canvas.getBoundingClientRect();
+		const kind = getKind( entry.kind );
+		entry.pivot.updateWorldMatrix( true, false );
+		const line = kind?.resize?.shape === 'points' ? kind.resize.points( entry.params ) : null;
+		const points = [];
+		if ( line ) {
+
+			for ( let i = 0; i < line.length - 1; i ++ ) {
+
+				const [ a, b ] = [ line[ i ], line[ i + 1 ] ];
+				const n = Math.min( 50, Math.max( 1, Math.ceil( Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] ) ) ) );
+				// In its own frame, as rows.js has them: ( east, 0, - north ).
+				for ( let k = 0; k <= n; k ++ ) points.push( new Vector3( a[ 0 ] + ( b[ 0 ] - a[ 0 ] ) * k / n, 0, - ( a[ 1 ] + ( b[ 1 ] - a[ 1 ] ) * k / n ) ) );
+
+			}
+
+		} else {
+
+			const { min, max } = entry.footprint;
+			for ( const x of [ min.x, max.x ] ) for ( const y of [ min.y, max.y ] ) for ( const z of [ min.z, max.z ] ) points.push( new Vector3( x, y, z ) );
+
+		}
+
+		const screen = points.map( p => toScreen( entry.pivot.localToWorld( p ), camera, rect ) ).filter( p => p.visible );
+		if ( screen.length === 0 ) return false;
+		if ( line ) return screen.some( p => p.x >= box.left && p.x <= box.right && p.y >= box.top && p.y <= box.bottom );
+		const xs = screen.map( p => p.x );
+		const ys = screen.map( p => p.y );
+		return Math.min( ...xs ) <= box.right && Math.max( ...xs ) >= box.left && Math.min( ...ys ) <= box.bottom && Math.max( ...ys ) >= box.top;
+
+	}
+
+	// Whether this browser keeps a clipboard (read again at most once a second: it's JSON).
+	let stored = { at: - Infinity, has: false };
+	function hasStoredClipboard() {
+
+		const now = performance.now();
+		if ( now - stored.at > 1000 ) stored = { at: now, has: !! readStoredClipboard() };
+		return stored.has;
+
+	}
+
+	function itemCount( n ) {
+
+		return n === 1 ? '1 item' : `${ n } items`;
 
 	}
 
@@ -759,7 +1400,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// arrives as a pointermove, not a pointerup, so presses end whenever it is no longer down.
 	function endPress( e ) {
 
-		dragging = null;
+		finishDrag();
+		if ( boxing ) finishBox( e );
 		if ( drawing?.start ) finishDrawing( e );
 		else if ( drawing?.press ) releaseLine( e );
 
@@ -768,7 +1410,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	canvas.addEventListener( 'pointermove', e => {
 
 		pointer = { x: e.clientX, y: e.clientY };
-		if ( ( dragging || drawing?.start || drawing?.press ) && ( e.buttons & 1 ) === 0 ) endPress( e );
+		if ( ( dragging || boxing || drawing?.start || drawing?.press ) && ( e.buttons & 1 ) === 0 ) endPress( e );
+		if ( boxing ) {
+
+			boxing.end = { x: e.clientX, y: e.clientY };
+			drawBox();
+
+		}
+
 		if ( drawing?.start ) updateDrawing();
 		if ( drawing?.tool.mode === 'line' ) moveLine( e );
 		if ( placing ) followPointer();
@@ -777,10 +1426,25 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( dragging && ! dragging.moved && Math.hypot( e.clientX - dragging.press.x, e.clientY - dragging.press.y ) < dragging.slop ) return;
 		if ( dragging ) {
 
-			const point = groundPoint( e.clientX, e.clientY, dragging.entry.pivot );
+			const { entry, members } = dragging;
+			const point = groundPoint( e.clientX, e.clientY, members.map( m => m.pivot ) );
 			if ( point ) {
 
-				models.moveTo( dragging.entry, point.add( dragging.offset ) );
+				// Several: each moves as far as the one under the pointer, keeping where they are from
+				// each other, and settles on the ground where it lands.
+				const was = { east: entry.state.east, north: entry.state.north };
+				models.moveTo( entry, point.add( dragging.offset ) );
+				const de = entry.state.east - was.east;
+				const dn = entry.state.north - was.north;
+				for ( const member of members ) {
+
+					if ( member === entry || ! models.entries.includes( member ) ) continue;
+					member.state.east = round2( member.state.east + de );
+					member.state.north = round2( member.state.north + dn );
+					models.apply( member );
+
+				}
+
 				dragging.moved = true;
 
 			}
@@ -835,20 +1499,44 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		}
 
-		dragging = null;
+		finishDrag();
 		const hit = pick( e.clientX, e.clientY );
+		// Shift (or Ctrl/Cmd) and a click on something: added to what's selected, or taken out.
+		const adding = e.shiftKey || e.ctrlKey || e.metaKey;
+		if ( hit && adding ) {
+
+			toggleSelected( hit.entry );
+			suppressClick = true;
+			return;
+
+		}
+
 		if ( hit ) {
 
-			if ( hit.entry !== selected ) select( hit.entry, ! mouse );
-			const ground = groundPoint( e.clientX, e.clientY, hit.entry.pivot ) ?? hit.point;
+			// One of several selected: they all move together.
+			const together = selection.length > 1 && selection.includes( hit.entry );
+			if ( ! together && hit.entry !== selected ) select( hit.entry, ! mouse );
+			const members = together ? [ ...selection ] : [ hit.entry ];
+			const ground = groundPoint( e.clientX, e.clientY, members.map( m => m.pivot ) ) ?? hit.point;
 			dragging = {
 				entry: hit.entry,
+				members,
+				before: members.map( stateOf ),
 				offset: _offset.copy( hit.entry.pivot.position ).sub( ground ).setY( 0 ).clone(),
 				press: { x: e.clientX, y: e.clientY },
 				slop: e.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP,
 				moved: false,
 			};
 			canvas.setPointerCapture( e.pointerId );
+			suppressClick = true;
+			return;
+
+		}
+
+		// On the ground with Shift, or with the edit bar's Select on: a box to select what's in it.
+		if ( boxMode || ( open && adding ) ) {
+
+			startBox( e, adding );
 			suppressClick = true;
 			return;
 
@@ -873,7 +1561,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// dragging, so the item doesn't later jump to wherever the next touch lands.
 	canvas.addEventListener( 'pointercancel', () => {
 
-		dragging = null;
+		finishDrag();
+		cancelBox();
 		if ( drawing?.start ) cancelDrawing();
 		// A press that turned out to be the browser's (a pinch, say) isn't a point.
 		else if ( drawing?.press ) drawing.press = null;
@@ -881,9 +1570,20 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	} );
 	canvas.addEventListener( 'lostpointercapture', () => {
 
-		dragging = null;
+		finishDrag();
+		cancelBox();
 
 	} );
+
+	// Let go of what was being moved: a step to undo, if it moved.
+	function finishDrag() {
+
+		if ( ! dragging ) return;
+		const { members, before, moved } = dragging;
+		dragging = null;
+		if ( moved ) recordTransform( members.length === 1 ? `move ${ members[ 0 ].state.name }` : `move ${ members.length } items`, members, before );
+
+	}
 
 	// While editing, a click selects or places instead of capturing the mouse.
 	controls.canLockPointer = () => {
@@ -945,8 +1645,10 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		else if ( e.code === 'Escape' ) {
 
 			if ( handles.busy ) handles.cancel();
+			else if ( boxing ) cancelBox();
 			else if ( drawing ) cancelDrawing();
 			else if ( placing ) cancelPlacing();
+			else if ( selection.length === 0 && boxMode ) setBoxMode( false );
 			else select( null );
 
 		} else if ( drawing?.tool.mode === 'line' && ( e.code === 'Enter' || e.code === 'NumpadEnter' ) ) {
@@ -968,11 +1670,115 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		} else if ( ( e.code === 'Delete' || e.code === 'Backspace' ) && selected && ! placing && ! handles.busy ) {
 
 			e.preventDefault();
-			toolbar.remove( selected );
+			toolbar.remove( group ?? selected );
 
 		}
 
 	}, true );
+
+	// Ctrl/Cmd with A, C, X, V, D, Z and Y: select all, copy, cut, paste, duplicate, undo and redo.
+	// Not while typing (a field's own copy and paste, undo...), nor while text on the page is
+	// selected (copying that), nor driving.
+	window.addEventListener( 'keydown', e => {
+
+		if ( ! ( e.ctrlKey || e.metaKey ) || e.altKey || isTyping( e ) || isDriving() || dialogOpen() ) return;
+		const textSelected = !! window.getSelection?.()?.toString();
+		const busy = handles.busy || !! dragging || !! boxing;
+		switch ( e.code ) {
+
+			case 'KeyA':
+				// Only while building, where there's nothing else to select.
+				if ( ! open && selection.length === 0 ) return;
+				e.preventDefault();
+				cancelPlacing();
+				cancelDrawing();
+				setSelection( selectable() );
+				break;
+			case 'KeyC':
+				if ( textSelected || selection.length === 0 ) return;
+				// The browser's copy event follows, and puts it on the system clipboard (see below).
+				copySelection();
+				break;
+			case 'KeyX':
+				if ( textSelected || selection.length === 0 || busy ) return;
+				cutSelection();
+				break;
+			case 'KeyV':
+				if ( busy ) return;
+				// The browser's paste event brings the system clipboard, if it will; else this browser's.
+				startPaste();
+				break;
+			case 'KeyD':
+				if ( selection.length === 0 || busy ) return;
+				e.preventDefault();
+				duplicateSelection();
+				break;
+			case 'KeyZ':
+				if ( busy ) return;
+				e.preventDefault();
+				if ( e.shiftKey ) history.redo();
+				else history.undo();
+				break;
+			case 'KeyY':
+				if ( busy || e.metaKey ) return;
+				e.preventDefault();
+				history.redo();
+				break;
+
+		}
+
+	}, true );
+
+	// A modal dialog (a Pro dialog, a project's) has the keys.
+	function dialogOpen() {
+
+		return !! document.querySelector( 'dialog[open]' );
+
+	}
+
+	function startPaste() {
+
+		clearTimeout( pasting?.timer );
+		const at = pointer ? { ...pointer } : null;
+		pasting = { at, timer: setTimeout( () => {
+
+			pasting = null;
+			paste( at );
+
+		}, PASTE_WAIT ) };
+
+	}
+
+	document.addEventListener( 'copy', e => {
+
+		if ( ! copying ) return;
+		const text = copying;
+		copying = null;
+		if ( isTyping( e ) || window.getSelection?.()?.toString() ) return;
+		e.clipboardData?.setData( 'text/plain', text );
+		e.preventDefault();
+
+	} );
+	document.addEventListener( 'cut', e => {
+
+		if ( ! copying ) return;
+		const text = copying;
+		copying = null;
+		if ( isTyping( e ) || window.getSelection?.()?.toString() ) return;
+		e.clipboardData?.setData( 'text/plain', text );
+		e.preventDefault();
+
+	} );
+	document.addEventListener( 'paste', e => {
+
+		if ( ! pasting || isTyping( e ) ) return;
+		clearTimeout( pasting.timer );
+		const { at } = pasting;
+		pasting = null;
+		e.preventDefault();
+		paste( at, e.clipboardData?.getData( 'text/plain' ) ?? '' );
+
+	} );
 
 	// --- tools: drawing areas and picking points -------------------------------------------
 
@@ -1336,7 +2142,12 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	return {
 		update() {
 
-			if ( selected ) {
+			if ( group ) {
+
+				measureGroup( group, _box );
+				selection.slice( 0, MAX_OUTLINES ).forEach( ( entry, i ) => outlines[ i ].setFromObject( entry.pivot ) );
+
+			} else if ( selected ) {
 
 				_box.setFromObject( selected.pivot );
 				highlight.setFromObject( selected.pivot );
@@ -1345,17 +2156,45 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 			// Handles and the toolbar are for the pointer: not while it's captured to look around,
 			// or for something hidden (an excavation once the library closes).
-			const shown = selected && ! controls.locked && ! isDriving() && isVisible( selected.pivot ) ? selected : null;
+			const target = group ?? selected;
+			const seen = group ? selection.some( e => isVisible( e.pivot ) ) : selected && isVisible( selected.pivot );
+			const shown = target && ! controls.locked && ! isDriving() && seen ? target : null;
 			handles.update( shown, _box );
 			// Out of the way while the item is moved or a handle dragged.
 			toolbar.update( dragging?.moved || handles.busy ? null : shown, _box, handles.onScreen() );
 			if ( placing?.entry && placing.commitWhenLoaded ) commitPlacing( false );
+			editBar.update( {
+				shown: ( open || selection.length > 1 ) && ! isDriving(),
+				boxing: boxMode,
+				selected: selection.length,
+				canPaste: !! clipboard || hasStoredClipboard(),
+				undo: history.undoLabel,
+				redo: history.redoLabel,
+			} );
 
 		},
 		isOpen: () => open,
-		getSelected: () => selected,
+		// The one selected; null with none, or with several (getSelection has those).
+		getSelected: () => selection.length > 1 ? null : selected,
+		getSelection: () => [ ...selection ],
+		setSelection: ( entries, primary ) => setSelection( entries, primary ),
 		deselect: () => select( null ),
 		select: entry => select( entry ),
+		copy: () => copySelection(),
+		cut: () => cutSelection(),
+		// Paste at a point on the screen ({ x, y }), or the middle of the view; resolves to what was placed.
+		paste: at => paste( at ?? null ),
+		duplicate: () => duplicateSelection(),
+		deleteSelected: () => deleteItems( selection ),
+		rotateSelected: degrees => rotateSelected( degrees ),
+		setBoxMode: on => setBoxMode( on ),
+		get boxMode() {
+
+			return boxMode;
+
+		},
+		history,
+		editBar,
 		addTool,
 		setGate,
 		setRowMaker,
@@ -1372,6 +2211,12 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		handles,
 		toolbar,
 	};
+
+}
+
+function round2( v ) {
+
+	return Math.round( v * 100 ) / 100;
 
 }
 
