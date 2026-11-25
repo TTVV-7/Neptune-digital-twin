@@ -837,7 +837,7 @@ ${ css }	</style>
 </head>
 <body>
 <header class="top">
-	<a class="brand" href="/">World <b>Drive</b></a>
+	<a class="brand" href="/"><img src="/icons/mark-64.png" width="32" height="32" alt="" />World <b>Drive</b></a>
 	<a class="play" href="/">Play free</a>
 </header>
 <main>
