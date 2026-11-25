@@ -12,6 +12,7 @@ const UNITS = { metres: 1, centimetres: 0.01, millimetres: 0.001, feet: 0.3048, 
 export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	const gui = new GUI( { title: 'Model placement  (P)' } );
+	let removeEntry = entry => models.remove( entry );
 	gui.hide();
 
 	const empty = gui.add( { hint: 'Drop a .glb file on the page' }, 'hint' ).name( 'No models yet' ).disable();
@@ -89,7 +90,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			},
 			remove() {
 
-				models.remove( entry );
+				removeEntry( entry );
 
 			},
 			async saveForEveryone() {
@@ -336,7 +337,15 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	}
 
-	return { gui, focus, refresh, shows };
+	return {
+		gui, focus, refresh, shows,
+		// What Remove does: the toolbar's delete, with its Undo toast, once there is a toolbar.
+		set onRemove( fn ) {
+
+			removeEntry = fn;
+
+		},
+	};
 
 }
 

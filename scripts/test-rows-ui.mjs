@@ -843,6 +843,80 @@ test( 'on a phone: Row without hovering, the sheet out of the way, taps and Done
 
 } );
 
+test( 'placing: a click that slips stays put; Esc puts a knob turn back; Remove has Undo; shared rows stay whole', async () => {
+
+	const barrier = { name: 'Concrete jersey barrier', library: 'jersey-barrier', procedural: 'jersey-barrier', heading: 0, up: null };
+	await page.evaluate( async config => window.twin.models.load( { ...config, east: 0, north: - 230 } ), barrier );
+	const at = () => page.evaluate( () => ( ( { east, north, heading } ) => ( { east, north, heading } ) )( window.twin.models.entries.find( e => e.library === 'jersey-barrier' ).state ) );
+
+	// From about 220 m away, a press that drifts 2 px before letting go selects without moving it.
+	await pose( 0, 0, 30, 180, - 8 );
+	const s = await screenOf( 0, - 230, 0.4 );
+	await page.mouse.move( s.x, s.y );
+	await page.mouse.down();
+	await page.mouse.move( s.x + 2, s.y + 1, { steps: 2 } );
+	await page.mouse.up();
+	assert.ok( await page.evaluate( () => window.twin.sidebar.getSelected()?.library === 'jersey-barrier' ) );
+	assert.deepEqual( await at(), { east: 0, north: - 230, heading: 0 } );
+
+	// Turned with the knob, then Esc before letting go: drawn and stored at the old heading.
+	await page.keyboard.press( 'KeyL' );
+	await pose( 0, - 230, 25, 0, - 89 );
+	await frames( 4 );
+	const knob = ( await page.evaluate( () => window.twin.sidebar.handles.positions() ) ).find( h => h.type === 'turn' );
+	assert.ok( knob, 'a turn knob' );
+	const middle = await screenOf( 0, - 230 );
+	await page.mouse.move( knob.screen.x, knob.screen.y );
+	await page.mouse.down();
+	const r = Math.hypot( knob.screen.x - middle.x, knob.screen.y - middle.y );
+	const a = Math.atan2( knob.screen.y - middle.y, knob.screen.x - middle.x ) + 2;
+	await page.mouse.move( middle.x + Math.cos( a ) * r, middle.y + Math.sin( a ) * r, { steps: 6 } );
+	assert.ok( await page.evaluate( () => window.twin.models.entries.find( e => e.library === 'jersey-barrier' ).state.heading !== 0 ), 'turned while dragging' );
+	await page.keyboard.press( 'Escape' );
+	await page.mouse.up();
+	const turned = await page.evaluate( () => {
+
+		const entry = window.twin.models.entries.find( e => e.library === 'jersey-barrier' );
+		const yaw = entry.pivot.rotation.y;
+		window.twin.models.apply( entry );
+		return { heading: entry.state.heading, drawn: yaw, stored: entry.pivot.rotation.y };
+
+	} );
+	assert.equal( turned.heading, 0 );
+	assert.ok( Math.abs( turned.drawn - turned.stored ) < 1e-6, JSON.stringify( turned ) );
+	await page.keyboard.press( 'KeyL' );
+
+	// The P panel's Remove offers Undo, as Delete does.
+	await page.evaluate( () => {
+
+		const entry = window.twin.models.entries.find( e => e.library === 'jersey-barrier' );
+		window.twin.sidebar.select( entry );
+		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => f.querySelector( '.lil-title' )?.textContent === entry.state.name );
+		[ ...folder.querySelectorAll( '.lil-controller.lil-function' ) ].find( c => c.querySelector( '.lil-name' ).textContent === 'Remove' ).querySelector( 'button' ).click();
+
+	} );
+	assert.equal( await page.evaluate( () => window.twin.models.entries.some( e => e.library === 'jersey-barrier' ) ), false );
+	await page.locator( '.undo-toast button' ).click();
+	await page.waitForFunction( () => window.twin.models.entries.some( e => e.library === 'jersey-barrier' ), null, { timeout: 20000 } );
+	await page.evaluate( () => window.twin.models.remove( window.twin.models.entries.find( e => e.library === 'jersey-barrier' ) ) );
+
+	// A row saved for everyone can't be broken apart (it would come back beside its copies), and
+	// Delete then Undo keeps it the record saved for everyone.
+	await placeRow( 'jersey-barrier', [ [ - 10, 0 ], [ 10, 0 ] ], {}, { north: 30 } );
+	await page.evaluate( () => Object.assign( window.twin.models.entries.find( e => e.kind === 'row' ), { inConfig: true, sharedId: 'shared-1' } ) );
+	await page.evaluate( () => window.twin.sidebar.select( window.twin.models.entries.find( e => e.kind === 'row' ) ) );
+	await pose( 0, - 30, 80, 0, - 60 );
+	assert.equal( await page.locator( '.selection-toolbar .split' ).isVisible(), false );
+	await page.evaluate( () => window.twin.rows.breakApart( window.twin.models.entries.find( e => e.kind === 'row' ) ) );
+	assert.equal( await page.evaluate( () => window.twin.models.entries.filter( e => e.kind === 'row' ).length ), 1 );
+	assert.equal( await page.evaluate( () => window.twin.models.entries.some( e => e.library === 'jersey-barrier' ) ), false );
+	await page.keyboard.press( 'Delete' );
+	await page.locator( '.undo-toast button' ).click();
+	await page.waitForFunction( () => window.twin.models.entries.some( e => e.kind === 'row' ), null, { timeout: 20000 } );
+	assert.equal( await page.evaluate( () => window.twin.models.entries.find( e => e.kind === 'row' ).sharedId ), 'shared-1' );
+
+} );
+
 test( 'no page errors', () => {
 
 	assert.deepEqual( errors, [] );

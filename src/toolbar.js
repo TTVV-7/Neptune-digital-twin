@@ -321,7 +321,9 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 	// Remove an entry, with an Undo toast that puts it back as it was.
 	function remove( target ) {
 
-		const config = { ...models.toConfig( target ), inConfig: target.inConfig };
+		// sharedId too: without it the item put back would no longer be the record saved for everyone,
+		// so its panel couldn't update or remove that record.
+		const config = { ...models.toConfig( target ), inConfig: target.inConfig, sharedId: target.sharedId };
 		const name = target.state.name;
 		models.remove( target );
 		offerUndo( `Deleted ${ name }`, async () => {

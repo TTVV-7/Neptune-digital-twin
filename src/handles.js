@@ -174,7 +174,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 			entry: target,
 			kind: getKind( target.kind ),
 			pointerId: e.pointerId,
-			start: { east: state.east, north: state.north, heading: state.heading, params: { ...params } },
+			start: { east: state.east, north: state.north, heading: state.heading, params: params ? { ...params } : null },
 			// Pointers are followed on a level plane through the item's base, which is steadier than
 			// the ground itself (with models and buildings standing on it) and what sizes are measured on.
 			base,

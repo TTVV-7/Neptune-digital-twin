@@ -82,7 +82,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let open = false;
 	let placing = null; // { item, entry, heading, cancelled }
 	let selected = null;
-	let dragging = null; // { entry, moved }
+	let dragging = null; // { entry, offset, press, slop, moved }
 	let suppressClick = false;
 	let pointer = null; // last pointer position over the scene, in client pixels
 	let drawing = null; // { tool, start, heading, outline } while a tool is in use; a line: { tool, points, press, click, cursor }
@@ -103,6 +103,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		canDrive: entry => vehicles.has( entry.library ),
 		hide: entry => models.setHidden( entry, true ),
 	} );
+	// The P panel's Remove deletes as the toolbar does, with Undo, so a misclick there isn't final.
+	panel.onRemove = entry => toolbar.remove( entry );
 
 	// --- the list ------------------------------------------------------------------------
 
@@ -769,6 +771,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( drawing?.start ) updateDrawing();
 		if ( drawing?.tool.mode === 'line' ) moveLine( e );
 		if ( placing ) followPointer();
+		// A press on an item selects it; it only moves once the pointer has gone further than a
+		// click's slip, since from afar one pixel of jitter covers metres of ground.
+		if ( dragging && ! dragging.moved && Math.hypot( e.clientX - dragging.press.x, e.clientY - dragging.press.y ) < dragging.slop ) return;
 		if ( dragging ) {
 
 			const point = groundPoint( e.clientX, e.clientY, dragging.entry.pivot );
@@ -835,7 +840,13 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 			if ( hit.entry !== selected ) select( hit.entry, ! mouse );
 			const ground = groundPoint( e.clientX, e.clientY, hit.entry.pivot ) ?? hit.point;
-			dragging = { entry: hit.entry, offset: _offset.copy( hit.entry.pivot.position ).sub( ground ).setY( 0 ).clone(), moved: false };
+			dragging = {
+				entry: hit.entry,
+				offset: _offset.copy( hit.entry.pivot.position ).sub( ground ).setY( 0 ).clone(),
+				press: { x: e.clientX, y: e.clientY },
+				slop: e.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP,
+				moved: false,
+			};
 			canvas.setPointerCapture( e.pointerId );
 			suppressClick = true;
 			return;

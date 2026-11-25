@@ -129,7 +129,7 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 		text: 'Break apart',
 		title: 'Break the row into single items, each where its copy is (you can undo it for a few seconds)',
 		icon: SPLIT_ICON,
-		shown: entry => entry.kind === ROW,
+		shown: entry => entry.kind === ROW && ! entry.inConfig,
 		run: entry => breakApart( entry ),
 	} );
 
@@ -476,6 +476,15 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 		const item = items.get( entry.params.item );
 		const plan = layoutOf( entry );
 		if ( ! item || ! plan || ! models.entries.includes( entry ) ) return;
+		// A row saved for everyone loads again from the server on every visit, so breaking it here
+		// would only add the single copies beside it after a reload.
+		if ( entry.inConfig ) {
+
+			toast( `${ entry.state.name } is saved for everyone, so it can't be broken apart here` );
+			return;
+
+		}
+
 		const { scene } = entry.pivot.children[ 0 ].userData.row.t;
 		const loader = scene ? { loadAsync: async () => ( { scene: cloneModel( scene ) } ) } : undefined;
 		const config = { ...models.toConfig( entry ), inConfig: entry.inConfig };
