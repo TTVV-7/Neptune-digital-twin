@@ -6,7 +6,10 @@
 // smoothed away; one slope, a crown, a swale and terraces give the heights they should; a pad
 // built up on the slope has an embankment at its batter ratio, and a cut slope where it's dug in;
 // the earth moved is worked out; what's saved loads again the same; a pit's floor comes from the
-// graded shape.
+// graded shape, and its rim from the pad or the embankment where it's built up. The Before view
+// leaves the earth moved as it was; 'flatten up to' bounds what's hidden over the area; a cut slope
+// meeting another area's embankment leaves no cliff; a large area's chunks are made over the next
+// frames, and a huge one is only pressed down. The resize label names the downhill side when turned.
 //
 // Needs Playwright with Chromium. TEST_VITE_PORT picks the port, or TEST_BASE=<url> uses a dev
 // server that's already running (started without a Maps key); TEST_SCREENSHOTS=<folder> saves
@@ -117,7 +120,7 @@ async function area( config ) {
 		while ( performance.now() < end ) {
 
 			terrain.flush();
-			const ready = [ ...terrain.chunks.values() ].every( c => c.ready );
+			const ready = [ ...terrain.chunks.values() ].every( c => c.ready ) && terrain.pending.length === 0;
 			if ( entry.snapped && ready && ( entry.params.grade === 'level' || entry.gradeVolume ) ) break;
 			await new Promise( resolve => setTimeout( resolve, 50 ) );
 
@@ -165,7 +168,12 @@ test( 'new areas follow the ground: the plane through it, the shed smoothed away
 		const entry = window.areas[ i ];
 		const { getKind } = await import( '/src/kinds.js' );
 		const kind = getKind( 'flatten-zone' );
-		return { up: entry.state.up, slope: entry.groundSlope, fit: entry.params.fit, grade: kind.readouts[ 0 ].get( entry ), saved: window.twin.models.toConfig( entry ).params, label: kind.resize.label( entry.params ) };
+		const { describeGrade } = await import( '/src/grade.js' );
+		return {
+			up: entry.state.up, slope: entry.groundSlope, fit: entry.params.fit, grade: kind.readouts[ 0 ].get( entry ), saved: window.twin.models.toConfig( entry ).params, label: kind.resize.label( entry.params, 0 ),
+			// Turned to face east, the label names the downhill side as the P panel does.
+			turned: kind.resize.label( entry.params, 90 ), turnedGrade: describeGrade( entry.params, entry.params.fit, 90 ),
+		};
 
 	}, i );
 	// The area's frame: x is east and z is south when it faces north.
@@ -174,7 +182,9 @@ test( 'new areas follow the ground: the plane through it, the shed smoothed away
 	assert.deepEqual( out.fit, out.slope, 'built on the slope fitted' );
 	near( out.up, window_slope( 40, 0 ), 0.1, 'height at the middle' );
 	assert.match( out.grade, /follows the ground: 8\.5% down to the west/ );
-	assert.match( out.label, /follows the ground/ );
+	assert.match( out.label, /follows the ground: 8\.5% down to the west/ );
+	assert.ok( out.turned.includes( out.turnedGrade ), `${ out.turned } names ${ out.turnedGrade }` );
+	assert.doesNotMatch( out.turnedGrade, /to the west/ );
 	assert.deepEqual( out.saved, { width: 24, length: 16, height: 0, surface: 'gravel', grade: 'follow', batter: 2 } );
 	// On the plane, over the shed too.
 	for ( const [ e, n ] of [ [ 30, - 6 ], [ 50, 6 ], [ 44, 4 ], [ 40, 0 ] ] ) near( await heightAt( e, n ), window_slope( e, n ), 0.08, `ground at ${ e }, ${ n }` );
@@ -261,9 +271,15 @@ test( 'a pad built up on the slope has an embankment at its batter, and a cut sl
 		const readouts = Object.fromEntries( kind.readouts.map( r => [ r.label, r.get( entry ) ] ) );
 		// A pit inside its west half: its floor is the graded shape's lowest there.
 		const floor = window.twin.terrain.floorUnder( rectFrame( 395, 0, 0, 3, 3 ) );
+		// A pit at its west edge, where it's built up, starts from the pad, not the ground under it;
+		// one on the embankment beyond, from the embankment.
+		const original = window.slopeAt( 391, 0 );
+		const rim = window.twin.terrain.rimUnder( rectFrame( 393, 0, 0, 2, 2 ), rectFrame( 393, 0, 0, 4, 4 ), original );
+		const bankRim = window.twin.terrain.rimUnder( rectFrame( 389.4, 0, 0, 0.3, 0.3 ), rectFrame( 389.4, 0, 0, 2.3, 2.3 ), window.slopeAt( 389.1, 0 ) );
+		const bank = window.twin.terrain.heightAt( - 389.1, 0.3 );
 		// Drawn there, over the stand-in's own ground.
 		const drawn = [ ...window.twin.terrain.chunks.values() ].some( c => c.mesh.visible && c.graded.some( v => v ) );
-		return { volume: entry.gradeVolume, readouts, floor, drawn };
+		return { volume: entry.gradeVolume, readouts, floor, drawn, rim, original, bankRim, bank };
 
 	}, i );
 	// Cut and fill about balanced: half the pad is in each, 0.4 m deep on average, plus the batters.
@@ -272,6 +288,9 @@ test( 'a pad built up on the slope has an embankment at its batter, and a cut sl
 	assert.match( out.readouts[ 'cut (bank)' ], /^\d+ m³$/ );
 	assert.match( out.readouts[ 'fill (compacted)' ], /^\d+ m³$/ );
 	near( out.floor, up - 0.015, 0.01, 'a pit\'s floor in it (its front edge, 3 m north)' );
+	near( out.rim, up - 0.01, 0.01, 'a pit\'s rim on its fill (its front edge, 2 m north)' );
+	assert.ok( out.rim > out.original + 0.4, `rim ${ out.rim } above the ground ${ out.original }` );
+	near( out.bankRim, out.bank, 0.08, 'a pit\'s rim on its embankment' );
 	assert.ok( out.drawn, 'the graded ground is drawn' );
 	await look( { east: 400, north: 0, distance: 40, from: 200, elevation: 25 } );
 	await shot( 'grading-batters' );
@@ -318,6 +337,118 @@ test( 'taking an area away puts the ground back', async () => {
 	} );
 	assert.equal( out.zones, 0 );
 	near( out.height, window_slope( 400, 0 ), 0.05, 'the ground under the pad' );
+
+} );
+
+test( 'the Before view leaves a graded area\'s cut and fill as they were', async () => {
+
+	const i = await area( { params: { width: 20, length: 16, grade: 'slope', fall: 0.5, toward: 'front', batter: 2 }, east: 600, north: 0 } );
+	const out = await page.evaluate( i => {
+
+		const entry = window.areas[ i ];
+		const { terrain } = window.twin;
+		const before = { ...entry.gradeVolume };
+		terrain.setUntouched( true );
+		const during = { ...entry.gradeVolume };
+		terrain.setUntouched( false );
+		const after = { ...entry.gradeVolume };
+		window.twin.models.remove( entry );
+		return { before, during, after };
+
+	}, i );
+	assert.ok( out.before.cut > 10 && out.before.fill > 10, JSON.stringify( out.before ) );
+	assert.deepEqual( out.during, out.before );
+	near( out.after.cut, out.before.cut, 0.1, 'cut after' );
+
+} );
+
+test( 'flatten up to: Google\'s mesh is hidden over a graded area only up to that height above it', async () => {
+
+	const i = await area( { params: { width: 20, length: 16, grade: 'slope', fall: 0.5, toward: 'front', batter: 2, height: 5 }, east: 700, north: 0 } );
+	const out = await page.evaluate( i => {
+
+		const entry = window.areas[ i ];
+		const { models, terrain } = window.twin;
+		const node = () => {
+
+			const chunk = terrain.owner( Math.round( - 700 / 0.5 ), 0 );
+			const k = ( 0 - chunk.j0 ) * 65 + Math.round( - 700 / 0.5 ) - chunk.i0;
+			return { base: chunk.base[ k ], ceiling: chunk.ceiling[ k ], finite: Number.isFinite( chunk.ceiling[ k ] ) };
+
+		};
+		const limited = node();
+		models.setParams( entry, { height: 0 } );
+		terrain.flush();
+		const all = node();
+		models.remove( entry );
+		return { limited, all };
+
+	}, i );
+	near( out.limited.ceiling, out.limited.base + 5, 0.01, 'the ceiling' );
+	assert.equal( out.all.finite, false, 'with no limit, everything above is hidden' );
+
+} );
+
+test( 'where one area\'s cut slope meets another\'s embankment there is no cliff at either edge', async () => {
+
+	const heights = await page.evaluate( async () => {
+
+		const { models, terrain } = window.twin;
+		const params = { width: 10, length: 10, grade: 'slope', fall: 0.5, toward: 'front', batter: 2 };
+		// 4 m apart: A 2 m above the ground at its east edge, B 2 m below at its west edge.
+		const a = await models.load( { kind: 'flatten-zone', heading: 0, east: 800, north: 0, up: window.slopeAt( 805, 0 ) + 2, params } );
+		const b = await models.load( { kind: 'flatten-zone', heading: 0, east: 814, north: 0, up: window.slopeAt( 809, 0 ) - 2, params } );
+		const end = performance.now() + 15000;
+		while ( performance.now() < end && ( terrain.pending.length || ! [ ...terrain.chunks.values() ].every( c => c.ready ) ) ) await new Promise( resolve => setTimeout( resolve, 50 ) );
+		terrain.flush();
+		const out = [];
+		for ( let e = 804; e <= 810.01; e += 0.5 ) out.push( terrain.heightAt( - e, 0 ) );
+		models.remove( a );
+		models.remove( b );
+		return out;
+
+	} );
+	near( heights[ 2 ], window_slope( 805, 0 ) + 2, 0.05, 'A\'s edge' );
+	near( heights[ 10 ], window_slope( 809, 0 ) - 2, 0.05, 'B\'s edge' );
+	const steps = heights.slice( 1 ).map( ( h, n ) => Math.abs( h - heights[ n ] ) );
+	// 4.3 m down over 4 m: about 0.55 m a node on average; a cut slope winning outright dropped
+	// more than 2 m in one.
+	assert.ok( Math.max( ...steps ) < 1.2, `steps ${ steps.map( v => v.toFixed( 2 ) ).join( ' ' ) }` );
+
+} );
+
+test( 'a large graded area makes its chunks over the next frames, and a huge one is only pressed down', async () => {
+
+	const out = await page.evaluate( async () => {
+
+		const { models, terrain } = window.twin;
+		const { getKind } = await import( '/src/kinds.js' );
+		const kind = getKind( 'flatten-zone' );
+		const chunks = terrain.chunks.size;
+		const huge = await models.load( { kind: 'flatten-zone', heading: 0, east: 0, north: 900, up: 0, params: { width: 1500, length: 1500, grade: 'follow' } } );
+		terrain.flush();
+		const hugeOut = { zone: terrain.zones.has( huge ), made: terrain.chunks.size - chunks, grade: kind.readouts[ 0 ].get( huge ) };
+		models.remove( huge );
+		const start = performance.now();
+		const large = await models.load( { kind: 'flatten-zone', heading: 0, east: 0, north: 900, up: 0, params: { width: 250, length: 250, grade: 'slope', fall: 1, toward: 'front' } } );
+		const took = performance.now() - start;
+		const zone = terrain.zones.get( large );
+		const waiting = terrain.pending.length;
+		const end = performance.now() + 30000;
+		while ( performance.now() < end && terrain.pending.length ) await new Promise( resolve => setTimeout( resolve, 50 ) );
+		const all = [ ...zone.chunks ].every( key => terrain.chunks.has( key ) );
+		terrain.flush();
+		const middle = terrain.heightAt( 0, 900 );
+		models.remove( large );
+		return { hugeOut, took, waiting, wanted: zone.chunks.size, all, middle };
+
+	} );
+	assert.equal( out.hugeOut.zone, false, 'too large to grade: without Google\'s tiles nothing to press' );
+	assert.equal( out.hugeOut.made, 0, 'no chunks made for it' );
+	assert.match( out.hugeOut.grade, /pressed down only/ );
+	assert.ok( out.waiting > 0 && out.waiting < out.wanted, `${ out.waiting } of ${ out.wanted } left for later` );
+	assert.ok( out.all, 'all made in the end' );
+	near( out.middle, 0, 0.05, 'the graded ground in the middle' );
 
 } );
 

@@ -24,7 +24,7 @@ import { TileFlatteningPlugin } from '3d-tiles-renderer/plugins';
 import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 import { registerKind } from './kinds.js';
 import { fencePanel } from './fence-panel.js';
-import { BATTERS, FALL, GRADES, MAX_GRADE, RIDGE_ALONG, STEPS, TOWARD, describeGrade, gradeOffset, gradeRange, isGraded, normalizeGrade, saveGrade } from './grade.js';
+import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, STEPS, TOWARD, describeGrade, gradeOffset, gradeRange, isGraded, normalizeGrade, pressedOnly, saveGrade } from './grade.js';
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
@@ -673,9 +673,9 @@ registerKind( ZONE_ID, {
 		{ key: 'batter', label: 'edge batters (h : v)', options: BATTERS, size: true, when: graded },
 	],
 	// How it's graded, and the earth it moves (terrain.js works it out with the batters, as
-	// gradeVolume on the entry).
+	// gradeVolume on the entry). Too large for that, it's only pressed down onto its shape.
 	readouts: [
-		{ label: 'grade', get: entry => graded( entry.params ) ? describeGrade( entry.params, entry.params.fit ?? entry.groundSlope, entry.state.heading ) : '' },
+		{ label: 'grade', get: entry => graded( entry.params ) ? describeGrade( entry.params, entry.params.fit ?? entry.groundSlope, entry.state.heading ) + ( pressedOnly( entry.params ) ? ` (over ${ MAX_GRADED_SIDE } m: pressed down only, no batters or earth reckoned)` : '' ) : '' },
 		{ label: 'cut (bank)', get: entry => graded( entry.params ) && entry.gradeVolume ? `${ Math.round( entry.gradeVolume.cut ).toLocaleString( 'en-CA' ) } m³` : '' },
 		{ label: 'fill (compacted)', get: entry => graded( entry.params ) && entry.gradeVolume ? `${ Math.round( entry.gradeVolume.fill ).toLocaleString( 'en-CA' ) } m³` : '' },
 	],
@@ -683,7 +683,7 @@ registerKind( ZONE_ID, {
 	resize: {
 		shape: 'rect',
 		live: true,
-		label: p => `${ p.width.toFixed( 1 ) } × ${ p.length.toFixed( 1 ) } m · ${ Math.round( p.width * p.length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ p.surface ] ? ` · ${ SURFACES[ p.surface ].name.toLowerCase() }` : '' }${ graded( p ) ? ` · ${ describeGrade( p, p.fit ) }` : '' }${ p.fence !== 'none' ? ' · fenced' : '' }${ p.height > 0 ? ` · up to ${ p.height.toFixed( 1 ) } m` : '' }`,
+		label: ( p, heading = 0 ) => `${ p.width.toFixed( 1 ) } × ${ p.length.toFixed( 1 ) } m · ${ Math.round( p.width * p.length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ p.surface ] ? ` · ${ SURFACES[ p.surface ].name.toLowerCase() }` : '' }${ graded( p ) ? ` · ${ describeGrade( p, p.fit, heading ) }` : '' }${ p.fence !== 'none' ? ' · fenced' : '' }${ p.height > 0 ? ` · up to ${ p.height.toFixed( 1 ) } m` : '' }`,
 	},
 } );
 

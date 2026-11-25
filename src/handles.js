@@ -188,7 +188,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 		if ( handle.type === 'point' || handle.type === 'insert' ) drag.base = handle.world.y;
 		root.classList.add( 'dragging' );
 		handle.element.classList.add( 'active' );
-		showLabel( e, handle.type === 'turn' ? `${ Math.round( state.heading ) }°` : drag.kind.resize.label( params ) );
+		showLabel( e, handle.type === 'turn' ? `${ Math.round( state.heading ) }°` : drag.kind.resize.label( params, state.heading ) );
 
 	}
 
@@ -289,7 +289,8 @@ export function createHandles( { scene, camera, canvas, models } ) {
 	function setDraft( e, draft ) {
 
 		drag.draft = draft;
-		showLabel( e, drag.kind.resize.label( draft.params ) );
+		// The heading too, for what's said by the compass (a graded area's downhill side).
+		showLabel( e, drag.kind.resize.label( draft.params, draft.heading ?? drag.entry.state.heading ) );
 		// Quick kinds follow the handle; the rest show the outline until it's let go.
 		if ( drag.kind.resize.live && performance.now() - drag.applied >= LIVE_INTERVAL ) {
 

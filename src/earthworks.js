@@ -357,7 +357,7 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 
 	const isEarthwork = entry => entry.kind === EXCAVATION || entry.kind === STOCKPILE;
 	const order = entry => () => models.entries.indexOf( entry );
-	const floorUnder = frame => terrain.floorUnder( frame );
+	const rimUnder = ( rect, around, up ) => terrain.rimUnder( rect, around, up );
 	// Hidden by hand or with its layer off in the Show panel: the hole or the pile isn't drawn in
 	// the ground either, nor walked on or clicked (layers.js).
 	const inTerrain = new Set();
@@ -393,7 +393,7 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 
 		if ( ! isEarthwork( entry ) || entry.placing ) return;
 		const make = entry.kind === EXCAVATION ? pitDesign : pileDesign;
-		designs.set( entry, make( entry, { order: order( entry ), progress, floorUnder } ) );
+		designs.set( entry, make( entry, { order: order( entry ), progress, rimUnder } ) );
 		sync( entry );
 
 	} );
@@ -731,11 +731,11 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 
 // --- designs: what an excavation or a stockpile does to the ground ----------------------------
 
-// floorUnder( frame ): the floor of the flatten areas reaching into a rectangle (Infinity if none).
+// rimUnder( rect, around, up ): the ground the pit's rim starts from (terrain.rimUnder).
 // The surface is the design's (excavation-design.js depthAt): each side sloped, benched or cut
 // vertical, as deep as the dig stage shown, and p (0..1) of that while the dig animation plays.
 // For pits saved before sides had methods it is exactly the surface they had.
-function pitDesign( entry, { order, progress, floorUnder } ) {
+function pitDesign( entry, { order, progress, rimUnder } ) {
 
 	const g = {};
 	return {
@@ -760,9 +760,10 @@ function pitDesign( entry, { order, progress, floorUnder } ) {
 			g.margin = margin;
 			// Inside a flatten area the ground is the area's floor, which is what the terrain digs
 			// into there; from the original ground (the roofs of what was cleared, say) the pit
-			// would be too shallow to reach it.
+			// would be too shallow to reach it. In a graded one, or on its batters, it's that graded
+			// ground, built up or dug down (terrain.rimUnder).
 			const around = rectFrame( state.east, state.north, state.heading, hw + RIM_REACH, hl + RIM_REACH );
-			g.rim = Math.min( state.up, floorUnder( around ) );
+			g.rim = rimUnder( g.rect, around, state.up );
 
 		},
 		get rim() {

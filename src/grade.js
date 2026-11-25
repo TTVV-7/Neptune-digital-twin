@@ -42,6 +42,11 @@ export const MAX_GRADE = 50;
 // A batter reaches at most this far from the area's edge (m), so a pad high above a gully doesn't
 // mark the whole map.
 export const MAX_REACH = 30;
+// The terrain draws a graded area, and its batters, from chunks of sampled ground over all of it,
+// which costs memory and raycasts by the square of its size. Wider or longer than this (m), an
+// area's grading only presses Google's mesh down onto its shape, as a level area does onto its
+// floor: no batters and no earth reckoned.
+export const MAX_GRADED_SIDE = 300;
 // Benches of a terrace are joined by a batter at most this share of a bench wide.
 const TERRACE_RUN = 0.6;
 
@@ -51,6 +56,13 @@ const num = ( v, fallback ) => Number.isFinite( Number( v ) ) && v !== null && v
 export function isGraded( params ) {
 
 	return !! params && GRADE_IDS.includes( params.grade ) && params.grade !== 'level';
+
+}
+
+// Whether a graded area is too large to be drawn with batters (see MAX_GRADED_SIDE).
+export function pressedOnly( params ) {
+
+	return isGraded( params ) && Math.max( params.width, params.length ) > MAX_GRADED_SIDE;
 
 }
 
