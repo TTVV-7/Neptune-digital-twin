@@ -278,7 +278,9 @@ describe( 'what search engines read', () => {
 			assert.equal( metaOf( html, 'og:image:width' ), '1200' );
 			assert.equal( metaOf( html, 'og:image:height' ), '630' );
 			assert.ok( metaOf( html, 'og:image:alt' )?.length > 10 );
-			for ( const icon of [ '/favicon.ico', '/favicon.svg', '/apple-touch-icon.png', '/site.webmanifest' ] ) assert.ok( html.includes( `href="${ icon }"` ), `${ path }: no ${ icon }` );
+			// The tab's icons with their version (?v=2: the mark that replaced the first globe, so a browser
+			// that kept the old one asks again), and the manifest.
+			for ( const icon of [ '/favicon.ico?v=2', '/favicon.svg?v=2', '/icons/favicon-32.png?v=2', '/apple-touch-icon.png?v=2', '/site.webmanifest' ] ) assert.ok( html.includes( `href="${ icon }"` ), `${ path }: no ${ icon }` );
 
 		}
 
