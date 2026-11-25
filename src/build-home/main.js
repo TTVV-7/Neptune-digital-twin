@@ -1,5 +1,6 @@
 import './style.css';
 import { BILLING_PAGE, PLANS, PRO_PHRASE, SOON, dateOf, intervalChoice, salesHidden } from '../build-plans.js';
+import { TOLERANCE, TOLERANCE_MAX, hex, removeBackground } from '../logo-background.js';
 
 // World Drive Build's dashboard (worlddrive.app/build/, drive/build/index.html, docs/build.md): find a
 // site by address and open the editor there (/build/app/), your saved projects, your plan, and
@@ -393,8 +394,12 @@ function portalButton( label ) {
 }
 
 // The company logo shown on the equipment in the editor (src/logo.js). Build Pro's. Whatever is
-// picked (PNG, JPEG, SVG...) is redrawn here as a PNG of LOGO_SIZE px at most before it's sent.
+// picked (PNG, JPEG, SVG...) is redrawn here as a PNG of LOGO_SIZE px at most before it's sent,
+// after the logo editor (logoEditor) has shown it and, unless that's turned off, taken the plain
+// box from behind it (src/logo-background.js), all in this page.
 const LOGO_SIZE = 512;
+// The server takes 256 KB of image at most (worker/drive/build.js's LOGO_BYTES): a little under.
+const LOGO_MOST = 250 * 1024;
 function logoCard( tier ) {
 
 	const box = document.createElement( 'div' );
@@ -409,42 +414,61 @@ function logoCard( tier ) {
 
 	}
 
-	note.textContent = home.hasLogo ? 'On both sides of your trucks, machines, trailers and bins. The Show panel can hide it.' : 'Put your logo on the trucks, machines and trailers in your projects. A PNG with a see-through background looks best.';
+	note.textContent = home.hasLogo ? 'On both sides of your trucks, machines, trailers and bins. The Show panel can hide it.' : 'Put your logo on the trucks, machines and trailers in your projects. A white or coloured box behind it can be taken out here.';
+	const shown = document.createElement( 'div' );
 	if ( home.hasLogo ) {
 
 		const img = document.createElement( 'img' );
 		img.className = 'logo-preview';
 		img.alt = 'Your company logo';
 		img.src = `${ API }logo?at=${ Date.now() }`;
-		box.append( img );
+		shown.append( img );
 
 	}
 
+	box.append( shown );
 	const row = document.createElement( 'div' );
 	row.className = 'logo-actions';
 	const input = Object.assign( document.createElement( 'input' ), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/svg+xml', hidden: true, id: 'logo-file' } );
 	const pick = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: home.hasLogo ? 'Change' : 'Upload logo' } );
 	pick.addEventListener( 'click', () => input.click() );
-	input.addEventListener( 'change', async () => {
+	// The picked file, or the saved logo, in the editor in place of the card's picture and links,
+	// till it's saved or cancelled.
+	const edit = async ( source, existing ) => {
 
-		const file = input.files?.[ 0 ];
-		if ( ! file ) return;
 		try {
 
-			await call( 'PUT', 'logo', { image: await logoImage( file ) } );
-			await load();
-			toast( 'Logo saved. It shows on your equipment next time the editor opens.' );
+			const canvas = await logoCanvas( source );
+			const editor = logoEditor( canvas, { existing, close: () => {
 
-		} catch ( err ) {
+				editor.remove();
+				shown.hidden = row.hidden = false;
+				input.value = '';
 
-			toast( `Couldn't save the logo: ${ err.message }` );
+			} } );
+			shown.hidden = row.hidden = true;
+			box.append( editor );
+
+		} catch {
+
+			toast( 'Couldn\'t open that image. Try a PNG or JPEG.' );
+			input.value = '';
 
 		}
+
+	};
+
+	input.addEventListener( 'change', () => {
+
+		const file = input.files?.[ 0 ];
+		if ( file ) edit( file, false );
 
 	} );
 	row.append( input, pick );
 	if ( home.hasLogo ) {
 
+		const clean = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', id: 'logo-clean', textContent: 'Remove background' } );
+		clean.addEventListener( 'click', () => edit( `${ API }logo?at=${ Date.now() }`, true ) );
 		const remove = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Remove' } );
 		remove.addEventListener( 'click', async () => {
 
@@ -453,7 +477,7 @@ function logoCard( tier ) {
 			toast( 'Logo removed' );
 
 		} );
-		row.append( remove );
+		row.append( clean, remove );
 
 	}
 
@@ -462,10 +486,115 @@ function logoCard( tier ) {
 
 }
 
-// A picked image file as a PNG data: URL, LOGO_SIZE px on its longer side at most, its transparency kept.
-async function logoImage( file ) {
+// The logo editor: the logo before and after its background is taken out, on a checkerboard (or a
+// machine's paint, to see its edge), with "Remove background" (on), its tolerance, and "Also clear
+// enclosed areas of the same colour" (off); Save sends the after. existing: the saved logo, opened
+// with "Remove background" (undone by uploading the original again).
+function logoEditor( source, { existing, close } ) {
 
-	const url = URL.createObjectURL( file );
+	const panel = document.createElement( 'div' );
+	panel.className = 'logo-edit';
+	panel.id = 'logo-edit';
+	panel.innerHTML = `
+		<div class="logo-compare">
+			<figure><div class="logo-stage checker"><canvas id="logo-before"></canvas></div><figcaption>Before</figcaption></figure>
+			<figure><div class="logo-stage checker" id="logo-after-stage"><canvas id="logo-after"></canvas></div><figcaption>After <span class="backdrops" role="group" aria-label="Show it on">
+				<button type="button" class="backdrop checker" data-backdrop="checker" aria-label="On see-through" aria-pressed="true"></button>
+				<button type="button" class="backdrop" data-backdrop="paint" style="--paint: #f2b705" aria-label="On yellow paint" aria-pressed="false"></button>
+				<button type="button" class="backdrop" data-backdrop="dark" style="--paint: #2a2f35" aria-label="On dark paint" aria-pressed="false"></button>
+			</span></figcaption></figure>
+		</div>
+		<label class="check"><input type="checkbox" id="logo-remove-bg" checked /> Remove background</label>
+		<label class="range"><span>Tolerance</span><input type="range" id="logo-tolerance" min="0" max="${ TOLERANCE_MAX }" step="1" value="${ TOLERANCE }" /><output id="logo-tolerance-value">${ TOLERANCE }</output></label>
+		<label class="check"><input type="checkbox" id="logo-enclosed" /> Also clear enclosed areas of the same colour</label>
+		<p class="small logo-edit-note" id="logo-edit-note" aria-live="polite"></p>
+		<div class="logo-actions"><button type="button" class="button" id="logo-save">Save logo</button><button type="button" class="link" id="logo-cancel">Cancel</button></div>`;
+	const q = id => panel.querySelector( `#${ id }` );
+	const before = q( 'logo-before' ), after = q( 'logo-after' );
+	before.width = source.width;
+	before.height = source.height;
+	before.getContext( '2d' ).drawImage( source, 0, 0 );
+	const pixels = source.getContext( '2d', { willReadFrequently: true } ).getImageData( 0, 0, source.width, source.height );
+	const remove = q( 'logo-remove-bg' ), tolerance = q( 'logo-tolerance' ), enclosed = q( 'logo-enclosed' ), note = q( 'logo-edit-note' );
+	let result = null;
+	const run = () => {
+
+		q( 'logo-tolerance-value' ).textContent = tolerance.value;
+		tolerance.disabled = enclosed.disabled = ! remove.checked;
+		const out = remove.checked ? removeBackground( pixels, { tolerance: Number( tolerance.value ), enclosed: enclosed.checked } ) : { image: pixels, skipped: 'off' };
+		const image = out.empty ? pixels : out.image;
+		after.width = image.width;
+		after.height = image.height;
+		after.getContext( '2d' ).putImageData( new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height ), 0, 0 );
+		result = out;
+		note.textContent = {
+			off: existing ? 'Kept as it is.' : 'Kept as it is: the whole picture goes on the equipment.',
+			transparent: 'Its background is see-through already: nothing to take out.',
+			busy: 'No one plain colour round its edge to take out (a photo?): kept as it is.',
+		}[ out.skipped ] ?? ( out.empty
+			? 'That tolerance takes the whole logo: turn it down.'
+			: `Took out the ${ out.colours.length > 1 ? 'shades of ' : '' }${ hex( out.colours[ 0 ] ) } background (${ Math.round( out.removed * 100 ) } % of the picture) and trimmed to the logo.${ existing ? ' To undo, upload the original again.' : '' }` );
+		q( 'logo-save' ).disabled = !! out.empty;
+		panel.dataset.state = out.skipped ?? ( out.empty ? 'empty' : 'removed' );
+
+	};
+
+	// Redrawn once a frame at most while the slider's dragged.
+	let pending = false;
+	const later = () => {
+
+		if ( pending ) return;
+		pending = true;
+		requestAnimationFrame( () => {
+
+			pending = false;
+			run();
+
+		} );
+
+	};
+
+	tolerance.addEventListener( 'input', later );
+	remove.addEventListener( 'change', run );
+	enclosed.addEventListener( 'change', run );
+	for ( const button of panel.querySelectorAll( '.backdrop' ) ) button.addEventListener( 'click', () => {
+
+		const stage = q( 'logo-after-stage' );
+		stage.className = `logo-stage ${ button.dataset.backdrop === 'checker' ? 'checker' : 'paint' }`;
+		stage.style.setProperty( '--paint', button.style.getPropertyValue( '--paint' ) );
+		for ( const other of panel.querySelectorAll( '.backdrop' ) ) other.setAttribute( 'aria-pressed', String( other === button ) );
+
+	} );
+	q( 'logo-cancel' ).addEventListener( 'click', close );
+	q( 'logo-save' ).addEventListener( 'click', async () => {
+
+		const save = q( 'logo-save' );
+		save.disabled = true;
+		try {
+
+			await call( 'PUT', 'logo', { image: logoDataUrl( after ) } );
+			close();
+			await load();
+			toast( result?.skipped ? 'Logo saved. It shows on your equipment next time the editor opens.' : 'Logo saved with its background taken out. It shows on your equipment next time the editor opens.' );
+
+		} catch ( err ) {
+
+			save.disabled = false;
+			toast( `Couldn't save the logo: ${ err.message }` );
+
+		}
+
+	} );
+	run();
+	return panel;
+
+}
+
+// A picked file, or the saved logo's address, drawn on a canvas LOGO_SIZE px on its longer side at
+// most, its transparency kept.
+async function logoCanvas( source ) {
+
+	const url = typeof source === 'string' ? source : URL.createObjectURL( source );
 	try {
 
 		const img = new Image();
@@ -476,14 +605,39 @@ async function logoImage( file ) {
 		const canvas = document.createElement( 'canvas' );
 		canvas.width = Math.max( 1, Math.round( w * k ) );
 		canvas.height = Math.max( 1, Math.round( h * k ) );
-		canvas.getContext( '2d' ).drawImage( img, 0, 0, canvas.width, canvas.height );
-		return canvas.toDataURL( 'image/png' );
+		canvas.getContext( '2d', { willReadFrequently: true } ).drawImage( img, 0, 0, canvas.width, canvas.height );
+		return canvas;
 
 	} finally {
 
-		URL.revokeObjectURL( url );
+		if ( typeof source !== 'string' ) URL.revokeObjectURL( url );
 
 	}
+
+}
+
+// The canvas as a PNG data: URL (alpha and all) under the server's limit: a busy one too big as a
+// PNG goes as a WebP where the browser makes one (alpha kept), else smaller till it fits.
+function logoDataUrl( canvas ) {
+
+	const bytes = url => Math.floor( ( url.length - url.indexOf( ',' ) - 1 ) * 3 / 4 );
+	let png = canvas.toDataURL( 'image/png' );
+	if ( bytes( png ) <= LOGO_MOST ) return png;
+	const webp = canvas.toDataURL( 'image/webp', 0.92 );
+	if ( webp.startsWith( 'data:image/webp' ) && bytes( webp ) <= LOGO_MOST ) return webp;
+	let current = canvas;
+	while ( bytes( png ) > LOGO_MOST && current.width > 16 ) {
+
+		const smaller = document.createElement( 'canvas' );
+		smaller.width = Math.max( 1, Math.round( current.width * 0.8 ) );
+		smaller.height = Math.max( 1, Math.round( current.height * 0.8 ) );
+		smaller.getContext( '2d' ).drawImage( current, 0, 0, smaller.width, smaller.height );
+		current = smaller;
+		png = current.toDataURL( 'image/png' );
+
+	}
+
+	return png;
 
 }
 

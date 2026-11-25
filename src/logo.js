@@ -1,12 +1,16 @@
-import { Box3, DoubleSide, Euler, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Raycaster, SRGBColorSpace, TextureLoader, Vector3 } from 'three';
+import { Box3, DataTexture, DoubleSide, Euler, LinearFilter, LinearMipmapLinearFilter, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Raycaster, SRGBColorSpace, Vector3 } from 'three';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { loadLibrary } from './library.js';
+import { bleedColours } from './logo-background.js';
 
 // World Drive Build Pro's company logo on the equipment: the account's logo (uploaded on the Build
 // dashboard, worker/drive/build.js), or on a share link its owner's, laid on both sides of every
 // placed vehicle, machine, trailer, container and bin, as a fleet's livery is. It's projected onto
 // the model's own surface (DecalGeometry), so it follows a cab's or a tank's shape rather than
 // floating in front of it. The Show panel's "Company logo" hides it, for this viewer only.
+// It's drawn with its own transparency (a logo whose background was taken out on the dashboard, or
+// a PNG with none): only the logo shows on the paint, with no plate or box behind it, and its
+// see-through pixels carry their neighbours' colour (bleedColours) so its edge has no fringe.
 
 // The kinds of thing a company puts its name on.
 const BRANDED = new Set( [
@@ -24,11 +28,13 @@ const LIFT = 0.025;
 // How deep a slice of the model the logo is cut from, round its outer surface (m).
 const SLICE = 0.3;
 // Where the logo is looked for: centres at these shares of the side's length and height, a grid of
-// GRID × GRID rays each; the rays have to land within FLAT metres of each other on one mesh, facing
-// out of the side within SQUARE (the cosine); and it shrinks to MIN_SIZE (m wide) to fit.
+// GRID × GRID rays each, out to the rectangle's very edge (a logo whose background was taken out
+// fills its rectangle, so a step or box at its edge would cut into it); the rays have to land
+// within FLAT metres of each other on one mesh, facing out of the side within SQUARE (the cosine);
+// and it shrinks to MIN_SIZE (m wide) to fit.
 const ALONG_AT = [ 0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8 ];
 const HEIGHT_AT = [ 0.55, 0.45, 0.65, 0.35, 0.75 ];
-const GRID = 4;
+const GRID = 5;
 const FLAT = 0.12;
 const SQUARE = 0.8;
 const MIN_SIZE = 0.5;
@@ -50,15 +56,15 @@ export function setUpLogo( { models, layers, apiBase } ) {
 
 		const res = await fetch( url, { credentials: 'same-origin' } ).catch( () => null );
 		if ( ! res?.ok ) return;
-		const blob = await res.blob();
-		const objectUrl = URL.createObjectURL( blob );
-		texture = await new TextureLoader().loadAsync( objectUrl ).catch( () => null );
-		URL.revokeObjectURL( objectUrl );
+		texture = await logoTexture( await res.blob() ).catch( () => null );
 		if ( ! texture ) return;
-		texture.colorSpace = SRGBColorSpace;
-		texture.anisotropy = 4;
 		aspect = texture.image.width / Math.max( 1, texture.image.height );
-		material = new MeshStandardMaterial( { map: texture, transparent: true, alphaTest: 0.02, roughness: 0.6, depthWrite: false, side: DoubleSide } );
+		// Blended over the paint by its alpha, never writing depth, and pulled towards the camera
+		// past the surface it's cut from, so it neither fights that surface nor hides what's behind.
+		material = new MeshStandardMaterial( {
+			map: texture, transparent: true, alphaTest: 0.02, roughness: 0.6, depthWrite: false, side: DoubleSide,
+			polygonOffset: true, polygonOffsetFactor: - 2, polygonOffsetUnits: - 2,
+		} );
 		material.userData.shared = true;
 		categories = new Map( ( await loadLibrary() ).map( item => [ item.id, item.category ] ) );
 		layers?.addLayer( LAYER, { name: 'Company logo', count: () => {
@@ -220,8 +226,8 @@ export function setUpLogo( { models, layers, apiBase } ) {
 				const hits = [];
 				for ( let i = 0; i < GRID; i ++ ) for ( let j = 0; j < GRID; j ++ ) {
 
-					const da = ( i / ( GRID - 1 ) - 0.5 ) * sw * 0.95;
-					const dy = ( j / ( GRID - 1 ) - 0.5 ) * sh * 0.95;
+					const da = ( i / ( GRID - 1 ) - 0.5 ) * sw;
+					const dy = ( j / ( GRID - 1 ) - 0.5 ) * sh;
 					raycaster.set( toWorld( at( side, a + da, y + dy ) ), worldIn );
 					const hit = raycaster.intersectObjects( targets, false )[ 0 ];
 					if ( ! hit?.face ) return null;
@@ -249,5 +255,35 @@ export function setUpLogo( { models, layers, apiBase } ) {
 		decals.set( entry, { meshes, content } );
 
 	}
+
+}
+
+// The logo's image as a texture with straight (not premultiplied) alpha: its pixels as they are,
+// with each fully see-through one given its nearest visible neighbour's colour (a PNG keeps none
+// for them), so filtering and the smaller mip levels blend the logo's own colour at its edge rather
+// than black or the background it was cut from. Rows flipped here, as an image texture's are.
+async function logoTexture( blob ) {
+
+	const bitmap = await createImageBitmap( blob );
+	const { width, height } = bitmap;
+	const canvas = document.createElement( 'canvas' );
+	canvas.width = width;
+	canvas.height = height;
+	const context = canvas.getContext( '2d', { willReadFrequently: true } );
+	context.drawImage( bitmap, 0, 0 );
+	bitmap.close?.();
+	const pixels = context.getImageData( 0, 0, width, height );
+	bleedColours( pixels );
+	const rows = new Uint8Array( width * height * 4 );
+	for ( let y = 0; y < height; y ++ ) rows.set( pixels.data.subarray( y * width * 4, ( y + 1 ) * width * 4 ), ( height - 1 - y ) * width * 4 );
+	const texture = new DataTexture( rows, width, height );
+	texture.colorSpace = SRGBColorSpace;
+	texture.premultiplyAlpha = false;
+	texture.generateMipmaps = true;
+	texture.minFilter = LinearMipmapLinearFilter;
+	texture.magFilter = LinearFilter;
+	texture.anisotropy = 4;
+	texture.needsUpdate = true;
+	return texture;
 
 }

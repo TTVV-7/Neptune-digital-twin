@@ -776,13 +776,25 @@ describe( 'World Drive Build', () => {
 
 	test( 'the company logo: Build Pro\'s, PNG or WebP only, on its share links too, removable', async () => {
 
-		// A 1 x 1 PNG.
+		// A 1 x 1 PNG with alpha (colour type 6, RGBA), as the dashboard sends a logo whose background
+		// it took out: kept byte for byte, alpha and all.
 		const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 		const tester = await signIn( { sub: 'tester-1', email: 'tester@example.com', name: 'Tess' } );
 		assert.equal( ( await call( '/build/api/logo', { cookie: tester.cookie } ) ).status, 404, 'none yet' );
 		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: free.cookie, body: { image: `data:image/png;base64,${ png }` } } ) ).status, 403, 'not on the free plan' );
 		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: tester.cookie, body: { image: 'data:image/svg+xml;base64,PHN2Zy8+' } } ) ).status, 400, 'no SVG' );
 		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: tester.cookie, body: { image: 'data:image/png;base64,AAAAAAAA' } } ) ).status, 400, 'a PNG has to be one' );
+		// Up to 256 KB of image, and no more (the dashboard keeps under it).
+		const sized = bytes => {
+
+			const out = Buffer.alloc( bytes, 7 );
+			Buffer.from( png, 'base64' ).copy( out );
+			return `data:image/png;base64,${ out.toString( 'base64' ) }`;
+
+		};
+
+		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: tester.cookie, body: { image: sized( 256 * 1024 ) } } ) ).status, 204, 'a full 256 KB' );
+		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: tester.cookie, body: { image: sized( 256 * 1024 + 1 ) } } ) ).status, 413, 'a byte over' );
 		assert.equal( ( await call( '/build/api/logo', { method: 'PUT', cookie: tester.cookie, body: { image: `data:image/png;base64,${ png }` } } ) ).status, 204 );
 		const got = await fetch( `${ server.base }/build/app/api/logo`, { headers: { Cookie: tester.cookie } } );
 		assert.equal( got.headers.get( 'Content-Type' ), 'image/png' );

@@ -171,7 +171,25 @@ flattening, the terrain and the surface so they agree):
   most), kept in `build_logos` (`migrations/0019_build_logo.sql`), served to its owner's editor and
   their share links (`/build/api/logo`, `/build/api/shared/<token>/logo`). `src/logo.js` lays it on
   both long sides of every vehicle, machine, trailer, container and bin, cut from the model's outer
-  surface; the Show panel's "Company logo" hides it.
+  surface (the flattest panel of each side, checked out to the logo's very edge); the Show panel's
+  "Company logo" hides it.
+  - **Background removal**, in the browser only (`src/logo-background.js`, no outside service): a
+    picked logo opens in an editor on the dashboard's logo box, before and after on a checkerboard
+    (or yellow or dark paint, to see its edge), with **Remove background** (on), **Tolerance**
+    (0-120, 40 by default) and **Also clear enclosed areas of the same colour** (off). The
+    background's colour is the dominant one round the image's edge (up to three close shades of it);
+    from every edge pixel a flood fill takes what's within the tolerance of it, so white letters
+    inside a logo stay unless "enclosed areas" is on; specks of a few pixels go too; the boundary is
+    un-mixed from the background (alpha its share of the logo's colour nearby, the colour the logo's
+    own) so no light fringe is left; then it's trimmed to the logo with 2 % padding. Nothing's done
+    to an image whose edge is see-through already, or that has no one colour round its edge (a
+    photo), and the editor says so. **Remove background** on a saved logo opens it in the same
+    editor and saves over it; undoing that is uploading the original again. A save over 250 KB as a
+    PNG goes as a WebP where the browser makes one, else smaller, under the server's 256 KB.
+  - On the equipment it's drawn with its alpha: transparent, `alphaTest` 0.02, no depth write,
+    pulled forward with polygon offset over the 2.5 cm lift (no z-fighting), no plate behind it; its
+    see-through texels take the nearest visible pixel's colour (a saved PNG keeps none for them), so
+    filtering and mip levels leave no dark or light ring. The same in the editor and on share links.
 - **Claude (MCP):** `https://worlddrive.app/mcp` is an MCP server (`worker/drive/mcp.js`), Build Pro
   and the owner only. Claude finds it as a custom connector: it registers itself, the person signs
   in on worlddrive.app and allows it (`worker/drive/oauth.js`: OAuth 2.1 with PKCE, codes and tokens
@@ -206,6 +224,8 @@ flattening, the terrain and the surface so they agree):
 - **Tests:** `npm run test:build-account` (the account page's Worker routes, against a stand-in for
   Stripe's API, and the built page in a browser), `npm run test:build-worker` (the server, under wrangler dev),
   `npm run test:build-ui` (the built page in a browser against the Worker),
+  `npm run test:logo-background` (the logo's background removal on images made in the test, the
+  dashboard's editor saving a PNG with alpha, and an excavator wearing it) and `npm run test:logo-ui`,
   `npm run test:build-mcp` (connecting as Claude does, every tool, and the result in the editor),
   `npm run test:build-admin` (the admin numbers from seeded rows, and the Build tab) and
   `npm run test:build-legal` (the legal pages, the cookie and storage list against the code, and no

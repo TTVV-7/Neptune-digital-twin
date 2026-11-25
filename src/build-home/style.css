@@ -730,7 +730,126 @@ h2 {
 
 .logo-actions {
 	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
 	gap: 14px;
+}
+
+/* The logo editor: before and after, on a see-through checkerboard or a machine's paint. */
+.logo-edit {
+	display: grid;
+	gap: 10px;
+	padding: 12px;
+	border-radius: 8px;
+	background: var( --panel-raised );
+	border: 1px solid var( --line );
+}
+
+.logo-compare {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 140px, 1fr ) );
+	gap: 10px;
+}
+
+.logo-compare figure {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	min-width: 0;
+}
+
+.logo-compare figcaption {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var( --muted );
+}
+
+.logo-stage {
+	display: grid;
+	place-items: center;
+	height: 120px;
+	padding: 10px;
+	border-radius: 6px;
+	border: 1px solid var( --line );
+}
+
+.logo-stage canvas {
+	display: block;
+	max-width: 100%;
+	max-height: 100px;
+}
+
+.checker {
+	background: repeating-conic-gradient( #c9d1d8 0 25%, #f4f6f8 0 50% ) 0 0 / 14px 14px;
+}
+
+.logo-stage.paint {
+	background: var( --paint );
+}
+
+.backdrops {
+	display: inline-flex;
+	gap: 4px;
+	margin-left: auto;
+}
+
+.backdrop {
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border-radius: 4px;
+	border: 1px solid var( --line );
+	background-color: var( --paint );
+	background-size: 8px 8px;
+	cursor: pointer;
+}
+
+.backdrop[aria-pressed="true"] {
+	outline: 2px solid var( --safety );
+	outline-offset: 1px;
+}
+
+.logo-edit .check, .logo-edit .range {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+}
+
+.logo-edit input[type="checkbox"], .logo-edit input[type="range"] {
+	margin: 0;
+	accent-color: var( --safety );
+}
+
+.logo-edit .range input {
+	flex: 1;
+	min-width: 0;
+}
+
+.logo-edit .range output {
+	min-width: 3ch;
+	font-family: var( --mono );
+	font-size: 13px;
+	text-align: right;
+}
+
+.logo-edit input:disabled {
+	opacity: 0.5;
+}
+
+.logo-edit .range:has( input:disabled ), .logo-edit .check:has( input:disabled ) {
+	color: var( --muted );
+}
+
+.logo-edit-note {
+	min-height: 1.5em;
+	color: var( --muted );
+}
+
+.logo-edit .button {
+	padding: 8px 16px;
 }
 
 .start-here {
