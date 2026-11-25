@@ -183,23 +183,37 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
 - **Build Pro:** a free account (or signed out) can't paste or duplicate Pro items: they're left
   out, with a toast saying how many ("2 Pro items weren't pasted: they need Build Pro"); the rest
   are pasted. Pro is judged as picking a card is (`sidebar.isLocked`), by the item, a row's item or
-  a kind's own card.
+  a kind's own card. Cutting is the same: Pro items stay where they are, the rest are cut, and the
+  Undo toast says how many were left ("Cut 1 item (1 Pro item wasn't cut: they need Build Pro)"),
+  since paste wouldn't put them back.
 - **Keys are left alone** while typing in a field (search, the P panel, a dialog), while text on
-  the page is selected (Ctrl+C copies that), while a dialog is open and while driving.
+  the page is selected (Ctrl+C copies that), while a dialog is open and while driving. **Ctrl/Cmd+V**
+  works only while building (the library open), and **Ctrl/Cmd+Z / Y** only then or with something
+  selected, so pressing them out of habit while just looking round doesn't change the plan.
 - **Undo and redo** (**Ctrl/Cmd+Z**, **Shift+Ctrl/Cmd+Z** or **Ctrl+Y**, the edit bar, and the
   Undo toasts after Delete and Cut) cover moving (by dragging), turning (keys, knob, toolbar; R
   pressed again and again is one step), resizing with a handle, deleting, cutting, pasting and
   duplicating, each one step however many things it touched; up to 100 steps. Something deleted and
   put back is loaded again as a new entry, and steps before it follow it (`history.replace`).
   Hiding keeps its own Undo toast, and changes typed in the P panel, breaking a row apart and
-  digging aren't steps.
+  digging aren't steps. Undoing or redoing a move, turn or resize puts back only what that step
+  changed (where it stands, its heading, the size dragged), so a later change in the P panel (a
+  width, a material) stays. What's undone is selected again, unless it's hidden. Opening another
+  layout in this one's place (a project from your account, a shared one: `layout.replace`, heard
+  through `layout.onReplace`) clears the steps, and a step still loading items back then drops
+  them, so nothing from the old layout lands in the new one.
+- **Many selected:** each one's box is measured when it changes (models' `change`), not every
+  frame, so a few hundred selected (Ctrl+A on a busy site) don't slow the editor.
 - Saving, autosave, share links and the MCP server are unchanged: what's pasted or moved is saved
   as any placed item is.
 - **Tests:** `npm run test:multiselect-ui` (Shift+click and box selecting, a row by its line,
   Ctrl+A leaving hidden things out; moving several keeps their offsets, turning keeps their
   distances from the middle, each one step to undo and redo; Delete and one Undo; copy and paste at
   the pointer, again beside it; pasting in another tab from localStorage; duplicate and cut; a free
-  account's paste leaving Pro items out; keys in a field and with text selected left alone).
+  account's paste leaving Pro items out; keys in a field and with text selected left alone; undo
+  cleared when another layout opens; undoing a move keeping a later P-panel width; undo not
+  selecting a hidden item; Ctrl+V/Z doing nothing with the library closed; cutting Pro items on a
+  free account leaving them; 80 selected not measured every frame, outlines following a turn).
 
 ## How it's put together
 

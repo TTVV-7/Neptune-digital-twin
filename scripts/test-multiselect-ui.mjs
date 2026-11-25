@@ -6,7 +6,10 @@
 // pointer laid out as they were, a step aside when pasted again; pasting in another tab (another
 // project) from what this browser keeps; Ctrl+D duplicates and Ctrl+X cuts, each one step to undo
 // and redo; a free account's paste leaves the Pro items out and says so; and the keys are left
-// alone while typing in a field.
+// alone while typing in a field. Then: another layout opened in this one's place starts with no
+// undo steps; undoing a move keeps a later P-panel change; undo never selects something hidden;
+// Ctrl+V and Ctrl+Z do nothing with the library closed and nothing selected; cutting Pro items on
+// a free account leaves them; and many selected aren't measured again every frame.
 //
 // Needs Playwright with Chromium (npm i -D playwright && npx playwright install chromium).
 // TEST_VITE_PORT picks the port, or TEST_BASE=<url> uses a dev server that's already running
@@ -619,6 +622,241 @@ test( 'typing in a field keeps its own keys', async () => {
 	await page.keyboard.press( 'Control+C' );
 	assert.equal( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive-build.clipboard' ) ).copiedAt ), copiedAt );
 	await page.evaluate( () => window.getSelection().removeAllRanges() );
+
+} );
+
+test( 'undo steps stay with their layout: another opened in its place starts with none', async () => {
+
+	await clearAll();
+	await layOut();
+	await page.evaluate( () => window.twin.sidebar.setSelection( window.twin.models.entries.filter( e => e.library === 'container-20' ) ) );
+	await page.keyboard.press( 'Delete' );
+	await settle();
+	assert.ok( await page.evaluate( () => window.twin.sidebar.history.canUndo ) );
+	// As cloud.js opens a project or a shared layout.
+	await page.evaluate( () => window.twin.layout.replace( { items: [] } ) );
+	await settle();
+	assert.deepEqual( await page.evaluate( () => window.twin.sidebar.history.size ), { undo: 0, redo: 0 } );
+	await clickAt( await groundOnScreen( 0, 40 ) );
+	await page.keyboard.press( 'Control+Z' );
+	await settle( page, 800 );
+	assert.equal( ( await placed() ).length, 0, 'Ctrl+Z put the old layout\'s items into the new one' );
+
+	// A delete being undone (loading back) as another layout opens: not loaded into that one.
+	await layOut();
+	await page.evaluate( () => window.twin.sidebar.setSelection( window.twin.models.entries.slice( 0, 2 ) ) );
+	await page.keyboard.press( 'Delete' );
+	await settle();
+	await page.evaluate( async () => {
+
+		const undoing = window.twin.sidebar.history.undo();
+		await window.twin.layout.replace( { items: [] } );
+		await undoing;
+
+	} );
+	await settle( page, 800 );
+	assert.equal( ( await placed() ).length, 0 );
+
+} );
+
+test( 'undoing a move leaves a later change in the P panel as it is', async () => {
+
+	await clearAll();
+	await layOut();
+	const zone = () => page.evaluate( () => {
+
+		const e = window.twin.models.entries.find( e => e.kind === 'flatten-zone' );
+		return { east: e.state.east, north: e.state.north, width: e.params.width, length: e.params.length };
+
+	} );
+	const start = await zone();
+	// Moved with a container, by dragging that.
+	await page.evaluate( () => window.twin.sidebar.setSelection( [ window.twin.models.entries[ 1 ], window.twin.models.entries.find( e => e.kind === 'flatten-zone' ) ] ) );
+	await settle();
+	const from = await onScreen( 1 );
+	await drag( from, { x: from.x + 60, y: from.y + 40 } );
+	const moved = await zone();
+	assert.ok( Math.hypot( moved.east - start.east, moved.north - start.north ) > 2, 'it did not move' );
+	// The P panel's width field, as placement.js changes it.
+	await page.evaluate( () => window.twin.models.setParams( window.twin.models.entries.find( e => e.kind === 'flatten-zone' ), { width: 20 } ) );
+	await page.keyboard.press( 'Control+Z' );
+	await settle();
+	const back = await zone();
+	assertNear( back.east, start.east, 'moved back (east)' );
+	assertNear( back.north, start.north, 'moved back (north)' );
+	assert.equal( back.width, 20, 'undoing the move undid the width typed after it' );
+	assert.equal( back.length, 8 );
+	await page.keyboard.press( 'Control+Shift+Z' );
+	await settle();
+	const again = await zone();
+	assertNear( again.east, moved.east, 'moved again' );
+	assert.equal( again.width, 20 );
+
+	// Turned (R), then its length changed: undoing the turn keeps the length.
+	await page.evaluate( () => window.twin.sidebar.select( window.twin.models.entries.find( e => e.kind === 'flatten-zone' ) ) );
+	await page.keyboard.press( 'KeyR' );
+	await page.evaluate( () => window.twin.models.setParams( window.twin.models.entries.find( e => e.kind === 'flatten-zone' ), { length: 12 } ) );
+	await page.keyboard.press( 'Control+Z' );
+	await settle();
+	const unturned = await page.evaluate( () => {
+
+		const e = window.twin.models.entries.find( e => e.kind === 'flatten-zone' );
+		return { heading: e.state.heading, length: e.params.length, width: e.params.width };
+
+	} );
+	assert.deepEqual( unturned, { heading: 0, length: 12, width: 20 } );
+	await page.evaluate( () => window.twin.sidebar.deselect() );
+
+} );
+
+test( 'undo never selects something hidden, so Delete can\'t take it unseen', async () => {
+
+	await clearAll();
+	await layOut();
+	const n = ( await placed() ).length;
+	const from = await onScreen( 0 );
+	await drag( from, { x: from.x + 50, y: from.y } );
+	await page.evaluate( () => {
+
+		window.twin.models.setHidden( window.twin.models.entries[ 0 ], true );
+		window.twin.sidebar.deselect();
+
+	} );
+	await page.keyboard.press( 'Control+Z' );
+	await settle();
+	assert.deepEqual( await selectedNames(), [] );
+	assert.equal( await page.evaluate( () => window.twin.sidebar.getSelection().some( e => window.twin.models.isHidden( e ) ) ), false );
+	await page.keyboard.press( 'Delete' );
+	await settle();
+	assert.equal( ( await placed() ).length, n, 'Delete took a hidden item' );
+	await page.evaluate( () => window.twin.models.setHidden( window.twin.models.entries[ 0 ], false ) );
+
+} );
+
+test( 'with the library closed, Ctrl+V and Ctrl+Z leave the plan alone', async () => {
+
+	await clearAll();
+	await layOut();
+	await page.evaluate( () => window.twin.sidebar.setSelection( window.twin.models.entries.slice( 0, 2 ) ) );
+	await page.keyboard.press( 'Control+C' );
+	// A step to undo: one turned (R).
+	await page.evaluate( () => window.twin.sidebar.select( window.twin.models.entries[ 3 ] ) );
+	await page.keyboard.press( 'KeyR' );
+	await page.evaluate( () => window.twin.sidebar.deselect() );
+	await page.evaluate( () => document.getElementById( 'library-toggle' ).click() );
+	assert.equal( await page.evaluate( () => window.twin.sidebar.isOpen() ), false );
+	const before = await placed();
+	const history = await page.evaluate( () => window.twin.sidebar.history.size );
+	const spot = await groundOnScreen( 0, 30 );
+	await page.mouse.move( spot.x, spot.y );
+	for ( const key of [ 'Control+V', 'Control+Z', 'Control+Y', 'Control+Shift+Z' ] ) await page.keyboard.press( key );
+	await settle( page, 800 );
+	assert.deepEqual( await placed(), before );
+	assert.deepEqual( await page.evaluate( () => window.twin.sidebar.history.size ), history );
+	assert.deepEqual( await selectedNames(), [] );
+	assert.equal( await page.locator( '.edit-bar' ).isVisible(), false );
+	await shot( 'paste-library-closed' );
+	await page.evaluate( () => document.getElementById( 'library-toggle' ).click() );
+	// Open again, they work.
+	await page.keyboard.press( 'Control+Z' );
+	await settle();
+	assert.equal( await page.evaluate( () => window.twin.sidebar.history.size.undo ), history.undo - 1 );
+
+} );
+
+test( 'a free account cutting Pro items: they stay where they are, saying so', async () => {
+
+	await clearAll();
+	await page.evaluate( async () => {
+
+		const { models, sidebar } = window.twin;
+		const { loadLibrary, itemConfig } = await import( '/src/library.js' );
+		const library = await loadLibrary();
+		const a = await models.load( itemConfig( library.find( i => i.id === 'container-20' ), { east: 0, north: 0, heading: 0 } ) );
+		const b = await models.load( itemConfig( library.find( i => i.id === 'telehandler-12k' ), { east: 10, north: 0, heading: 0 } ) );
+		sidebar.setGate( { isLocked: item => !! item.premium, onLocked: () => {} } );
+		sidebar.setSelection( [ a, b ] );
+
+	} );
+	await page.keyboard.press( 'Control+X' );
+	await page.locator( '.undo-toast', { hasText: 'Cut 1 item (1 Pro item wasn\'t cut' } ).waitFor();
+	assert.deepEqual( await page.evaluate( () => window.twin.models.entries.map( e => e.library ) ), [ 'telehandler-12k' ] );
+	assert.equal( ( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive-build.clipboard' ) ) ) ).items.length, 1 );
+	const spot = await groundOnScreen( 0, 30 );
+	await page.mouse.move( spot.x, spot.y );
+	await page.keyboard.press( 'Control+V' );
+	await page.waitForFunction( () => window.twin.models.entries.length === 2 );
+	// Only Pro items selected: nothing cut.
+	await page.evaluate( () => window.twin.sidebar.setSelection( window.twin.models.entries.filter( e => e.library === 'telehandler-12k' ) ) );
+	await page.keyboard.press( 'Control+X' );
+	await page.locator( '.toast', { hasText: '1 Pro item wasn\'t cut' } ).last().waitFor();
+	assert.equal( ( await placed() ).length, 2 );
+	await page.evaluate( () => window.twin.sidebar.setGate( null ) );
+
+} );
+
+test( 'many selected: their outlines are measured when they change, not every frame', async () => {
+
+	await clearAll();
+	await page.evaluate( async () => {
+
+		const { models } = window.twin;
+		const { loadLibrary, itemConfig } = await import( '/src/library.js' );
+		const library = await loadLibrary();
+		const container = library.find( i => i.id === 'container-20' );
+		const loads = [];
+		for ( let i = 0; i < 80; i ++ ) loads.push( models.load( itemConfig( container, { east: ( i % 10 ) * 4 - 20, north: Math.floor( i / 10 ) * 8, heading: 0 } ) ) );
+		await Promise.all( loads );
+
+	} );
+	await settle( page, 1500 );
+	await page.keyboard.press( 'Control+A' );
+	await settle( page, 800 );
+	assert.equal( ( await selectedNames() ).length, 80 );
+	// Box3's measuring of objects, counted over frames where nothing changes (snapping aside).
+	const measure = () => page.evaluate( () => {
+
+		const { models, sidebar } = window.twin;
+		const proto = Object.getPrototypeOf( models.entries[ 0 ].footprint );
+		const original = proto.expandByObject;
+		let calls = 0;
+		proto.expandByObject = function ( ...args ) {
+
+			calls ++;
+			return original.apply( this, args );
+
+		};
+		// No snapping between: only what the editor does itself.
+		const update = models.update;
+		models.update = () => {};
+		const t = performance.now();
+		for ( let i = 0; i < 20; i ++ ) sidebar.update();
+		const ms = ( performance.now() - t ) / 20;
+		models.update = update;
+		proto.expandByObject = original;
+		return { calls, ms };
+
+	} );
+	await settle( page, 1500 );
+	const idle = await measure();
+	assert.ok( idle.calls < 20, `measured ${ idle.calls } times in 20 frames with nothing changing (${ idle.ms.toFixed( 2 ) } ms a frame)` );
+	// Turned (R), they're measured again: the outlines follow.
+	await page.keyboard.press( 'KeyR' );
+	await settle();
+	const outlined = await page.evaluate( () => {
+
+		const { scene, sidebar } = window.twin;
+		const entry = sidebar.getSelection()[ 0 ];
+		const box = Object.getPrototypeOf( entry.footprint ).constructor;
+		const want = new box().setFromObject( entry.pivot );
+		const outline = scene.children.filter( o => o.type === 'BoxHelper' && o.visible && o.material.color.getHex() === 0xffb02e )[ 0 ];
+		outline.geometry.computeBoundingBox();
+		const got = outline.geometry.boundingBox;
+		return Math.max( got.min.distanceTo( want.min ), got.max.distanceTo( want.max ) );
+
+	} );
+	assert.ok( outlined < 0.05, `the outline is ${ outlined } m off its item after turning` );
+	await page.keyboard.press( 'Escape' );
 
 } );
 

@@ -114,6 +114,11 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// Several selected: one stand-in for them all, for the handles and the toolbar (see makeGroup).
 	let group = null;
 	const outlines = [];
+	// Each of several selected's box in the scene, and round them all: worked out again only when
+	// one has changed (models' 'change'), not every frame, as a few hundred selected would be slow.
+	const memberBoxes = new Map();
+	const groupBox = new Box3();
+	let groupStale = true;
 	// A box being dragged out to select what's in it: { start: { x, y }, end, add, element, pointerId }.
 	let boxing = null;
 	// The edit bar's Select: a drag on the ground selects a box, without Shift.
@@ -135,6 +140,15 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let wheel = 0; // trackpad scrolling not yet turned into a turn, in pixels
 
 	const history = createHistory( { models, onError } );
+	// Another layout opened in this one's place (a project, a shared one): its steps would put the
+	// old one's items into it, so they go, with what was selected and where the last paste went.
+	layout.onReplace?.( () => {
+
+		history.clear();
+		lastPaste = null;
+		select( null );
+
+	} );
 	// What a handle (turn, resize, a row's points) was pressed on, as it was then: a step once let go.
 	let handleStart = null;
 	const handles = createHandles( {
@@ -505,9 +519,23 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	} );
 	updateCount();
+	// One of several selected moved, turned, resized or went: its box and theirs are measured again.
+	for ( const type of [ 'change', 'remove' ] ) models.addEventListener( type, ( { entry } ) => {
+
+		if ( memberBoxes.delete( entry ) ) groupStale = true;
+
+	} );
+	models.addEventListener( 'buildmode', () => {
+
+		memberBoxes.clear();
+		groupStale = true;
+
+	} );
 	// Hidden things can't stay selected (the Show panel, the toolbar's Hide, Before).
 	models.addEventListener( 'visibility', () => {
 
+		memberBoxes.clear();
+		groupStale = true;
 		if ( selection.length > 1 && selection.some( e => models.isHidden( e ) ) ) setSelection( selection.filter( e => ! models.isHidden( e ) ), selected );
 		else if ( selected && models.isHidden( selected ) ) select( null );
 
@@ -835,7 +863,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// Select these (several, or one or none as select() does). `primary`: the one picked last.
 	function setSelection( entries, primary = null ) {
 
-		const list = [ ...new Set( entries ) ].filter( e => e && models.entries.includes( e ) && ! e.placing );
+		// Never what's hidden (undo touching a hidden one, say): it couldn't be seen to be selected,
+		// and Delete would take it unseen.
+		const list = [ ...new Set( entries ) ].filter( e => e && models.entries.includes( e ) && ! e.placing && ! models.isHidden( e ) );
 		if ( list.length <= 1 ) {
 
 			select( list[ 0 ] ?? null );
@@ -883,6 +913,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		}
 
 		group = several ? makeGroup( selection ) : null;
+		memberBoxes.clear();
+		groupStale = true;
 		showGroupPanel( false );
 
 	}
@@ -941,7 +973,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		let north = 0;
 		for ( const member of stand.members ) {
 
-			box.expandByObject( member.pivot );
+			box.union( memberBox( member ) );
 			east += member.state.east;
 			north += member.state.north;
 
@@ -962,6 +994,35 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		stand.footprint.min.set( - half, 0, - half );
 		stand.footprint.max.set( half, 1, half );
 		stand.state.up = box.min.y;
+
+	}
+
+	function memberBox( entry ) {
+
+		let box = memberBoxes.get( entry );
+		if ( ! box ) {
+
+			box = new Box3().setFromObject( entry.pivot );
+			memberBoxes.set( entry, box );
+
+		}
+
+		return box;
+
+	}
+
+	// An outline (a BoxHelper) drawn round a box, as BoxHelper.update() draws round an object.
+	function outlineBox( helper, box ) {
+
+		if ( box.isEmpty() ) return;
+		const { min, max } = box;
+		const array = helper.geometry.attributes.position.array;
+		array.set( [
+			max.x, max.y, max.z, min.x, max.y, max.z, min.x, min.y, max.z, max.x, min.y, max.z,
+			max.x, max.y, min.z, min.x, max.y, min.z, min.x, min.y, min.z, max.x, min.y, min.z,
+		] );
+		helper.geometry.attributes.position.needsUpdate = true;
+		helper.geometry.computeBoundingSphere();
 
 	}
 
@@ -1008,10 +1069,24 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
-	function putState( entry, { east, north, heading, up, snap, params } ) {
+	// Put back `to` where it differs from `from` (the other end of the step), and nothing else: a
+	// change made since that the step didn't make (a size or material typed in the P panel, the
+	// "N items" fields) stays as it is.
+	function putState( entry, to, from ) {
 
-		Object.assign( entry.state, { east, north, heading, up, snap } );
-		if ( params && JSON.stringify( params ) !== JSON.stringify( entry.params ) ) models.setParams( entry, params );
+		const changes = {};
+		for ( const key of [ 'east', 'north', 'heading', 'up', 'snap' ] ) if ( to[ key ] !== from[ key ] ) changes[ key ] = to[ key ];
+		// A snapped height follows the ground: it isn't put back unless snapping changed.
+		if ( to.snap && from.snap ) delete changes.up;
+		Object.assign( entry.state, changes );
+		const params = {};
+		for ( const key of new Set( [ ...Object.keys( to.params ?? {} ), ...Object.keys( from.params ?? {} ) ] ) ) {
+
+			if ( JSON.stringify( to.params?.[ key ] ) !== JSON.stringify( from.params?.[ key ] ) ) params[ key ] = to.params?.[ key ];
+
+		}
+
+		if ( entry.params && Object.keys( params ).length ) models.setParams( entry, params );
 		else models.apply( entry );
 
 	}
@@ -1030,8 +1105,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			refs,
 			before,
 			after,
-			undo: () => putStates( refs, step.before ),
-			redo: () => putStates( refs, step.after ),
+			undo: () => putStates( refs, step.before, step.after ),
+			redo: () => putStates( refs, step.after, step.before ),
 		};
 		if ( merge ) step.merge = top => {
 
@@ -1044,14 +1119,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
-	function putStates( refs, states ) {
+	function putStates( refs, states, others ) {
 
 		const entries = [];
 		refs.forEach( ( ref, i ) => {
 
 			const entry = history.resolve( ref );
 			if ( ! entry ) return;
-			putState( entry, states[ i ] );
+			putState( entry, states[ i ], others[ i ] );
 			entries.push( entry );
 
 		} );
@@ -1085,7 +1160,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			refs,
 			async undo() {
 
+				const epoch = history.epoch;
 				const results = await Promise.allSettled( configs.map( config => models.load( config ) ) );
+				// Another layout was opened while they loaded: not into that one.
+				if ( history.epoch !== epoch ) {
+
+					for ( const r of results ) if ( r.status === 'fulfilled' ) models.remove( r.value );
+					return;
+
+				}
+
 				const back = [];
 				results.forEach( ( r, i ) => {
 
@@ -1136,14 +1220,33 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
+	// Cut: copied and taken away. Pro items stay where they are while they're locked, as paste
+	// wouldn't put them back (a free account would lose them); the rest are cut.
 	function cutSelection() {
 
-		const entries = [ ...selection ];
+		const locked = selection.filter( entry => configLocked( models.toConfig( entry ) ) );
+		const entries = selection.filter( entry => ! locked.includes( entry ) );
+		const note = locked.length ? `${ locked.length === 1 ? '1 Pro item wasn\'t cut' : `${ locked.length } Pro items weren't cut` }: ${ BUILD_PRO_SAYING }` : '';
+		if ( entries.length === 0 ) {
+
+			if ( note ) toast( note );
+			return;
+
+		}
+
+		if ( locked.length ) setSelection( entries );
 		if ( ! copySelection( { quiet: true } ) ) return;
 		const step = removalStep( `cut ${ itemCount( entries.length ) }`, entries );
 		history.push( step );
 		step.redo();
-		toolbar.offerUndo( `Cut ${ itemCount( entries.length ) }`, () => history.undo( step ) );
+		toolbar.offerUndo( `Cut ${ itemCount( entries.length ) }${ note ? ` (${ note })` : '' }`, () => history.undo( step ) );
+
+	}
+
+	// Whether a saved item (a config) is Pro and locked for this account (premium.js's gate).
+	function configLocked( config ) {
+
+		return libraryIdsOf( config ).some( id => isLocked( library.find( i => i.id === id ) ?? {} ) );
 
 	}
 
@@ -1212,8 +1315,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		let locked = 0;
 		for ( const item of data.items ) {
 
-			const ids = libraryIdsOf( item.config );
-			if ( ids.some( id => isLocked( library.find( i => i.id === id ) ?? {} ) ) ) locked ++;
+			if ( configLocked( item.config ) ) locked ++;
 			else allowed.push( item );
 
 		}
@@ -1224,7 +1326,15 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		cancelPlacing();
 		cancelDrawing();
 		const configs = allowed.map( item => resolveItem( pastedConfig( item, { east: middle.east + item.east, north: middle.north + item.north } ), library ) );
+		const epoch = history.epoch;
 		const results = await Promise.allSettled( configs.map( config => models.load( config ) ) );
+		if ( history.epoch !== epoch ) {
+
+			for ( const r of results ) if ( r.status === 'fulfilled' ) models.remove( r.value );
+			return [];
+
+		}
+
 		const placed = results.filter( r => r.status === 'fulfilled' ).map( r => r.value );
 		const failed = results.length - placed.length;
 		if ( failed ) onError( `${ failed } of ${ results.length } couldn't be ${ pasted }: ${ results.find( r => r.status === 'rejected' ).reason?.message ?? '' }` );
@@ -1678,7 +1788,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	// Ctrl/Cmd with A, C, X, V, D, Z and Y: select all, copy, cut, paste, duplicate, undo and redo.
 	// Not while typing (a field's own copy and paste, undo...), nor while text on the page is
-	// selected (copying that), nor driving.
+	// selected (copying that), nor driving. Paste only while building (the library open), and undo
+	// and redo only then or with something selected: pressed out of habit while just looking round,
+	// they'd change the plan, and it saves itself.
 	window.addEventListener( 'keydown', e => {
 
 		if ( ! ( e.ctrlKey || e.metaKey ) || e.altKey || isTyping( e ) || isDriving() || dialogOpen() ) return;
@@ -1704,7 +1816,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 				cutSelection();
 				break;
 			case 'KeyV':
-				if ( busy ) return;
+				if ( busy || ! open ) return;
 				// The browser's paste event brings the system clipboard, if it will; else this browser's.
 				startPaste();
 				break;
@@ -1714,13 +1826,13 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 				duplicateSelection();
 				break;
 			case 'KeyZ':
-				if ( busy ) return;
+				if ( busy || ( ! open && selection.length === 0 ) ) return;
 				e.preventDefault();
 				if ( e.shiftKey ) history.redo();
 				else history.undo();
 				break;
 			case 'KeyY':
-				if ( busy || e.metaKey ) return;
+				if ( busy || e.metaKey || ( ! open && selection.length === 0 ) ) return;
 				e.preventDefault();
 				history.redo();
 				break;
@@ -2144,8 +2256,15 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 			if ( group ) {
 
-				measureGroup( group, _box );
-				selection.slice( 0, MAX_OUTLINES ).forEach( ( entry, i ) => outlines[ i ].setFromObject( entry.pivot ) );
+				if ( groupStale ) {
+
+					groupStale = false;
+					measureGroup( group, groupBox );
+					selection.slice( 0, MAX_OUTLINES ).forEach( ( entry, i ) => outlineBox( outlines[ i ], memberBox( entry ) ) );
+
+				}
+
+				_box.copy( groupBox );
 
 			} else if ( selected ) {
 

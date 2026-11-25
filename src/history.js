@@ -8,6 +8,7 @@
 // entry an older one became is found with resolve(). Steps that touch the same items one after the
 // other within MERGE_TIME (pressing R a few times) can merge into one: push( step ) with
 // `merge( top )` returning true when it took the top step's place, having folded it in.
+// Another layout replacing what's placed (layout.replace) clears it all.
 
 const LIMIT = 100;
 const MERGE_TIME = 1500;
@@ -19,6 +20,8 @@ export function createHistory( { models, onError = () => {} } ) {
 	// An entry deleted and loaded back -> the entry it was loaded as.
 	const replaced = new WeakMap();
 	const listeners = new Set();
+	// Bumped by clear(): a step still loading items back from before then takes them away again.
+	let epoch = 0;
 	// Steps undone and redone, one at a time (undoing a delete loads items back, which takes a while).
 	let queue = Promise.resolve();
 
@@ -65,6 +68,7 @@ export function createHistory( { models, onError = () => {} } ) {
 			const index = from.lastIndexOf( step ?? from[ from.length - 1 ] );
 			if ( index === - 1 ) return null;
 			const [ target ] = from.splice( index, 1 );
+			const at = epoch;
 			changed();
 			try {
 
@@ -76,6 +80,8 @@ export function createHistory( { models, onError = () => {} } ) {
 
 			}
 
+			// Cleared meanwhile (another layout opened): it belongs to the old one.
+			if ( epoch !== at ) return null;
 			target.time = - Infinity;
 			to.push( target );
 			changed();
@@ -94,6 +100,21 @@ export function createHistory( { models, onError = () => {} } ) {
 		replace( entry, next ) {
 
 			if ( entry && next && entry !== next ) replaced.set( entry, next );
+
+		},
+		// Forget every step: another layout (a project opened, a shared one) has replaced what was
+		// placed, and steps from the old one would put its items into the new one.
+		clear() {
+
+			done.length = 0;
+			undone.length = 0;
+			epoch ++;
+			changed();
+
+		},
+		get epoch() {
+
+			return epoch;
 
 		},
 		// Undo the last step, or a given one (an Undo toast's, which may not be the last any more).
