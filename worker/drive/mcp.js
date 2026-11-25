@@ -323,9 +323,11 @@ async function findSite( context, args ) {
 	if ( ! q ) throw new ToolError( 'query: an address, town or landmark' );
 	const url = new URL( `/api/search?q=${ encodeURIComponent( q ) }`, context.url.origin );
 	const res = await search( { ...context, url } );
-	const { results } = await res.json();
+	const { results, streetOnly } = await res.json();
 	if ( ! results?.length ) return text( 'Nothing found. Try a street address with its town, or a landmark.' );
-	return text( results.map( r => ( { place: r.name, lat: r.lat, lon: r.lon } ) ) );
+	// exact: a building or numbered address (search.js's house), not just its street; those come first.
+	const places = results.map( r => ( { place: r.name, lat: r.lat, lon: r.lon, exact: r.house === true } ) );
+	return text( streetOnly ? { note: 'Street only: the exact address wasn\'t found. Tell the person to move the site into place in the editor.', places } : places );
 
 }
 

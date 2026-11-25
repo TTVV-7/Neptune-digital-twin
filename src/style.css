@@ -1027,6 +1027,17 @@ body.library-open .site-picker {
 	opacity: 0.75;
 }
 
+/* Only the street was found for an address with a house number; and whose search answered. */
+.site-picker .street-only {
+	border-left: 3px solid currentColor;
+	opacity: 0.9;
+}
+
+.site-picker .credit {
+	padding: 2px 8px;
+	font-size: 10px;
+}
+
 /* Notices go below the Site button (product.js), not over it (on narrow screens they're already
    below the status block, lower still). */
 body.has-site-picker #banner {

@@ -7,7 +7,8 @@ import { WORLD_IDS } from '../../src/drive-app/worlds.js';
 // per visitor, the leaderboard's new names and scores per visitor, and what driving with others has
 // spent of its budget (and each address's share of it) and which room each visit is in (liveOpen,
 // liveSpent), where people are driving now for the globe (liveSpent, liveOnline), which drop-in
-// places may be counted (places), and spaces out the searches sent on to OpenStreetMap.
+// places may be counted (places), spaces out the searches sent on to OpenStreetMap, and counts the
+// day's address lookups sent to Google's Geocoding API (geocodeTurn).
 // A Durable Object handles one call at a time, and each check-and-count below runs in one go with
 // nothing in between, so two visits arriving together can't both take the last drive of the day.
 // Counts are kept in its SQLite storage (on every plan, the free one too), so a restart doesn't
@@ -85,6 +86,9 @@ export class DriveLimits extends DurableObject {
 		// each as a hash of the day's salt and it, so neither an address nor a username is kept, nor can
 		// be linked from one day to the next. last_at: when its latest try was (ms).
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS password_fails ( day TEXT NOT NULL, key TEXT NOT NULL, count INTEGER NOT NULL, last_at INTEGER NOT NULL, PRIMARY KEY ( day, key ) ) WITHOUT ROWID' );
+		// Google Geocoding lookups each day, from everyone together (geocodeTurn; search.js): a count,
+		// nothing of what was looked up or by whom.
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS geocodes ( day TEXT PRIMARY KEY, count INTEGER NOT NULL ) WITHOUT ROWID' );
 		// The key for those HMACs, once it's made (placesKey).
 		this.placeKey = null;
 		// When the next search may go out (ms). Only in memory: if this object is put to sleep,
@@ -553,6 +557,32 @@ export class DriveLimits extends DurableObject {
 		if ( at - now > SEARCH_QUEUE ) return { busy: true, retryAfter: Math.ceil( ( at - now ) / 1000 ) };
 		this.nextSearch = at + SEARCH_GAP;
 		return { wait: at - now };
+
+	}
+
+	// One of today's Google Geocoding lookups at `now` (ms), unless `daily` of them have been taken
+	// today, or (with a `visitor`: an address, an IPv6 one by its /48, or "account:<id>") that
+	// visitor has had `perVisitor` of them: { ok: true, left } with that one counted (for everyone
+	// and, with a visitor, for it), or { ok: false, reason: 'daily' or 'visitor', retryAfter } with
+	// the seconds until midnight UTC, when the counts start again, and nothing counted. So one visitor
+	// (a script looping over made-up addresses) can't use up everyone's day. Visitors are hashed with
+	// the day's salt and counted as take's turns ('geocode'). Days before today are forgotten.
+	async geocodeTurn( { now, daily, visitor = null, perVisitor = Infinity } ) {
+
+		const day = dayOf( now );
+		const hashed = visitor === null ? null : await sha256Hex( `${ this.saltFor( day ) }:${ visitor }` );
+		return this.ctx.storage.transactionSync( () => {
+
+			this.sql.exec( 'DELETE FROM geocodes WHERE day < ?', day );
+			const retryAfter = untilMidnight( now );
+			const taken = this.sql.exec( 'SELECT count FROM geocodes WHERE day = ?', day ).toArray()[ 0 ]?.count ?? 0;
+			if ( ! ( taken < daily ) ) return { ok: false, reason: 'daily', retryAfter };
+			if ( hashed !== null && ! ( turnsTaken( this.sql, day, 'geocode', hashed ) < perVisitor ) ) return { ok: false, reason: 'visitor', retryAfter };
+			this.sql.exec( 'INSERT INTO geocodes ( day, count ) VALUES ( ?, 1 ) ON CONFLICT ( day ) DO UPDATE SET count = count + 1', day );
+			if ( hashed !== null ) this.sql.exec( 'INSERT INTO turns ( day, kind, visitor, count ) VALUES ( ?, ?, ?, 1 ) ON CONFLICT ( day, kind, visitor ) DO UPDATE SET count = count + 1', day, 'geocode', hashed );
+			return { ok: true, left: daily - taken - 1 };
+
+		} );
 
 	}
 
