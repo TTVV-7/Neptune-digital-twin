@@ -222,6 +222,48 @@ test( 'a level area is level, saves as before, and is walked on at its floor, fi
 
 } );
 
+test( 'round a level area its edge is the ground beside it, kept above a height or not, and a tree beside it is no spike', async () => {
+
+	// On the slope (8% up to the east), its uphill edge at east -50, dug about a metre into it there.
+	const i = await area( { params: { width: 20, length: 14, surface: 'gravel', keep: 'height', height: 5 }, east: - 60, north: 60 } );
+	for ( const out of [ 0.5, 0.75 ] ) near( await heightAt( - 50 + out, 60 ), 0.08 * ( - 50 + out ) + 0.03 * 60, 0.05, `${ out } m outside its uphill edge` );
+	const ring = await page.evaluate( i => {
+
+		const { terrain } = window.twin;
+		const entry = window.areas[ i ];
+		const node = ( east, north ) => {
+
+			const a = Math.round( - east / 0.5 ), b = Math.round( north / 0.5 );
+			const chunk = terrain.owner( a, b );
+			return { chunk, k: ( b - chunk.j0 ) * 65 + a - chunk.i0 };
+
+		};
+		// Google's mesh just outside it isn't hidden up to its height limit (it's not in the area).
+		const outside = node( - 49.5, 60 );
+		const ceiling = outside.chunk.ceiling[ outside.k ];
+		// A tree's crown read as the ground at a node just outside it: drawn (with Google's tiles) no
+		// higher than the ground round it, and the ground beside it as it is.
+		const { chunk, k } = outside;
+		const saved = [ chunk.surface[ k ], chunk.base[ k ] ];
+		chunk.surface[ k ] = chunk.base[ k ] = saved[ 0 ] + 6;
+		const changed = new Uint8Array( 65 * 65 );
+		for ( let n = 0; n < changed.length; n ++ ) changed[ n ] = Math.abs( chunk.surface[ n ] - chunk.base[ n ] ) > 0.02 || chunk.graded[ n ] ? 1 : 0;
+		const drawn = terrain.lipHeights( chunk, changed, chunk.shown );
+		const beside = node( - 49.5, 62 );
+		const out = { ceiling, shown: chunk.shown[ k ], ground: saved[ 0 ], tree: drawn[ k ], beside: drawn[ beside.k ], besideGround: chunk.surface[ beside.k ], floor: entry.state.up };
+		[ chunk.surface[ k ], chunk.base[ k ] ] = saved;
+		return out;
+
+	}, i );
+	assert.equal( ring.ceiling, Infinity, 'nothing hidden up to its height limit outside it' );
+	assert.equal( ring.shown, 1, 'the node is in the ring drawn round it' );
+	assert.ok( ring.tree < ring.ground + 0.3, `the tree beside it drawn ${ ( ring.tree - ring.ground ).toFixed( 2 ) } m above the ground, not 6 m` );
+	assert.ok( ring.tree > ring.floor, 'nor down to its floor (it\'s dug in there)' );
+	near( ring.beside, ring.besideGround, 0.3, 'the ground beside it as it is' );
+	await page.evaluate( () => window.twin.models.remove( window.areas.pop() ) );
+
+} );
+
 test( 'the walking character is drawn after the ground and a pad\'s surface', async () => {
 
 	const orders = await page.evaluate( async () => {
@@ -820,6 +862,44 @@ test( 'keeping what\'s overhead: under a stand-in overpass its curtains are hidd
 	assert.ok( top < out.deck, `a jump under the deck stops under it (head at most ${ ( top - out.deck ).toFixed( 2 ) } m from it)` );
 	await look( { east: 300, north: - 100, distance: 45, from: 220, elevation: 20 } );
 	await shot( 'grading-overpass' );
+
+	// Read again only near it, and never forgotten for a coarser read: with the camera 5 km away
+	// and the overpass gone (as Google's tiles there are coarse or unloaded), it isn't read again;
+	// back over it, it is, and what was found stands.
+	const reread = await page.evaluate( async () => {
+
+		const { flattening, controls, camera } = window.twin;
+		const { entry, bridge } = window.overpass;
+		const wait = async ( ms, until = () => false ) => {
+
+			const end = performance.now() + ms;
+			while ( performance.now() < end && ! until() ) await new Promise( resolve => setTimeout( resolve, 50 ) );
+
+		};
+		const keep = () => flattening.keepAbove( entry, - 300, - 100 );
+		const reads = flattening.overheadReads;
+		controls.setPose( camera.position.clone().set( - 5300, 200, - 100 ), 90, 0 );
+		bridge.visible = false;
+		flattening.overheadChanged();
+		await wait( 4500 );
+		const away = { reads: flattening.overheadReads - reads, keep: keep() };
+		controls.setPose( camera.position.clone().set( - 330, 40, - 100 ), 90, - 20 );
+		await wait( 6000, () => flattening.overheadReads > reads );
+		await wait( 6000, () => flattening.overheadsRead );
+		const back = { reads: flattening.overheadReads - reads, keep: keep() };
+		bridge.visible = true;
+		flattening.overheadChanged();
+		await wait( 6000, () => flattening.overheadReads > reads + back.reads );
+		await wait( 6000, () => flattening.overheadsRead );
+		return { away, back, again: { reads: flattening.overheadReads - reads, keep: keep() } };
+
+	} );
+	assert.equal( reread.away.reads, 0, 'not read again from 5 km away' );
+	near( reread.away.keep, 5.7, 0.05, 'what was found, from 5 km away' );
+	assert.equal( reread.back.reads, 1, 'read again back over it' );
+	near( reread.back.keep, 5.7, 0.05, 'what was found stands over a coarser read' );
+	assert.equal( reread.again.reads, 2, 'and again as more loads' );
+	near( reread.again.keep, 5.7, 0.05, 'what\'s found with the overpass there again' );
 	await page.evaluate( () => {
 
 		const { models, controls } = window.twin;

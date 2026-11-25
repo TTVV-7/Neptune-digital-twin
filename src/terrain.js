@@ -1044,10 +1044,12 @@ export class Terrain extends EventDispatcher {
 				if ( inside < 0 ) {
 
 					// The ring of nodes just outside, drawn and masked with it (shownNodes): under what
-					// it keeps overhead, Google's mesh is hidden only up to that too, and the ground read
-					// there from above is the deck (or a curtain hanging from it), not the ground: drawn
-					// no higher than the edge's floor, not as a wall up to the deck.
-					if ( inside < - 1.5 * CELL || ! zone.chunks ) return;
+					// an auto area keeps overhead, Google's mesh is hidden only up to that too, and the
+					// ground read there from above is the deck (or a curtain hanging from it), not the
+					// ground: drawn no higher than the edge's floor, not as a wall up to the deck. (One
+					// kept above a height keeps it everywhere, so its ring is the ground, as for one
+					// keeping nothing: lipHeights draws it.)
+					if ( inside < - 1.5 * CELL || ! zone.chunks || zone.params.keep !== 'auto' ) return;
 					const [ u, v ] = zoneLocal( zone, x, z );
 					const cu = MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), cv = MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl );
 					const edge = zone.height( cu, cv );
@@ -2202,10 +2204,15 @@ export class Terrain extends EventDispatcher {
 	// car as often as the ground; drawn there, and with Google's mesh hidden above it, those showed
 	// as slabs of earth rising off the pit's edge. So each such node is drawn no higher than the
 	// lowest ground within LIP_REACH of it (what's beside a car) or LIP_RISE above the rim of the pit
-	// it's round, nor lower than that rim (gentle rises round a pit stay where they are).
+	// it's round, nor lower than that rim (gentle rises round a pit stay where they are). The same
+	// round a level flatten area holding its floor: the ring of nodes just outside it is drawn no
+	// higher than the lowest ground outside it within LIP_REACH, nor lower than the edge's floor, so a
+	// tree or a roof beside it doesn't stand up off its edge as a spike of earth (where it's dug into
+	// a hillside, the cut's face still rises to the ground).
 	lipHeights( chunk, changed, shown ) {
 
 		const drawn = chunk.surface.slice();
+		this.zoneLips( chunk, changed, shown, drawn );
 		const rims = [];
 		for ( const design of this.designs.values() ) {
 
@@ -2232,6 +2239,33 @@ export class Terrain extends EventDispatcher {
 		}
 
 		return drawn;
+
+	}
+
+	// The ring of nodes just outside each level flatten area holding its floor (see lipHeights),
+	// lowered in `drawn`.
+	zoneLips( chunk, changed, shown, drawn ) {
+
+		let lowest = null;
+		for ( const zone of this.untouched ? [] : this.zones.values() ) {
+
+			if ( zone.graded || ! zone.chunks ) continue;
+			const range = nodeRange( chunk, zone.bounds );
+			if ( ! range ) continue;
+			this.forRange( chunk, range, ( k, x, z ) => {
+
+				if ( changed[ k ] || ! shown[ k ] ) return;
+				const inside = insideRect( zone.frame, x, z );
+				if ( inside >= 0 || inside < - 1.5 * CELL ) return;
+				// The lowest ground round it, leaving out what's held (the floors, built up or dug).
+				lowest ??= crop( filterGrid( this.padded( chunk, LIP_REACH, ( c, n ) => c.graded[ n ] ? Infinity : c.base[ n ], Infinity ), NODES + 2 * LIP_REACH, LIP_REACH, Math.min ), LIP_REACH );
+				const [ u, v ] = zoneLocal( zone, x, z );
+				const edge = zone.height( MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl ) );
+				drawn[ k ] = Math.min( drawn[ k ], Math.max( lowest[ k ], edge ) );
+
+			} );
+
+		}
 
 	}
 

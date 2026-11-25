@@ -73,6 +73,14 @@ const OVERHEAD_CELL = 1;
 const OVERHEAD_NODES = 10000;
 const OVERHEAD_BUDGET = 4;
 const RESCAN = 3;
+// Read again only while the camera is within this far (m) of the area: farther off, the tiles over it
+// are coarse (or not loaded) and show no undersides. A read again from coarser tiles than the last
+// (their geometric error, on average along its lines, more than RESCAN_COARSER times the last's), or
+// that sees Google's mesh along fewer of its lines (less than RESCAN_SEEN of the last's: tiles not
+// loaded), doesn't replace the last.
+const RESCAN_NEAR = 300;
+const RESCAN_COARSER = 1.1;
+const RESCAN_SEEN = 0.9;
 // A pillar (or a gap in a deck's underside) this far (m) inside a deck's edge is closed over; a deck
 // or canopy smaller than MIN_DECK (m²) is flattened. A deck is kept from this far under its underside
 // (m), and a pillar from this far above the floor. Google's mesh is pressed under the lowest of what's
@@ -915,7 +923,7 @@ class AreaFlatteningPlugin extends TileFlatteningPlugin {
 
 // Keeps TileFlatteningPlugin shapes in step with flatten areas and with shapes other modules set.
 // Does nothing without Google tiles, apart from originalHeight().
-export function setUpFlattening( { tiles, models } ) {
+export function setUpFlattening( { tiles, models, camera = null } ) {
 
 	const plugin = tiles ? new AreaFlatteningPlugin() : null;
 	if ( plugin ) tiles.registerPlugin( plugin );
@@ -1156,11 +1164,13 @@ export function setUpFlattening( { tiles, models } ) {
 	// whole, so pillars stand under the deck as obstacles; a gap in the underside Google didn't
 	// capture takes the underside round it. Decks smaller than MIN_DECK (a tree's crown, a sign) are
 	// flattened. Read again a few seconds after more of Google's tiles load, as finer ones come in,
+	// while the camera is near it (RESCAN_NEAR), keeping the last read where the new one is coarser;
 	// and from scratch when the area moves.
 	const scans = new Map(); // entry -> { key, cell, i0, j0, w, h, floor, under, above, next, result }
 	const overheadRoots = tiles ? [ tiles.group ] : [];
 	const overheadListeners = [];
 	let tileLoads = 0;
+	let reads = 0;
 	let lastFrame = 0;
 	tiles?.addEventListener( 'load-model', () => tileLoads ++ );
 	const limits = new WeakMap();
@@ -1223,6 +1233,13 @@ export function setUpFlattening( { tiles, models } ) {
 		};
 
 		const top = first( floor + 2000, DOWN, 4000 );
+		if ( top ) {
+
+			scan.seen ++;
+			scan.error += top.object.userData.tile?.geometricError ?? 0;
+
+		}
+
 		scan.above[ k ] = top && asMade( top ).y > floor + CLEARANCE ? 1 : 0;
 		let under = Infinity;
 		let from = floor + CLEARANCE;
@@ -1278,7 +1295,8 @@ export function setUpFlattening( { tiles, models } ) {
 
 		}
 
-		const scan = { key: scanKey( entry ), cell, i0, j0, w, h, floor, under: new Float32Array( w * h ).fill( Infinity ), above: new Uint8Array( w * h ), next: 0, loads: tileLoads, result: old?.result ?? null, finished: 0 };
+		reads ++;
+		const scan = { key: scanKey( entry ), cell, i0, j0, w, h, floor, under: new Float32Array( w * h ).fill( Infinity ), above: new Uint8Array( w * h ), next: 0, seen: 0, error: 0, loads: tileLoads, result: old?.result ?? null, finished: 0 };
 		scans.set( entry, scan );
 		return scan;
 
@@ -1318,13 +1336,16 @@ export function setUpFlattening( { tiles, models } ) {
 		const reachPress = Math.max( 1, Math.round( PRESS_REACH / cell ) );
 		const low = minFilter( keep.map( ( v, k ) => Number.isNaN( v ) ? Infinity : v + floor[ k ] ), w, h, reachPress );
 		const press = keep.map( ( v, k ) => Number.isNaN( floor[ k ] ) || low[ k ] === Infinity ? NaN : Math.max( PILLAR_KEEP, low[ k ] - floor[ k ] ) );
-		const result = { cell, i0: scan.i0, j0: scan.j0, w, h, keep, press };
+		const error = scan.seen ? scan.error / scan.seen : Infinity;
+		const result = { cell, i0: scan.i0, j0: scan.j0, w, h, keep, press, seen: scan.seen, error };
 		const old = scan.result;
-		const same = old && old.cell === cell && old.i0 === result.i0 && old.j0 === result.j0 && old.w === w && old.h === h &&
-			keep.every( ( v, k ) => Number.isNaN( v ) ? Number.isNaN( old.keep[ k ] ) : Math.abs( v - old.keep[ k ] ) < 0.1 );
-		scan.result = result;
+		const grid = old && old.cell === cell && old.i0 === result.i0 && old.j0 === result.j0 && old.w === w && old.h === h;
 		scan.next = - 1;
 		scan.finished = performance.now();
+		// Read again with coarser tiles over it (or fewer of them) than last time: the last stands.
+		if ( grid && ( error > RESCAN_COARSER * old.error + 0.01 || result.seen < RESCAN_SEEN * old.seen ) ) return false;
+		const same = grid && keep.every( ( v, k ) => Number.isNaN( v ) ? Number.isNaN( old.keep[ k ] ) : Math.abs( v - old.keep[ k ] ) < 0.1 );
+		scan.result = result;
 		return ! same;
 
 	};
@@ -1335,6 +1356,18 @@ export function setUpFlattening( { tiles, models } ) {
 		for ( const listener of overheadListeners ) listener( entry );
 
 	};
+
+	// Whether the camera is near enough an area for the tiles over it to be fine ones (RESCAN_NEAR).
+	const _centre = new Vector3();
+	const near = entry => {
+
+		if ( ! camera ) return true;
+		entry.pivot.getWorldPosition( _centre );
+		const reach = Math.hypot( entry.params.width, entry.params.length ) / 2;
+		return camera.getWorldPosition( _cameraAt ).distanceTo( _centre ) - reach < RESCAN_NEAR;
+
+	};
+	const _cameraAt = new Vector3();
 
 	// A few milliseconds a frame of reading, for every auto area that needs it.
 	const scanOverheads = () => {
@@ -1352,7 +1385,7 @@ export function setUpFlattening( { tiles, models } ) {
 				scan = startScan( entry, scan );
 				notify( entry );
 
-			} else if ( scan.next < 0 && tileLoads > scan.loads && performance.now() - scan.finished > RESCAN * 1000 ) {
+			} else if ( scan.next < 0 && tileLoads > scan.loads && performance.now() - scan.finished > RESCAN * 1000 && near( entry ) ) {
 
 				scan = startScan( entry, scan );
 
@@ -1511,6 +1544,21 @@ export function setUpFlattening( { tiles, models } ) {
 
 			overheadRoots.push( object );
 			for ( const scan of scans.values() ) scan.key = null;
+
+		},
+
+		// That ground has changed, as when more of Google's tiles load: auto areas near the camera
+		// are read again a few seconds on (the tests' stand-in overpass).
+		overheadChanged() {
+
+			tileLoads ++;
+
+		},
+
+		// How many times auto areas' overheads have been started reading (tests).
+		get overheadReads() {
+
+			return reads;
 
 		},
 
