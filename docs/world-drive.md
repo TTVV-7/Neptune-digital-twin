@@ -5553,9 +5553,12 @@ street address with a house number ("453 W 12th Ave, Vancouver" came back as Wes
   another error or no answer is logged once (per Worker instance) and Nominatim answers instead.
 - **The cap**: at most `GEOCODE_DAILY` (300 if unset) Google lookups a day from everyone together,
   counted in the DriveLimits object (`geocodeTurn`, a count a day and nothing else), then Nominatim
-  only until midnight UTC. Cached answers don't count.
+  only until midnight UTC. Cached answers don't count. Each visitor (an address, an IPv6 one by its
+  /48, or a Build account through the MCP server) gets at most `GEOCODE_PER_VISITOR` (30 if unset) of
+  them a day (hashed with the day's salt, as the leaderboard's turns), then Nominatim for it alone: a
+  script looping over made-up addresses can't use up everyone's day.
 - **Caching**: an answer is kept a day, except a Nominatim answer given only because Google
-  couldn't be asked just then (refused, failing, the day's cap reached), which is kept 10 minutes so
+  couldn't be asked just then (refused, failing, the day's cap or the visitor's share reached), which is kept 10 minutes so
   Google is tried again soon. The cache key says whether the key is set, so setting it up doesn't
   leave a day of older answers.
 - **Nominatim** stays under its usage policy: World Drive names itself in the User-Agent
@@ -5563,10 +5566,13 @@ street address with a house number ("453 W 12th Ave, Vancouver" came back as Wes
   together (a busier queue gets "try again in a moment"), and asks with `addressdetails=1`. When the
   query has a house number and no answer is a house, it asks **once more** (with another turn, and
   only if the queue has room): with the street's abbreviations written out (`W`/`E`/`N`/`S`... at the
-  start or end of the street, `St`, `Ave`, `Rd`, `Blvd`, `Dr`, `Hwy`, `Cres`, `Pl`, `Ct`, `Ln`, `Pkwy`,
-  `Sq`, `Terr` after the street's first word, so "St Clair" stays Saint), as a structured query
-  (`street=453 west 12th avenue&city=vancouver`) when the query has a town after a comma, else as
-  free text. What that finds goes first.
+  start or end of the street, but not a letter that is the street's name, "100 E St NW" or "Avenue
+  E"; `St`, `Ave`, `Rd`, `Blvd`, `Dr`, `Hwy`, `Cres`, `Pl`, `Ct`, `Ln`, `Pkwy`, `Sq`, `Terr` after the
+  street's first word, with `St` only when it ends the street, so "St Clair" and "Rue St Denis" stay
+  Saint), as a structured query (`street=453 west 12th avenue&city=vancouver`) when the query is just
+  the street and a town, else as free text (so a state, province or country after the town still
+  says which town). What that finds goes first. A number after a word like Pier, Route, Highway,
+  Studio, Area or Terminal ("Pier 39, San Francisco") is a place's name, not a house number.
 
 **Ranking and the pages.** `house` marks a building or numbered address (Google's `street_address`,
 `premise`, `subpremise`; Nominatim's with a `house_number`, or a house or building); those come

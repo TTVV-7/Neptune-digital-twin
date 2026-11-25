@@ -1,4 +1,5 @@
 import { HttpError, json } from '../http.js';
+import { addressOf } from './settings.js';
 
 // Place and address search for the globe, Build's start-a-project and its Site button.
 //
@@ -8,7 +9,10 @@ import { HttpError, json } from '../http.js';
 //    is the browser's). It finds street addresses ("453 W 12th Ave, Vancouver") where OpenStreetMap
 //    often only finds the street. It's paid for past Google's free use, so at most GEOCODE_DAILY
 //    lookups a day (300 if unset) are sent to it from everyone together (counted in the DriveLimits
-//    object, geocodeTurn), after which it's OpenStreetMap only until midnight UTC. Google is asked
+//    object, geocodeTurn), after which it's OpenStreetMap only until midnight UTC; and each visitor
+//    (an address, an IPv6 one by its /48, or a Build account through the MCP server) at most
+//    GEOCODE_PER_VISITOR of them (30 if unset), then OpenStreetMap for it, so one visitor (a script
+//    looping over made-up addresses) can't use up everyone's day. Google is asked
 //    first only for queries with a number in them (a house number, a postcode, "12th Ave"): those
 //    are the addresses OpenStreetMap misses. A place name ("Furka Pass", "CN Tower") goes to
 //    OpenStreetMap first and to Google only when OpenStreetMap finds nothing. So the cap is spent
@@ -43,6 +47,8 @@ const CACHE_SECONDS = 24 * 60 * 60;
 const BRIEF_SECONDS = 10 * 60;
 // Google's lookups a day from everyone together, unless GEOCODE_DAILY says otherwise.
 export const GEOCODE_DAILY = 300;
+// Each visitor's share of them, unless GEOCODE_PER_VISITOR says otherwise.
+export const GEOCODE_PER_VISITOR = 30;
 // Google's result types that are a building or an address on a street, not the street itself.
 const GOOGLE_HOUSE = new Set( [ 'street_address', 'premise', 'subpremise' ] );
 // Nominatim's types for one.
@@ -56,7 +62,7 @@ const logged = new Set();
 // streetOnly: the query has a house number but the best result isn't a house (the page says so).
 // SEARCH_UPSTREAM and GEOCODING_UPSTREAM are for the tests only, which stand in for Nominatim and
 // Google on this machine.
-export async function search( { env, url, ctx, limits, now } ) {
+export async function search( { request, env, url, ctx, limits, now, account } ) {
 
 	const q = cleanQuery( url.searchParams.get( 'q' ) );
 	if ( ! q ) throw new HttpError( 400, 'Type a place or an address' );
@@ -73,7 +79,7 @@ export async function search( { env, url, ctx, limits, now } ) {
 	let brief = false;
 	const askGoogle = async () => {
 
-		const answer = await fromGoogle( { env, key, q, limits, now: at } );
+		const answer = await fromGoogle( { env, key, q, limits, now: at, visitor: visitorOf( request, account ) } );
 		if ( answer.failed ) brief = true;
 		return answer.results ?? [];
 
@@ -128,23 +134,34 @@ function geocodingKey( env ) {
 
 }
 
-// The day's Google lookups for everyone: GEOCODE_DAILY, or 300.
-function dailyLookups( env ) {
+// The day's Google lookups for everyone: GEOCODE_DAILY, or 300; each visitor's: GEOCODE_PER_VISITOR,
+// or 30.
+function dailyLookups( env, name = 'GEOCODE_DAILY', fallback = GEOCODE_DAILY ) {
 
-	const n = Number( env.GEOCODE_DAILY );
-	return env.GEOCODE_DAILY !== undefined && env.GEOCODE_DAILY !== '' && Number.isFinite( n ) && n >= 0 ? Math.floor( n ) : GEOCODE_DAILY;
+	const n = Number( env[ name ] );
+	return env[ name ] !== undefined && env[ name ] !== '' && Number.isFinite( n ) && n >= 0 ? Math.floor( n ) : fallback;
+
+}
+
+// Who a Google lookup is counted against: the Build account asking through the MCP server, else the
+// address asking (an IPv6 one by its /48, so a block of them is one visitor); null without a request
+// (not from the Worker).
+function visitorOf( request, account ) {
+
+	if ( account?.id !== undefined && account?.id !== null ) return `account:${ account.id }`;
+	return request?.headers ? addressOf( request, 48 ) : null;
 
 }
 
 // Google's answer for `q`: { results } (perhaps none: ZERO_RESULTS), or { failed } when it couldn't
-// be asked (today's lookups used up, DriveLimits not answering) or said no (OVER_QUERY_LIMIT,
+// be asked (today's lookups used up, for everyone or this visitor; DriveLimits not answering) or said no (OVER_QUERY_LIMIT,
 // REQUEST_DENIED, INVALID_REQUEST, UNKNOWN_ERROR) or didn't answer.
-async function fromGoogle( { env, key, q, limits, now } ) {
+async function fromGoogle( { env, key, q, limits, now, visitor } ) {
 
 	let turn;
 	try {
 
-		turn = await limits.geocodeTurn( { now, daily: dailyLookups( env ) } );
+		turn = await limits.geocodeTurn( { now, daily: dailyLookups( env ), visitor, perVisitor: dailyLookups( env, 'GEOCODE_PER_VISITOR', GEOCODE_PER_VISITOR ) } );
 
 	} catch ( err ) {
 
@@ -153,7 +170,7 @@ async function fromGoogle( { env, key, q, limits, now } ) {
 
 	}
 
-	if ( ! turn?.ok ) return { failed: 'daily' };
+	if ( ! turn?.ok ) return { failed: turn?.reason ?? 'daily' };
 
 	const upstream = new URL( env.GEOCODING_UPSTREAM || GEOCODING );
 	upstream.search = new URLSearchParams( { address: q, language: 'en', key } );
@@ -267,10 +284,19 @@ export function cleanQuery( value ) {
 
 }
 
+// Words a number follows in a place's own name, not a street's house number: "pier 39", "route 66",
+// "highway 1", "studio 54", "area 51", "terminal 5".
+const NAMED_NUMBERS = new Set( [
+	'pier', 'route', 'highway', 'hwy', 'interstate', 'motorway', 'autobahn', 'exit', 'junction', 'studio', 'area', 'terminal',
+	'gate', 'platform', 'track', 'dock', 'berth', 'wharf', 'hangar', 'building', 'block', 'level', 'floor', 'unit', 'suite',
+	'lot', 'zone', 'sector', 'district', 'arrondissement', 'ward', 'station', 'stage', 'camp', 'base', 'site', 'mile',
+	'apollo', 'phase', 'county', 'township', 'lock', 'bay', 'hall', 'lake', 'fort',
+] );
+
 // Whether a (cleaned) query looks like a street address with a house number: a number starting one
 // of its comma-separated parts and followed by at least two words ("453 w 12th ave", "10 downing
 // street", "221b baker street"; not "10115 berlin", a postcode and a town), or a street name ending
-// in one before a comma ("hauptstraße 5, berlin").
+// in one before a comma ("hauptstraße 5, berlin"; not a name like "pier 39, san francisco").
 export function hasHouseNumber( q ) {
 
 	return q.split( ',' ).some( part => {
@@ -279,7 +305,7 @@ export function hasHouseNumber( q ) {
 		if ( /^\d+[a-z]?([-/]\d+[a-z]?)?$/.test( words[ 0 ] ?? '' ) && words.length >= 3 ) return true;
 		return false;
 
-	} ) || /\p{L}{3,}\.? \d+[a-z]? ?,/u.test( q );
+	} ) || [ ...q.matchAll( /(\p{L}{3,})\.? \d+[a-z]? ?,/gu ) ].some( match => ! NAMED_NUMBERS.has( match[ 1 ] ) );
 
 }
 
@@ -289,18 +315,36 @@ const SUFFIXES = {
 	pl: 'place', ct: 'court', ln: 'lane', pkwy: 'parkway', sq: 'square', terr: 'terrace', ter: 'terrace',
 };
 
+// "St" is Saint unless it ends the street ("rue st denis", but "9 oak st" and "100 e st nw").
+const SAINT = new Set( [ 'st' ] );
+
 // A street's abbreviations written out: a direction just after the house number or at the end
 // ("453 w 12th ave nw" -> "453 west 12th avenue northwest") and a street type after the first word
-// of its name ("st clair ave" -> "st clair avenue": a first "St" is Saint).
+// of its name ("st clair ave" -> "st clair avenue": a first "St" is Saint; so is one that doesn't end
+// the street, "rue st denis"). A letter that is the street's name is left as it is: one followed by
+// just a street type ("100 e st nw", Washington's E Street) or following just one ("avenue e").
 export function expandStreet( street ) {
 
 	const words = street.trim().split( ' ' ).filter( Boolean );
+	const bare = words.map( word => word.replace( /\.$/, '' ) );
 	const start = /^\d/.test( words[ 0 ] ?? '' ) ? 1 : 0;
+	const isDirection = i => Object.hasOwn( DIRECTIONS, bare[ i ] );
+	const isType = i => Object.hasOwn( SUFFIXES, bare[ i ] );
+	// The street's last word that isn't a direction after it ("100 e st nw": st).
+	let end = words.length - 1;
+	while ( end > start && isDirection( end ) ) end --;
 	return words.map( ( word, i ) => {
 
-		const bare = word.replace( /\.$/, '' );
-		if ( ( i === start || i === words.length - 1 ) && i >= start && Object.hasOwn( DIRECTIONS, bare ) && words.length - start > 1 ) return DIRECTIONS[ bare ];
-		if ( i > start && Object.hasOwn( SUFFIXES, bare ) ) return SUFFIXES[ bare ];
+		if ( i >= start && isDirection( i ) && words.length - start > 1 ) {
+
+			// Just after the number: a direction only if a word of the name (not a type) follows.
+			if ( i === start && i + 1 < words.length && ! isType( i + 1 ) && ! isDirection( i + 1 ) ) return DIRECTIONS[ bare[ i ] ];
+			// At the end: a direction only if the name before it is more than a street type.
+			if ( i === words.length - 1 && ! ( i - start === 1 && ( isType( start ) || Object.values( SUFFIXES ).includes( bare[ start ] ) ) ) ) return DIRECTIONS[ bare[ i ] ];
+
+		}
+
+		if ( i > start && isType( i ) && ( ! SAINT.has( bare[ i ] ) || i === end ) ) return SUFFIXES[ bare[ i ] ];
 		return word;
 
 	} ).join( ' ' );
@@ -308,13 +352,14 @@ export function expandStreet( street ) {
 }
 
 // The second question for Nominatim when the first found no house: a structured one (street and
-// city) when the query is "<number> <street>, <town>[, ...]", else the whole query with its street
-// written out; null when that's no different from what was asked.
+// city) when the query is just "<number> <street>, <town>", else the whole query with its street
+// written out, so a state, province or country after the town still says which town it is
+// ("123 main st, springfield, illinois"); null when that's no different from what was asked.
 export function retryOf( q ) {
 
 	const parts = q.split( ',' ).map( part => part.trim() ).filter( Boolean );
 	const street = expandStreet( parts[ 0 ] );
-	if ( parts.length >= 2 && /^\d/.test( parts[ 0 ] ) ) return { street, city: parts[ 1 ] };
+	if ( parts.length === 2 && /^\d/.test( parts[ 0 ] ) ) return { street, city: parts[ 1 ] };
 	const whole = [ street, ...parts.slice( 1 ) ].join( ', ' );
 	return whole !== q ? { q: whole } : null;
 

@@ -13,9 +13,11 @@ GOOGLE_MAPS_API_KEY=
 
 # Optional: a server-only Google key restricted to the Geocoding API (docs/build.md, "Address
 # search"), so search finds street addresses OpenStreetMap misses. Not the Maps key. Empty, search
-# is OpenStreetMap's alone. GEOCODE_DAILY: the most Google lookups a day from everyone (300).
+# is OpenStreetMap's alone. GEOCODE_DAILY: the most Google lookups a day from everyone (300);
+# GEOCODE_PER_VISITOR: the most for one visitor (30).
 GOOGLE_GEOCODING_KEY=
 GEOCODE_DAILY=300
+GEOCODE_PER_VISITOR=30
 
 # The daily caps, as on worlddrive.app. Lower them (say to 2) to reach the "used up" screen quickly.
 DAILY_VISITS=300

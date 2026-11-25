@@ -310,7 +310,9 @@ Google Geocoding key set, addresses are found to the building. To set it up:
 5. Optional: `GEOCODE_DAILY` (a var in `wrangler.drive.jsonc`, 300 now) is the most Google lookups a
    day from everyone together; past it, search is OpenStreetMap's until midnight UTC. Only searches
    with a number in them go to Google first (and others only when OpenStreetMap finds nothing), and
-   answers are cached a day, so 300 goes a long way.
+   answers are cached a day, so 300 goes a long way. `GEOCODE_PER_VISITOR` (30 now) is each
+   visitor's share of them (an address, an IPv6 one by its /48, or a Build account through the
+   Claude connector), so one script can't use up everyone's day.
 6. **Cost.** The Geocoding API is billed per request beyond a free monthly allowance; the numbers
    change, so check Google's [Geocoding usage and billing](https://developers.google.com/maps/documentation/geocoding/usage-and-billing)
    page, and set a **budget alert** (*Billing → Budgets & alerts*) and, if you like, a quota cap

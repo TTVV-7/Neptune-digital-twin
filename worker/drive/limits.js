@@ -561,17 +561,25 @@ export class DriveLimits extends DurableObject {
 	}
 
 	// One of today's Google Geocoding lookups at `now` (ms), unless `daily` of them have been taken
-	// today: { ok: true, left } with that one counted, or { ok: false, retryAfter } with the seconds
-	// until midnight UTC, when the count starts again. Days before today are forgotten.
-	geocodeTurn( { now, daily } ) {
+	// today, or (with a `visitor`: an address, an IPv6 one by its /48, or "account:<id>") that
+	// visitor has had `perVisitor` of them: { ok: true, left } with that one counted (for everyone
+	// and, with a visitor, for it), or { ok: false, reason: 'daily' or 'visitor', retryAfter } with
+	// the seconds until midnight UTC, when the counts start again, and nothing counted. So one visitor
+	// (a script looping over made-up addresses) can't use up everyone's day. Visitors are hashed with
+	// the day's salt and counted as take's turns ('geocode'). Days before today are forgotten.
+	async geocodeTurn( { now, daily, visitor = null, perVisitor = Infinity } ) {
 
 		const day = dayOf( now );
+		const hashed = visitor === null ? null : await sha256Hex( `${ this.saltFor( day ) }:${ visitor }` );
 		return this.ctx.storage.transactionSync( () => {
 
 			this.sql.exec( 'DELETE FROM geocodes WHERE day < ?', day );
+			const retryAfter = untilMidnight( now );
 			const taken = this.sql.exec( 'SELECT count FROM geocodes WHERE day = ?', day ).toArray()[ 0 ]?.count ?? 0;
-			if ( ! ( taken < daily ) ) return { ok: false, retryAfter: untilMidnight( now ) };
+			if ( ! ( taken < daily ) ) return { ok: false, reason: 'daily', retryAfter };
+			if ( hashed !== null && ! ( turnsTaken( this.sql, day, 'geocode', hashed ) < perVisitor ) ) return { ok: false, reason: 'visitor', retryAfter };
 			this.sql.exec( 'INSERT INTO geocodes ( day, count ) VALUES ( ?, 1 ) ON CONFLICT ( day ) DO UPDATE SET count = count + 1', day );
+			if ( hashed !== null ) this.sql.exec( 'INSERT INTO turns ( day, kind, visitor, count ) VALUES ( ?, ?, ?, 1 ) ON CONFLICT ( day, kind, visitor ) DO UPDATE SET count = count + 1', day, 'geocode', hashed );
 			return { ok: true, left: daily - taken - 1 };
 
 		} );

@@ -118,7 +118,9 @@ export { DriveRoom } from './live.js';
 //   GOOGLE_GEOCODING_KEY  a secret: the server's own Google key, restricted to the Geocoding API,
 //                         for finding street addresses (search.js); never sent to a page. Unset,
 //                         search is OpenStreetMap's alone. GEOCODE_DAILY the most lookups sent to
-//                         Google a day from everyone together (300 if unset)
+//                         Google a day from everyone together (300 if unset), GEOCODE_PER_VISITOR
+//                         the most of them for one visitor (an address, an IPv6 /48, or a Build
+//                         account; 30 if unset)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, GEOCODING_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests
 //                         only (see scripts/test-drive-worker.mjs)
 

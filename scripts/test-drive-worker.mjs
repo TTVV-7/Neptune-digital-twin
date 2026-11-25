@@ -4389,7 +4389,7 @@ describe( 'World Drive search by itself: Google\'s Geocoding, its cap, the brief
 	}
 
 	// A search as the Worker makes it: { status, json, text, maxAge, hit, cache }.
-	async function ask( q, { env = {}, cache = newCache(), now = NOON, slot = () => ( { wait: 0 } ) } = {} ) {
+	async function ask( q, { env = {}, cache = newCache(), now = NOON, slot = () => ( { wait: 0 } ), ip = '203.0.113.7', account } = {} ) {
 
 		const was = globalThis.caches;
 		globalThis.caches = { default: cache };
@@ -4399,6 +4399,8 @@ describe( 'World Drive search by itself: Google\'s Geocoding, its cap, the brief
 			const res = await searchModule.search( {
 				env: { SEARCH_UPSTREAM: `${ standBase }/search`, ...env },
 				url: new URL( `https://worlddrive.app/api/search?q=${ encodeURIComponent( q ) }` ),
+				request: new Request( 'https://worlddrive.app/api/search', { headers: { 'CF-Connecting-IP': ip } } ),
+				account,
 				ctx: { waitUntil: promise => waits.push( promise ) },
 				limits: { searchSlot: slot, geocodeTurn: options => geocodes.geocodeTurn( options ) },
 				now,
@@ -4428,9 +4430,23 @@ describe( 'World Drive search by itself: Google\'s Geocoding, its cap, the brief
 		assert.equal( expandStreet( '5 n park blvd' ), '5 north park boulevard' );
 		assert.equal( expandStreet( '8 kings hwy' ), '8 kings highway' );
 		for ( const [ short, long ] of [ [ 'rd', 'road' ], [ 'dr', 'drive' ], [ 'cres', 'crescent' ], [ 'pl', 'place' ], [ 'ct', 'court' ], [ 'ln', 'lane' ], [ 'pkwy', 'parkway' ], [ 'sq', 'square' ], [ 'terr', 'terrace' ], [ 'st', 'street' ] ] ) assert.equal( expandStreet( `9 oak ${ short }` ), `9 oak ${ long }` );
-		assert.deepEqual( retryOf( '453 w 12th ave, vancouver, bc' ), { street: '453 west 12th avenue', city: 'vancouver' } );
+		assert.deepEqual( retryOf( '453 w 12th ave, vancouver' ), { street: '453 west 12th avenue', city: 'vancouver' } );
+		// A state, province or country after the town: the whole query, so it still says which town.
+		assert.deepEqual( retryOf( '453 w 12th ave, vancouver, bc' ), { q: '453 west 12th avenue, vancouver, bc' } );
+		assert.deepEqual( retryOf( '123 main st, springfield, illinois' ), { q: '123 main street, springfield, illinois' } );
 		assert.deepEqual( retryOf( '453 w 12th ave' ), { q: '453 west 12th avenue' } );
 		assert.equal( retryOf( '10 downing street' ), null, 'nothing new to ask' );
+		// A number in a place's own name isn't a house number.
+		for ( const q of [ 'pier 39, san francisco', 'route 66, arizona', 'highway 1, big sur', 'studio 54, new york', 'area 51, nevada', 'terminal 5, heathrow' ] ) assert.ok( ! hasHouseNumber( q ), q );
+		for ( const q of [ 'kalverstraat 10, amsterdam', 'via roma 10, milano', 'pier 39, hauptstraße 5, berlin' ] ) assert.ok( hasHouseNumber( q ), q );
+		// A letter that is the street's name stays a letter (Washington's E Street; "Avenue E"); "St"
+		// before more of the name is Saint.
+		assert.equal( expandStreet( '100 e st nw' ), '100 e street northwest' );
+		assert.equal( expandStreet( '5 n st' ), '5 n street' );
+		assert.equal( expandStreet( '1 avenue e' ), '1 avenue e' );
+		assert.equal( expandStreet( '10 rue st denis' ), '10 rue st denis' );
+		assert.equal( expandStreet( '10 w main st' ), '10 west main street' );
+		assert.deepEqual( retryOf( '100 e st nw, washington' ), { street: '100 e street northwest', city: 'washington' } );
 
 	} );
 
@@ -4533,7 +4549,7 @@ describe( 'World Drive search by itself: Google\'s Geocoding, its cap, the brief
 		const capped = await ask( '3 C St, Vancouver', { env, now: day + HOUR } );
 		assert.deepEqual( [ capped.json.provider, capped.maxAge ], [ 'osm', 600 ] );
 		assert.equal( google.length, 2, 'Google was asked past the day\'s cap' );
-		assert.deepEqual( await geocodes.geocodeTurn( { now: day + HOUR, daily: 2 } ), { ok: false, retryAfter: 14 * 60 * 60 } );
+		assert.deepEqual( await geocodes.geocodeTurn( { now: day + HOUR, daily: 2 } ), { ok: false, reason: 'daily', retryAfter: 14 * 60 * 60 } );
 		// The next day, Google again.
 		assert.equal( ( await ask( '3 C St, Vancouver', { env, now: day + DAY } ) ).json.provider, 'google' );
 		assert.equal( google.length, 3 );
@@ -4542,6 +4558,39 @@ describe( 'World Drive search by itself: Google\'s Geocoding, its cap, the brief
 		assert.equal( google.length, 3 );
 		assert.equal( ( await ask( '4 D St, Vancouver', { env: withGoogle(), now: day + 2 * DAY } ) ).json.provider, 'google' );
 		assert.deepEqual( await geocodes.geocodeTurn( { now: day + 2 * DAY, daily: 300 } ), { ok: true, left: 298 } );
+
+	} );
+
+	test( 'GEOCODE_PER_VISITOR lookups a day for each visitor (an address, an IPv6 one by its /48, or a Build account), then OpenStreetMap for it alone (kept 10 minutes)', async () => {
+
+		google.length = 0;
+		googleAnswer = () => ( { status: 'OK', results: [ HOUSE ] } );
+		osmAnswer = () => [ OSM_STREET ];
+		const day = Date.UTC( 2030, 5, 1, 9 );
+		const env = withGoogle( { GEOCODE_PER_VISITOR: '2' } );
+		const from = ( q, more = {} ) => ask( q, { env, now: day, ...more } ).then( res => [ res.json.provider, res.maxAge ] );
+		assert.deepEqual( await from( '1 a b st, x', { ip: '198.51.100.1' } ), [ 'google', 86400 ] );
+		assert.deepEqual( await from( '2 a b st, x', { ip: '198.51.100.1' } ), [ 'google', 86400 ] );
+		// A script looping over made-up addresses from one address: OpenStreetMap, briefly kept.
+		assert.deepEqual( await from( '3 a b st, x', { ip: '198.51.100.1' } ), [ 'osm', 600 ] );
+		assert.deepEqual( await from( '4 a b st, x', { ip: '198.51.100.1' } ), [ 'osm', 600 ] );
+		assert.equal( google.length, 2, 'Google was asked past a visitor\'s share' );
+		// Everyone else still gets Google; one IPv6 /48 is one visitor; a Build account is its own.
+		assert.deepEqual( await from( '5 a b st, x', { ip: '198.51.100.2' } ), [ 'google', 86400 ] );
+		assert.deepEqual( await from( '6 a b st, x', { ip: '2001:db8:1:1::1' } ), [ 'google', 86400 ] );
+		assert.deepEqual( await from( '7 a b st, x', { ip: '2001:db8:1:2::1' } ), [ 'google', 86400 ] );
+		assert.deepEqual( await from( '8 a b st, x', { ip: '2001:db8:1:3::1' } ), [ 'osm', 600 ] );
+		assert.deepEqual( await from( '9 a b st, x', { ip: '198.51.100.1', account: { id: 42 } } ), [ 'google', 86400 ] );
+		assert.equal( google.length, 6 );
+		// A refused visitor isn't counted towards everyone's day, nor itself.
+		assert.deepEqual( await geocodes.geocodeTurn( { now: day, daily: 300, visitor: '198.51.100.1', perVisitor: 2 } ), { ok: false, reason: 'visitor', retryAfter: 15 * 60 * 60 } );
+		assert.deepEqual( await geocodes.geocodeTurn( { now: day, daily: 300 } ), { ok: true, left: 293 } );
+		// The next day, a fresh share.
+		assert.deepEqual( await from( '3 a b st, x', { ip: '198.51.100.1', now: day + DAY } ), [ 'google', 86400 ] );
+		// Unset, 30 each.
+		google.length = 0;
+		for ( let i = 0; i < 31; i ++ ) await ask( `${ i } c d st, x`, { env: withGoogle(), now: day + 2 * DAY, ip: '198.51.100.9' } );
+		assert.equal( google.length, 30 );
 
 	} );
 

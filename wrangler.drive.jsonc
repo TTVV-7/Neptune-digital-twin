@@ -103,6 +103,9 @@
 		// search"): at most this many lookups a day from everyone together, then OpenStreetMap only
 		// until midnight UTC. Only used once the GOOGLE_GEOCODING_KEY secret is set (see below).
 		"GEOCODE_DAILY": "300",
+		// And at most this many of them for each visitor (an address, an IPv6 one by its /48, or a
+		// Build account through the MCP server), so one script can't use up everyone's day.
+		"GEOCODE_PER_VISITOR": "30",
 		// Google AdSense (docs/world-drive.md, "Ads"): one banner on the globe, never while driving and
 		// never for a supporter. ADSENSE_CLIENT is the publisher id, "ca-pub-" and 16 digits (public);
 		// empty, no ads at all: nothing about them is loaded or shown, and /ads.txt is a 404.
