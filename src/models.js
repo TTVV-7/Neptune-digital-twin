@@ -10,6 +10,7 @@ import { buildProcedural } from './procedural.js';
 import { getKind, kindParams } from './kinds.js';
 import { fitPlane, fitPoints, fitSurface, sameFit, surfaceLayout, surfacePoints } from './grade.js';
 import { addHitFilter, passesHitFilters } from './walk.js';
+import { PLACED_ORDER, drawnAfterGround } from './draw-order.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const _box = new Box3();
@@ -677,19 +678,8 @@ function upgradeConfig( config ) {
 
 }
 
-// What's placed is drawn after the ground (Google's tiles and earthworks, renderOrder 0) and after a
-// flatten area's surface (flatten.js's SURFACE_ORDER, drawn over the ground without writing depth),
-// so it stands on that surface rather than under it. Parts that set an order of their own keep it.
-export const PLACED_ORDER = 1;
-export function drawnAfterGround( object ) {
-
-	object.traverse( o => {
-
-		if ( ( o.isMesh || o.isLine || o.isPoints ) && o.renderOrder === 0 ) o.renderOrder = PLACED_ORDER;
-
-	} );
-
-}
+// What's placed is drawn after the ground and a flatten area's surface (draw-order.js).
+export { PLACED_ORDER, drawnAfterGround };
 
 // Whether an object is part of a hidden entry (see showOrHide).
 function inHidden( object ) {

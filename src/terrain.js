@@ -29,7 +29,7 @@ import { blocks } from './walk.js';
 //
 //   h0       the ground as Google (or the stand-in) made it, from flattening.originalHeight(), so
 //            pits don't feed back into their own reference. Under a flatten area it is that
-//            area's floor, as that's the ground Google's mesh shows there (base, below). Under a
+//            area's floor, built up or dug down to, and that ground is drawn (base, below). Under a
 //            graded one (grade.js) it is the graded shape, raised or lowered, with batters round
 //            it down or up to the ground, and that ground is drawn (see composeGrading). It only takes ground
 //            from tiles at least as fine as those it already has it from (err): the coarse tiles
@@ -64,6 +64,9 @@ export const CHUNK_SIZE = CELL * CELLS;
 const MAX_SAVED_CHUNKS = 200;
 // A graded area's chunks made at once (ensureSoon), and the time a frame for the rest (ms).
 const SYNC_CHUNKS = 16;
+// A level flatten area (or one too large to grade) holds its floor in chunks of its own when it
+// takes no more than this many (about 500 m square); a larger one is only pressed down.
+const MAX_FLOOR_CHUNKS = 324;
 const CREATE_BUDGET = 4;
 const MAX_CHUNK_INDEX = 200;
 const NODES = CELLS + 1;
@@ -233,6 +236,15 @@ const chunkKey = ( cx, cz ) => ( cx + 32768 ) * 65536 + ( cz + 32768 );
 function chunkRange( min, max ) {
 
 	return [ Math.ceil( min / CHUNK_SIZE ) - 1, Math.floor( max / CHUNK_SIZE ) ];
+
+}
+
+// How many chunks a rectangle's bounds take.
+function chunkCount( { minX, maxX, minZ, maxZ } ) {
+
+	const [ cx0, cx1 ] = chunkRange( minX, maxX );
+	const [ cz0, cz1 ] = chunkRange( minZ, maxZ );
+	return ( cx1 - cx0 + 1 ) * ( cz1 - cz0 + 1 );
 
 }
 
@@ -433,6 +445,13 @@ export class Terrain extends EventDispatcher {
 
 		};
 		for ( const type of [ 'add', 'change', 'remove' ] ) models.addEventListener( type, onZone );
+		// What an area keeps overhead was worked out again (flatten.js): hide Google's mesh up to it.
+		flattening?.onOverhead?.( entry => {
+
+			const zone = this.zones.get( entry );
+			if ( zone ) this.markBounds( zone.bounds );
+
+		} );
 
 	}
 
@@ -1019,20 +1038,44 @@ export class Terrain extends EventDispatcher {
 			if ( zone.graded ) continue;
 			const range = nodeRange( chunk, zone.bounds );
 			if ( ! range ) continue;
-			const limit = zone.params.height > 0 ? zone.params.height : Infinity;
 			this.forRange( chunk, range, ( k, x, z ) => {
 
-				if ( insideRect( zone.frame, x, z ) < 0 ) return;
+				const inside = insideRect( zone.frame, x, z );
+				if ( inside < 0 ) {
+
+					// The ring of nodes just outside, drawn and masked with it (shownNodes): under what
+					// it keeps overhead, Google's mesh is hidden only up to that too, and the ground read
+					// there from above is the deck (or a curtain hanging from it), not the ground: drawn
+					// no higher than the edge's floor, not as a wall up to the deck.
+					if ( inside < - 1.5 * CELL || ! zone.chunks ) return;
+					const [ u, v ] = zoneLocal( zone, x, z );
+					const cu = MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), cv = MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl );
+					const edge = zone.height( cu, cv );
+					const top = edge + this.keepAbove( zone, x, z, cu, cv, true );
+					if ( ! Number.isFinite( top ) ) return;
+					ceiling[ k ] = Math.max( ceiling[ k ], top );
+					base[ k ] = Math.min( base[ k ], edge );
+					return;
+
+				}
+
 				// One too large to grade presses onto its shape, as the flattening does.
-				const floor = zone.height ? zone.height( ...zoneLocal( zone, x, z ) ) : zone.floor;
-				base[ k ] = Math.min( base[ k ], floor );
+				const [ u, v ] = zoneLocal( zone, x, z );
+				const floor = zone.height( u, v );
 				levelled[ k ] = Math.min( levelled[ k ], floor );
+				// One holding its floor in chunks is that floor, built up or dug down (drawn, and
+				// Google's mesh hidden above it); one too large to hold is Google's mesh pressed down.
+				if ( zone.chunks ) graded[ k ] = 1;
+				else base[ k ] = Math.min( base[ k ], floor );
 				// Overlapping, the flattening has pressed Google's mesh up to the highest of them.
-				ceiling[ k ] = Math.max( ceiling[ k ], floor + limit );
+				ceiling[ k ] = Math.max( ceiling[ k ], floor + this.keepAbove( zone, x, z, u, v ) );
 
 			} );
 
 		}
+
+		// The lowest of the floors held over each node (as the flattening presses to the lowest).
+		for ( let k = 0; k < COUNT; k ++ ) if ( graded[ k ] ) base[ k ] = levelled[ k ];
 
 		const grading = zones.filter( zone => zone.graded && nodeRange( chunk, zone.bounds ) );
 		if ( grading.length ) this.composeGrading( chunk, grading );
@@ -1192,8 +1235,8 @@ export class Terrain extends EventDispatcher {
 			if ( ! zone ) continue;
 			// A level area presses its ground down to its floor: nothing graded is built up over it.
 			base[ k ] = Math.min( base[ k ], levelled[ k ] );
-			const limit = zone.params.height > 0 ? zone.params.height : Infinity;
-			ceiling[ k ] = Math.max( ceiling[ k ], base[ k ] + limit );
+			const x = chunk.x( k ), z = chunk.z( k );
+			ceiling[ k ] = Math.max( ceiling[ k ], base[ k ] + this.keepAbove( zone, x, z, ...zoneLocal( zone, x, z ) ) );
 			if ( ! graded[ k ] && Math.abs( base[ k ] - ground[ k ] ) > DISTURBED ) graded[ k ] = 2;
 			if ( ! owns( k % NODES, Math.floor( k / NODES ) ) ) continue;
 			const d = base[ k ] - bare[ k ];
@@ -1735,9 +1778,10 @@ export class Terrain extends EventDispatcher {
 	}
 
 	// Flatten areas count as the ground they press Google's mesh down to. Dispatches 'zones'.
-	// Without Google's tiles a level area changes nothing (there's nothing to press flat), but a
-	// graded one still shapes the ground. A graded area's chunks are made over its batters' reach
-	// (most of a large one's over the next frames, ensureSoon) and kept while it's there.
+	// Each shapes the ground with or without Google's tiles: a graded one's chunks are made over its
+	// batters' reach, a level one's (and one too large to grade) over its rectangle (most of a large
+	// one's over the next frames, ensureSoon), and kept while it's there. A level area too large for
+	// that (MAX_FLOOR_CHUNKS) only counts where chunks are anyway, as Google's mesh pressed down.
 	updateZone( entry, removed ) {
 
 		const old = this.zones.get( entry );
@@ -1747,15 +1791,22 @@ export class Terrain extends EventDispatcher {
 		// the flattening presses Google's mesh, the way a level one does onto its floor.
 		const pressed = pressedOnly( params );
 		const graded = isGraded( params ) && ! pressed;
-		if ( removed || ! this.models.entries.includes( entry ) || ( ! graded && ! this.tiles ) ) {
+		const frame = rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 );
+		// A level area (or one too large to grade) holds its floor in chunks of its own, as a graded
+		// one does its shape, unless it would take too many.
+		const bounds = rectBounds( frame, CELL );
+		const holds = ! graded && chunkCount( bounds ) <= MAX_FLOOR_CHUNKS;
+		if ( removed || ! this.models.entries.includes( entry ) || ( ! graded && ! holds && ! this.tiles ) ) {
 
 			this.zones.delete( entry );
 			if ( removed || ! graded ) delete entry.gradeVolume;
 
 		} else {
 
-			const frame = rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 );
-			const zone = { entry, frame, floor: state.up, graded, params, bounds: rectBounds( frame, CELL ) };
+			const zone = { entry, frame, floor: state.up, graded, params, bounds };
+			// Its floor: level, or for one too large to grade its shape, pressed onto as the
+			// flattening presses Google's mesh.
+			zone.height = () => state.up;
 			if ( pressed ) {
 
 				const fit = params.fit ?? null;
@@ -1763,6 +1814,15 @@ export class Terrain extends EventDispatcher {
 				zone.floor = state.up + gradeRange( params, fit ).min;
 
 			}
+
+			// Google's mesh is only ever pressed down onto the floor, so where the floor is built up
+			// over the ground (a surfaced pad snaps to the ground's median: about half of it is fill)
+			// there was nothing at its height to stand on, and Google's large triangles crossing its
+			// edge kept their slope inside it. With chunks of its own, the floor is the ground drawn,
+			// walked and driven on there, and Google's mesh above it is hidden and passed through
+			// (updateMask, covers), as over a graded area. No batters: the pad's sides (flatten.js)
+			// show where it's built up.
+			if ( holds ) zone.chunks = new Set( this.ensureSoon( bounds, [ - state.east, state.north ] ) );
 
 			if ( graded ) {
 
@@ -1793,6 +1853,16 @@ export class Terrain extends EventDispatcher {
 		}
 
 		this.dispatchEvent( { type: 'zones' } );
+
+	}
+
+	// How far above a flatten area's floor at (x, z) (its own frame: u, v) Google's mesh is kept, as
+	// the flattening keeps it (flatten.js keepAbove): Infinity where everything is flattened.
+	// `wide`: the lowest kept within a couple of metres, as the flattening presses (for the ring of
+	// nodes round an area, where a deck's edge may have just been missed).
+	keepAbove( zone, x, z, u, v, wide = false ) {
+
+		return this.flattening?.keepAbove?.( zone.entry, x, z, wide ) ?? ( zone.params.height > 0 ? zone.params.height : Infinity );
 
 	}
 
@@ -2071,8 +2141,11 @@ export class Terrain extends EventDispatcher {
 
 		}
 
-		const shown = this.standIn ? null : this.shownNodes( chunk, changed );
-		chunk.shown = shown;
+		// Worked out on the stand-in too, for the mask and covers() (what else the mask hides there, the
+		// tests' stand-in for an overpass, is passed through as Google's mesh would be), but there the
+		// chunks draw their whole surface.
+		chunk.shown = this.shownNodes( chunk, changed );
+		const shown = this.standIn ? null : chunk.shown;
 		chunk.drawn = shown ? this.lipHeights( chunk, changed, shown ) : null;
 		if ( chunk.drawn ) for ( let k = 0; k < COUNT; k ++ ) position.array[ k * 3 + 1 ] = chunk.drawn[ k ];
 		this.maskDirty = true;

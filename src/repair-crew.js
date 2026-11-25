@@ -1,4 +1,5 @@
 import { BoxGeometry, CylinderGeometry, Group, IcosahedronGeometry, Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { drawnAfterGround } from './draw-order.js';
 import { makeMachine, makeWorker } from './repair-crew-figures.js';
 
 // The people and machines in the timeline (repair-timeline.js). Looking back at a day: a worker
@@ -379,6 +380,8 @@ export function createCrew( { onUpdate } ) {
 
 		}
 
+		// Added after the entry was placed: drawn after the ground as the rest of it is.
+		drawnAfterGround( group );
 		s.content.add( group );
 		shown.set( s, { group, key, figures, extras } );
 		tick();

@@ -15,6 +15,7 @@ import {
 import { enuToLocal, headingToYaw, localToEnu } from './geo.js';
 import { SWELL, findMaterial } from './terrain.js';
 import { createPourStream } from './pour.js';
+import { PLACED_ORDER } from './draw-order.js';
 
 // Drive an excavator (V) and dig with it: hold Space or the left mouse button and it digs a
 // bucketful out of the ground in front, swings round and dumps it on a spoil pile beside the hole,
@@ -1085,6 +1086,7 @@ function createTruckLoads( { models, layout } ) {
 			load.heap.name = 'load';
 			load.heap.position.set( bed.x, 0, bed.z );
 			load.heap.raycast = () => {};
+			load.heap.renderOrder = PLACED_ORDER;
 			entry.pivot.add( load.heap );
 
 		}

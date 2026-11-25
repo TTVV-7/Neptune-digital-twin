@@ -16,6 +16,7 @@ import {
 	PlaneGeometry,
 	Quaternion,
 	Raycaster,
+	Sphere,
 	RepeatWrapping,
 	SRGBColorSpace,
 	Vector3,
@@ -28,8 +29,10 @@ import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, SMOOTHI
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
-// An area can stop at a height ("flatten up to"), so what passes overhead (a conveyor, a gantry,
-// a bridge deck) is left standing while what's under it is cleared.
+// An area can keep what's overhead (keep: KEEPS), so what passes over it (a bridge deck, a viaduct,
+// a canopy, a conveyor) is left standing while what's under it is cleared: everything above a height
+// ("flatten up to"), or, auto, what has open space under it (Overheads, below), with the curtains
+// Google's photogrammetry hangs from a deck's edge down to the ground hidden.
 // An area can also be surfaced: gravel, asphalt or concrete laid over the flattened ground, so it
 // reads as a finished pad instead of Google's photo of whatever stood there, smeared flat. The
 // surface shows all the time, with no red box over it (a bare area's red box shows in build mode).
@@ -52,6 +55,33 @@ import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, SMOOTHI
 // setEnabled( true ) flattens it all again.
 
 export const ZONE_ID = 'flatten-zone';
+// What an area keeps of what's overhead (the P panel's 'keep what's overhead': label → id):
+//   off     nothing: everything above the floor is pressed flat, as areas always were
+//   auto    what has open space under it at least CLEARANCE above the floor (a bridge deck, a viaduct,
+//           a canopy), found in Google's mesh as it was (see Overheads), and the pillars under it
+//   height  everything higher than `height` above the floor ("flatten up to"), as areas saved with
+//           a height limit have
+export const KEEPS = { 'nothing (flatten everything)': 'off', 'auto: decks, canopies (open space under)': 'auto', 'everything above a height': 'height' };
+// Auto keeps what's at least this far above the floor (m): the lowest a deck or canopy can be.
+export const CLEARANCE = 2.5;
+// The height limit an area gets when 'everything above a height' is picked with none set.
+const KEEP_HEIGHT = 5;
+// Reading what's overhead (setUpFlattening's Overheads): on a grid this fine (m, every other node
+// of terrain.js's), coarser over a large area so it's no more than OVERHEAD_NODES lines, for this long
+// a frame (ms), and again this long (s) after more of Google's tiles have loaded.
+const OVERHEAD_CELL = 1;
+const OVERHEAD_NODES = 10000;
+const OVERHEAD_BUDGET = 4;
+const RESCAN = 3;
+// A pillar (or a gap in a deck's underside) this far (m) inside a deck's edge is closed over; a deck
+// or canopy smaller than MIN_DECK (m²) is flattened. A deck is kept from this far under its underside
+// (m), and a pillar from this far above the floor. Google's mesh is pressed under the lowest of what's
+// kept within PRESS_REACH (m).
+const PILLAR_REACH = 3;
+const MIN_DECK = 12;
+const UNDER_MARGIN = 0.3;
+const PILLAR_KEEP = 0.01;
+const PRESS_REACH = 2;
 // The volume drawn for an area with no height limit.
 const VOLUME_HEIGHT = 8;
 const MAX_HEIGHT = 200;
@@ -249,7 +279,8 @@ function buildSurface( width, length, id, offset = null ) {
 
 	}
 
-	// Walked and driven on like the ground under it, which is flattened to the same height.
+	// Not what's walked and driven on: the ground under it is (terrain.js holds an area's floor in
+	// chunks of its own, built up where the pad is over lower ground), 3 cm below its top.
 	group.traverse( o => o.userData.noCollide = true );
 	return group;
 
@@ -634,18 +665,22 @@ const graded = p => isGraded( p );
 registerKind( ZONE_ID, {
 	label: 'Flattened area',
 	layer: 'Flatten areas',
-	build: params => buildZone( params.width, params.length, params.height, params.surface, params.fence, params.gates, { params, slope: params.fit } ),
+	build: params => buildZone( params.width, params.length, limitOf( params ), params.surface, params.fence, params.gates, { params, slope: params.fit } ),
 	// Areas saved before surfaces existed have none, and are saved again without one.
 	// And without a fence, which areas saved without one leave out of what's saved. And level,
 	// as areas saved before grading were, with nothing about grading saved.
 	normalize: p => ( {
 		width: clampSize( p.width ), length: clampSize( p.length ), height: clampHeight( p.height ), surface: SURFACES[ p.surface ] ? p.surface : 'none',
+		// Areas saved before there was a choice kept what's above their height limit, if they had one.
+		keep: Object.values( KEEPS ).includes( p.keep ) ? p.keep : clampHeight( p.height ) > 0 ? 'height' : 'off',
 		fence: Object.values( FENCES ).includes( p.fence ) ? p.fence : 'none', gates: Math.min( MAX_GATES, Math.max( 0, Math.round( Number( p.gates ) || 0 ) ) ),
 		...normalizeGrade( p ),
 		fit: fitOf( p.fit ),
 	} ),
-	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter, fit, ...rest } ) => ( {
-		...rest, ...( surface === 'none' ? {} : { surface } ), ...( fence === 'none' ? {} : { fence, gates } ),
+	// A height limit is saved as it always was (the height, with nothing else); auto as keep.
+	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter, fit, keep, height, ...rest } ) => ( {
+		...rest, height: keep === 'height' ? height : 0, ...( keep === 'auto' ? { keep } : {} ),
+		...( surface === 'none' ? {} : { surface } ), ...( fence === 'none' ? {} : { fence, gates } ),
 		...saveGrade( { grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter } ),
 	} ),
 	// Down to the lowest ground around it as Google made it, so flattening doesn't drag it lower, and
@@ -668,8 +703,9 @@ registerKind( ZONE_ID, {
 		{ key: 'gates', label: 'entrances (24 ft)', min: 0, max: MAX_GATES, step: 1, size: true, when: p => p.fence !== 'none' },
 		{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
 		{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
+		{ key: 'keep', label: 'keep what\'s overhead', options: KEEPS, size: true, editor: true },
 		// 0 flattens everything above the floor, as areas always did (and saved ones still do).
-		{ key: 'height', label: 'flatten up to (m, 0 = all)', min: 0, max: MAX_HEIGHT, step: 0.5, size: true },
+		{ key: 'height', label: 'flatten up to (m above the floor)', min: 0, max: MAX_HEIGHT, step: 0.5, size: true, when: p => p.keep === 'height' },
 		{ key: 'grade', label: 'ground', options: GRADES, size: true, editor: true },
 		{ key: 'smoothing', label: 'smoothing (m)', min: SMOOTHING.min, max: SMOOTHING.max, step: SMOOTHING.step, size: true, when: p => p.grade === 'follow' },
 		{ key: 'maxGrade', label: 'steepest (%, 0 = as the ground)', min: 0, max: MAX_GRADE, step: 0.5, size: true, when: p => p.grade === 'follow' || p.grade === 'plane' },
@@ -690,7 +726,7 @@ registerKind( ZONE_ID, {
 	resize: {
 		shape: 'rect',
 		live: true,
-		label: ( p, heading = 0 ) => `${ p.width.toFixed( 1 ) } × ${ p.length.toFixed( 1 ) } m · ${ Math.round( p.width * p.length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ p.surface ] ? ` · ${ SURFACES[ p.surface ].name.toLowerCase() }` : '' }${ graded( p ) ? ` · ${ describeGrade( p, p.fit, heading ) }` : '' }${ p.fence !== 'none' ? ' · fenced' : '' }${ p.height > 0 ? ` · up to ${ p.height.toFixed( 1 ) } m` : '' }`,
+		label: ( p, heading = 0 ) => `${ p.width.toFixed( 1 ) } × ${ p.length.toFixed( 1 ) } m · ${ Math.round( p.width * p.length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ p.surface ] ? ` · ${ SURFACES[ p.surface ].name.toLowerCase() }` : '' }${ graded( p ) ? ` · ${ describeGrade( p, p.fit, heading ) }` : '' }${ p.fence !== 'none' ? ' · fenced' : '' }${ limitOf( p ) > 0 ? ` · up to ${ p.height.toFixed( 1 ) } m` : p.keep === 'auto' ? ' · keeps what\'s overhead' : '' }`,
 	},
 } );
 
@@ -726,6 +762,14 @@ export function rememberSurface( surface ) {
 function clampSize( v ) {
 
 	return Math.min( 2000, Math.max( 1, Number( v ) || 10 ) );
+
+}
+
+// The height an area flattens up to (m above its floor), 0 for all of it: auto works it out per
+// place (keepAbove).
+export function limitOf( p ) {
+
+	return p.keep === 'height' ? p.height : 0;
 
 }
 
@@ -771,11 +815,109 @@ export class ShapeMesh extends Mesh {
 
 }
 
+// TileFlatteningPlugin, with a shape's height limit worked out per vertex: `limitAt( point )` (the
+// point on the shape under the vertex, in the tileset's frame) gives how far above the shape a vertex
+// is left where it is, in place of one `threshold` for the whole shape. An area that keeps what's
+// overhead automatically (Overheads) keeps a deck from its underside up, its pillars whole, and
+// presses everything else. Otherwise _updateTile is the plugin's own (3d-tiles-renderer 0.4).
+const _sphere = new Sphere();
+const _vec = new Vector3();
+const _matrix = new Matrix4();
+const _invMatrix = new Matrix4();
+const _shapeRay = new Raycaster();
+const RAYCAST_DISTANCE = 1e5;
+class AreaFlatteningPlugin extends TileFlatteningPlugin {
+
+	_updateTile( tile ) {
+
+		const { positionsUpdated, positionsMap, shapes, tiles } = this;
+		positionsUpdated.add( tile );
+		const scene = tile.engineData.scene;
+		if ( ! positionsMap.has( tile ) ) {
+
+			const geomMap = new Map();
+			positionsMap.set( tile, geomMap );
+			scene.traverse( c => {
+
+				if ( c.geometry ) geomMap.set( c.geometry, c.geometry.attributes.position.array.slice() );
+
+			} );
+
+		} else {
+
+			const geomMap = positionsMap.get( tile );
+			scene.traverse( c => {
+
+				const buffer = c.geometry && geomMap.get( c.geometry );
+				if ( buffer ) {
+
+					c.geometry.attributes.position.array.set( buffer );
+					c.geometry.attributes.position.needsUpdate = true;
+
+				}
+
+			} );
+
+		}
+
+		scene.updateMatrixWorld( true );
+		scene.traverse( c => {
+
+			const { geometry } = c;
+			if ( ! geometry ) return;
+			_matrix.copy( c.matrixWorld );
+			if ( scene.parent !== null ) _matrix.premultiply( tiles.group.matrixWorldInverse );
+			_invMatrix.copy( _matrix ).invert();
+			if ( geometry.boundingSphere === null ) geometry.computeBoundingSphere();
+			_sphere.copy( geometry.boundingSphere ).applyMatrix4( _matrix );
+			shapes.forEach( ( { shape, direction, sphere, thresholdMode, threshold, flattenRange, limitAt } ) => {
+
+				_vec.subVectors( _sphere.center, sphere.center );
+				_vec.addScaledVector( direction, - direction.dot( _vec ) );
+				if ( _vec.lengthSq() > ( _sphere.radius + sphere.radius ) ** 2 ) return;
+				const { position } = geometry.attributes;
+				const { ray } = _shapeRay;
+				ray.direction.copy( direction ).multiplyScalar( - 1 );
+				for ( let i = 0, l = position.count; i < l; i ++ ) {
+
+					ray.origin.fromBufferAttribute( position, i ).applyMatrix4( _matrix ).addScaledVector( direction, RAYCAST_DISTANCE );
+					_shapeRay.far = RAYCAST_DISTANCE;
+					const hit = _shapeRay.intersectObject( shape )[ 0 ];
+					if ( ! hit ) continue;
+					const limit = limitAt ? limitAt( hit.point ) : threshold;
+					let rangeAlpha = ( RAYCAST_DISTANCE - hit.distance ) / limit;
+					const aboveThreshold = rangeAlpha >= 1;
+					if ( aboveThreshold && thresholdMode !== 'flatten' ) continue;
+					rangeAlpha = Math.min( rangeAlpha, 1 );
+					hit.point.addScaledVector( ray.direction, MathUtils.mapLinear( rangeAlpha, 0, 1, - flattenRange, 0 ) );
+					hit.point.applyMatrix4( _invMatrix );
+					position.setXYZ( i, ...hit.point );
+
+				}
+
+			} );
+
+		} );
+
+		tiles.dispatchEvent( { type: 'needs-render' } );
+
+	}
+
+	updateShape( mesh ) {
+
+		const { direction, threshold, thresholdMode, flattenRange, limitAt } = this.shapes.get( mesh );
+		this.deleteShape( mesh );
+		this.addShape( mesh, direction, { threshold, thresholdMode, flattenRange, limitAt } );
+
+	}
+
+}
+
 // Keeps TileFlatteningPlugin shapes in step with flatten areas and with shapes other modules set.
 // Does nothing without Google tiles, apart from originalHeight().
 export function setUpFlattening( { tiles, models } ) {
 
-	const plugin = tiles ? new TileFlatteningPlugin() : null;
+	const plugin = tiles ? new AreaFlatteningPlugin() : null;
 	if ( plugin ) tiles.registerPlugin( plugin );
 
 	const shapes = new Map(); // key (an entry, or another module's key) -> shape in the tileset's frame
@@ -799,13 +941,14 @@ export function setUpFlattening( { tiles, models } ) {
 
 	// `threshold`: how far above the shape the plugin presses vertices down onto it (an area's
 	// height limit); higher ones are left where they are.
-	const commit = ( key, shape, threshold = Infinity ) => {
+	// `limitAt`: the height limit per vertex instead (AreaFlatteningPlugin), for auto.
+	const commit = ( key, shape, threshold = Infinity, limitAt = null ) => {
 
 		// The plugin presses vertices along this direction onto the shape; pointing down, it
 		// flattens what's above the floor and leaves what's below (e.g. water under a deck).
 		down.set( 0, - 1, 0 ).transformDirection( toTileset() );
 		const current = plugin.shapes.get( shape );
-		if ( current && current.direction.distanceToSquared( down ) < 1e-12 && current.threshold === threshold ) {
+		if ( current && current.direction.distanceToSquared( down ) < 1e-12 && current.threshold === threshold && ( current.limitAt ?? null ) === limitAt ) {
 
 			plugin.updateShape( shape );
 			return;
@@ -817,7 +960,7 @@ export function setUpFlattening( { tiles, models } ) {
 		// Google's root tileset has loaded and been turned to the site, when "down" in the
 		// tileset's frame points somewhere else entirely; update() makes them again once it is.
 		if ( current ) plugin.deleteShape( shape );
-		plugin.addShape( shape, down, { threshold } );
+		plugin.addShape( shape, down, { threshold, limitAt } );
 		shapes.set( key, shape );
 
 	};
@@ -893,7 +1036,7 @@ export function setUpFlattening( { tiles, models } ) {
 		shape.matrix.multiplyMatrices( toTileset(), pivot.matrixWorld )
 			.multiply( new Matrix4().makeScale( params.width, 1, params.length ) );
 		shape.matrixWorld.copy( shape.matrix );
-		commit( entry, shape, params.height > 0 ? params.height : Infinity );
+		commit( entry, shape, limitOf( params ) > 0 ? params.height : Infinity, params.keep === 'auto' ? limitFor( entry ) : null );
 
 	};
 
@@ -907,11 +1050,13 @@ export function setUpFlattening( { tiles, models } ) {
 	// gets the same (gravel, then asphalt all evening, say). Loading a layout doesn't count.
 	const surfaces = new WeakMap();
 	const grades = new WeakMap();
+	const keeps = new WeakMap();
 	models.addEventListener( 'add', e => {
 
 		mark( e );
 		if ( e.entry.kind === ZONE_ID ) surfaces.set( e.entry, e.entry.params.surface );
 		if ( e.entry.kind === ZONE_ID ) grades.set( e.entry, e.entry.params.grade );
+		if ( e.entry.kind === ZONE_ID ) keeps.set( e.entry, e.entry.params.keep );
 
 	} );
 	models.addEventListener( 'change', e => {
@@ -930,11 +1075,16 @@ export function setUpFlattening( { tiles, models } ) {
 		const fit = entry.groundSlope ?? null;
 		const { params } = entry;
 		if ( FITTED.includes( params.grade ) && fit && ! sameFit( params.fit, fit ) ) models.setParams( entry, { fit } );
+		// 'Everything above a height' picked with no height: a height to start from.
+		const kept = keeps.get( entry );
+		keeps.set( entry, params.keep );
+		if ( kept !== undefined && kept !== 'height' && params.keep === 'height' && ! ( params.height > 0 ) ) models.setParams( entry, { height: KEEP_HEIGHT } );
 
 	} );
 	models.addEventListener( 'remove', ( { entry } ) => {
 
 		dirty.delete( entry );
+		scans.delete( entry );
 		if ( plugin ) remove( entry );
 
 	} );
@@ -958,8 +1108,266 @@ export function setUpFlattening( { tiles, models } ) {
 	const raycaster = new Raycaster();
 	raycaster.firstHitOnly = true;
 	const DOWN = new Vector3( 0, - 1, 0 );
+	const UP = new Vector3( 0, 1, 0 );
 	const corners = [ new Vector3(), new Vector3(), new Vector3() ];
 	const before = [ new Vector3(), new Vector3(), new Vector3() ];
+	const _ab = new Vector3(), _cb = new Vector3();
+
+	// Where a vertical ray hit Google's mesh, as Google made it: { y, ny } (the height, and how far
+	// its triangle faces up, -1 for straight down). Flattening only moves vertices up and down, so a
+	// vertical ray crosses the same triangles before and after, from the same side, at the same place
+	// across each: read from the original corners.
+	const asMade = hit => {
+
+		const original = hit.face && findOriginal( hit.object.geometry );
+		if ( ! original ) {
+
+			const ny = hit.face ? _ab.copy( hit.face.normal ).transformDirection( hit.object.matrixWorld ).y : 0;
+			return { y: hit.point.y, ny };
+
+		}
+
+		const { position } = hit.object.geometry.attributes;
+		const ids = [ hit.face.a, hit.face.b, hit.face.c ];
+		ids.forEach( ( id, i ) => {
+
+			corners[ i ].fromBufferAttribute( position, id ).applyMatrix4( hit.object.matrixWorld );
+			before[ i ].set( ...[ 0, 1, 2 ].map( k => readValue( original, id * 3 + k, position ) ) ).applyMatrix4( hit.object.matrixWorld );
+
+		} );
+		const w = barycentricXZ( hit.point, corners );
+		if ( ! w ) return { y: hit.point.y, ny: 0 };
+		// The triangle's normal as three.js works it out (Triangle.getNormal), from the original corners.
+		const n = _cb.subVectors( before[ 2 ], before[ 1 ] ).cross( _ab.subVectors( before[ 0 ], before[ 1 ] ) ).normalize();
+		return { y: before[ 0 ].y * w[ 0 ] + before[ 1 ].y * w[ 1 ] + before[ 2 ].y * w[ 2 ], ny: n.y };
+
+	};
+
+	// --- what's overhead, for areas that keep it automatically ---------------------------------
+	//
+	// Over each area that keeps what's overhead automatically (keep 'auto'), Google's mesh as it was
+	// is read along vertical lines on a grid: a surface facing down (an underside) at least CLEARANCE
+	// above the floor has open space under it, so it and what's above it are a deck or a canopy, kept;
+	// anything else is pressed flat, as ever. Google's photogrammetry hangs curtains from a deck's edge
+	// down to the ground (and skirts round its pillars): their feet are pressed, and terrain.js's mask
+	// hides what's left of them below the underside (keepAbove gives it that height), and walking and
+	// driving pass through them there (terrain.js covers()). Within PILLAR_REACH under a deck, a line
+	// with something above the clearance but no underside (a pillar, or the deck over one) is kept
+	// whole, so pillars stand under the deck as obstacles; a gap in the underside Google didn't
+	// capture takes the underside round it. Decks smaller than MIN_DECK (a tree's crown, a sign) are
+	// flattened. Read again a few seconds after more of Google's tiles load, as finer ones come in,
+	// and from scratch when the area moves.
+	const scans = new Map(); // entry -> { key, cell, i0, j0, w, h, floor, under, above, next, result }
+	const overheadRoots = tiles ? [ tiles.group ] : [];
+	const overheadListeners = [];
+	let tileLoads = 0;
+	let lastFrame = 0;
+	tiles?.addEventListener( 'load-model', () => tileLoads ++ );
+	const limits = new WeakMap();
+	const _tilePoint = new Vector3();
+	// The plugin's height limit for an auto area's vertex, from the point on its shape under it.
+	const limitFor = entry => {
+
+		if ( ! limits.has( entry ) ) limits.set( entry, point => {
+
+			_tilePoint.copy( point ).applyMatrix4( tiles.group.matrixWorld );
+			return keepAbove( entry, _tilePoint.x, _tilePoint.z, true );
+
+		} );
+		return limits.get( entry );
+
+	};
+
+	// How far above an area's floor at (x, z) Google's mesh is left as it is: Infinity where it's all
+	// pressed flat. For auto, what was found there (CLEARANCE until it has been read).
+	const keepAbove = ( entry, x, z, pressing = false ) => {
+
+		const p = entry.params;
+		if ( p.keep === 'height' ) return p.height > 0 ? p.height : Infinity;
+		if ( p.keep !== 'auto' ) return Infinity;
+		const found = scans.get( entry )?.result;
+		if ( ! found ) return overheadRoots.length ? CLEARANCE : Infinity;
+		const i = Math.round( x / found.cell ) - found.i0, j = Math.round( z / found.cell ) - found.j0;
+		if ( i < 0 || j < 0 || i >= found.w || j >= found.h ) return Infinity;
+		const v = ( pressing ? found.press : found.keep )[ j * found.w + i ];
+		return Number.isNaN( v ) ? Infinity : v;
+
+	};
+
+	const scanKey = ( { state, params } ) => JSON.stringify( [ state.east, state.north, state.up, state.heading, params.width, params.length, graded( params ) ? shapeKey( params ) : 'level' ] );
+	const columnRay = new Raycaster();
+	columnRay.firstHitOnly = true;
+	const _from = new Vector3();
+	const visible = object => {
+
+		for ( let o = object; o; o = o.parent ) if ( ! o.visible ) return false;
+		return true;
+
+	};
+
+	// Read one grid line: the lowest underside above the clearance (looking up from there, past
+	// whatever else faces down a little: the bottom of a tree's crown, a curtain), and whether the
+	// top of what's there (looking down) was above it. First hits only: reading every surface along
+	// the line costs several times as much, and an area has thousands of lines.
+	const readColumn = ( scan, k ) => {
+
+		const floor = scan.floor[ k ];
+		if ( Number.isNaN( floor ) ) return;
+		const x = ( scan.i0 + k % scan.w ) * scan.cell, z = ( scan.j0 + Math.floor( k / scan.w ) ) * scan.cell;
+		const first = ( y0, dir, far ) => {
+
+			columnRay.set( _from.set( x, y0, z ), dir );
+			columnRay.far = far;
+			return columnRay.intersectObjects( overheadRoots, true ).find( hit => hit.object.isMesh && hit.face && visible( hit.object ) ) ?? null;
+
+		};
+
+		const top = first( floor + 2000, DOWN, 4000 );
+		scan.above[ k ] = top && asMade( top ).y > floor + CLEARANCE ? 1 : 0;
+		let under = Infinity;
+		let from = floor + CLEARANCE;
+		for ( let tries = 0; tries < 4 && scan.above[ k ]; tries ++ ) {
+
+			const hit = first( from, UP, 500 );
+			if ( ! hit ) break;
+			const { y, ny } = asMade( hit );
+			if ( ny < - 0.7 && y > floor + CLEARANCE ) {
+
+				under = y;
+				break;
+
+			}
+
+			from = hit.point.y + 0.05;
+
+		}
+
+		scan.under[ k ] = under;
+
+	};
+
+	const startScan = ( entry, old ) => {
+
+		const { pivot, params } = entry;
+		pivot.updateWorldMatrix( true, false );
+		const toLocal = pivot.matrixWorld.clone().invert();
+		const hw = params.width / 2, hl = params.length / 2;
+		const cell = Math.max( OVERHEAD_CELL, Math.ceil( Math.sqrt( params.width * params.length / OVERHEAD_NODES ) / OVERHEAD_CELL ) * OVERHEAD_CELL );
+		const box = { minX: Infinity, maxX: - Infinity, minZ: Infinity, maxZ: - Infinity };
+		const c = new Vector3();
+		for ( const [ a, b ] of [ [ - 1, - 1 ], [ 1, - 1 ], [ 1, 1 ], [ - 1, 1 ] ] ) {
+
+			c.set( a * ( hw + cell ), 0, b * ( hl + cell ) ).applyMatrix4( pivot.matrixWorld );
+			box.minX = Math.min( box.minX, c.x );
+			box.maxX = Math.max( box.maxX, c.x );
+			box.minZ = Math.min( box.minZ, c.z );
+			box.maxZ = Math.max( box.maxZ, c.z );
+
+		}
+
+		const i0 = Math.floor( box.minX / cell ), j0 = Math.floor( box.minZ / cell );
+		const w = Math.ceil( box.maxX / cell ) - i0 + 1, h = Math.ceil( box.maxZ / cell ) - j0 + 1;
+		const floor = new Float32Array( w * h ).fill( NaN );
+		for ( let k = 0; k < w * h; k ++ ) {
+
+			c.set( ( i0 + k % w ) * cell, 0, ( j0 + Math.floor( k / w ) ) * cell ).applyMatrix4( toLocal );
+			// Inside the area, and a node round it (a deck's edge just outside is kept too).
+			if ( Math.abs( c.x ) > hw + cell || Math.abs( c.z ) > hl + cell ) continue;
+			const lift = graded( params ) ? gradeOffset( params, params.fit, MathUtils.clamp( c.x, - hw, hw ), MathUtils.clamp( c.z, - hl, hl ) ) : 0;
+			floor[ k ] = c.setY( lift ).applyMatrix4( pivot.matrixWorld ).y;
+
+		}
+
+		const scan = { key: scanKey( entry ), cell, i0, j0, w, h, floor, under: new Float32Array( w * h ).fill( Infinity ), above: new Uint8Array( w * h ), next: 0, loads: tileLoads, result: old?.result ?? null, finished: 0 };
+		scans.set( entry, scan );
+		return scan;
+
+	};
+
+	// Once every line is read: what's kept above the floor at each node (see the section's top).
+	const finishScan = scan => {
+
+		const { w, h, cell, under, above, floor } = scan;
+		const n = w * h;
+		const deck = new Uint8Array( n );
+		for ( let k = 0; k < n; k ++ ) deck[ k ] = under[ k ] < Infinity ? 1 : 0;
+		const reach = Math.max( 1, Math.round( PILLAR_REACH / cell ) );
+		// Pillars and gaps closed over (grown by the reach, then shrunk back by it).
+		const closed = squareFilter( squareFilter( deck, w, h, reach, 1 ), w, h, reach, 0 );
+		for ( let k = 0; k < n; k ++ ) if ( deck[ k ] ) closed[ k ] = 1;
+		// Too small to be a deck or a canopy.
+		dropSmall( closed, w, h, Math.ceil( MIN_DECK / ( cell * cell ) ) );
+		const lowest = minFilter( under, w, h, reach );
+		const keep = new Float32Array( n ).fill( NaN );
+		for ( let k = 0; k < n; k ++ ) {
+
+			if ( ! closed[ k ] || Number.isNaN( floor[ k ] ) ) continue;
+			if ( deck[ k ] ) keep[ k ] = under[ k ] - floor[ k ] - UNDER_MARGIN;
+			else if ( above[ k ] ) keep[ k ] = PILLAR_KEEP;
+			else if ( lowest[ k ] < Infinity ) keep[ k ] = lowest[ k ] - floor[ k ] - UNDER_MARGIN;
+
+		}
+
+		// A node round the decks too, so their edges stay where they are.
+		const edge = minFilter( keep.map( ( v, k ) => Number.isNaN( v ) || v === PILLAR_KEEP ? Infinity : v + floor[ k ] ), w, h, 1 );
+		for ( let k = 0; k < n; k ++ ) if ( Number.isNaN( keep[ k ] ) && edge[ k ] < Infinity && ! Number.isNaN( floor[ k ] ) ) keep[ k ] = edge[ k ] - floor[ k ];
+		for ( let k = 0; k < n; k ++ ) if ( ! Number.isNaN( keep[ k ] ) ) keep[ k ] = Math.max( PILLAR_KEEP, keep[ k ] );
+		// The flattening keeps the lowest of that within PRESS_REACH: a deck's underside is anything but
+		// flat (beams, girders, a pier's cap), and a vertex of it pressed to the floor would drag its
+		// triangles down into a spike, out past the area's edge where nothing hides it.
+		const reachPress = Math.max( 1, Math.round( PRESS_REACH / cell ) );
+		const low = minFilter( keep.map( ( v, k ) => Number.isNaN( v ) ? Infinity : v + floor[ k ] ), w, h, reachPress );
+		const press = keep.map( ( v, k ) => Number.isNaN( floor[ k ] ) || low[ k ] === Infinity ? NaN : Math.max( PILLAR_KEEP, low[ k ] - floor[ k ] ) );
+		const result = { cell, i0: scan.i0, j0: scan.j0, w, h, keep, press };
+		const old = scan.result;
+		const same = old && old.cell === cell && old.i0 === result.i0 && old.j0 === result.j0 && old.w === w && old.h === h &&
+			keep.every( ( v, k ) => Number.isNaN( v ) ? Number.isNaN( old.keep[ k ] ) : Math.abs( v - old.keep[ k ] ) < 0.1 );
+		scan.result = result;
+		scan.next = - 1;
+		scan.finished = performance.now();
+		return ! same;
+
+	};
+
+	const notify = entry => {
+
+		dirty.add( entry );
+		for ( const listener of overheadListeners ) listener( entry );
+
+	};
+
+	// A few milliseconds a frame of reading, for every auto area that needs it.
+	const scanOverheads = () => {
+
+		// More when frames are slow anyway (a quarter of the last one), so it isn't minutes there.
+		const end = performance.now() + MathUtils.clamp( lastFrame / 4, OVERHEAD_BUDGET, 4 * OVERHEAD_BUDGET );
+		for ( const entry of models.entries ) {
+
+			if ( entry.kind !== ZONE_ID || entry.params.keep !== 'auto' || entry.placing || ! Number.isFinite( entry.state.up ) ) continue;
+			let scan = scans.get( entry );
+			if ( ! scan || scan.key !== scanKey( entry ) ) {
+
+				// New, moved or reshaped: what was found no longer applies.
+				if ( scan ) scan.result = null;
+				scan = startScan( entry, scan );
+				notify( entry );
+
+			} else if ( scan.next < 0 && tileLoads > scan.loads && performance.now() - scan.finished > RESCAN * 1000 ) {
+
+				scan = startScan( entry, scan );
+
+			}
+
+			if ( scan.next < 0 ) continue;
+			while ( scan.next < scan.w * scan.h && performance.now() < end ) readColumn( scan, scan.next ++ );
+			if ( scan.next < scan.w * scan.h ) return;
+			if ( finishScan( scan ) ) notify( entry );
+
+		}
+
+		for ( const entry of scans.keys() ) if ( entry.params.keep !== 'auto' ) scans.delete( entry );
+
+	};
 
 	return {
 
@@ -973,6 +1381,9 @@ export function setUpFlattening( { tiles, models } ) {
 				for ( const key of shapes.keys() ) dirty.add( key );
 
 			}
+
+			lastFrame = dt * 1000;
+			if ( enabled ) scanOverheads();
 
 			timer -= dt;
 			if ( ! enabled || timer > 0 || dirty.size === 0 ) return;
@@ -1061,9 +1472,45 @@ export function setUpFlattening( { tiles, models } ) {
 
 		},
 
-		get active() {
+			get active() {
 
 			return enabled && shapes.size > 0;
+
+		},
+
+		// How far above an area's floor at (x, z) Google's mesh is left as it is (Infinity: none of
+		// it), as the flattening leaves it: terrain.js hides it up to there.
+		// `wide`: the lowest kept within PRESS_REACH, as the flattening presses.
+		keepAbove( entry, x, z, wide = false ) {
+
+			return keepAbove( entry, x, z, wide );
+
+		},
+
+		// Called with an area's entry when what's kept over it has been worked out again.
+		onOverhead( listener ) {
+
+			overheadListeners.push( listener );
+
+		},
+
+		// Whether every auto area's overhead has been read (tests wait for it).
+		get overheadsRead() {
+
+			return models.entries.every( entry => {
+
+				const scan = scans.get( entry );
+				return entry.kind !== ZONE_ID || entry.params.keep !== 'auto' || ( scan?.next < 0 && scan.key === scanKey( entry ) );
+
+			} );
+
+		},
+
+		// Other ground to look for decks in, beside Google's tiles (the tests' stand-in overpass).
+		addOverheadRoot( object ) {
+
+			overheadRoots.push( object );
+			for ( const scan of scans.values() ) scan.key = null;
 
 		},
 
@@ -1086,5 +1533,101 @@ function barycentricXZ( p, [ a, b, c ] ) {
 	const u = ( ( b.z - c.z ) * ( p.x - c.x ) + ( c.x - b.x ) * ( p.z - c.z ) ) / d;
 	const v = ( ( c.z - a.z ) * ( p.x - c.x ) + ( a.x - c.x ) * ( p.z - c.z ) ) / d;
 	return [ u, v, 1 - u - v ];
+
+}
+
+// A grid of 0s and 1s (w × h) grown (`value` 1: a node is 1 if any within `reach` is) or shrunk
+// (`value` 0: 0 if any within reach is 0), over squares: done along rows, then columns.
+function squareFilter( grid, w, h, reach, value ) {
+
+	const pass = ( from, along ) => {
+
+		const out = new Uint8Array( w * h );
+		for ( let j = 0; j < h; j ++ ) {
+
+			for ( let i = 0; i < w; i ++ ) {
+
+				let v = 1 - value;
+				for ( let d = - reach; d <= reach && v !== value; d ++ ) {
+
+					const a = along ? i + d : i, b = along ? j : j + d;
+					// Off the grid counts as empty when growing, and as full when shrinking.
+					const t = a < 0 || b < 0 || a >= w || b >= h ? 1 - value : from[ b * w + a ];
+					if ( t === value ) v = value;
+
+				}
+
+				out[ j * w + i ] = v;
+
+			}
+
+		}
+
+		return out;
+
+	};
+
+	return pass( pass( grid, true ), false );
+
+}
+
+// The lowest value within `reach` nodes (a square) of each node of a w × h grid.
+function minFilter( grid, w, h, reach ) {
+
+	const pass = ( from, along ) => {
+
+		const out = new Float32Array( w * h );
+		for ( let j = 0; j < h; j ++ ) {
+
+			for ( let i = 0; i < w; i ++ ) {
+
+				let v = Infinity;
+				for ( let d = - reach; d <= reach; d ++ ) {
+
+					const a = along ? i + d : i, b = along ? j : j + d;
+					if ( a >= 0 && b >= 0 && a < w && b < h && from[ b * w + a ] < v ) v = from[ b * w + a ];
+
+				}
+
+				out[ j * w + i ] = v;
+
+			}
+
+		}
+
+		return out;
+
+	};
+
+	return pass( pass( grid, true ), false );
+
+}
+
+// Clear the patches of 1s (side by side) in a w × h grid that have fewer than `least` nodes.
+function dropSmall( grid, w, h, least ) {
+
+	const seen = new Uint8Array( w * h );
+	for ( let start = 0; start < w * h; start ++ ) {
+
+		if ( ! grid[ start ] || seen[ start ] ) continue;
+		const patch = [ start ];
+		seen[ start ] = 1;
+		for ( let n = 0; n < patch.length; n ++ ) {
+
+			const k = patch[ n ], i = k % w, j = Math.floor( k / w );
+			for ( const [ a, b ] of [ [ i - 1, j ], [ i + 1, j ], [ i, j - 1 ], [ i, j + 1 ] ] ) {
+
+				const next = b * w + a;
+				if ( a < 0 || b < 0 || a >= w || b >= h || seen[ next ] || ! grid[ next ] ) continue;
+				seen[ next ] = 1;
+				patch.push( next );
+
+			}
+
+		}
+
+		if ( patch.length < least ) for ( const k of patch ) grid[ k ] = 0;
+
+	}
 
 }

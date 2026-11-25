@@ -156,22 +156,93 @@ const heightAt = ( east, north ) => page.evaluate( ( [ east, north ] ) => window
 
 const near = ( actual, expected, tolerance, what ) => assert.ok( Math.abs( actual - expected ) <= tolerance, `${ what }: ${ actual?.toFixed?.( 3 ) ?? actual } m, expected ${ expected.toFixed( 3 ) } ± ${ tolerance }` );
 
-test( 'a level area is as it was, and saves as before', async () => {
+// The ground the walker stands on over an area (every 2 m, 0.5 m in from its edges): the worst
+// difference from the area's floor, and how much of it is fill (the stand-in's slope below the floor).
+async function walkedOn( i ) {
+
+	return page.evaluate( i => {
+
+		const entry = window.areas[ i ];
+		const { controls } = window.twin;
+		const { east, north, up } = entry.state;
+		const { width, length } = entry.params;
+		let worst = 0, fill = 0, n = 0;
+		for ( let de = - width / 2 + 0.5; de <= width / 2 - 0.5; de += 2 ) for ( let dn = - length / 2 + 0.5; dn <= length / 2 - 0.5; dn += 2 ) {
+
+			const hit = controls.groundHit( - ( east + de ), up + 3, north + dn );
+			worst = Math.max( worst, hit ? Math.abs( hit.point.y - up ) : Infinity );
+			if ( window.slopeAt( east + de, north + dn ) < up - 0.3 ) fill ++;
+			n ++;
+
+		}
+
+		return { worst, fill: fill / n };
+
+	}, i );
+
+}
+
+test( 'a level area is level, saves as before, and is walked on at its floor, fill and all', async () => {
 
 	const i = await area( { params: { width: 20, length: 14, surface: 'gravel' }, east: - 60, north: 0 } );
 	const out = await page.evaluate( i => {
 
 		const entry = window.areas[ i ];
 		const { models, terrain } = window.twin;
-		return { params: entry.params, saved: models.toConfig( entry ).params, zone: terrain.zones.has( entry ), up: entry.state.up };
+		return { params: entry.params, saved: models.toConfig( entry ).params, holds: terrain.zones.get( entry )?.chunks?.size ?? 0, up: entry.state.up };
 
 	}, i );
 	assert.equal( out.params.grade, 'level' );
 	assert.deepEqual( out.saved, { width: 20, length: 14, height: 0, surface: 'gravel' }, 'nothing about grading is saved' );
-	// Without Google's tiles a level area presses nothing, as before.
-	assert.equal( out.zone, false );
-	// At the ground's median under it, as surfaced areas always snapped.
+	// Its floor is held in chunks of its own, with or without Google's tiles.
+	assert.ok( out.holds > 0, 'it holds its floor' );
+	// At the ground's median under it, as surfaced areas always snapped: about half of it is built up.
 	near( out.up, - 4.8, 0.4, 'its height' );
+	const walked = await walkedOn( i );
+	assert.ok( walked.fill > 0.3, `${ ( walked.fill * 100 ).toFixed( 0 ) }% of it is over lower ground` );
+	near( walked.worst, 0, 0.02, 'the ground walked on, from its floor' );
+	// Beside it the slope is as it was.
+	near( await heightAt( - 75, 0 ), 0.08 * - 75, 0.05, 'the slope beside it' );
+
+	// One with no surface, set above the ground (not snapped down to its lowest): the same.
+	const bare = await page.evaluate( async () => {
+
+		const { models, terrain } = window.twin;
+		const entry = await models.load( { kind: 'flatten-zone', heading: 0, east: - 100, north: 40, up: - 6.6, params: { width: 16, length: 12 } } );
+		for ( let t = 0; t < 100 && ! terrain.zones.has( entry ); t ++ ) await new Promise( resolve => setTimeout( resolve, 50 ) );
+		terrain.flush();
+		window.areas.push( entry );
+		return window.areas.length - 1;
+
+	} );
+	const bareWalked = await walkedOn( bare );
+	assert.ok( bareWalked.fill > 0.3, `${ ( bareWalked.fill * 100 ).toFixed( 0 ) }% of the bare one is over lower ground` );
+	near( bareWalked.worst, 0, 0.02, 'the ground walked on over the bare one, from its floor' );
+	await page.evaluate( () => window.twin.models.remove( window.areas.pop() ) );
+
+} );
+
+test( 'the walking character is drawn after the ground and a pad\'s surface', async () => {
+
+	const orders = await page.evaluate( async () => {
+
+		const { player, scene } = window.twin;
+		const end = performance.now() + 20000;
+		while ( ! player.loaded && performance.now() < end ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		const { PLACED_ORDER } = await import( '/src/models.js' );
+		const out = [];
+		scene.traverse( o => {
+
+			let named = false;
+			for ( let p = o; p; p = p.parent ) if ( p.name?.startsWith( 'Player:' ) ) named = true;
+			if ( named && o.isMesh ) out.push( o.renderOrder - PLACED_ORDER );
+
+		} );
+		return out;
+
+	} );
+	assert.ok( orders.length > 0, 'the character is in the scene' );
+	assert.ok( orders.every( d => d >= 0 ), `render orders less PLACED_ORDER: ${ orders.join() }` );
 
 } );
 
@@ -634,6 +705,129 @@ test( 'on a hillside that isn\'t a plane, following the ground stays on it where
 	assert.ok( again.same, 'the same surface fitted' );
 	near( again.after, again.before, 0.02, 'loaded, the ground there' );
 	await page.evaluate( i => window.twin.models.remove( window.areas[ i ] ), i );
+
+} );
+
+test( 'keeping what\'s overhead: under a stand-in overpass its curtains are hidden and walked through, its deck kept', async () => {
+
+	// A deck 10 m wide running north-south, its underside 6 m over a level area 24 × 20 m on the
+	// slope at (300, -100), with curtains hanging from both its edges down past the ground (as Google's
+	// photogrammetry hangs them), standing in for Google's mesh: its own ground for walking, its
+	// material hidden by the earthworks' mask, read for what's overhead.
+	const out = await page.evaluate( async () => {
+
+		const { Mesh, BoxGeometry, PlaneGeometry, MeshStandardMaterial, DoubleSide, Group } = await import( '/node_modules/.vite/deps/three.js' );
+		const { hideUnderEarthworks } = await import( '/src/terrain.js' );
+		const { models, terrain, flattening, controls } = window.twin;
+		const east = 300, north = - 100;
+		const up = window.slopeAt( east, north );
+		const deck = up + 6;
+		const bridge = new Group();
+		bridge.name = 'stand-in overpass';
+		const material = new MeshStandardMaterial( { color: 0x999999, side: DoubleSide } );
+		hideUnderEarthworks( material, terrain.mask );
+		const slab = new Mesh( new BoxGeometry( 10, 1, 40 ), material );
+		slab.position.set( - east, deck + 0.5, north );
+		bridge.add( slab );
+		for ( const side of [ - 5, 5 ] ) {
+
+			const curtain = new Mesh( new PlaneGeometry( 40, 14 ).rotateY( Math.PI / 2 ), material );
+			curtain.position.set( - ( east + side ), deck - 7, north );
+			bridge.add( curtain );
+
+		}
+
+		bridge.traverse( o => o.userData.googleTile = true );
+		controls.getColliders()[ 0 ].add( bridge );
+		bridge.updateMatrixWorld( true );
+		flattening.addOverheadRoot( bridge );
+		const entry = await models.load( { kind: 'flatten-zone', heading: 0, east, north, up, params: { width: 24, length: 20, keep: 'auto' } } );
+		const end = performance.now() + 20000;
+		while ( performance.now() < end && ! ( terrain.zones.has( entry ) && flattening.overheadsRead ) ) await new Promise( resolve => setTimeout( resolve, 50 ) );
+		await new Promise( resolve => setTimeout( resolve, 300 ) );
+		terrain.flush();
+		terrain.updateMask();
+		const node = ( e, n ) => {
+
+			const i = Math.round( - e / 0.5 ), j = Math.round( n / 0.5 );
+			const chunk = terrain.owner( i, j );
+			return chunk.ceiling[ ( j - chunk.j0 ) * 65 + i - chunk.i0 ];
+
+		};
+		const V = controls.camera.position.constructor;
+		window.overpass = { entry, up, deck, bridge };
+		return {
+			read: flattening.overheadsRead, up, deck,
+			saved: models.toConfig( entry ).params,
+			keepUnder: flattening.keepAbove( entry, - east, north ), keepBeside: flattening.keepAbove( entry, - ( east - 9 ), north ),
+			ceilingUnder: node( east, north ), ceilingBeside: node( east - 9, north ),
+			curtainCovered: terrain.covers( new V( - ( east - 5 ), up + 2, north + 3 ) ),
+			deckCovered: terrain.covers( new V( - east, deck, north ) ),
+			groundUnder: controls.groundHit( - east, up + 3, north )?.point.y,
+		};
+
+	} );
+	assert.ok( out.read, 'what\'s overhead has been read' );
+	assert.deepEqual( out.saved, { width: 24, length: 20, height: 0, keep: 'auto' } );
+	near( out.keepUnder, 6 - 0.3, 0.05, 'kept from under the deck\'s underside' );
+	assert.equal( out.keepBeside, Infinity, 'beside the deck everything is flattened (Infinity)' );
+	near( out.ceilingUnder, out.up + 5.7, 0.05, 'Google\'s mesh hidden up to there under the deck' );
+	assert.equal( out.ceilingBeside, Infinity, 'and all of it beside the deck' );
+	assert.ok( out.curtainCovered, 'a curtain is hidden and passed through' );
+	assert.ok( ! out.deckCovered, 'the deck is not' );
+	near( out.groundUnder, out.up, 0.02, 'the ground under the deck' );
+
+	// Walk east from beside the deck, through its curtain, under it; then jump there.
+	await page.evaluate( () => {
+
+		const { controls } = window.twin;
+		const { up } = window.overpass;
+		controls.setMode( 'walk' );
+		controls.setPose( controls.camera.position.clone().set( - 293.5, up + 1.7, - 100 ), 90, 0 );
+
+	} );
+	await page.waitForTimeout( 500 );
+	await page.keyboard.down( 'KeyW' );
+	await page.waitForFunction( () => - window.twin.camera.position.x > 298, null, { timeout: 15000 } ).catch( () => {} );
+	await page.keyboard.up( 'KeyW' );
+	await page.waitForTimeout( 300 );
+	const walked = await page.evaluate( () => {
+
+		const { camera, controls } = window.twin;
+		return { east: - camera.position.x, feet: camera.position.y - 1.7, mode: controls.mode };
+
+	} );
+	assert.equal( walked.mode, 'walk' );
+	assert.ok( walked.east > 297, `walked through the curtain at 295 m east, to ${ walked.east.toFixed( 1 ) }` );
+	near( walked.feet, out.up, 0.1, 'feet on the floor under the deck' );
+	const top = await page.evaluate( async () => {
+
+		const { camera, controls } = window.twin;
+		controls.velocityY = 15;
+		controls.grounded = false;
+		let top = camera.position.y;
+		const end = performance.now() + 1500;
+		while ( performance.now() < end ) {
+
+			top = Math.max( top, camera.position.y );
+			await new Promise( resolve => requestAnimationFrame( resolve ) );
+
+		}
+
+		return top;
+
+	} );
+	assert.ok( top < out.deck, `a jump under the deck stops under it (head at most ${ ( top - out.deck ).toFixed( 2 ) } m from it)` );
+	await look( { east: 300, north: - 100, distance: 45, from: 220, elevation: 20 } );
+	await shot( 'grading-overpass' );
+	await page.evaluate( () => {
+
+		const { models, controls } = window.twin;
+		controls.setMode( 'fly' );
+		models.remove( window.overpass.entry );
+		window.overpass.bridge.removeFromParent();
+
+	} );
 
 } );
 
