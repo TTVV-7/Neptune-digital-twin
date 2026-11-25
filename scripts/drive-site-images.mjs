@@ -2,9 +2,10 @@
 // Drive's icons and the pictures its links unfurl with into drive/public/ (icons and cards, with none
 // named):
 //
-// - icons: favicon.svg (the globe with its road, as the page always had it), favicon.ico (16, 32
-//   and 48 px), apple-touch-icon.png (180 px), and the web app manifest's icons/icon-192.png,
-//   icon-512.png and icon-maskable-512.png (its safe circle kept clear), from that drawing.
+// - icons: from World Drive's mark (exports/worlddrive-mark-transparent.png: the globe with the road
+//   and the car round it), favicon.svg, icons/favicon-32.png and favicon.ico (16, 32 and 48 px) for the
+//   tab, icons/mark-64.png and mark-128.png beside the name, apple-touch-icon.png (180 px), and the web
+//   app manifest's icons/icon-192.png, icon-512.png and icon-maskable-512.png (its safe circle kept clear).
 // - cards: og/world-drive.png, the 1200 × 630 card a link to the game shows in a chat or a post
 //   (og:image), and og/<slug>.png for each place's page (drive/site/places.js). The name, the line
 //   under it and the Earth are drawn in HTML and CSS; the car is the muscle car as World Drive
@@ -46,14 +47,10 @@ const VIEW = [ 1, 0.32, - 0.95 ];
 const asked = process.argv.slice( 2 );
 const wanted = what => asked.length === 0 ? ! OFF_EARTH.includes( what ) : asked.includes( what );
 
-// The globe with a road over it, as the page's favicon has been since the start: a 64-unit square.
-const GLOBE = `<circle cx="32" cy="32" r="30" fill="#155a9c"/><path d="M10 40c8-4 14-4 22 0s14 4 22 0" stroke="#ffd23f" stroke-width="7" fill="none" stroke-linecap="round"/>`;
-const svg = ( inner, { size = 64, background = null, scale = 1 } = {} ) => {
-
-	const pad = 32 - 32 * scale;
-	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${ size }" height="${ size }">${ background ? `<rect width="64" height="64" fill="${ background }"/>` : '' }<g transform="translate(${ pad } ${ pad }) scale(${ scale })">${ inner }</g></svg>`;
-
-};
+// World Drive's mark: the globe with the road and the car round it (the logo's emblem, made with hi3D:
+// exports/worlddrive-logo.png), cut out on transparent. Every icon is drawn from it.
+const MARK = new URL( '../exports/worlddrive-mark-transparent.png', import.meta.url );
+const NAVY = '#070c16';
 
 // The words on every card: the name (big, or small over a place's title), the line or the place's
 // region, the chips and the address.
@@ -193,14 +190,30 @@ for ( const [ world, named ] of worldsAsked ) await drawWorld( world, named.leng
 async function drawIcons() {
 
 	mkdirSync( new URL( 'icons/', PUBLIC ), { recursive: true } );
-	writeFileSync( new URL( 'favicon.svg', PUBLIC ), `${ svg( GLOBE ) }\n` );
-	const png = ( text, size ) => sharp( Buffer.from( text ), { density: 72 * size / 64 } ).resize( size, size ).png( { compressionLevel: 9, palette: true } ).toBuffer();
-	writeFileSync( new URL( 'favicon.ico', PUBLIC ), ico( await Promise.all( [ 16, 32, 48 ].map( size => png( svg( GLOBE, { size } ), size ) ) ), [ 16, 32, 48 ] ) );
-	// On a home screen the icon is a square, cornered by the phone: the globe on the night sky.
-	writeFileSync( new URL( 'apple-touch-icon.png', PUBLIC ), await png( svg( GLOBE, { size: 180, background: '#070c16', scale: 0.8 } ), 180 ) );
-	for ( const size of [ 192, 512 ] ) writeFileSync( new URL( `icons/icon-${ size }.png`, PUBLIC ), await png( svg( GLOBE, { size } ), size ) );
-	// Maskable: anything outside the middle 80 % may be cut off, so the globe sits inside that.
-	writeFileSync( new URL( 'icons/icon-maskable-512.png', PUBLIC ), await png( svg( GLOBE, { size: 512, background: '#070c16', scale: 0.72 } ), 512 ) );
+	// The mark at `size`, as palette PNGs (a few kB each); on the night sky, at `scale` of the square,
+	// when it's for a home screen (a square the phone corners) or a web app's icon.
+	const mark = size => sharp( MARK.pathname ).resize( size, size, { kernel: 'lanczos3' } ).png().toBuffer();
+	const png = async ( size, { background = null, scale = 1 } = {} ) => {
+
+		if ( ! background ) return sharp( await mark( size ) ).png( { compressionLevel: 9, palette: true } ).toBuffer();
+		const inner = Math.round( size * scale );
+		return sharp( { create: { width: size, height: size, channels: 4, background } } )
+			.composite( [ { input: await mark( inner ), gravity: 'center' } ] ).png( { compressionLevel: 9, palette: true } ).toBuffer();
+
+	};
+
+	// The browser's tab: favicon.svg (the 64 px mark inside, which every browser that reads an SVG icon
+	// shows sharply in a tab), icons/favicon-32.png for the ones that don't (Safari), and favicon.ico.
+	writeFileSync( new URL( 'favicon.svg', PUBLIC ), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><image width="64" height="64" href="data:image/png;base64,${ ( await png( 64 ) ).toString( 'base64' ) }"/></svg>` );
+	writeFileSync( new URL( 'icons/favicon-32.png', PUBLIC ), await png( 32 ) );
+	writeFileSync( new URL( 'favicon.ico', PUBLIC ), ico( await Promise.all( [ 16, 32, 48 ].map( size => png( size ) ) ), [ 16, 32, 48 ] ) );
+	// Beside the name, on the game's screens and the site's pages (style.css and site.css's .logo img).
+	for ( const size of [ 64, 128 ] ) writeFileSync( new URL( `icons/mark-${ size }.png`, PUBLIC ), await png( size ) );
+	// On a home screen the icon is a square, cornered by the phone: the mark on the night sky.
+	writeFileSync( new URL( 'apple-touch-icon.png', PUBLIC ), await png( 180, { background: NAVY, scale: 0.88 } ) );
+	for ( const size of [ 192, 512 ] ) writeFileSync( new URL( `icons/icon-${ size }.png`, PUBLIC ), await png( size, { background: NAVY, scale: 0.9 } ) );
+	// Maskable: anything outside the middle 80 % may be cut off, so the mark sits inside that.
+	writeFileSync( new URL( 'icons/icon-maskable-512.png', PUBLIC ), await png( 512, { background: NAVY, scale: 0.72 } ) );
 	console.log( 'Drew favicon.svg, favicon.ico, apple-touch-icon.png and icons/' );
 
 }
