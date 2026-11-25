@@ -4768,6 +4768,9 @@ and times on every device, and driving and the leaderboard never need it.
     named by `client_reference_id`, else nobody's yet, and whoever signs in with the email paid with
     (which Google has checked is theirs) has it. With `SUPPORTER_PAYMENT_LINK_ID` set, only that
     link's checkouts count; without it any paid checkout on the account does (it's World Drive's own).
+    Each purchase also keeps the tax in its total (`tax`, the checkout's `total_details.amount_tax`, in
+    cents; `amount` includes it, as Stripe collects the sales tax as merchant of record), from
+    `0023_purchase_tax.sql`; NULL when Stripe didn't say. The admin page shows the money before tax.
   - `charge.refunded` with `refunded: true` (refunded in full) marks that payment's purchase refunded,
     which takes the pass away. A partial refund keeps it.
   - `charge.dispute.funds_withdrawn` (a chargeback: the bank has taken the money back) marks it

@@ -45,6 +45,13 @@
 		.brand b {
 			color: var( --accent );
 		}
+		/* The globe-and-road mark (public/icons/mark-64.png, the favicon's picture) before the name. */
+		.brand img {
+			width: 32px;
+			height: 32px;
+			margin-right: 8px;
+			vertical-align: -6px;
+		}
 		.play,
 		.small-go {
 			padding: 8px 14px;

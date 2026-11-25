@@ -1724,6 +1724,27 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
+	test( 'a purchase keeps the tax in its total, NULL when Stripe sends none or nonsense', async () => {
+
+		const bought = ( id, total_details ) => {
+
+			const event = checkout( id, { email: 'tax@example.com' } );
+			Object.assign( event.data.object, { total_details } );
+			return event;
+
+		};
+		assert.equal( ( await webhook( server, bought( 'tax_some', { amount_discount: 0, amount_shipping: 0, amount_tax: 260 } ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, bought( 'tax_none', undefined ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, bought( 'tax_odd', { amount_tax: -1 } ) ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT checkout_session, tax FROM purchases WHERE checkout_session LIKE \'cs_test_tax%\' ORDER BY 1' ), [
+			{ checkout_session: 'cs_test_tax_none', tax: null },
+			{ checkout_session: 'cs_test_tax_odd', tax: null },
+			{ checkout_session: 'cs_test_tax_some', tax: 260 },
+		] );
+		server.d1( 'DELETE FROM purchases WHERE checkout_session LIKE \'cs_test_tax%\'' );
+
+	} );
+
 	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went (a link to the Moon or to Mars each its own, a plain load\'s orrery its own)', async () => {
 
 		// On the suite's own day (others' visits that day are counted too: what these add is compared).
@@ -2138,6 +2159,17 @@ describe( 'World Drive Supporter Pass', () => {
 			( 'cs_admin_3', ${ account( '1202' ) }, 'oto@example.com', 1999, 'cad', 'pi_admin_3', 'refunded', ${ ADMIN_DAY - 2 * DAY }, ${ ADMIN_DAY - DAY } ),
 			( 'granted-admin', NULL, 'oto@example.com', NULL, NULL, NULL, 'granted', ${ ADMIN_DAY - 2 * DAY }, NULL ),
 			( 'cs_admin_4', ${ account( '1203' ) }, 'pia@example.com', 999, 'usd', 'pi_admin_4', 'paid', ${ ADMIN_DAY - 10 * DAY }, NULL )` );
+		// And the other kinds, each told apart: a 99-cent day pass Nia bought this morning (its 24 hours
+		// still running, the tax in it known), a monthly pass Oto started two days ago (its subscription
+		// active), Build Pro Pia bought yesterday, and a kind a later version might add.
+		server.d1( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at, subscription, pass, tax ) VALUES
+			( 'cs_admin_day_00000001', ${ account( '1201' ) }, 'nia@example.com', 99, 'cad', 'pi_admin_5', 'paid', ${ ADMIN_DAY - 2 * HOUR }, NULL, NULL, 'day', 12 ),
+			( 'cs_admin_month_000002', ${ account( '1202' ) }, 'oto@example.com', 299, 'cad', NULL, 'paid', ${ ADMIN_DAY - 2 * DAY + HOUR }, NULL, 'sub_admin_1', NULL, 39 ),
+			( 'cs_admin_build_000003', ${ account( '1203' ) }, 'pia@example.com', 1500, 'cad', 'pi_admin_6', 'paid', ${ ADMIN_DAY - DAY }, NULL, NULL, 'build', NULL ),
+			( 'cs_admin_odd_00000004', ${ account( '1203' ) }, 'pia@example.com', 100, 'cad', 'pi_admin_7', 'paid', ${ ADMIN_DAY - DAY - HOUR }, NULL, NULL, 'later', NULL )` );
+		server.d1( `INSERT INTO subscriptions ( id, status, event_at, updated_at ) VALUES ( 'sub_admin_1', 'active', ${ ADMIN_DAY - 2 * DAY }, ${ ADMIN_DAY - 2 * DAY } )` );
+		// Nia's nickname on the leaderboard, linked to her account.
+		server.d1( `UPDATE players SET account_id = ${ account( '1201' ) } WHERE id = 'admin-player-01'` );
 		// And the page's counts: today's, two days of the week before, and older ones (one older than
 		// two years).
 		server.d1( `INSERT INTO stats_daily ( day, metric, key, n ) VALUES ( '${ dayAt( ADMIN_DAY ) }', 'funnel', 'globe', 3 ),
@@ -2154,14 +2186,34 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.deepEqual( sorted( rows ), sorted( [
 			[ today, 'funnel', 'globe', 3 ], [ today, 'players', 'new', 2 ], [ today, 'scores', 'new_best', 2 ], [ dayAt( ADMIN_DAY - DAY ), 'scores', 'new_best', 1 ],
 			[ today, 'accounts', 'new', 1 ], [ dayAt( ADMIN_DAY - 3 * DAY ), 'accounts', 'new', 1 ],
-			[ today, 'purchases', 'paid', 2 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'purchases', 'granted', 1 ], [ today, 'revenue', 'cad', 3998 ],
+			// The passes by what they were, and their money (tax included) and the tax in it, by currency.
+			[ today, 'purchases', 'lifetime', 2 ], [ today, 'purchases', 'day', 1 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'purchases', 'granted', 1 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'purchases', 'monthly', 1 ],
+			// (Build Pro's, and a kind a later version adds, are the Build tab's or nobody's: not the game's money.)
+			[ today, 'revenue', 'cad', 3998 + 99 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'revenue', 'cad', 299 ],
+			[ today, 'tax', 'cad', 12 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'tax', 'cad', 39 ],
 		] ) );
 		assert.deepEqual( rows.map( ( [ day ] ) => day ), rows.map( ( [ day ] ) => day ).sort() );
 		// The week before, added up by metric and key.
 		assert.deepEqual( { ...previous, rows: sorted( previous.rows ) }, {
 			from: dayAt( ADMIN_DAY - 13 * DAY ), to: dayAt( ADMIN_DAY - 7 * DAY ), first: { visit: null, funnel: null },
-			rows: sorted( [ [ 'play', 'go-kart', 150 ], [ 'players', 'new', 1 ], [ 'scores', 'new_best', 1 ], [ 'accounts', 'new', 1 ], [ 'purchases', 'paid', 1 ], [ 'revenue', 'usd', 999 ] ] ),
+			rows: sorted( [ [ 'play', 'go-kart', 150 ], [ 'players', 'new', 1 ], [ 'scores', 'new_best', 1 ], [ 'accounts', 'new', 1 ], [ 'purchases', 'lifetime', 1 ], [ 'revenue', 'usd', 999 ] ] ),
 		} );
+		// The week's sales one by one, the newest first (the last recorded first of two at once), taken back too: what, when, what was paid, and
+		// whose (the account and its nickname, or nobody yet), and never an email or a whole Stripe id.
+		const nia = account( '1201' ), oto = account( '1202' );
+		assert.deepEqual( res.json.sales, [
+			{ at: ADMIN_DAY - HOUR, kind: 'lifetime', amount: 1999, currency: 'cad', tax: null, status: 'paid', refunded: false, subscription: null, until: null, running: false, account: null, nickname: null, ref: '' },
+			{ at: ADMIN_DAY - HOUR, kind: 'lifetime', amount: 1999, currency: 'cad', tax: null, status: 'paid', refunded: false, subscription: null, until: null, running: false, account: nia, nickname: 'Admin Ada', ref: '' },
+			{ at: ADMIN_DAY - 2 * HOUR, kind: 'day', amount: 99, currency: 'cad', tax: 12, status: 'paid', refunded: false, subscription: null, until: ADMIN_DAY + 22 * HOUR, running: true, account: nia, nickname: 'Admin Ada', ref: '00000001' },
+			{ at: ADMIN_DAY - 2 * DAY + HOUR, kind: 'monthly', amount: 299, currency: 'cad', tax: 39, status: 'paid', refunded: false, subscription: 'active', until: null, running: false, account: oto, nickname: null, ref: 'h_000002' },
+			// Given by hand to Oto's email: Oto's, as the pass is.
+			{ at: ADMIN_DAY - 2 * DAY, kind: 'granted', amount: null, currency: null, tax: null, status: 'granted', refunded: false, subscription: null, until: null, running: false, account: oto, nickname: null, ref: '' },
+			{ at: ADMIN_DAY - 2 * DAY, kind: 'lifetime', amount: 1999, currency: 'cad', tax: null, status: 'refunded', refunded: true, subscription: null, until: null, running: false, account: oto, nickname: null, ref: '' },
+		] );
+		assert.doesNotMatch( res.text, /@example\.com|pi_admin|sub_admin|cs_admin/ );
+		// A day pass's 24 hours run out: no longer running.
+		const later = ( await call( server, '/api/admin/stats?days=7', { headers: { Cookie: boss.cookie }, time: ADMIN_DAY + DAY } ) ).json.sales;
+		assert.deepEqual( later.filter( s => s.kind === 'day' ).map( s => s.running ), [ false ] );
 		// Now: three more players and accounts, three more with the pass (Nia's and Pia's bought, Oto's
 		// given), and one bought by an email nobody has signed in with.
 		// (All three with Google alone, so the kinds of account say so.)
