@@ -538,8 +538,9 @@ function buildLegalPage( { slug, title, crumb, description, body } ) {
 	<meta name="robots" content="noindex, nofollow" />
 	<link rel="canonical" href="${ SITE + path }" />
 	<meta name="theme-color" content="#11171d" />
-	<link rel="icon" href="/favicon.ico" sizes="48x48" />
-	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	<link rel="icon" href="/favicon.ico?v=2" sizes="48x48" />
+	<link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+	<link rel="icon" href="/icons/favicon-32.png?v=2" type="image/png" sizes="32x32" />
 	<style>
 ${ css }${ BUILD_CSS }	</style>
 </head>
@@ -828,9 +829,10 @@ function page( { title, social, description, path, card, cardAlt, data, body, cr
 	<meta name="twitter:description" content="${ esc( description ) }" />
 	<meta name="twitter:image" content="${ SITE + card }" />
 	<meta name="twitter:image:alt" content="${ esc( cardAlt ) }" />
-	<link rel="icon" href="/favicon.ico" sizes="48x48" />
-	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+	<link rel="icon" href="/favicon.ico?v=2" sizes="48x48" />
+	<link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+	<link rel="icon" href="/icons/favicon-32.png?v=2" type="image/png" sizes="32x32" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
 	<link rel="manifest" href="/site.webmanifest" />
 	${ data.map( item => `<script type="application/ld+json">${ json( item ) }</script>` ).join( '\n\t' ) }
 	<style>
