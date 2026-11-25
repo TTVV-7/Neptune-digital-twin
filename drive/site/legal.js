@@ -249,6 +249,16 @@ export const BUILD_UPDATED = '24 November 2026';
 // As Checkout charges them (docs/build.md, "The owner's steps"): change them with the Stripe prices
 // and BUILD_PRICE_LABEL_MONTHLY and BUILD_PRICE_LABEL_ANNUAL, never one without the others.
 export const BUILD_PRICES = { monthly: 'US$5 a month', annual: 'US$50 a year' };
+// Whether the pages offer Build Pro for sale: the build's BUILD_SALES, 'on' as the Worker's is
+// (worker/drive/billing.js's salesOn). These pages are built, not served by the Worker, so they read
+// it when the site is built (vite.drive.config.js passes it on from .env files too): set it in both
+// places together. Unset (the default), buying is hidden: the Terms and Refunds have no prices,
+// checkout or renewal, and say Build Pro isn't for sale just now.
+export function buildSalesOn( env = process.env ) {
+
+	return String( env.BUILD_SALES ?? '' ).trim().toLowerCase() === 'on';
+
+}
 // The plans' limits, as worker/drive/build.js's and mcp.js's defaults have them.
 export const BUILD_LIMITS = { freeItems: 33, freeViews: 15, freeProjects: 1, proViews: 300, proProjects: 200, mcpHourly: 300 };
 // The one cookie Build sets (worker/sessions.js's sessionCookies, for worker/drive/accounts.js) and
@@ -291,15 +301,18 @@ function buildOwner( contact ) {
 }
 
 // The pages, as legalPages' are. `credits` is public/library/CREDITS.md's text, for the credits page.
-export function buildLegalPages( contact, credits = '' ) {
+// sales: Build Pro is for sale (buildSalesOn); else the Terms and Refunds say nothing about buying it.
+export function buildLegalPages( contact, credits = '', { sales = buildSalesOn() } = {} ) {
 
 	return [
 		{
 			slug: 'terms',
 			title: 'Terms of Service',
 			crumb: 'Terms',
-			description: 'The terms for using World Drive Build and buying Build Pro: who can use it, plans and limits, renewal, your content, Google Maps, and liability.',
-			body: buildTerms( contact ),
+			description: sales
+				? 'The terms for using World Drive Build and buying Build Pro: who can use it, plans and limits, renewal, your content, Google Maps, and liability.'
+				: 'The terms for using World Drive Build: who can use it, plans and limits, your content, Google Maps, and liability.',
+			body: buildTerms( contact, sales ),
 		},
 		{
 			slug: 'privacy',
@@ -312,8 +325,10 @@ export function buildLegalPages( contact, credits = '' ) {
 			slug: 'refunds',
 			title: 'Refunds and Cancelling',
 			crumb: 'Refunds',
-			description: 'How to cancel Build Pro, when it ends, and refunds: a full refund within 14 days of your first charge, no questions asked.',
-			body: buildRefunds( contact ),
+			description: sales
+				? 'How to cancel Build Pro, when it ends, and refunds: a full refund within 14 days of your first charge, no questions asked.'
+				: 'Build Pro isn\'t for sale just now, so there\'s nothing to pay for or cancel. Refunds for anyone who has paid.',
+			body: buildRefunds( contact, sales ),
 		},
 		{
 			slug: 'acceptable-use',
@@ -333,10 +348,10 @@ export function buildLegalPages( contact, credits = '' ) {
 
 }
 
-function buildTerms( contact ) {
+function buildTerms( contact, sales = true ) {
 
 	return `
-	<p>These terms are an agreement between you and ${ buildOwner( contact ) } ("we", "us"), who runs World Drive Build ("Build") at worlddrive.app/build/. You accept them when you press a sign-in button beside the words "By continuing you agree to the Terms and Privacy Policy", and again when you tick the box accepting them at checkout. If you don't agree, please don't use Build. They include the <a href="/build/acceptable-use/">Acceptable Use Policy</a> and <a href="/build/refunds/">Refunds and Cancelling</a>; the <a href="/build/privacy/">Privacy Policy</a> says what's done with your information.</p>
+	<p>These terms are an agreement between you and ${ buildOwner( contact ) } ("we", "us"), who runs World Drive Build ("Build") at worlddrive.app/build/. You accept them when you press a sign-in button beside the words "By continuing you agree to the Terms and Privacy Policy"${ sales ? ', and again when you tick the box accepting them at checkout' : '' }. If you don't agree, please don't use Build. They include the <a href="/build/acceptable-use/">Acceptable Use Policy</a> and <a href="/build/refunds/">Refunds and Cancelling</a>; the <a href="/build/privacy/">Privacy Policy</a> says what's done with your information.</p>
 	<h2>1. Who can use Build</h2>
 	<ul>
 		<li>You must be 18 or older. Build is a tool for business and professional use: planning and showing construction sites.</li>
@@ -349,20 +364,14 @@ function buildTerms( contact ) {
 		<li><b>Build Pro:</b> the whole library and its sets, ${ BUILD_LIMITS.proViews } 3D map views a month, up to ${ BUILD_LIMITS.proProjects } saved projects, share links, your company logo on equipment, and the Claude connector.</li>
 		<li><b>A 3D map view</b> is one opening of the editor, or of a share link, that loads Google's 3D map: each one costs us a fee to Google. Share links your viewers open count against your views. Without a view left, Build still works, on flat ground.</li>
 		<li>Free views for everyone together are capped each day as a fair-use limit; once it's reached, free accounts get flat ground until midnight UTC. Monthly allowances start again on the first of each calendar month, UTC, and unused views don't carry over.</li>
-		<li>We may change the plans' limits. A change that gives you less will be announced at least 30 days ahead, by email or in Build, and applies to a paid plan from your first renewal after that.</li>
+		<li>We may change the plans' limits. A change that gives you less will be announced at least 30 days ahead, by email or in Build${ sales ? ', and applies to a paid plan from your first renewal after that' : '' }.</li>
 		<li>There's no team plan yet.</li>
 	</ul>
 	<h2>3. One named user</h2>
-	<p>Each Build Pro subscription is for one named person: the account it was bought with. Don't share your sign-in, or let others use your account or your subscription. Everyone who uses Build Pro needs their own.</p>
-	<h2>4. Fees, renewal and tax</h2>
-	<ul>
-		<li>Build Pro is ${ BUILD_PRICES.monthly } or ${ BUILD_PRICES.annual }, in US dollars, as shown before you pay. Sales tax, VAT or GST is added where it applies and shown at checkout, where businesses can enter a tax ID. Your bank may charge for converting currency. There's no free trial: the free plan is the way to try Build.</li>
-		<li><b>Build Pro renews automatically</b> at the end of each month or year, at the price then in effect, charged to the payment method you gave, until you cancel. You can cancel at any time in your account's Billing, which opens Stripe's billing page; cancelling stops the next renewal, and Build Pro stays until the end of the period you've paid for.</li>
-		<li>If the price is going to change, you'll be told at least 30 days before the renewal it applies to, so you can cancel first.</li>
-		<li>If a renewal can't be charged, Stripe tries again for a while and Build Pro carries on meanwhile; if it still can't be paid, the subscription ends.</li>
-		<li>Refunds are as <a href="/build/refunds/">Refunds and Cancelling</a> says: a full refund within 14 days of your first charge, no questions asked. A refund or a chargeback ends Build Pro at once.</li>
-		<li>Payments are taken by Stripe; we never see your card.</li>
-	</ul>
+	${ sales
+		? '<p>Each Build Pro subscription is for one named person: the account it was bought with. Don\'t share your sign-in, or let others use your account or your subscription. Everyone who uses Build Pro needs their own.</p>'
+		: '<p>Build Pro is for one named person: the account it\'s on. Don\'t share your sign-in, or let others use your account. Everyone who uses Build Pro needs their own.</p>' }
+	${ sales ? buildFees() : buildNoFees() }
 	<h2>5. Your content</h2>
 	<ul>
 		<li>Your layouts, project names, site addresses and logos are yours ("your content"). You give us a licence to store, copy, back up, process and show your content only as needed to run Build for you and for whoever you share it with.</li>
@@ -388,16 +397,16 @@ function buildTerms( contact ) {
 	<ul>
 		<li>We work to keep Build running, but there's no guarantee it will always be available, and no service level.</li>
 		<li>Build can change. The 3D map depends on Google and may change, cost more or be withdrawn if Google changes its terms, prices or service.</li>
-		<li>If we stop selling Build Pro or close Build, we'll tell you at least 30 days ahead, no renewal will be charged after that, and you'll get back the unused part of a year you've paid for.</li>
+		<li>${ sales ? 'If we stop selling Build Pro or close Build, we\'ll tell you at least 30 days ahead, no renewal will be charged after that, and you\'ll get back the unused part of a year you\'ve paid for.' : 'If we close Build, we\'ll tell you at least 30 days ahead.' }</li>
 	</ul>
 	<h2>10. Our property, and others'</h2>
 	<p>Build's software, design and words are ours or our licensors'. Don't copy, resell or reverse-engineer them, except as the law allows. Most equipment models are others' work under Creative Commons licences, credited on the <a href="/build/credits/">credits page</a>. If you send us ideas or feedback, we may use them without owing you anything.</p>
 	<h2>11. Suspension and ending</h2>
 	<ul>
 		<li>You can stop using Build and close your account at any time.</li>
-		<li>We may suspend or close an account that breaks these terms or the <a href="/build/acceptable-use/">Acceptable Use Policy</a>, doesn't pay, or puts Build, its users or our agreement with Google at risk. We'll tell you why, unless the law or security stops us.</li>
+		<li>We may suspend or close an account that breaks these terms or the <a href="/build/acceptable-use/">Acceptable Use Policy</a>, ${ sales ? 'doesn\'t pay, ' : '' }or puts Build, its users or our agreement with Google at risk. We'll tell you why, unless the law or security stops us.</li>
 		<li>If you delete your account yourself, its projects are deleted at once, so download them first (the account page offers a copy). If we close your account, you can still get a copy of your projects for 30 days, by asking us, unless the law or a serious breach stops it. Then they're deleted.</li>
-		<li>If we close your account without your having broken these terms, you get back the unused part of a period you've paid for.</li>
+		${ sales ? '<li>If we close your account without your having broken these terms, you get back the unused part of a period you\'ve paid for.</li>' : '' }
 	</ul>
 	<h2>12. Warranties and liability</h2>
 	<ul>
@@ -409,10 +418,37 @@ function buildTerms( contact ) {
 	<h2>13. The law</h2>
 	<p>These terms are governed by the laws of British Columbia and the laws of Canada that apply there, and disputes go to the courts of British Columbia. If you're a consumer, you keep the protection of the consumer laws where you live and can use your local courts. There's no arbitration. Before any claim, please ${ emailLink( contact, 'get in touch' ) }: most things can be sorted out quickly.</p>
 	<h2>14. Changes and notices</h2>
-	<p>We may change these terms. A change that matters will be announced at least 30 days before it applies, by email or in Build; if you don't accept it, you can cancel before then. The date below says when they last changed. We send notices to your account's email; send yours to:</p>
+	<p>We may change these terms. A change that matters will be announced at least 30 days before it applies, by email or in Build; if you don't accept it, you can ${ sales ? 'cancel' : 'stop using Build' } before then. The date below says when they last changed. We send notices to your account's email; send yours to:</p>
 	${ contactBlock( contact ) }
 	<p>These terms, with the policies they name, are the whole agreement about Build. If a part can't be enforced, the rest still applies, and not enforcing a part isn't giving it up. We may pass this agreement to someone who takes over Build, and will tell you if we do.</p>
 	<p class="small">Last updated ${ BUILD_UPDATED }. These terms set out our agreement; they aren't legal, engineering or other professional advice. See also the <a href="/build/privacy/">Privacy Policy</a>.</p>`;
+
+}
+
+// The Terms' section 4 while Build Pro is for sale: its prices, renewal, refunds and tax.
+function buildFees() {
+
+	return `<h2>4. Fees, renewal and tax</h2>
+	<ul>
+		<li>Build Pro is ${ BUILD_PRICES.monthly } or ${ BUILD_PRICES.annual }, in US dollars, as shown before you pay. Sales tax, VAT or GST is added where it applies and shown at checkout, where businesses can enter a tax ID. Your bank may charge for converting currency. There's no free trial: the free plan is the way to try Build.</li>
+		<li><b>Build Pro renews automatically</b> at the end of each month or year, at the price then in effect, charged to the payment method you gave, until you cancel. You can cancel at any time in your account's Billing, which opens Stripe's billing page; cancelling stops the next renewal, and Build Pro stays until the end of the period you've paid for.</li>
+		<li>If the price is going to change, you'll be told at least 30 days before the renewal it applies to, so you can cancel first.</li>
+		<li>If a renewal can't be charged, Stripe tries again for a while and Build Pro carries on meanwhile; if it still can't be paid, the subscription ends.</li>
+		<li>Refunds are as <a href="/build/refunds/">Refunds and Cancelling</a> says: a full refund within 14 days of your first charge, no questions asked. A refund or a chargeback ends Build Pro at once.</li>
+		<li>Payments are taken by Stripe; we never see your card.</li>
+	</ul>`;
+
+}
+
+// Section 4 while buying is hidden: nothing is sold, so no prices, checkout or renewal. Build Pro is
+// still a plan (given by us), and the terms will say what it costs before it can be bought.
+function buildNoFees() {
+
+	return `<h2>4. Fees</h2>
+	<ul>
+		<li>Build Pro isn't for sale just now, and using Build costs nothing: Build Pro is on an account only when we give it. If you paid for Build Pro before, <a href="/build/refunds/">Refunds and Cancelling</a> says how to cancel it and get a refund.</li>
+		<li>If Build Pro goes on sale, these terms will say what it costs and how paying, cancelling and refunds work before anything can be bought, and you'll be told by email or in Build.</li>
+	</ul>`;
 
 }
 
@@ -477,7 +513,22 @@ function buildPrivacy( contact ) {
 
 }
 
-function buildRefunds( contact ) {
+function buildRefunds( contact, sales = true ) {
+
+	// Buying hidden: nothing to pay for or cancel. An account that has paid before can still cancel
+	// and ask for its money back (the account page's Manage billing opens Stripe's portal for it).
+	if ( ! sales ) return `
+	<p>Build Pro isn't for sale just now, so there's nothing to pay for, cancel or refund: using Build costs nothing.</p>
+	<h2>If you've paid before</h2>
+	<ul>
+		<li>Cancel at any time: open your account's <b>Plan</b> and press <b>Manage billing</b>, which opens Stripe's billing page. Or ${ emailLink( contact ) } and it will be cancelled for you.</li>
+		<li>A full refund within 14 days of your first charge, on request, no questions asked; later charges only if made in error, charged twice, or where the law where you live requires it. Refunds go back to the card you paid with, through Stripe.</li>
+		<li>Nothing is deleted: you keep the projects you've saved and can still open and edit them, and they're never deleted without telling you.</li>
+	</ul>
+	<h2>Contact</h2>
+	${ contactBlock( contact ) }
+	<p>This is on top of any rights the law gives you where you live.</p>
+	<p class="small">Last updated ${ BUILD_UPDATED }. See also the <a href="/build/terms/">Terms of Service</a>.</p>`;
 
 	return `
 	<p>Build Pro is ${ BUILD_PRICES.monthly } or ${ BUILD_PRICES.annual }, and renews automatically until you cancel. Here's how to cancel, and when you get your money back.</p>

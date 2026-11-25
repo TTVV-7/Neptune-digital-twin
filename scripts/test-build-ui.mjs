@@ -630,6 +630,8 @@ test( 'starting a project from the dashboard, moving it, and renaming and deleti
 	await page.waitForSelector( '.start-here button' );
 	await page.click( '.start-here button' );
 	await page.locator( '.start-note', { hasText: 'free plan saves one project' } ).waitFor();
+	// On sale: and the way up.
+	assert.match( await page.textContent( '.start-note' ), /Open or delete your project below, or go Build Pro\.$/ );
 
 	// Rename and delete, from the list.
 	page.once( 'dialog', d => d.accept( 'Crane base, north side' ) );
@@ -831,6 +833,56 @@ test( 'buying hidden, the dashboard: the plans and their limits, the views gauge
 	assert.doesNotMatch( free.text, BUYING_WORDS );
 	assert.equal( free.buy, false );
 	await shot( 'hidden-dashboard-free' );
+
+} );
+
+test( 'buying hidden: a second project says what to do without "go Build Pro"; stale checkout links say nothing', async () => {
+
+	// Signed out, back from a checkout that can't happen now (a bookmark, an old Stripe link):
+	// the address is tidied and nothing is said, here or in the editor.
+	await page.context().clearCookies();
+	const quiet = async path => {
+
+		await page.goto( server.base + path );
+		await page.waitForSelector( 'body[data-loaded]', { timeout: 30000 } );
+		await page.waitForTimeout( 500 );
+		const out = await page.evaluate( () => ( { search: location.search, notices: document.getElementById( 'notices' )?.innerText ?? '', hidden: document.getElementById( 'notices' )?.hidden } ) );
+		assert.equal( out.search, '', path );
+		assert.equal( out.notices, '', `${ path }: ${ out.notices }` );
+		assert.equal( out.hidden, true, path );
+
+	};
+	for ( const path of [ '/build/?checkout=done', '/build/?checkout=cancelled', '/build/?premium=thanks' ] ) await quiet( path );
+	const editorQuiet = async () => {
+
+		await open( '/build/app/?premium=thanks' );
+		await page.waitForTimeout( 500 );
+		const out = await page.evaluate( () => ( { search: location.search, banner: document.getElementById( 'banner' )?.textContent ?? '' } ) );
+		assert.doesNotMatch( out.search, /premium=/ );
+		assert.doesNotMatch( out.banner, /subscrib|Stripe|Thanks/i );
+
+	};
+	await editorQuiet();
+
+	// A free account (one project saved), the same; and a second project is refused saying only
+	// what can be done.
+	await signInAs( { sub: 'ui-hidden-second', email: 'hsecond@example.com', name: 'Sid Second' } );
+	const made = await page.evaluate( async () => ( await fetch( '/build/api/layouts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { site: 'Yard', name: 'First', data: { version: 2, site: 'Yard', lat: 49.28, lon: -123.12, items: [], extras: {} } } ) } ) ).status );
+	assert.equal( made, 201 );
+	for ( const path of [ '/build/?checkout=done', '/build/?checkout=cancelled' ] ) await quiet( path );
+	await editorQuiet();
+	await dashboard();
+	await page.fill( '#find-query', 'CN Tower' );
+	await page.click( '#find-go' );
+	await page.waitForSelector( '.start-here button' );
+	await page.click( '.start-here button' );
+	const note = page.locator( '.start-note', { hasText: 'free plan saves one project' } );
+	await note.waitFor();
+	const said = await note.textContent();
+	assert.match( said, /Open or delete your project below\.$/ );
+	assert.doesNotMatch( said, /go Build Pro/i );
+	assert.doesNotMatch( said, BUYING_WORDS );
+	await shot( 'hidden-dashboard-second-project' );
 
 } );
 

@@ -138,7 +138,9 @@ function startHere( place ) {
 		} catch ( err ) {
 
 			said.hidden = false;
-			said.textContent = err.status === 403 ? `${ err.message } Open or delete your project below, or go Build Pro.` : `Couldn't make the project: ${ err.message }`;
+			// Buying hidden: no "go Build Pro", as nothing can be bought.
+			const more = salesHidden( home?.premium?.billing ) ? 'Open or delete your project below.' : 'Open or delete your project below, or go Build Pro.';
+			said.textContent = err.status === 403 ? `${ err.message } ${ more }` : `Couldn't make the project: ${ err.message }`;
 			create.disabled = false;
 
 		}
@@ -800,7 +802,8 @@ async function load() {
 
 // Back from Stripe's checkout. ?checkout=done (or ?premium=thanks, from the old Payment Link) asks
 // GET me until Build Pro shows, because the webhook can take a moment; ?checkout=cancelled says
-// nothing was bought.
+// nothing was bought. With buying hidden there's no checkout to come back from, so a stale link
+// (a bookmark, an old Stripe return) just loses its ?checkout and says nothing.
 const RECHECKS = 10;
 const RECHECK_DELAY = 3000;
 async function welcomeBack() {
@@ -811,6 +814,7 @@ async function welcomeBack() {
 	url.searchParams.delete( 'checkout' );
 	url.searchParams.delete( 'premium' );
 	history.replaceState( null, '', url.href );
+	if ( salesHidden( home?.premium?.billing ) ) return;
 	if ( back === 'cancelled' ) {
 
 		notice( 'checkout', 'Checkout cancelled. Nothing was charged.' );

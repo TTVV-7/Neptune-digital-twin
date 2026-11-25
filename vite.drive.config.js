@@ -31,6 +31,9 @@ export default defineConfig( ( { command, mode } ) => {
 	// Who runs World Drive, for the contact page and policies (drive/site/legal.js), from .env files
 	// too, not only the shell's environment.
 	for ( const name of Object.values( CONTACT_VARS ) ) if ( env[ name ] && ! process.env[ name ] ) process.env[ name ] = env[ name ];
+	// Whether Build's Terms and Refunds offer Build Pro for sale (legal.js's buildSalesOn): 'on' as the
+	// Worker's BUILD_SALES is, from .env files too. Unset, they say nothing about buying.
+	if ( env.BUILD_SALES && ! process.env.BUILD_SALES ) process.env.BUILD_SALES = env.BUILD_SALES;
 
 	return {
 		root: join( ROOT, 'drive' ),

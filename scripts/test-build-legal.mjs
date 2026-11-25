@@ -23,7 +23,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { before, describe, test } from 'node:test';
 import { BUILD_LEGAL_PATHS, buildSitePages } from '../drive/site/build.js';
-import { BUILD_COOKIE, BUILD_STORAGE, creditEntries, NOT_IN_BUILD_STORAGE } from '../drive/site/legal.js';
+import { BUILD_COOKIE, BUILD_STORAGE, buildSalesOn, creditEntries, NOT_IN_BUILD_STORAGE } from '../drive/site/legal.js';
 
 const require = createRequire( import.meta.url );
 const ROOT = join( dirname( fileURLToPath( import.meta.url ) ), '..' );
@@ -63,7 +63,8 @@ before( () => {
 	// Never a Maps key in the build: blank every name it's read from.
 	const noKey = Object.fromEntries( [ 'GOOGLE_API', 'google_api', 'GOOGLE_MAPS_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'GOOGLE_MAPS_KEY', 'GOOGLE_MAPS_API' ].map( name => [ name, '' ] ) );
 	const vite = join( dirname( require.resolve( 'vite/package.json' ) ), 'bin', 'vite.js' );
-	const run = spawnSync( process.execPath, [ vite, 'build', '--config', 'vite.drive.config.js', '--logLevel', 'error' ], { cwd: ROOT, env: { ...process.env, ...noKey }, encoding: 'utf8' } );
+	// Built as it ships by default: buying hidden (BUILD_SALES not 'on', whatever .env files say).
+	const run = spawnSync( process.execPath, [ vite, 'build', '--config', 'vite.drive.config.js', '--logLevel', 'error' ], { cwd: ROOT, env: { ...process.env, ...noKey, BUILD_SALES: 'off' }, encoding: 'utf8' } );
 	assert.equal( run.status, 0, `npm run build:drive failed:\n${ run.stdout }\n${ run.stderr }` );
 
 } );
@@ -98,13 +99,23 @@ describe( 'World Drive Build\'s legal pages', () => {
 
 	} );
 
-	test( 'the Terms say what the owner decided: 18 and over for work, one named user, the price and auto-renewal, Google\'s terms, a planning aid, the cap, and the law', () => {
+	// With BUILD_SALES 'on' (as the Worker's): the pages as they'd be built with Build Pro for sale.
+	const onSale = slug => textOf( buildSitePages( { sales: true } ).find( p => p.path === `/build/${ slug }/` ).html );
 
+	test( 'the Terms say what the owner decided: 18 and over for work, one named user, Google\'s terms, a planning aid, the cap, and the law; on sale, the price and auto-renewal', () => {
+
+		// The build reads BUILD_SALES as the Worker's salesOn does: 'on', any case, else hidden.
+		assert.equal( buildSalesOn( { BUILD_SALES: ' On ' } ), true );
+		for ( const value of [ undefined, '', 'off', 'yes', 'true' ] ) assert.equal( buildSalesOn( { BUILD_SALES: value } ), false );
+		const sale = onSale( 'terms' );
+		for ( const words of [
+			'US$5 a month or US$50 a year', 'Build Pro renews automatically', 'until you cancel', 'stays until the end of the period you\'ve paid for',
+			'a full refund within 14 days of your first charge', 'A refund or a chargeback ends Build Pro at once', 'There\'s no free trial',
+			'tick the box accepting them at checkout', 'Each Build Pro subscription is for one named person',
+		] ) assert.ok( sale.includes( words ), `the Terms on sale don't say "${ words }"` );
 		const terms = textOf( built( '/build/terms/' ) );
 		for ( const words of [
 			'You must be 18 or older', 'business and professional use', 'for one named person',
-			'US$5 a month or US$50 a year', 'Build Pro renews automatically', 'until you cancel', 'stays until the end of the period you\'ve paid for',
-			'a full refund within 14 days of your first charge', 'A refund or a chargeback ends Build Pro at once', 'There\'s no free trial',
 			'By using Build you agree to the Google Maps/Google Earth Additional Terms of Service and the Google Privacy Policy',
 			'Never remove, hide or crop Google\'s logo', 'AI training data', 'indicative visualisations only', 'WorkSafeBC', 'qualified professional',
 			'Claude (from Anthropic)', 'share link', 'logo', 'never deleted without telling you', 'for 30 days',
@@ -115,19 +126,31 @@ describe( 'World Drive Build\'s legal pages', () => {
 		assert.ok( linksOf( built( '/build/terms/' ) ).includes( 'https://maps.google.com/help/terms_maps/' ) );
 		assert.ok( linksOf( built( '/build/terms/' ) ).includes( 'https://policies.google.com/privacy' ) );
 		// Nothing sold that the owner decided against.
-		assert.ok( ! /per seat|founding|unlimited projects/i.test( terms ) );
+		for ( const text of [ terms, sale ] ) assert.ok( ! /per seat|founding|unlimited projects/i.test( text ) );
+		// Buying hidden (as built: BUILD_SALES unset): the plans and their limits, but no price,
+		// checkout or renewal, and it says Build Pro isn't for sale.
+		for ( const words of [ '33 everyday library items, 15 3D map views a month and 1 saved project', 'Build Pro isn\'t for sale just now', 'using Build costs nothing' ] ) assert.ok( terms.includes( words ), `the Terms don't say "${ words }"` );
+		assert.ok( ! /US\$5\b|US\$50\b|a month or|checkout|renews automatically|renewal|subscription/i.test( terms ), `the Terms talk about buying while it's hidden: ${ terms.match( /[^.]*(US\$5\b|US\$50\b|a month or|checkout|renews automatically|renewal|subscription)[^.]*/i )?.[ 0 ] }` );
+		assert.ok( ! /buying Build Pro|renewal/i.test( built( '/build/terms/' ).match( /<meta name="description" content="([^"]*)"/ )[ 1 ] ) );
 
 	} );
 
-	test( 'Refunds and cancelling: online, at the end of the period, 14 days from the first charge, renewals only for errors, and nothing deleted', () => {
+	test( 'Refunds and cancelling: online, at the end of the period, 14 days from the first charge, renewals only for errors, and nothing deleted; hidden, nothing to pay for', () => {
 
-		const refunds = textOf( built( '/build/refunds/' ) );
+		const hidden = textOf( built( '/build/refunds/' ) );
+		for ( const words of [
+			'Build Pro isn\'t for sale just now, so there\'s nothing to pay for, cancel or refund', 'If you\'ve paid before',
+			'A full refund within 14 days of your first charge, on request, no questions asked', 'never deleted without telling you',
+		] ) assert.ok( hidden.includes( words ), `Refunds doesn't say "${ words }"` );
+		assert.ok( ! /US\$|a month or|renews|renewal|checkout|subscri/i.test( hidden ), `Refunds talks about buying while it's hidden: ${ hidden.match( /[^.]*(US\$|a month or|renews|renewal|checkout|subscri)[^.]*/i )?.[ 0 ] }` );
+		const refunds = onSale( 'refunds' );
 		for ( const words of [
 			'Cancel at any time, online', 'Build Pro stays until the end of the month or year you\'ve paid for',
 			'Within 14 days of your first charge: a full refund on request, no questions asked',
 			'aren\'t refunded, except a charge made in error, a duplicate charge, or where the law where you live requires it',
 			'A refund ends Build Pro at once', 'So does a chargeback', 'can still open and edit them', 'never deleted without telling you',
-		] ) assert.ok( refunds.includes( words ), `Refunds doesn't say "${ words }"` );
+			'Build Pro is US$5 a month or US$50 a year, and renews automatically until you cancel',
+		] ) assert.ok( refunds.includes( words ), `Refunds on sale doesn't say "${ words }"` );
 
 	} );
 

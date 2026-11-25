@@ -25,8 +25,16 @@ and the Neptune twin.
   includes and the 3D map view gauge (signed out, the Free and Build Pro cards without prices);
   the account page's `#billing` section is titled **Plan**, with payments and the refund line only
   for an account that has paid; the MCP server tells a free account its tools are part of Build
-  Pro, with nowhere to buy. `billing/portal` still opens for an account with a Stripe customer
-  (`portal: true`), so anyone who ever paid can cancel and see invoices. All the billing code is
+  Pro, with nowhere to buy. A free account's second project is refused with "Open or delete your
+  project below" (no "or go Build Pro"), the Profile mentions receipts and billing only for an
+  account that has paid, and a stale return link (`?checkout=done`, `?checkout=cancelled`,
+  `?premium=thanks`) is tidied from the address and says nothing. `billing/portal` still opens for
+  an account with a Stripe customer (`portal: true`), so anyone who ever paid can cancel and see
+  invoices. The legal pages (`/build/terms/`, `/build/refunds/`, `drive/site/legal.js`) are built,
+  not served by the Worker, so they read `BUILD_SALES` from the **build's** environment (the
+  shell, or a `.env` file, when `npm run build:drive` runs): unset, the Terms say Build Pro isn't
+  for sale and nothing is charged (no price, checkout or renewal), and Refunds says there's nothing
+  to pay for, with how anyone who has paid before cancels and gets a refund. All the billing code is
   kept: set `BUILD_SALES` to `on` (with Stripe set up, "The owner's steps") and everything below
   about buying is back as it was.
 - **Upgrading** (with `BUILD_SALES` on; the dashboard's plan box and the editor's Build Pro dialog, `src/premium.js`):
@@ -293,7 +301,9 @@ then again in live mode.
    - `BUILD_PRICE_LABEL_MONTHLY`, `BUILD_PRICE_LABEL_ANNUAL`: the prices as the page shows them, if
      not `US$5/month` and `US$50/year` (change them with the prices, never one without the other)
    - `BUILD_SALES`: `on` to put Build Pro on sale (a commented line in `wrangler.drive.jsonc`'s
-     vars, or the dashboard). Unset, buying stays hidden everywhere whatever else is set; setting
+     vars, or the dashboard), **and** `BUILD_SALES=on` in the environment of the build that deploys
+     (the shell or `.env`), so the Terms and Refunds are built with the prices and renewal terms;
+     set or unset both together. Unset, buying stays hidden everywhere whatever else is set; setting
      it back to anything else (or removing it) hides buying again, and accounts with a Stripe
      customer can still open the billing portal to cancel.
    - optional: `BUILD_PORTAL_CONFIG` (the `bpc_...` id), `BUILD_EMAILS` (testers given Pro),

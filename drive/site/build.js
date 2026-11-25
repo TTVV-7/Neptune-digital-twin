@@ -10,7 +10,7 @@ import { MARS_SITE } from './mars.js';
 import { MOON_SITE } from './moon.js';
 import { PLACES } from './places.js';
 import { VESTA_SITE } from './vesta.js';
-import { BUILD_LEGAL_LINKS, buildLegalPages, contactDetails, legalPages, missingContact } from './legal.js';
+import { BUILD_LEGAL_LINKS, buildLegalPages, buildSalesOn, contactDetails, legalPages, missingContact } from './legal.js';
 
 // World Drive's pages for search engines and links (docs/world-drive.md, "Search engines"): a page
 // for each place in places.js at /drive/<slug>/, a page listing them at /drive/, and for each world
@@ -150,10 +150,11 @@ export function sitePages( { when = lastChanged, contact = contactDetails() } = 
 // of search, like the rest of /build/ while it's on trial, so they're not in the sitemap; and
 // they're written into dist-drive/build/ by vite.drive.config.js's buildApp, after the dashboard's
 // own build has emptied that folder.
-export function buildSitePages( { contact = contactDetails() } = {} ) {
+// sales: whether they offer Build Pro for sale (legal.js's buildSalesOn: the build's BUILD_SALES).
+export function buildSitePages( { contact = contactDetails(), sales = buildSalesOn() } = {} ) {
 
 	const credits = readFileSync( join( ROOT, 'public', 'library', 'CREDITS.md' ), 'utf8' );
-	return buildLegalPages( contact, credits ).map( item => ( { path: `/build/${ item.slug }/`, file: `build/${ item.slug }/index.html`, html: buildLegalPage( item ) } ) );
+	return buildLegalPages( contact, credits, { sales } ).map( item => ( { path: `/build/${ item.slug }/`, file: `build/${ item.slug }/index.html`, html: buildLegalPage( item ) } ) );
 
 }
 

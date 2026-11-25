@@ -365,14 +365,20 @@ function showProfile() {
 	] ) );
 	if ( a.google ) {
 
-		body.append( paragraph( `Receipts and billing emails go to ${ a.email }. Your name and email come from Google: change them there.`, 'hint' ) );
+		// Buying hidden, and never paid: no receipts or billing to speak of.
+		const billed = ! salesHidden( me?.premium?.billing ) || me?.premium?.billing?.portal;
+		body.append( paragraph( `${ billed ? `Receipts and billing emails go to ${ a.email }. ` : '' }Your name and email come from Google: change them there.`, 'hint' ) );
 		return;
 
 	}
 
 	// A username's account has no email of Google's: one for its receipts, or none.
+	// Buying hidden: it's for support (and any receipts of an account that once paid), not a checkout.
 	const { form, status, submit } = makeForm( 'email-form', 'Save' );
-	const email = field( form, 'Email for receipts', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint: 'Put on Stripe\'s checkout so your receipts come to you, and how support knows it\'s you. Not checked yet. Leave it empty for none.' } );
+	const hint = salesHidden( me?.premium?.billing )
+		? 'How support knows it\'s you, and where any receipts go. Not checked yet. Leave it empty for none.'
+		: 'Put on Stripe\'s checkout so your receipts come to you, and how support knows it\'s you. Not checked yet. Leave it empty for none.';
+	const email = field( form, 'Email for receipts', { name: 'email', type: 'email', autocomplete: 'email', maxLength: 254, required: false, hint } );
 	email.value = a.contactEmail;
 	form.append( submit, status );
 	form.addEventListener( 'submit', async event => {
@@ -745,13 +751,15 @@ function payments() {
 // Back from Stripe's checkout (?checkout=done): ask until Build Pro shows (the webhook can take a
 // moment). Only the plan is asked for meanwhile, so nothing being typed on the page is redrawn
 // under the user; the page is shown again once, when Build Pro is on. Signed out, there's nothing
-// to ask: sign in with the account that subscribed.
+// to ask: sign in with the account that subscribed. With buying hidden there's no checkout to come
+// back from: a stale link just loses its ?checkout and says nothing.
 async function welcomeBack() {
 
 	const url = new URL( location.href );
 	if ( url.searchParams.get( 'checkout' ) !== 'done' ) return;
 	url.searchParams.delete( 'checkout' );
 	history.replaceState( null, '', url.href );
+	if ( salesHidden( home?.premium?.billing ) ) return;
 	if ( ! home?.signedIn ) {
 
 		toast( 'Thanks for subscribing! Sign in with the account you subscribed with to use Build Pro.' );

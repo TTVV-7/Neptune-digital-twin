@@ -298,6 +298,8 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 		if ( url.searchParams.get( THANKS_PARAM ) !== 'thanks' ) return;
 		url.searchParams.delete( THANKS_PARAM );
 		window.history.replaceState( null, '', url.href );
+		// Buying hidden: no checkout to come back from, so a stale link says nothing.
+		if ( hidden() ) return;
 		if ( ! user ) {
 
 			showBanner( WORDS.thanks, 10000 );

@@ -677,9 +677,38 @@ describe( 'the page, buying hidden (BUILD_SALES unset)', () => {
 		payments: !! document.querySelector( '#billing-body .payments' ),
 	} ) );
 
+	// Back from a checkout that can't happen now (a stale link): the address tidied, nothing said.
+	async function staleCheckout() {
+
+		await page.goto( 'about:blank' );
+		await page.goto( `${ server.base }/build/account/?checkout=done` );
+		await page.waitForFunction( () => document.body.dataset.loaded === 'yes' );
+		await page.waitForTimeout( 500 );
+		assert.equal( await page.evaluate( () => location.search ), '' );
+		assert.equal( await page.evaluate( () => { const t = document.getElementById( 'toast' ); return t.hidden ? '' : t.textContent; } ), '' );
+
+	}
+
+	test( 'signed out: the page promises the plan, not billing; a stale checkout link says nothing', async () => {
+
+		await page.context().clearCookies();
+		await open();
+		const text = await page.locator( '#signed-out' ).innerText();
+		assert.match( text, /Your plan, how you sign in/ );
+		assert.doesNotMatch( text, /billing/i );
+		assert.doesNotMatch( await page.getAttribute( 'meta[name="description"]', 'content' ), /billing/i );
+		await staleCheckout();
+
+	} );
+
 	test( 'the free plan: just the plan, what each includes, no prices or buying', async () => {
 
 		await signInAs( { sub: 'hidden-free', email: 'hiddenfree@example.com', name: 'Hidden Free' } );
+		await staleCheckout();
+		// Profile: nothing about receipts or billing for an account that's never paid.
+		const profile = await page.locator( '#profile-body' ).innerText();
+		assert.match( profile, /Your name and email come from Google/ );
+		assert.doesNotMatch( profile, /receipt|billing/i );
 		await open( '#billing' );
 		const plan = await section();
 		assert.equal( plan.title, 'Plan' );
@@ -719,6 +748,8 @@ describe( 'the page, buying hidden (BUILD_SALES unset)', () => {
 		const id = await signInAs( { sub: 'hidden-paid', email: 'hiddenpaid@example.com', name: 'Hidden Paid' } );
 		makeSubscriber( id, 'sub_hidden', { days: 10 } );
 		await open( '#billing' );
+		// Paid before: its receipts still go somewhere.
+		assert.match( await page.locator( '#profile-body' ).innerText(), /Receipts and billing emails go to hiddenpaid@example\.com/ );
 		const plan = await section();
 		assert.equal( plan.title, 'Plan' );
 		assert.match( plan.text, /Build Pro/ );

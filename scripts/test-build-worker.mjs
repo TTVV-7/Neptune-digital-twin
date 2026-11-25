@@ -917,4 +917,38 @@ describe( 'World Drive Build, buying hidden (BUILD_SALES unset)', () => {
 
 	} );
 
+	// The one place planOf's hiding shows: a subscription with an interval, whose priceLabel would
+	// otherwise be 'US$5/month'. It stays Build Pro (and its webhooks are still handled), but nothing
+	// it's sent says what it costs.
+	test( 'a subscriber (bought before buying was hidden): Build Pro, its interval, but no priceLabel anywhere', async () => {
+
+		const sub = await signIn( { sub: 'hidden-sub', email: 'hsub@example.com', name: 'Sam Sub' } );
+		const id = accountId( 'hsub@example.com' );
+		assert.equal( ( await webhook( buildCheckout( 'hsub', id ) ) ).status, 200 );
+		assert.equal( ( await webhook( buildSubscription( 'hsub', id, { created: T + 5, type: 'customer.subscription.created' } ) ) ).status, 200 );
+		const me = await call( '/build/api/me', { cookie: sub.cookie } );
+		assert.equal( me.json.plan.tier, 'pro', me.text );
+		assert.equal( me.json.plan.subscribed, true );
+		assert.equal( me.json.plan.interval, 'month' );
+		assert.equal( me.json.plan.priceLabel, null );
+		assert.equal( me.json.premium.billing.hidden, true );
+		for ( const path of [ '/build/api/me', '/build/api/home', '/build/api/config', '/build/api/account' ] ) {
+
+			const res = await call( path, { cookie: sub.cookie } );
+			assert.equal( res.status, 200, `${ path }: ${ res.text }` );
+			assert.doesNotMatch( res.text, PRICE_WORDS, path );
+			if ( res.json.plan?.priceLabel !== undefined ) assert.equal( res.json.plan.priceLabel, null, path );
+			assert.equal( res.json.premium?.price, undefined, path );
+
+		}
+
+		// Yearly too.
+		assert.equal( ( await webhook( buildSubscription( 'hsub', id, { created: T + 6, interval: 'year' } ) ) ).status, 200 );
+		const yearly = await call( '/build/api/me', { cookie: sub.cookie } );
+		assert.equal( yearly.json.plan.interval, 'year' );
+		assert.equal( yearly.json.plan.priceLabel, null );
+		assert.doesNotMatch( yearly.text, PRICE_WORDS );
+
+	} );
+
 } );

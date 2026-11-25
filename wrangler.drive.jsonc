@@ -110,7 +110,8 @@
 		// shows its prices and lets people subscribe through Stripe, once Stripe is set up too.
 		// Unset (the default, as now) buying is hidden everywhere: no prices, no checkout; the free
 		// and Pro plans and their limits are unchanged, and Pro comes from the owner's comps,
-		// BUILD_EMAILS or ADMIN_EMAILS. To sell again, uncomment this (with a comma after ADSENSE_SLOT's):
+		// BUILD_EMAILS or ADMIN_EMAILS. To sell again, uncomment this (with a comma after ADSENSE_SLOT's),
+		// and build with BUILD_SALES=on too, for the Terms and Refunds pages (drive/site/legal.js):
 		// "BUILD_SALES": "on"
 	},
 	// Secrets, set by the owner and never in a file (the dashboard, or

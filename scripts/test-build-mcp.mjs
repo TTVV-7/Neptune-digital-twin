@@ -20,6 +20,8 @@ import { CLIENT_ID, ROOT, makeKey, makeToken, serveKeys, startWorker, stripeSign
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_BUILD_MCP_PORT ) || 8784;
+// A second Worker with BUILD_SALES 'on' (the last test): TEST_BUILD_MCP_SALES_PORT, else the next port.
+const SALES_PORT = Number( process.env.TEST_BUILD_MCP_SALES_PORT ) || PORT + 1;
 const DIST = join( ROOT, 'dist-drive', 'build' );
 const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
 const WEBHOOK_SECRET = 'whsec_test_mcp';
@@ -180,27 +182,30 @@ before( async () => {
 	await new Promise( resolve => upstream.listen( 0, '127.0.0.1', resolve ) );
 	googleKey = await makeKey( 'mcp-test-key-1' );
 	keys = await serveKeys( [ googleKey.jwk ] );
-	server = await startWorker( {
-		port: PORT,
-		config: 'wrangler.drive.jsonc',
-		vars: {
-			GOOGLE_MAPS_API_KEY: 'test-maps-key-not-real',
-			GOOGLE_CLIENT_ID: CLIENT_ID,
-			GOOGLE_JWKS_URL: keys.url,
-			STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
-			SUPPORTER_PAYMENT_LINK: 'https://buy.stripe.com/test_pass',
-			SUPPORTER_PAYMENT_LINK_ID: '',
-			BUILD_PAYMENT_LINK: 'https://buy.stripe.com/test_build',
-			BUILD_PAYMENT_LINK_ID: BUILD_LINK_ID,
-			ADMIN_EMAILS: 'boss@example.com',
-			MCP_HOURLY: String( HOURLY ),
-			BUILD_LAYOUT_LIMIT: '2',
-			SEARCH_UPSTREAM: `http://127.0.0.1:${ upstream.address().port }/search`,
-		},
-		assets: assetsOf(),
-	} );
+	server = await startWorker( { port: PORT, config: 'wrangler.drive.jsonc', vars: workerVars(), assets: assetsOf() } );
 
 } );
+
+// The Worker's settings; `extra` on top (BUILD_SALES, for the last test).
+function workerVars( extra = {} ) {
+
+	return {
+		GOOGLE_MAPS_API_KEY: 'test-maps-key-not-real',
+		GOOGLE_CLIENT_ID: CLIENT_ID,
+		GOOGLE_JWKS_URL: keys.url,
+		STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+		SUPPORTER_PAYMENT_LINK: 'https://buy.stripe.com/test_pass',
+		SUPPORTER_PAYMENT_LINK_ID: '',
+		BUILD_PAYMENT_LINK: 'https://buy.stripe.com/test_build',
+		BUILD_PAYMENT_LINK_ID: BUILD_LINK_ID,
+		ADMIN_EMAILS: 'boss@example.com',
+		MCP_HOURLY: String( HOURLY ),
+		BUILD_LAYOUT_LIMIT: '2',
+		SEARCH_UPSTREAM: `http://127.0.0.1:${ upstream.address().port }/search`,
+		...extra,
+	};
+
+}
 
 after( async () => {
 
@@ -466,5 +471,37 @@ test( 'a plan that lapses stops the tools; the hourly limit holds', async () => 
 	for ( let i = 0; i < HOURLY; i ++ ) last = await tool( 'list_sets', {} );
 	assert.equal( last.error, true );
 	assert.match( last.text, /changes this hour/ );
+
+} );
+
+// Everything above runs with BUILD_SALES unset (the default: buying hidden). With it 'on', the free
+// plan is offered Build Pro as before it was hidden: the authorize page's "Go Build Pro" and the
+// tools' "Upgrade at ...". On a Worker of its own (fresh, so registered and signed in again).
+test( 'with BUILD_SALES on: the authorize page and the tools offer Build Pro to the free plan', async () => {
+
+	server?.stop();
+	server = await startWorker( { port: SALES_PORT, config: 'wrangler.drive.jsonc', vars: workerVars( { BUILD_SALES: 'on' } ), assets: assetsOf() } );
+	const registered = await call( '/oauth/register', { method: 'POST', body: { redirect_uris: [ REDIRECT ], client_name: 'Claude' } } );
+	assert.equal( registered.status, 201, registered.text );
+	client = registered.json;
+	const free = await signIn( { sub: 'mcp-sales-free', email: 'sfree@example.com', name: 'Sal Free' } );
+	const { page } = await connect( free );
+	assert.match( page.text, /comes with <strong>Build Pro<\/strong>/ );
+	assert.match( page.text, /<a class="button" href="\/build\/">Go Build Pro<\/a>/ );
+	assert.doesNotMatch( page.text, /isn&#39;t available to buy|isn't available to buy/ );
+	// Pro connects, then lapses: the tools say where to upgrade.
+	const cookie = await signIn( { sub: 'mcp-sales-pro', email: 'spro@example.com', name: 'Sam Pro' } );
+	const me = await call( '/build/api/me', { headers: { Cookie: cookie } } );
+	await webhook( { id: 'evt_sales_pro', object: 'event', type: 'checkout.session.completed', livemode: false, data: { object: {
+		id: 'cs_test_sales_pro', object: 'checkout.session', mode: 'subscription', payment_status: 'paid', amount_total: 500, currency: 'usd',
+		client_reference_id: me.json.premium.clientReferenceId, customer_details: { email: 'spro@example.com' }, payment_intent: 'pi_sales_pro', payment_link: BUILD_LINK_ID, subscription: 'sub_sales_pro',
+	} } } );
+	const connected = await connect( cookie );
+	assert.ok( connected.tokens, connected.page?.text.slice( -600 ) );
+	assert.equal( ( await tool( 'list_projects', {}, connected.tokens.access_token ) ).error, false );
+	await webhook( { id: 'evt_sales_pro_end', object: 'event', type: 'customer.subscription.deleted', livemode: false, created: Math.floor( Date.now() / 1000 ) + 10, data: { object: { id: 'sub_sales_pro', object: 'subscription', status: 'canceled' } } } );
+	const lapsed = await tool( 'list_projects', {}, connected.tokens.access_token );
+	assert.equal( lapsed.error, true );
+	assert.equal( lapsed.text, 'World Drive Build\'s Claude connector comes with Build Pro. Upgrade at https://worlddrive.app/build/ and try again.' );
 
 } );

@@ -37,5 +37,6 @@ ADSENSE_SLOT=
 
 # World Drive Build Pro on sale (docs/build.md, "Payments"): "on" shows its prices and checkout,
 # once the Stripe settings are there too. Blank (the default), buying is hidden: the plans and
-# their limits stay the same, with no prices and no checkout.
+# their limits stay the same, with no prices and no checkout. The legal pages are built, so the
+# build reads BUILD_SALES too (from the shell or a .env file): set it there as well.
 BUILD_SALES=
