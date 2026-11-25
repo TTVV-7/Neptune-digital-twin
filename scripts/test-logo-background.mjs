@@ -176,6 +176,41 @@ describe( 'taking the background out (src/logo-background.js)', () => {
 
 	} );
 
+	test( 'a solid shape stays solid: no see-through notches cut along its edges, its thin tail kept', () => {
+
+		// A solid block (as a bar of a logo) at 512 × 512, with a 1 px spur 8 px long below it: the
+		// speck pass once cut big shapes into "specks" along their bottom and right edges.
+		const DARK = [ 20, 20, 120 ];
+		const image = draw( 512, 512, WHITE, [ [ rect( 100, 200, 400, 240 ), DARK ], [ rect( 250, 240, 251, 249 ), DARK ] ] );
+		const out = removeBackground( image );
+		let holes = 0;
+		for ( let y = 201; y < 240; y ++ ) for ( let x = 101; x < 400; x ++ ) if ( from( out.image, x, y )[ 3 ] < 128 ) holes ++;
+		assert.equal( holes, 0, `${ holes } see-through pixels inside the block` );
+		for ( let y = 240; y < 248; y ++ ) assert.ok( from( out.image, 250, y )[ 3 ] > 0, `the spur's pixel at 250,${ y } kept` );
+		// A real speck, three pixels on their own, still goes.
+		const specks = draw( 512, 512, WHITE, [ [ rect( 100, 200, 400, 240 ), DARK ], [ rect( 30, 30, 33, 31 ), DARK ] ] );
+		assert.equal( from( removeBackground( specks ).image, 31, 30 )?.[ 3 ] ?? 0, 0, 'the speck gone' );
+
+	} );
+
+	test( 'a pale logo just past the tolerance: no darker rim, its edge its own colour', () => {
+
+		for ( const grey of [ 226, 222, 210 ] ) {
+
+			const image = draw( 200, 100, WHITE, [ [ rect( 40, 30, 160, 70 ), [ grey, grey, grey ] ] ] );
+			const out = removeBackground( image );
+			for ( const y of [ 30, 31, 32, 50 ] ) {
+
+				const [ r, g, b, a ] = from( out.image, 100, y );
+				assert.ok( a > 0, `${ grey }: 100,${ y } shows` );
+				for ( const v of [ r, g, b ] ) assert.ok( Math.abs( v - grey ) <= 3, `${ grey }: 100,${ y } is ${ [ r, g, b, a ] }, not the logo's own grey` );
+
+			}
+
+		}
+
+	} );
+
 	test( 'a PNG that\'s see-through already is left as it is', () => {
 
 		const image = draw( 120, 60, WHITE, [ [ ellipse( 60, 30, 40, 20 ), NAVY ] ] );
@@ -418,6 +453,19 @@ describe( 'in the browser', () => {
 		await page.waitForFunction( t => document.querySelector( '#logo-tolerance-value' ).textContent === String( t ), TOLERANCE );
 		// On dark paint, to see its edge.
 		await page.click( '.backdrop[data-backdrop="dark"]' );
+		// The backdrop buttons: 24 px at least to tap, the chosen one marked with a tick and a border,
+		// not with the outline keyboard focus has.
+		const swatches = await page.$$eval( '.backdrop', buttons => buttons.map( b => {
+
+			const box = b.getBoundingClientRect(), style = getComputedStyle( b ), tick = getComputedStyle( b, '::after' );
+			return { w: box.width, h: box.height, pressed: b.getAttribute( 'aria-pressed' ), border: style.borderTopColor, outline: style.outlineStyle, tick: tick.content };
+
+		} ) );
+		for ( const s of swatches ) assert.ok( s.w >= 24 && s.h >= 24, `backdrop button ${ s.w } × ${ s.h }` );
+		assert.deepEqual( swatches.map( s => s.pressed ), [ 'false', 'false', 'true' ] );
+		assert.notEqual( swatches[ 2 ].tick, 'none', 'the chosen one ticked' );
+		assert.equal( swatches[ 0 ].tick, 'none' );
+		assert.notEqual( swatches[ 2 ].border, swatches[ 0 ].border, 'the chosen one\'s border' );
 		if ( SHOTS ) {
 
 			mkdirSync( SHOTS, { recursive: true } );
