@@ -5,6 +5,7 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { getKind, kindParams, resizeShape } from './kinds.js';
 import { headingToYaw } from './geo.js';
+import { setFromView } from './view-ray.js';
 
 // On-map handles for the selected item (sidebar.js): a ring round its footprint with a knob in
 // front of it to turn it, and for areas (kinds with `resize`, see kinds.js) squares on the corners
@@ -638,7 +639,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		const rect = canvas.getBoundingClientRect();
 		_ndc.set( ( x - rect.left ) / rect.width * 2 - 1, - ( y - rect.top ) / rect.height * 2 + 1 );
-		raycaster.setFromCamera( _ndc, camera );
+		setFromView( raycaster, _ndc, camera );
 		plane.set( UP, - height );
 		return raycaster.ray.intersectPlane( plane, _point );
 

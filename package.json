@@ -40,6 +40,7 @@
     "test:site-items-ui": "node --test scripts/test-site-items-ui.mjs",
     "test:plant-ui": "node --test scripts/test-plant-ui.mjs",
     "test:logo-ui": "node --test scripts/test-logo-ui.mjs",
+    "test:moving-ui": "node --test scripts/test-moving-ui.mjs",
     "test:own-models-ui": "node --test scripts/test-own-models-ui.mjs",
     "test:sets-flatten-ui": "node --test scripts/test-sets-flatten-ui.mjs",
     "test:grading-ui": "node --test scripts/test-grading-ui.mjs",

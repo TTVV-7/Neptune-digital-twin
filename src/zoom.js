@@ -1,6 +1,7 @@
 import { MathUtils, Raycaster, Vector2, Vector3 } from 'three';
 import { ZOOM } from './config.js';
 import { blocks } from './walk.js';
+import { setFromView } from './view-ray.js';
 
 // Wheel movement (pixels) that makes one notch of a mouse wheel. A trackpad sends many small
 // movements instead, which zoom smoothly. Wheels that count in lines (Firefox) count LINE pixels a line.
@@ -38,7 +39,7 @@ export function setUpZoom( { canvas, camera, controls, driver, getColliders } ) 
 		const rect = canvas.getBoundingClientRect();
 		if ( controls.locked ) _ndc.set( 0, 0 );
 		else _ndc.set( ( x - rect.left ) / rect.width * 2 - 1, - ( y - rect.top ) / rect.height * 2 + 1 );
-		raycaster.setFromCamera( _ndc, camera );
+		setFromView( raycaster, _ndc, camera );
 		raycaster.far = Infinity;
 		const hit = raycaster.intersectObjects( getColliders(), true ).find( h => blocks( h ) && isVisible( h.object ) );
 		if ( hit ) return _point.copy( hit.point );

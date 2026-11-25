@@ -2,6 +2,7 @@ import { Bone, BufferAttribute, MathUtils, Raycaster, Skeleton, SkinnedMesh, Vec
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PLAYER } from './config.js';
 import { blocks, isTyping } from './walk.js';
+import { viewOffset } from './view-ray.js';
 
 // Walking round the site as a construction worker (public/models/player-worker.glb, made by
 // scripts/add-player-model.mjs from a hi3D model): seen from behind in third person, or from his
@@ -17,9 +18,10 @@ import { blocks, isTyping } from './walk.js';
 // camera, at his eyes, isn't inside it.
 //
 // The camera is the walk controller's (walk.js), at his eyes: for third person it's moved back
-// and up over his shoulder just for drawing the frame, and put back after, so walking, clicking
-// and everything else go on from his eyes as before. It comes in closer when a wall or the ground
-// is in the way.
+// and up over his shoulder just for drawing the frame, and put back after, so walking and
+// everything else go on from his eyes as before. Rays from the screen start from where the frame
+// was drawn (view-ray.js), so clicks land on what's in the picture. It comes in closer when a wall
+// or the ground is in the way, and the shoulder in when a wall is close on his right.
 
 // Who you can walk as (K changes, remembered in this browser), each made by
 // scripts/add-player-model.mjs. Only the one you're walking as is loaded.
@@ -283,6 +285,7 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders, to
 
 		thirdPerson = on;
 		distance = CHASE.nearest;
+		heading = null;
 		keep( STORAGE_KEY, on ? 'third' : 'first' );
 
 	}
@@ -351,9 +354,15 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders, to
 		// Before the frame is drawn: him where the walker is, and the camera behind him in third person.
 		beforeRender( dt ) {
 
+			const was = shown;
 			shown = !! body && controls.mode === 'walk' && controls.enabled && ! driver?.active;
 			if ( body ) body.visible = shown;
+			// The camera is where the frame is drawn from until afterRender.
+			viewOffset.set( 0, 0, 0 );
 			if ( ! shown ) return;
+			// Back on his feet (out of a vehicle, landed, teleported): facing the way you look, not
+			// the way he last walked.
+			if ( ! was ) heading = null;
 			eye.copy( camera.position );
 			_forward.set( - Math.sin( controls.yaw ), 0, - Math.cos( controls.yaw ) );
 			const behind = thirdPerson ? EYES_FORWARD.level : EYES_FORWARD.level + EYES_FORWARD.down * smooth( 0.35, 1.2, - controls.pitch );
@@ -376,7 +385,13 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders, to
 			// Back along the way the camera looks, up a little and over his right shoulder.
 			camera.getWorldDirection( _dir );
 			_right.set( Math.cos( controls.yaw ), 0, - Math.sin( controls.yaw ) );
-			const from = _want.copy( eye ).addScaledVector( _right, CHASE.right ).setY( eye.y + CHASE.up - 0.15 );
+			// Walking keeps him only PLAYER.radius off a wall, less than the shoulder's offset: with
+			// one on his right, the shoulder comes in short of it, or the camera would be inside it.
+			raycaster.set( eye, _right );
+			raycaster.far = CHASE.right + CHASE.margin;
+			const side = raycaster.intersectObjects( getColliders(), true ).find( blocks );
+			const shoulder = side ? Math.max( 0, Math.min( CHASE.right, side.distance - CHASE.margin ) ) : CHASE.right;
+			const from = _want.copy( eye ).addScaledVector( _right, shoulder ).setY( eye.y + CHASE.up - 0.15 );
 			const back = _dir.clone().negate();
 			raycaster.set( from, back );
 			raycaster.far = CHASE.back + CHASE.margin;
@@ -394,6 +409,7 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders, to
 		afterRender() {
 
 			if ( ! shown || ! thirdPerson ) return;
+			viewOffset.subVectors( camera.position, saved );
 			camera.position.copy( saved );
 			camera.updateMatrixWorld();
 

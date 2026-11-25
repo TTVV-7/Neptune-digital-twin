@@ -4,6 +4,7 @@ import { sendForEveryone } from './placements.js';
 import { useFastRaycast } from './raycast.js';
 import { coplanarFace, triangleAt, triNormal } from './repair-geometry.js';
 import { isTyping } from './walk.js';
+import { setFromView } from './view-ray.js';
 
 // Changing the B2D2 model's structure in the twin: adding beams, and painting walls, floors and
 // soffits. "Edit model" in the views bar, beside "Edit areas" (repair-areas.js, whose models
@@ -618,7 +619,7 @@ export function setUpModelEdits( { host, models, controls, onUpdate, toast, bar 
 
 		const rect = canvas.getBoundingClientRect();
 		_ndc.set( ( e.clientX - rect.left ) / rect.width * 2 - 1, - ( e.clientY - rect.top ) / rect.height * 2 + 1 );
-		_raycaster.setFromCamera( _ndc, camera );
+		setFromView( _raycaster, _ndc, camera );
 		return _raycaster;
 
 	};

@@ -7,6 +7,7 @@ import { createCrew } from './repair-crew.js';
 import { createAreaPhotos } from './repair-photos.js';
 import { areaExtras, areaName, areaParts, basisOf, CHIPPED, cutOut, dayOf, daysOf, describeArea, LOOKS, lookNames, outlineNormal, rimOf, stageAt, STAGES, stageOf, trianglesOf } from './repair-geometry.js';
 import { isTyping } from './walk.js';
+import { setFromView } from './view-ray.js';
 
 // Fixing the B2D2 model's repair areas in the twin: moving areas drawn in the wrong spot or turned
 // the wrong way, drawing new ones, changing an area's details and taking areas away. A model whose
@@ -1670,7 +1671,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 		const rect = canvas.getBoundingClientRect();
 		_ndc.set( ( e.clientX - rect.left ) / rect.width * 2 - 1, - ( e.clientY - rect.top ) / rect.height * 2 + 1 );
-		_raycaster.setFromCamera( _ndc, camera );
+		setFromView( _raycaster, _ndc, camera );
 		return _raycaster;
 
 	};

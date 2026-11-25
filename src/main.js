@@ -358,12 +358,14 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 		if ( driver.active ) driver.update( dt );
 		else controls.update( dt );
 		camera.updateMatrixWorld();
+		// The camera behind the walker in third person from here until the frame is drawn, so the
+		// handles, labels and toolbar placed below line up with the picture.
+		player.beforeRender( dt );
 		tiles?.update();
 		models.update( dt );
 		for ( const update of updates ) update( dt );
 		flattening.update( dt );
 		sidebar?.update();
-		player.beforeRender( dt );
 		renderer.render( scene, camera );
 		player.afterRender();
 

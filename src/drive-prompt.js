@@ -24,6 +24,9 @@ export function setUpDriving( { driver, models, library, camera, getSidebar, get
 	const promptName = prompt.querySelector( '.name' );
 	const sidebarElement = document.getElementById( 'library' );
 	let promptFor = null;
+	// The new pickup on its way, while its model loads: V again meanwhile waits for it rather than
+	// bringing a second one to the same spot.
+	let coming = null;
 	prompt.querySelector( 'button' ).addEventListener( 'click', () => {
 
 		if ( promptFor ) startDriving( promptFor );
@@ -64,9 +67,14 @@ export function setUpDriving( { driver, models, library, camera, getSidebar, get
 
 		if ( driver.active ) return null;
 		if ( entry && ! isDrivable( entry ) ) return null;
-		entry ??= await newPickup();
+		entry ??= await ( coming ??= newPickup().finally( () => coming = null ) );
 		if ( ! entry || driver.active ) return null;
-		getSidebar()?.deselect();
+		// Not an item still following the pointer, or an outline half drawn: the wheel would turn the
+		// item rather than move the chase camera, and it would be waiting there after.
+		const sidebar = getSidebar();
+		sidebar?.cancelPlacing();
+		sidebar?.cancelDrawing();
+		sidebar?.deselect();
 		driver.start( entry, specFor( vehicles.get( entry.library ) ) );
 		showDrivingKeys( driver.machine ? 'excavator' : 'drive' );
 		update();

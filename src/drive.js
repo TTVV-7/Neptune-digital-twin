@@ -1,6 +1,7 @@
 import { BufferGeometry, Box3, DoubleSide, Euler, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshStandardMaterial, Quaternion, Raycaster, SphereGeometry, Vector3 } from 'three';
 import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from './geo.js';
 import { blocks, isTyping } from './walk.js';
+import { PLAYER } from './config.js';
 import { createDriveFx } from './drive-fx.js';
 import { PARACHUTE, PlaneMode, chuteSink } from './plane.js';
 
@@ -52,6 +53,14 @@ const FALL_RESET = 200;
 const FALL_MOST = 1500;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
 const LEAVE_GROUND = 0.35;
+// On the ground, the ground under the axles is looked for from this far (m) over the wheels, or
+// its top bumper if higher (what's lower that the bumpers didn't stop, it climbs: a monster truck
+// over a car), plus as far as it went this step (as steep as 45° climbing). From higher, a
+// carport's roof, a scaffold run or a parked excavator's arm that the bumpers pass under is taken
+// for the ground, and the vehicle is put on top of it as soon as an axle is under it.
+const STEP_UP = 1;
+// Getting out, the walker stands this far (m) out from the vehicle's side, back or front.
+const STEP_OUT = 1.2;
 // Hitting a wall faster than this (m/s) into it says "Crash!" (and squashes and shakes it).
 const CRASH_FLASH = 3;
 // Coming down faster than this (m/s) throws up dust as it lands, a puff off each rear tyre; faster
@@ -793,11 +802,17 @@ export class Driver {
 		this.models.park( entry, this.grounded ? { pitch: pitch * MathUtils.RAD2DEG, roll: roll * MathUtils.RAD2DEG } : null );
 		this.air = null;
 
-		// Step out on the driver's side, facing the way the vehicle points.
+		// Step out on the driver's side, facing the way the vehicle points; if that's up against
+		// something (a container parked beside, a wall), the other side, then behind and in front, and
+		// with no room anywhere, on its roof.
 		const rad = this.heading * Math.PI / 180;
-		const side = this.width / 2 + 1.2;
-		const { east, north } = { east: this.east - Math.cos( rad ) * side, north: this.north + Math.sin( rad ) * side };
-		this.controls.setPose?.( enuToLocal( east, north, this.y + 1.7 + 0.5 ), this.heading, 0 );
+		const sin = Math.sin( rad ), cos = Math.cos( rad );
+		const ways = [ [ - cos, sin, this.width / 2 ], [ cos, - sin, this.width / 2 ], [ - sin, - cos, this.rear ], [ sin, cos, this.front ] ];
+		const out = ways.find( ( [ de, dn, from ] ) => this.roomTo( de, dn, from + STEP_OUT ) );
+		const [ de, dn, from ] = out ?? [ 0, 0, 0 ];
+		const east = this.east + de * ( from + STEP_OUT );
+		const north = this.north + dn * ( from + STEP_OUT );
+		this.controls.setPose?.( enuToLocal( east, north, this.y + 1.7 + ( out ? 0.5 : this.height ) ), this.heading, 0 );
 		this.controls.setMode?.( 'walk' );
 		this.controls.enabled = true;
 		this.hud.hide();
@@ -1016,10 +1031,11 @@ export class Driver {
 		const fx = Math.sin( rad ), fz = Math.cos( rad );
 		const half = this.wheelbase / 2;
 		const track = this.width * 0.4;
-		const front = this.groundAt( this.east + fx * half, this.north + fz * half );
-		const rear = this.groundAt( this.east - fx * half, this.north - fz * half );
-		const left = this.groundAt( this.east - fz * track, this.north + fx * track );
-		const right = this.groundAt( this.east + fz * track, this.north - fx * track );
+		const look = this.flying || this.air ? undefined : this.y + Math.max( STEP_UP, ...this.bumpers ) + Math.abs( this.speed ) * dt;
+		const front = this.groundAt( this.east + fx * half, this.north + fz * half, look );
+		const rear = this.groundAt( this.east - fx * half, this.north - fz * half, look );
+		const left = this.groundAt( this.east - fz * track, this.north + fx * track, look );
+		const right = this.groundAt( this.east + fz * track, this.north - fx * track, look );
 		const heights = [ front, rear ].filter( h => h !== null );
 
 		if ( this.flying ) {
@@ -3064,6 +3080,21 @@ export class Driver {
 		enuToLocal( east, north, from, _origin );
 		const hit = this.cast( _origin, DOWN, REACH_DOWN / this.gravity );
 		return hit ? hit.point.y : null;
+
+	}
+
+	// Whether there's room to stand `distance` m out from its middle along ( de, dn ): no wall in
+	// the way at the knees or the head, nor within a walker's reach past that (ground sloping up
+	// that way doesn't count, as it doesn't stop it driving).
+	roomTo( de, dn, distance ) {
+
+		_dir.set( - de, 0, dn );
+		return [ 0.5, 1.6 ].every( up => {
+
+			const hit = this.cast( enuToLocal( this.east, this.north, this.y + up, _origin ), _dir, distance + PLAYER.radius );
+			return ! hit?.face || Math.abs( _normal.copy( hit.face.normal ).transformDirection( hit.object.matrixWorld ).y ) >= 0.5;
+
+		} );
 
 	}
 

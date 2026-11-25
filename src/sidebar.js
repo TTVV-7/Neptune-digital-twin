@@ -18,6 +18,7 @@ import { itemConfig } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { localToEnu } from './geo.js';
 import { isTyping, passesHitFilters } from './walk.js';
+import { setFromView } from './view-ray.js';
 import { ZONE_ID, defaultGrade, defaultSurface } from './flatten.js';
 import { availableSets, memberPlacement } from './sets.js';
 import { getKind } from './kinds.js';
@@ -1326,7 +1327,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		const rect = canvas.getBoundingClientRect();
 		_ndc.set( ( x - rect.left ) / rect.width * 2 - 1, - ( y - rect.top ) / rect.height * 2 + 1 );
-		raycaster.setFromCamera( _ndc, camera );
+		setFromView( raycaster, _ndc, camera );
 		// Hidden things (flatten zones outside build mode) can't be clicked.
 		return raycaster.intersectObjects( objects, true ).filter( h => h.object.isMesh && isVisible( h.object ) && passesHitFilters( h ) );
 
@@ -1363,6 +1364,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		startLine,
 		finishLine,
 		undoPoint,
+		cancelPlacing,
 		cancelDrawing,
 		// The line being drawn, if any: { name, points } (how many).
 		getLine: () => drawing?.tool.mode === 'line' ? { name: drawing.tool.name, points: drawing.points.length } : null,

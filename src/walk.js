@@ -212,7 +212,12 @@ export class WalkController {
 			this.keys.delete( e.code );
 
 		};
-		this._onBlur = () => this.keys.clear();
+		this._onBlur = () => {
+
+			this.keys.clear();
+			this.dragLooking = false;
+
+		};
 		// Clicking anything but the scene (the panel, a dropdown) can swallow key-ups, e.g. while a
 		// dropdown's list is open, so forget held keys rather than walking on by themselves.
 		this._onPointerDown = e => {
@@ -225,6 +230,8 @@ export class WalkController {
 		this.dragLooking = false;
 		this._onMouseMove = e => {
 
+			// The right button let go while another was held sends no pointerup of its own.
+			if ( this.dragLooking && ( e.buttons & 2 ) === 0 ) this.dragLooking = false;
 			if ( ! this.locked && ! this.dragLooking ) return;
 			const moved = Math.abs( e.movementX ) + Math.abs( e.movementY );
 			this.lookActivity += moved;
@@ -252,7 +259,9 @@ export class WalkController {
 		};
 		this._onPointerUpLook = e => {
 
-			if ( e.button === 2 ) this.dragLooking = false;
+			// The last button up ends it, whichever: one let go while another was held sends no
+			// pointerup of its own.
+			if ( ( e.buttons & 2 ) === 0 ) this.dragLooking = false;
 
 		};
 		this._onContextMenu = e => e.preventDefault();
@@ -273,6 +282,8 @@ export class WalkController {
 		domElement.addEventListener( 'click', this._onClick );
 		domElement.addEventListener( 'pointerdown', this._onPointerDownLook );
 		domElement.addEventListener( 'pointerup', this._onPointerUpLook );
+		domElement.addEventListener( 'pointercancel', this._onPointerUpLook );
+		domElement.addEventListener( 'lostpointercapture', this._onPointerUpLook );
 		domElement.addEventListener( 'contextmenu', this._onContextMenu );
 
 	}
@@ -1073,6 +1084,8 @@ export class WalkController {
 		this.domElement.removeEventListener( 'click', this._onClick );
 		this.domElement.removeEventListener( 'pointerdown', this._onPointerDownLook );
 		this.domElement.removeEventListener( 'pointerup', this._onPointerUpLook );
+		this.domElement.removeEventListener( 'pointercancel', this._onPointerUpLook );
+		this.domElement.removeEventListener( 'lostpointercapture', this._onPointerUpLook );
 		this.domElement.removeEventListener( 'contextmenu', this._onContextMenu );
 
 	}
