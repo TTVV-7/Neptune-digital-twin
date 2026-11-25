@@ -1,6 +1,6 @@
 import { HttpError, json, randomToken } from '../http.js';
 import { bearerAccount } from './oauth.js';
-import { LOG_KEEP_MS, planOf } from './build.js';
+import { ACCOUNT_BYTES, LOG_KEEP_MS, limitsOf, planOf } from './build.js';
 import { search } from './search.js';
 import CATALOG from './build-catalog.json' with { type: 'json' };
 
@@ -37,6 +37,11 @@ const TOWARD = [ 'front', 'back', 'left', 'right' ];
 const BATTERS = [ 1.5, 2, 3 ];
 // Pieces placed touching end to end in a row; anything else a metre apart.
 const TOUCHING = [ 'Barriers & fencing', 'Temporary covers' ];
+// The largest the editor makes them (earthworks.js's normalizePile, laydown.js's clampSize): any
+// bigger and it would quietly draw a smaller one than Claude said.
+const PILE_VOLUME = 20000;
+const PILE_SIZE = 200;
+const LAYDOWN_SIZE = 1000;
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Expose-Headers': 'WWW-Authenticate' };
 
@@ -120,6 +125,7 @@ const INSTRUCTIONS = `World Drive Build lays out construction sites on a 3D map 
 const point = { east: { type: 'number', description: 'Metres east of the site point (negative: west)' }, north: { type: 'number', description: 'Metres north of the site point (negative: south)' } };
 const heading = { heading: { type: 'number', description: 'Degrees clockwise from north that its front faces (0 north, 90 east)', default: 0 } };
 const project = { project_id: { type: 'string', description: 'The project\'s id (create_project, list_projects)' } };
+const version = { version: { type: 'number', description: 'The project\'s version the indexes are from: get_project\'s, or the one the last change gave' } };
 
 const TOOLS = [
 	{
@@ -137,7 +143,7 @@ const TOOLS = [
 		inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true }, run: listProjects,
 	},
 	{
-		name: 'get_project', title: 'What\'s in a project', description: 'Everything placed in a project, each with its index (for move_item and remove_items), what it is, where and which way it faces, and its size.',
+		name: 'get_project', title: 'What\'s in a project', description: 'Everything placed in a project, each with its index (for move_item and remove_items), what it is, where and which way it faces, and its size; and the project\'s version, which move_item and remove_items take so they don\'t act on indexes that have changed since.',
 		inputSchema: { type: 'object', properties: { ...project }, required: [ 'project_id' ] }, annotations: { readOnlyHint: true }, run: getProject,
 	},
 	{
@@ -150,7 +156,7 @@ const TOOLS = [
 		inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true }, run: listSets,
 	},
 	{
-		name: 'place_items', title: 'Place items', description: `Place library items (ids from search_library), each at its middle. Up to ${ PER_CALL } at a time.`,
+		name: 'place_items', title: 'Place items', description: `Place library items (ids from search_library), each at its middle (unless search_library says it's placed by something else, as a tower crane is by its mast). Up to ${ PER_CALL } at a time.`,
 		inputSchema: { type: 'object', properties: { ...project, items: { type: 'array', items: { type: 'object', properties: { item: { type: 'string', description: 'Library id' }, ...point, ...heading }, required: [ 'item', 'east', 'north' ] } } }, required: [ 'project_id', 'items' ] },
 		run: placeItems,
 	},
@@ -171,22 +177,22 @@ const TOOLS = [
 	},
 	{
 		name: 'add_laydown_area', title: 'Mark a laydown area', description: 'Mark out a rectangle where materials and equipment go, with a label.',
-		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number' }, length: { type: 'number' }, ...heading, label: { type: 'string' }, colour: { type: 'string', description: '#rrggbb', default: '#ffd60a' }, note: { type: 'string' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
+		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', minimum: 1, maximum: LAYDOWN_SIZE }, length: { type: 'number', minimum: 1, maximum: LAYDOWN_SIZE }, ...heading, label: { type: 'string' }, colour: { type: 'string', description: '#rrggbb', default: '#ffd60a' }, note: { type: 'string' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
 		run: addLaydown,
 	},
 	{
 		name: 'add_stockpile', title: 'Add a stockpile', description: 'A pile of material: a cone of a volume, or a ridge filling width x length.',
-		inputSchema: { type: 'object', properties: { ...project, ...point, material: { type: 'string', enum: MATERIALS, default: 'gravel' }, shape: { type: 'string', enum: [ 'cone', 'ridge' ], default: 'cone' }, volume: { type: 'number', description: 'm³, for a cone', default: 50 }, width: { type: 'number' }, length: { type: 'number' }, ...heading }, required: [ 'project_id', 'east', 'north' ] },
+		inputSchema: { type: 'object', properties: { ...project, ...point, material: { type: 'string', enum: MATERIALS, default: 'gravel' }, shape: { type: 'string', enum: [ 'cone', 'ridge' ], default: 'cone' }, volume: { type: 'number', minimum: 0.5, maximum: PILE_VOLUME, description: 'm³, for a cone', default: 50 }, width: { type: 'number', minimum: 1, maximum: PILE_SIZE, description: 'm, for a ridge' }, length: { type: 'number', minimum: 1, maximum: PILE_SIZE, description: 'm, for a ridge' }, ...heading }, required: [ 'project_id', 'east', 'north' ] },
 		run: addStockpile,
 	},
 	{
 		name: 'move_item', title: 'Move an item', description: 'Move or turn something already placed (its index from get_project).',
-		inputSchema: { type: 'object', properties: { ...project, index: { type: 'number' }, east: { type: 'number' }, north: { type: 'number' }, heading: { type: 'number' } }, required: [ 'project_id', 'index' ] },
+		inputSchema: { type: 'object', properties: { ...project, ...version, index: { type: 'number' }, east: { type: 'number' }, north: { type: 'number' }, heading: { type: 'number' } }, required: [ 'project_id', 'version', 'index' ] },
 		run: moveItem,
 	},
 	{
 		name: 'remove_items', title: 'Remove items', description: 'Remove things already placed, by their indexes from get_project.',
-		inputSchema: { type: 'object', properties: { ...project, indexes: { type: 'array', items: { type: 'number' } } }, required: [ 'project_id', 'indexes' ] },
+		inputSchema: { type: 'object', properties: { ...project, ...version, indexes: { type: 'array', items: { type: 'number' } } }, required: [ 'project_id', 'version', 'indexes' ] },
 		annotations: { destructiveHint: true }, run: removeItems,
 	},
 	{
@@ -265,26 +271,45 @@ async function ownProject( env, account, id ) {
 
 }
 
-// Saves a project's layout after a change (the editor, if open on it, says it changed and offers it).
-async function save( env, row, layout, now ) {
+// Saves a project's layout after a change (the editor, if open on it, says it changed and offers
+// it), within what the account may store in all as the editor's saves are (build.js's
+// updateLayout), so they don't then fail for the account being full. Returns its new version.
+async function save( env, account, row, layout, now ) {
 
 	if ( layout.items.length > PROJECT_ITEMS ) throw new ToolError( `A project holds at most ${ PROJECT_ITEMS } things` );
 	const data = JSON.stringify( layout );
 	if ( data.length > LAYOUT_BYTES ) throw new ToolError( 'That makes the project too big to save' );
+	const { bytes } = await env.DB.prepare( 'SELECT COALESCE( SUM( LENGTH( data ) ), 0 ) AS bytes FROM build_layouts WHERE account_id = ?' ).bind( account.id ).first();
+	if ( bytes - row.data.length + data.length > ACCOUNT_BYTES ) throw new ToolError( 'The account is full: that would store more than it may. Delete some projects in the editor first.' );
+	const updatedAt = Math.max( now, row.updated_at + 1 );
 	const updated = await env.DB.prepare( 'UPDATE build_layouts SET data = ?, updated_at = ? WHERE id = ? AND updated_at = ?' )
-		.bind( data, Math.max( now, row.updated_at + 1 ), row.id, row.updated_at ).run();
+		.bind( data, updatedAt, row.id, row.updated_at ).run();
 	if ( ! updated.meta.changes ) throw new ToolError( 'The project was changed somewhere else just then. Try again.' );
+	return updatedAt;
 
 }
 
-// A change to a project: fn( layout ) changes it and says what it did.
-async function change( context, id, fn ) {
+// A change to a project: fn( layout ) changes it and says what it did. Given `version` (what
+// indexes were read from), it's refused if the project has been saved since: the editor saves its
+// items in the order they finished loading, and anyone's add or remove shifts the rest, so an old
+// index may well be something else now. The new version comes back, unless the change renumbers
+// what's left (removing), when the old indexes are no good anyway.
+async function change( context, id, fn, { version, renumbers = false } = {} ) {
 
 	const { env, account, now, url } = context;
 	const row = await ownProject( env, account, id );
+	if ( version !== undefined ) sameVersion( row, version );
 	const said = fn( row.layout );
-	await save( env, row, row.layout, now );
-	return text( `${ said }\nThe project has ${ row.layout.items.length } things now. Open it: ${ editorLink( url.origin, row ) }` );
+	const updatedAt = await save( env, account, row, row.layout, now );
+	const versionText = renumbers ? '' : ` (version ${ updatedAt }: indexes from before still hold)`;
+	return text( `${ said }\nThe project has ${ row.layout.items.length } things now${ versionText }. Open it: ${ editorLink( url.origin, row ) }` );
+
+}
+
+function sameVersion( row, value ) {
+
+	if ( value === undefined || value === null ) throw new ToolError( 'version: the one get_project gave with the indexes' );
+	if ( Number( value ) !== row.updated_at ) throw new ToolError( 'The project has changed since those indexes were read (in the editor, or by another change), so they may be other things now. get_project again for its indexes and version.' );
 
 }
 
@@ -309,10 +334,12 @@ async function createProject( context, args ) {
 	const lat = number( args.lat, 'lat', { min: - 85, max: 85 } );
 	const lon = number( args.lon, 'lon', { min: - 180, max: 180 } );
 	const plan = await planOf( env, account );
-	const most = plan.tier === 'free' ? 1 : 200;
-	const { count } = await env.DB.prepare( 'SELECT COUNT(*) AS count FROM build_layouts WHERE account_id = ?' ).bind( account.id ).first();
-	if ( count >= most ) throw new ToolError( 'The account has as many projects as it can. Delete some in the editor first.' );
+	// The same limits as a project made in the editor (build.js's createLayout).
+	const most = plan.tier === 'free' ? 1 : limitsOf( env ).layouts;
 	const layout = { version: 2, site: place, lat, lon, items: [], extras: {} };
+	const { count, bytes } = await env.DB.prepare( 'SELECT COUNT(*) AS count, COALESCE( SUM( LENGTH( data ) ), 0 ) AS bytes FROM build_layouts WHERE account_id = ?' ).bind( account.id ).first();
+	if ( count >= most ) throw new ToolError( 'The account has as many projects as it can. Delete some in the editor first.' );
+	if ( bytes + JSON.stringify( layout ).length > ACCOUNT_BYTES ) throw new ToolError( 'The account is full. Delete some projects in the editor first.' );
 	const id = randomToken( 12 );
 	await env.DB.prepare( 'INSERT INTO build_layouts ( id, account_id, site, name, data, created_at, updated_at, lat, lon ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
 		.bind( id, account.id, place, name, JSON.stringify( layout ), now, now, lat, lon ).run();
@@ -335,6 +362,8 @@ function describe( item, index ) {
 	const out = { index, item: item.library ?? item.kind ?? null, name: item.name ?? known?.name ?? item.kind, east: item.east, north: item.north, heading: item.heading ?? 0 };
 	if ( item.kind && item.params ) out.params = item.params;
 	if ( known?.dimensions ) out.size = known.dimensions;
+	const by = placedBy( item.kind, item.params );
+	if ( by ) out.placed = by;
 	return out;
 
 }
@@ -342,7 +371,7 @@ function describe( item, index ) {
 async function getProject( { env, account, url }, args ) {
 
 	const row = await ownProject( env, account, args.project_id );
-	return text( { project_id: row.id, name: row.name, site: row.site, lat: row.lat, lon: row.lon, editor: editorLink( url.origin, row ), items: row.layout.items.map( describe ) } );
+	return text( { project_id: row.id, name: row.name, site: row.site, lat: row.lat, lon: row.lon, version: row.updated_at, editor: editorLink( url.origin, row ), items: row.layout.items.map( describe ) } );
 
 }
 
@@ -368,7 +397,23 @@ async function searchLibrary( context, args ) {
 
 	} ).slice( 0, limit );
 	if ( ! found.length ) return text( 'Nothing matches. Try fewer or other words, or search with no query for the categories.' );
-	return text( found.map( i => ( { id: i.id, name: i.name, category: i.category, size: i.dimensions } ) ) );
+	return text( found.map( i => {
+
+		const by = placedBy( i.kind, i.params );
+		return { id: i.id, name: i.name, category: i.category, size: i.dimensions, ...( by ? { placed: by } : {} ) };
+
+	} ) );
+
+}
+
+// Where an item built in code is placed by, if not its middle: it isn't recentred (models.js), so
+// a tower crane stands where it's put by its mast, its jib out the way it faces and its counter-jib
+// behind (tower-crane.js's shape), and its size is for the jib it's listed with.
+function placedBy( kind, params ) {
+
+	if ( kind !== 'tower-crane' ) return null;
+	const jib = Math.min( 80, Math.max( 20, Number( params?.jib ) || 50 ) );
+	return `by its mast, not its middle: the jib reaches ${ round( jib + 1 ) } m the way it faces (heading), the counter-jib ${ Math.max( 12, Math.round( jib * 0.32 ) ) } m behind; the hook works up to ${ jib } m from the mast all round`;
 
 }
 
@@ -449,42 +494,125 @@ async function placeRow( context, args ) {
 	const { length: along = 1, width: across = 0 } = item.dimensions ?? {};
 	const sideways = across > along;
 	const length = sideways ? across : along;
-	const step = args.spacing !== undefined ? number( args.spacing, 'spacing', { min: 0.2, max: 500 } ) : length + ( TOUCHING.includes( item.category ) ? 0 : 1 );
-	const configs = [];
-	// Along each stretch, the first copy's middle half its length in, then a step apart.
-	let carry = length / 2;
-	for ( let i = 0; i < points.length - 1; i ++ ) {
+	const facing = ( a, b ) => {
 
-		const a = points[ i ], b = points[ i + 1 ];
-		const run = Math.hypot( b.east - a.east, b.north - a.north );
-		if ( run < 0.01 ) continue;
 		const h = ( Math.atan2( b.east - a.east, b.north - a.north ) * 180 / Math.PI + 360 ) % 360;
-		let at = carry;
-		for ( ; at <= run + 1e-6; at += step ) {
+		return round( sideways ? ( h + 270 ) % 360 : h );
 
-			const t = at / run;
-			configs.push( configOf( item.id, { east: round( a.east + ( b.east - a.east ) * t ), north: round( a.north + ( b.north - a.north ) * t ), heading: round( sideways ? ( h + 270 ) % 360 : h ) } ) );
-			if ( configs.length > 500 ) throw new ToolError( 'That row would be more than 500 pieces: a shorter line or a wider spacing' );
+	};
+
+	const configs = [];
+	let left = '';
+	if ( args.spacing === undefined && TOUCHING.includes( item.category ) ) {
+
+		// End to end as the editor's rows lay them (rows.js's layOut): each piece from where the last
+		// ended to where the line is its length away, cutting across a corner rather than stopping
+		// short of it or sticking out past it. Pieces that share their joints (a fence panel's feet)
+		// are rowLength apart, not their box's length.
+		const links = chain( points, item.rowLength ?? length );
+		const spare = links.total - ( links.length ? links[ links.length - 1 ][ 1 ] : 0 );
+		const closed = points.length > 3 && Math.hypot( points[ 0 ].east - points.at( - 1 ).east, points[ 0 ].north - points.at( - 1 ).north ) < 0.05;
+		// Along an open line, what's over is split between its ends; round a loop, it's where it closes.
+		const shifted = ! closed && spare > 1e-3 ? chain( points, item.rowLength ?? length, spare / 2 ) : links;
+		const used = shifted.length === links.length ? shifted : links;
+		for ( const [ sa, sb ] of used ) {
+
+			const a = links.point( sa ), b = links.point( sb );
+			configs.push( configOf( item.id, { east: round( ( a.east + b.east ) / 2 ), north: round( ( a.north + b.north ) / 2 ), heading: facing( a, b ) } ) );
 
 		}
 
-		carry = at - run;
+		if ( spare >= 0.05 ) left = closed ? ` It leaves a ${ round( spare ) } m gap where the loop closes, shorter than a piece.` : ` It stops ${ round( used === shifted ? spare / 2 : spare ) } m short of ${ used === shifted ? 'each end' : 'the end' }, less than a piece.`;
+
+	} else {
+
+		const step = args.spacing !== undefined ? number( args.spacing, 'spacing', { min: 0.2, max: 500 } ) : length + 1;
+		// Along each stretch, the first copy's middle half its length in, then a step apart.
+		let carry = length / 2;
+		for ( let i = 0; i < points.length - 1; i ++ ) {
+
+			const a = points[ i ], b = points[ i + 1 ];
+			const run = Math.hypot( b.east - a.east, b.north - a.north );
+			if ( run < 0.01 ) continue;
+			let at = carry;
+			for ( ; at <= run + 1e-6; at += step ) {
+
+				const t = at / run;
+				configs.push( configOf( item.id, { east: round( a.east + ( b.east - a.east ) * t ), north: round( a.north + ( b.north - a.north ) * t ), heading: facing( a, b ) } ) );
+				if ( configs.length > 500 ) break;
+
+			}
+
+			carry = at - run;
+
+		}
 
 	}
 
+	if ( configs.length > 500 ) throw new ToolError( 'That row would be more than 500 pieces: a shorter line or a wider spacing' );
 	if ( ! configs.length ) throw new ToolError( 'The line is shorter than one piece' );
 	return await change( context, args.project_id, layout => {
 
 		layout.items.push( ...configs );
-		return `Placed a row of ${ configs.length } × ${ item.name }.`;
+		return `Placed a row of ${ configs.length } × ${ item.name }.${ left }`;
 
 	} );
 
 }
 
-function size( value, name ) {
+// Pieces `extent` long end to end along a line of points from `start` metres along it: each
+// [ from, to ] in metres along the line, where `to` is the first point on it `extent` from `from` in
+// a straight line (rows.js's reach). The list also has the line's total and point( s ), the point
+// s metres along it.
+function chain( points, extent, start = 0 ) {
 
-	return round( number( value, name, { min: 1, max: 2000 } ) );
+	const starts = [ 0 ];
+	for ( let k = 1; k < points.length; k ++ ) starts.push( starts[ k - 1 ] + Math.hypot( points[ k ].east - points[ k - 1 ].east, points[ k ].north - points[ k - 1 ].north ) );
+	const total = starts.at( - 1 );
+	const at = s => {
+
+		s = Math.min( total, Math.max( 0, s ) );
+		let k = 0;
+		while ( k < points.length - 2 && starts[ k + 1 ] <= s ) k ++;
+		const run = starts[ k + 1 ] - starts[ k ];
+		const f = run > 0 ? ( s - starts[ k ] ) / run : 0;
+		const a = points[ k ], b = points[ k + 1 ];
+		return { east: a.east + ( b.east - a.east ) * f, north: a.north + ( b.north - a.north ) * f, k, f };
+
+	};
+
+	const reach = s => {
+
+		const from = at( s );
+		for ( let k = from.k; k < points.length - 1; k ++ ) {
+
+			const de = points[ k + 1 ].east - points[ k ].east;
+			const dn = points[ k + 1 ].north - points[ k ].north;
+			const square = de * de + dn * dn;
+			const fe = points[ k ].east - from.east;
+			const fn = points[ k ].north - from.north;
+			const b = fe * de + fn * dn;
+			const disc = b * b - square * ( fe * fe + fn * fn - extent * extent );
+			if ( square === 0 || disc < 0 ) continue;
+			// Where the stretch leaves the circle of that radius round where the piece starts.
+			const f = ( - b + Math.sqrt( disc ) ) / square;
+			if ( f >= ( k === from.k ? from.f : 0 ) - 1e-9 && f <= 1 + 1e-9 ) return starts[ k ] + Math.min( 1, Math.max( 0, f ) ) * Math.sqrt( square );
+
+		}
+
+		return null;
+
+	};
+
+	const links = [];
+	for ( let s = start, end; links.length <= 500 && ( end = reach( s ) ) !== null; s = end ) links.push( [ s, end ] );
+	return Object.assign( links, { total, point: at } );
+
+}
+
+function size( value, name, max ) {
+
+	return round( number( value, name, { min: 1, max } ) );
 
 }
 
@@ -494,7 +622,7 @@ async function addFlatten( context, args ) {
 	const fence = FENCES.includes( args.fence ) ? args.fence : 'none';
 	const gates = fence === 'none' ? 0 : Math.min( 8, Math.max( 0, Math.round( Number( args.entrances ) || 0 ) ) );
 	const grading = gradeOf( args );
-	const params = { width: size( args.width, 'width' ), length: size( args.length, 'length' ), height: 0, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params };
+	const params = { width: size( args.width, 'width', 2000 ), length: size( args.length, 'length', 2000 ), height: 0, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params };
 	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
 	return await change( context, args.project_id, layout => {
 
@@ -556,7 +684,7 @@ async function addLaydown( context, args ) {
 
 	const colour = /^#[0-9a-f]{6}$/i.test( args.colour ?? '' ) ? args.colour : '#ffd60a';
 	const label = String( args.label ?? 'Laydown' ).slice( 0, 60 );
-	const config = { name: label || 'Laydown area', kind: 'laydown', params: { label, colour, width: size( args.width, 'width' ), length: size( args.length, 'length' ), note: String( args.note ?? '' ).slice( 0, 200 ) }, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
+	const config = { name: label || 'Laydown area', kind: 'laydown', params: { label, colour, width: size( args.width, 'width', LAYDOWN_SIZE ), length: size( args.length, 'length', LAYDOWN_SIZE ), note: String( args.note ?? '' ).slice( 0, 200 ) }, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
 	return await change( context, args.project_id, layout => {
 
 		layout.items.push( config );
@@ -571,8 +699,8 @@ async function addStockpile( context, args ) {
 	const material = MATERIALS.includes( args.material ) ? args.material : 'gravel';
 	const shape = args.shape === 'ridge' ? 'ridge' : 'cone';
 	const params = shape === 'cone'
-		? { shape, volume: round( number( args.volume, 'volume', { min: 0.5, max: 200000, fallback: 50 } ) ), material }
-		: { shape, width: size( args.width, 'width' ), length: size( args.length, 'length' ), maxHeight: 0, material };
+		? { shape, volume: round( number( args.volume, 'volume', { min: 0.5, max: PILE_VOLUME, fallback: 50 } ) ), material }
+		: { shape, width: size( args.width, 'width', PILE_SIZE ), length: size( args.length, 'length', PILE_SIZE ), maxHeight: 0, material };
 	const config = { name: 'Stockpile', kind: 'stockpile', params, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
 	return await change( context, args.project_id, layout => {
 
@@ -601,7 +729,7 @@ async function moveItem( context, args ) {
 		if ( args.heading !== undefined ) item.heading = turned( args.heading );
 		return `Moved ${ item.name } to ${ item.east } m east, ${ item.north } m north, facing ${ item.heading }°.`;
 
-	} );
+	}, { version: args.version ?? null } );
 
 }
 
@@ -616,7 +744,7 @@ async function removeItems( context, args ) {
 		layout.items = layout.items.filter( ( _, i ) => ! gone.has( i ) );
 		return `Removed ${ gone.size }: ${ summary( names ) }. The rest are numbered again: get_project for their indexes.`;
 
-	} );
+	}, { version: args.version ?? null, renumbers: true } );
 
 }
 

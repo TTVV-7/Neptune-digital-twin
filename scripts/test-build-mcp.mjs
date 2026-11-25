@@ -24,7 +24,7 @@ const DIST = join( ROOT, 'dist-drive', 'build' );
 const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
 const WEBHOOK_SECRET = 'whsec_test_mcp';
 const BUILD_LINK_ID = 'plink_build0000000000000001';
-const HOURLY = 40;
+const HOURLY = 80;
 
 let server;
 let keys;
@@ -194,6 +194,7 @@ before( async () => {
 			BUILD_PAYMENT_LINK_ID: BUILD_LINK_ID,
 			ADMIN_EMAILS: 'boss@example.com',
 			MCP_HOURLY: String( HOURLY ),
+			BUILD_LAYOUT_LIMIT: '2',
 			SEARCH_UPSTREAM: `http://127.0.0.1:${ upstream.address().port }/search`,
 		},
 		assets: assetsOf(),
@@ -300,10 +301,16 @@ test( 'the tools lay out a site', async () => {
 	project = made.value.project_id;
 	assert.match( made.value.editor, /\/build\/app\/\?at=49\.282700%2C-123\.120700&place=Vancouver\+City\+Hall&project=/ );
 
+	// Projects Claude makes keep to the account's limit as the editor's do (BUILD_LAYOUT_LIMIT here 2).
+	assert.equal( ( await tool( 'create_project', { name: 'Second', place: 'Vancouver City Hall', lat: 49.2827, lon: - 123.1207 } ) ).error, false );
+	assert.match( ( await tool( 'create_project', { name: 'Third', place: 'Vancouver City Hall', lat: 49.2827, lon: - 123.1207 } ) ).text, /as many projects as it can/ );
+
 	const lib = await tool( 'search_library', { query: 'office trailer' } );
 	assert.ok( lib.value.some( i => i.id === 'office-trailer-10x40' && i.size.length > 3 ), lib.text );
 	assert.ok( ( await tool( 'search_library', {} ) ).value.categories.Vehicles > 10 );
 	assert.ok( ( await tool( 'list_sets', {} ) ).value.some( s => s.id === 'set-site-office' ) );
+	// A tower crane stands by its mast, not the middle of its size: Claude is told so.
+	assert.match( ( await tool( 'search_library', { query: 'tower crane' } ) ).value.find( i => i.id === 'tower-crane' ).placed, /by its mast.*51 m the way it faces.*16 m behind/ );
 
 	const placed = await tool( 'place_items', { project_id: project, items: [
 		{ item: 'office-trailer-10x40', east: 0, north: 20, heading: 180 },
@@ -313,9 +320,10 @@ test( 'the tools lay out a site', async () => {
 	assert.match( placed.text, /Placed 3/ );
 	assert.ok( ( await tool( 'place_items', { project_id: project, items: [ { item: 'no-such-thing', east: 0, north: 0 } ] } ) ).error );
 	assert.match( ( await tool( 'place_set', { project_id: project, set_id: 'set-lane-closure', east: - 30, north: 0, heading: 90 } ) ).text, /Placed Lane closure/ );
-	// A 30.5 m fence line, panels touching, each along the line by its width (3.25 m with its feet).
+	// A 30.5 m fence line, panels sharing their feet (10 ft apart, not their 3.25 m box), each along
+	// the line by its width, what's over split between the ends.
 	const row = await tool( 'place_row', { project_id: project, item: 'fence-panel', points: [ [ 10, 0 ], [ 10, 30.5 ] ] } );
-	assert.match( row.text, /row of 9 ×/ );
+	assert.match( row.text, /row of 10 ×/ );
 	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 0, north: 20, width: 30, length: 20, surface: 'asphalt', fence: 'screened', entrances: 2 } ) ).text, /surfaced with asphalt, fenced \(green privacy screen\) with 2 entrances/ );
 	// Graded: falling 3% to its left, edges battered 3 : 1; out-of-range numbers are clamped and
 	// unknown grades refused. Without a grade, a new area follows the ground.
@@ -325,20 +333,53 @@ test( 'the tools lay out a site', async () => {
 	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 60, north: 90, width: 20, length: 20, grade: 'slope', toward: 'uphill' } ) ).error );
 	assert.match( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 15, length: 10, label: 'Rebar' } ) ).text, /Rebar/ );
 	assert.match( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, material: 'road-base', volume: 80 } ) ).text, /road-base, 80 m³/ );
+	// Bigger than the editor makes them is refused, not reported and then drawn smaller.
+	assert.match( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, volume: 50000 } ) ).text, /volume must be a number from 0.5 to 20000/ );
+	assert.ok( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, shape: 'ridge', width: 10, length: 400 } ) ).error );
+	assert.ok( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 1500, length: 10 } ) ).error );
 
 	const got = await tool( 'get_project', { project_id: project } );
 	const items = got.value.items;
 	const lane = 10; // the lane closure set: arrow board, two flaggers, seven cones
-	assert.equal( items.length, 3 + lane + 9 + 5 );
+	assert.equal( items.length, 3 + lane + 10 + 5 );
 	const panels = items.filter( i => i.item === 'fence-panel' );
-	assert.deepEqual( panels.slice( 0, 2 ).map( i => [ i.east, i.north, i.heading ] ), [ [ 10, 1.63, 270 ], [ 10, 4.88, 270 ] ] );
+	assert.deepEqual( panels.slice( 0, 2 ).map( i => [ i.east, i.north, i.heading ] ), [ [ 10, 1.53, 270 ], [ 10, 4.58, 270 ] ] );
 	assert.deepEqual( items[ 0 ], { index: 0, item: 'office-trailer-10x40', name: items[ 0 ].name, east: 0, north: 20, heading: 180, size: items[ 0 ].size } );
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && i.params.fence === 'screened' && i.params.gates === 2 && i.params.grade === 'follow' && i.params.batter === 2 ) );
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'slope' && i.params.fall === 3 && i.params.toward === 'left' && i.params.batter === 3 ) );
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.grade === 'terraces' && i.params.steps === 8 ) );
-	assert.match( ( await tool( 'move_item', { project_id: project, index: 1, east: 4, heading: 45 } ) ).text, /Moved .* to 4 m east, 14 m north, facing 45°/ );
-	assert.match( ( await tool( 'remove_items', { project_id: project, indexes: [ 2 ] } ) ).text, /Removed 1: Traffic cone/ );
+	// Indexes come with the version they're from: without it, or once the project has been saved
+	// since (here by the editor, as when someone moves something), they're refused, not acted on.
+	assert.ok( ( await tool( 'move_item', { project_id: project, index: 1, east: 4 } ) ).error );
+	const moved = await tool( 'move_item', { project_id: project, version: got.value.version, index: 1, east: 4, heading: 45 } );
+	assert.match( moved.text, /Moved .* to 4 m east, 14 m north, facing 45°/ );
+	// A change that doesn't renumber gives the new version, and the old indexes still hold.
+	const next = Number( moved.text.match( /version (\d+)/ )[ 1 ] );
+	assert.match( ( await tool( 'remove_items', { project_id: project, version: got.value.version, indexes: [ 2 ] } ) ).text, /changed since those indexes were read/ );
+	assert.match( ( await tool( 'remove_items', { project_id: project, version: next, indexes: [ 2 ] } ) ).text, /Removed 1: Traffic cone/ );
 	assert.equal( ( await tool( 'get_project', { project_id: project } ) ).value.items.length, items.length - 1 );
+	const before = ( await tool( 'get_project', { project_id: project } ) ).value;
+	const proCookie = await signIn( { sub: 'mcp-pro', email: 'pro@example.com', name: 'Pat Pro' } );
+	const { data } = ( await call( `/build/api/layouts/${ project }`, { headers: { Cookie: proCookie } } ) ).json;
+	const saved = await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: { ...data, items: data.items.reverse() } }, headers: { Cookie: proCookie, Origin: server.base } } );
+	assert.equal( saved.status, 200, saved.text );
+	assert.match( ( await tool( 'remove_items', { project_id: project, version: before.version, indexes: [ 0 ] } ) ).text, /changed since those indexes were read/ );
+
+	// A barrier loop round a 10 m square: end to end all the way, across the corners rather than
+	// short of them or sticking out past them, with what's over left where the loop closes.
+	const loop = await tool( 'place_row', { project_id: project, item: 'jersey-barrier', points: [ [ 100, 0 ], [ 110, 0 ], [ 110, 10 ], [ 100, 10 ], [ 100, 0 ] ] } );
+	assert.match( loop.text, /row of 12 ×.*gap where the loop closes/, loop.text );
+	const barriers = ( await tool( 'get_project', { project_id: project } ) ).value.items.filter( i => i.item === 'jersey-barrier' );
+	const ends = barriers.map( b => {
+
+		// Its long side (3.05 m) is across its front, a quarter turn from its heading.
+		const h = ( b.heading + 90 ) * Math.PI / 180;
+		const [ de, dn ] = [ Math.sin( h ) * 3.05 / 2, Math.cos( h ) * 3.05 / 2 ];
+		return [ [ b.east - de, b.north - dn ], [ b.east + de, b.north + dn ] ];
+
+	} );
+	for ( const [ a, b ] of ends ) for ( const [ e, n ] of [ a, b ] ) assert.ok( e > 99.98 && e < 110.02 && n > - 0.02 && n < 10.02, `${ e }, ${ n } is outside the square` );
+	for ( let i = 1; i < ends.length; i ++ ) assert.ok( Math.hypot( ends[ i ][ 0 ][ 0 ] - ends[ i - 1 ][ 1 ][ 0 ], ends[ i ][ 0 ][ 1 ] - ends[ i - 1 ][ 1 ][ 1 ] ) < 0.03, `a gap before barrier ${ i }` );
 	const shared = await tool( 'share_project', { project_id: project } );
 	assert.match( shared.value.share, /\/build\/app\/\?at=49\.282700%2C-123\.120700&place=Vancouver\+City\+Hall&view=[\w-]{22}$/ );
 	assert.match( ( await tool( 'list_projects', {} ) ).text, /City hall staging/ );

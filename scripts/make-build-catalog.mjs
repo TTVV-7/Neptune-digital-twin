@@ -1,7 +1,8 @@
 // npm run make-build-catalog: worker/drive/build-catalog.json, the library as World Drive Build's
 // MCP server (worker/drive/mcp.js) offers it to Claude: every item (downloaded and built in code)
 // with its id, name, category, real size (m: length along its front, width, height) and whether the
-// free plan has it, and the sets with their pieces. Items built in code are measured in a browser,
+// free plan has it, how far apart its joints are where it shares them in a row (rowLength: a fence
+// panel's 10 ft, not its box's 3.25 m), and the sets with their pieces. Items built in code are measured in a browser,
 // as the app's own library does (sidebar.js's measure), against the dev server. Run it again after
 // adding to the library.
 //
@@ -46,6 +47,7 @@ try {
 				category: item.category,
 				dimensions,
 				free: FREE_ITEMS.has( item.id ),
+				...( Number( item.rowLength ) > 0 ? { rowLength: Number( item.rowLength ) } : {} ),
 				...( item.kind ? { kind: item.kind, params: item.params } : {} ),
 			};
 

@@ -36,7 +36,8 @@ import { METRICS } from '../../src/drive-app/stats-protocol.js';
 const PREFIXES = [ '/build/api/', '/build/app/api/' ];
 const LAYOUT_LIMIT = 200;
 const LAYOUT_BYTES = 1024 * 1024;
-const ACCOUNT_BYTES = 25 * 1024 * 1024;
+// What an account may store in all (the MCP server's saves keep to it too).
+export const ACCOUNT_BYTES = 25 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const SHARE_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const SUMMARY = 'id, site, name, share_token, updated_at, lat, lon';
