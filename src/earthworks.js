@@ -135,6 +135,15 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 	addGround( terrain.group );
 	// Before (the Show panel): the ground as it was, with Google's mesh showing everywhere.
 	layers.onBeforeAfter( before => terrain.setUntouched( before ) );
+	// The faces of earth round flatten areas, their cut and fill sides and a graded one's batters
+	// (they're drawn anyway only where the ground is well off a level area's floor: terrain.js
+	// sideClip). Off, only the areas' floors are drawn, up to their outlines, and Google's ground
+	// beyond. Listed while there's a flatten area holding its ground.
+	layers.addLayer( 'cut-fill-sides', {
+		name: 'Cut & fill sides',
+		count: () => [ ...terrain.zones.values() ].some( zone => zone.chunks ) ? true : 0,
+		setShown: on => terrain.setSidesShown( on ),
+	} );
 	// Pits hide part of Google's mesh, which the attribution has to mention.
 	addMapEdit( () => terrain.hasCuts() );
 	terrain.onFreeformChange = () => layout.changed();

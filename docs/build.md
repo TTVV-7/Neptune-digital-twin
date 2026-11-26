@@ -232,6 +232,30 @@ flattening, the terrain and the surface so they agree):
   where a crown hangs over a batter's foot. A fill embankment's nodes are never standing: raised,
   a pad's embankment buries the trees and sheds under it, hidden and walked on as earth (a 60 × 40 m
   follow pad raised 3 m showed crowns through its fill before).
+- **Cut and fill sides** (`terrain.js` `sideClip`, the Show panel's **Cut & fill sides**). Round
+  every level area holding its floor, the earth drawn with Google's tiles was the grid's cells from
+  the last nodes inside it to the ring just outside and their outer corners: a brown band a metre
+  or so wide, in steps (saw teeth) along an area at any heading but the grid's, round every pad,
+  whether it was cut, filled or laid at the ground's height. A 5.5 × 85 m asphalt pad at heading
+  53° on the North Vancouver waterfront example, its floor 0.6 to 0.9 m below Google's ground
+  beside it (rails and ballast; rail cars along one side read 5 m up), had a saw-toothed brown
+  band all along both sides. Now what's drawn ends exactly on the outline: each node holds how far
+  inside the area it is (`chunk.clip`, negative outside), which the surface's shader reads across
+  each triangle (cut away below 0) and the mask Google's mesh is hidden by reads between nodes
+  (alpha). Both are affine across a side, so the edge is straight at any heading. The nodes inside
+  within a cell's diagonal of the outline are moved onto it, so the floor reaches it. Where the
+  ground drawn just outside (the ring, as `lipHeights` has it) is at least 1 m (`SIDE_MIN`)
+  above or below the floor, a real cut or fill, a face is drawn on its own (`faceSamples`,
+  `updateFaces`): sampled every 0.5 m round the outline, straight up along it from the floor to the
+  ground (2 cm inside, behind a surfaced pad's own sides), each sample as high as the one within
+  6 m of it whose ground is nearest the floor, so rail cars or trucks read as the ground don't
+  stand up as humps along it. (Moving the ring's nodes onto the outline instead left the grid's
+  triangles torn into teeth along a 3 m cut.)
+  Nearer than 1 m the floor meets Google's ground at its edge with no face (Google's
+  photogrammetry beside a pad is commonly half a metre or more off the ground). A graded area keeps
+  its batters. The Show panel's **Cut & fill sides** (listed while an area holds its ground) hides
+  every face and batter: only the floors are drawn, up to their outlines, with Google's ground
+  beyond; remembered in this browser with the other layers. Tests: `test:sides-ui`.
 - **Drawn over the pad.** The surface is drawn after the ground without writing depth
   (`SURFACE_ORDER`), so anything drawn before it went under it. What's placed was already drawn
   after it (`PLACED_ORDER`); now the walking character (`player.js`), a repair crew, a truck's load

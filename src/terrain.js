@@ -4,6 +4,7 @@ import {
 	BufferGeometry,
 	Color,
 	DataTexture,
+	DoubleSide,
 	EventDispatcher,
 	FloatType,
 	Group,
@@ -91,6 +92,24 @@ const LIP_TALL = 2;
 // conifer's is) is no spike of earth rising off its cut face (see edgeGround).
 const EDGE_REACH = 12;
 const EDGE_SLOPE = 0.3;
+// Round a level flatten area, a face of earth (cut or fill) is drawn only where the ground beside
+// it is at least this far (m) above or below its floor. Where it's nearer than that, the area's
+// floor is drawn up to its outline and no further, and Google's ground meets it there (see
+// sideClip): no band of earth round a pad laid at about the ground's height. Google's ground is
+// photogrammetry, read from above: beside a pad it's commonly half a metre or more off the ground
+// you'd stand on (rails and their ballast, kerbs, the mesh's own smoothing over what stands
+// there; 0.6 to 0.9 m along the rail yard at the North Vancouver waterfront), so less than a metre
+// counts as the pad laid at the ground's height. Real cuts and fills are well over it.
+const SIDE_MIN = 1;
+// What sideClip holds (m) where nothing is cut away: drawn, and Google's mesh hidden as usual.
+const CLIP_OPEN = 2;
+// A face of earth round a level area stands this far (m) inside its outline: behind a surfaced
+// pad's own sides (flatten.js), which are on it.
+const FACE_INSET = 0.02;
+// How far apart (m) the faces round a level area are sampled along its outline (updateFaces).
+const FACE_STEP = 0.5;
+// How far out (m) from an area's outline sideClip looks: past the drawn ring and its outer corners.
+const CLIP_BAND = 4 * CELL;
 // Inside the drawn earthworks, Google's mesh is hidden from this far below their surface upwards
 // (hideUnderEarthworks): what's lower is behind the surface anyway, and Google's ground at about
 // the same height would show through in patches. Raycasts ignore what is above it (covers).
@@ -298,6 +317,9 @@ class Chunk {
 		this.bare = new Float32Array( COUNT ).fill( Infinity );
 		// Nodes drawn round an area that are what stands beside it, a tree's crown or a roof (edgeLips).
 		this.standing = new Uint8Array( COUNT );
+		// Where the earth drawn round flatten areas is cut away along their outlines (sideClip): how far
+		// inside what's kept each node is (m, negative where it's cut away), CLIP_OPEN where nothing is.
+		this.clip = new Float32Array( COUNT ).fill( CLIP_OPEN );
 		// How high Google's mesh is hidden over the drawn earthworks (updateMask): up to a flatten
 		// area's 'flatten up to' height over its ground, so what stands above that (an overpass, a
 		// power line) is kept, as the flattening keeps it; Infinity elsewhere.
@@ -418,6 +440,11 @@ export class Terrain extends EventDispatcher {
 		this.onFreeformChange = null;
 		// The ground as it was is shown instead of the earthworks (setUntouched).
 		this.untouched = false;
+		// The faces of earth round flatten areas, their cut and fill sides and batters, are drawn
+		// (setSidesShown: the Show panel's 'Cut & fill sides').
+		this.sidesShown = true;
+		// How far off a level area's floor the ground beside it is before a face is drawn (SIDE_MIN).
+		this.sideMin = SIDE_MIN;
 
 		this.standIn = tiles ? null : takeOverStandIn( ground );
 		this.standInChanged = false;
@@ -444,6 +471,17 @@ export class Terrain extends EventDispatcher {
 		}
 
 		this.material = createSurfaceMaterial( this.standIn?.grid );
+		// The cut and fill faces round level flatten areas, straight up along their outlines
+		// (updateFaces): seen from either side, not walked on or clicked (the chunks are).
+		const faceMaterial = createSurfaceMaterial();
+		faceMaterial.side = DoubleSide;
+		this.faces = new Mesh( new BufferGeometry(), faceMaterial );
+		this.faces.name = 'cut and fill faces';
+		this.faces.visible = false;
+		this.faces.raycast = () => {};
+		this.faces.userData.noCollide = true;
+		this.group.add( this.faces );
+		this.facesDirty = false;
 		// Where the earthworks are drawn over Google's tiles, and their surface height there, for
 		// the tiles' shader (hideUnderEarthworks). Shared by every tile material.
 		this.mask = {
@@ -505,6 +543,17 @@ export class Terrain extends EventDispatcher {
 
 		if ( on === this.untouched ) return;
 		this.untouched = on;
+		for ( const key of this.chunks.keys() ) this.dirty.add( key );
+		this.flush();
+
+	}
+
+	// Draw the earth round flatten areas (their cut and fill sides, a graded one's batters), or
+	// only their floors, up to their outlines, with Google's ground beyond (see sideClip).
+	setSidesShown( on ) {
+
+		if ( on === this.sidesShown ) return;
+		this.sidesShown = on;
 		for ( const key of this.chunks.keys() ) this.dirty.add( key );
 		this.flush();
 
@@ -924,6 +973,7 @@ export class Terrain extends EventDispatcher {
 		this.flush();
 		this.collect( dt );
 		if ( this.tiles ) this.updateMask();
+		if ( this.tiles ) this.updateFaces();
 		this.updateStandIn();
 
 	}
@@ -2079,6 +2129,7 @@ export class Terrain extends EventDispatcher {
 		geometry.setAttribute( 'normal', new BufferAttribute( new Float32Array( COUNT * 3 ), 3 ) );
 		geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( COUNT * 3 ), 3 ) );
 		geometry.setAttribute( 'disturbed', new BufferAttribute( new Float32Array( COUNT ), 1 ) );
+		geometry.setAttribute( 'clip', new BufferAttribute( new Float32Array( COUNT ).fill( CLIP_OPEN ), 1 ) );
 		geometry.setIndex( new BufferAttribute( new Uint16Array( CELLS * CELLS * 6 ), 1 ) );
 		geometry.setDrawRange( 0, 0 );
 
@@ -2102,7 +2153,7 @@ export class Terrain extends EventDispatcher {
 
 		const { mesh, surface, base, top } = chunk;
 		const { geometry, collider } = mesh;
-		const { position, normal, color, disturbed } = geometry.attributes;
+		const { position, normal, color, disturbed, clip } = geometry.attributes;
 		const height = ( li, lj ) => {
 
 			if ( li >= 0 && li <= CELLS && lj >= 0 && lj <= CELLS ) return surface[ lj * NODES + li ];
@@ -2182,6 +2233,18 @@ export class Terrain extends EventDispatcher {
 
 		}
 
+		// Cut away along flatten areas' outlines, their faces moved onto them (sideClip).
+		const sides = this.sideClip( chunk, changed, shown );
+		this.facesDirty = true;
+		clip.array.set( sides?.clip ?? chunk.clip );
+		for ( let k = 0; k < COUNT; k ++ ) {
+
+			const moved = sides && ! Number.isNaN( sides.moves[ k * 2 ] );
+			position.array[ k * 3 ] = moved ? sides.moves[ k * 2 ] : chunk.x( k );
+			position.array[ k * 3 + 2 ] = moved ? sides.moves[ k * 2 + 1 ] : chunk.z( k );
+
+		}
+
 		this.maskDirty = true;
 		const index = geometry.index.array;
 		let n = 0;
@@ -2192,7 +2255,8 @@ export class Terrain extends EventDispatcher {
 				const k = lj * NODES + li;
 				const corners = [ k, k + 1, k + NODES, k + NODES + 1 ];
 				// The stand-in draws untouched land too (it has a gap here), but not its water.
-				const draw = shown ? corners.some( c => shown[ c ] ) : corners.every( c => changed[ c ] || base[ c ] > - 1 );
+				// (Not a cell wholly cut away round a flatten area: see sideClip.)
+				const draw = shown ? corners.some( c => shown[ c ] ) && corners.some( c => clip.array[ c ] >= 0 ) : corners.every( c => changed[ c ] || base[ c ] > - 1 );
 				if ( draw ) n = writeCell( index, n, k, chunk.flip[ lj * CELLS + li ] );
 
 			}
@@ -2200,7 +2264,7 @@ export class Terrain extends EventDispatcher {
 		}
 
 		geometry.setDrawRange( 0, n );
-		for ( const attribute of [ position, color, disturbed, geometry.index ] ) attribute.needsUpdate = true;
+		for ( const attribute of [ position, color, disturbed, clip, geometry.index ] ) attribute.needsUpdate = true;
 		geometry.computeBoundingSphere();
 		mesh.visible = n > 0;
 		if ( collider.boundsTree && ! flipped ) {
@@ -2306,13 +2370,195 @@ export class Terrain extends EventDispatcher {
 	// up or dug): the lowest within LIP_REACH, and no higher than the ground within EDGE_REACH rising
 	// at EDGE_SLOPE from there. A crown or a roof wider than LIP_REACH beside the area is read as the
 	// ground all the way across, so on its own the lowest within LIP_REACH is the crown's top.
-	edgeGround( chunk ) {
+	edgeGround( chunk, layer = 'base' ) {
 
-		const held = ( c, n ) => c.graded[ n ] ? Infinity : c.base[ n ];
+		const held = ( c, n ) => c.graded[ n ] ? Infinity : c[ layer ][ n ];
 		const lowest = crop( filterGrid( this.padded( chunk, LIP_REACH, held, Infinity ), NODES + 2 * LIP_REACH, LIP_REACH, Math.min ), LIP_REACH );
 		const rising = crop( slopeLimit( this.padded( chunk, EDGE_REACH, held, Infinity ), NODES + 2 * EDGE_REACH, EDGE_REACH, EDGE_SLOPE * CELL ), EDGE_REACH );
 		for ( let k = 0; k < COUNT; k ++ ) lowest[ k ] = Math.min( lowest[ k ], rising[ k ] );
 		return lowest;
+
+	}
+
+	// The earth drawn round flatten areas holding their ground in chunks, with Google tiles. It was
+	// the grid's cells reaching from the last nodes inside an area to the ring of nodes just outside
+	// it (shownNodes) and their outer corners: brown faces whose edges ran in steps along an area at
+	// any heading but the grid's, a band of earth a metre or so wide round every pad, cut or fill or
+	// neither. Now, round a level area, what the chunks draw ends exactly on its outline, and Google's
+	// ground begins there: chunk.clip holds how far inside it each node is (m, negative outside;
+	// CLIP_OPEN away from areas, and over what pits, piles and digging changed), which the mask mixes
+	// between nodes as it hides Google's mesh, and the surface's shader across each triangle as it
+	// draws (cut away below 0). Both are affine across a side, so the edge is straight. The nodes
+	// inside within a cell's diagonal of the outline are moved onto it, so the floor reaches it. Its
+	// cut and fill faces are drawn on their own, straight up along the outline (updateFaces). A graded
+	// area keeps its batters (they reach out to the ground) unless the sides are hidden
+	// (setSidesShown), when they're cut away along its outline too.
+	//
+	// Fills chunk.clip and returns { clip, moves }: the clip at each node where it's drawn, and the
+	// nodes moved (x, z pairs, NaN where not), or null where nothing is cut away.
+	sideClip( chunk, changed, shown ) {
+
+		const clip = chunk.clip;
+		clip.fill( CLIP_OPEN );
+		if ( ! shown || this.untouched ) return null;
+		// Round a graded area, over its batters' reach (all of them cut away with the sides hidden).
+		const reach = zone => zone.graded ? zone.bounds : rectBounds( zone.frame, CLIP_BAND );
+		const zones = [ ...this.zones.values() ].filter( zone => zone.chunks && nodeRange( chunk, reach( zone ) ) );
+		if ( zones.length === 0 ) return null;
+		// For each node, the area it's furthest inside (or least outside), and how far.
+		const inside = new Float32Array( COUNT ).fill( - Infinity );
+		const nearest = new Array( COUNT ).fill( null );
+		for ( const zone of zones ) {
+
+			this.forRange( chunk, nodeRange( chunk, reach( zone ) ), ( k, x, z ) => {
+
+				const d = insideRect( zone.frame, x, z );
+				if ( d > inside[ k ] ) {
+
+					inside[ k ] = d;
+					nearest[ k ] = zone;
+
+				}
+
+			} );
+
+		}
+
+		for ( let k = 0; k < COUNT; k ++ ) {
+
+			const d = inside[ k ];
+			if ( d === - Infinity || ( d < - CLIP_BAND && ( this.sidesShown || ! nearest[ k ].graded ) ) ) continue;
+			// Dug, piled or round a pit: drawn as it is.
+			if ( Math.abs( chunk.surface[ k ] - chunk.base[ k ] ) > DISTURBED ) continue;
+			if ( d >= 0 ) clip[ k ] = Math.min( d, CLIP_OPEN );
+			else if ( ! nearest[ k ].graded || ! this.sidesShown ) clip[ k ] = d;
+
+		}
+
+		// Onto the outline: the nodes inside a level area within a cell's diagonal of it.
+		const at = new Float32Array( clip );
+		const moves = new Float32Array( COUNT * 2 ).fill( NaN );
+		for ( let k = 0; k < COUNT; k ++ ) {
+
+			const zone = nearest[ k ];
+			if ( ! ( inside[ k ] >= 0 && inside[ k ] < CELL * Math.SQRT2 && ! zone.graded && clip[ k ] < CLIP_OPEN ) ) continue;
+			const { hw, hl } = zone.frame;
+			let [ u, v ] = zoneLocal( zone, chunk.x( k ), chunk.z( k ) );
+			if ( hw - Math.abs( u ) < hl - Math.abs( v ) ) u = Math.sign( u ) * hw;
+			else v = Math.sign( v ) * hl;
+			const [ x, z ] = zoneWorld( zone, u, v );
+			moves[ k * 2 ] = x;
+			moves[ k * 2 + 1 ] = z;
+			at[ k ] = 0;
+
+		}
+
+		return { clip: at, moves };
+
+	}
+
+	// The cut and fill faces round a level area holding its floor (with Google tiles), as samples
+	// FACE_STEP or less apart round its outline: [ { x, z, floor, off, top } ], top NaN where there's
+	// none. A face stands where the ground drawn just outside (the ring's node there, as lipHeights
+	// has it, in chunk.drawn) is at least sideMin above or below the floor: a real cut or fill.
+	// Nearer than that, the floor meets Google's ground at its edge. The ground is read from above,
+	// so beside a rail car or a parked truck it's their roofs, metres above the ground between them
+	// (and wider than edgeGround looks): where what was read stands more than LIP_TALL over what's
+	// drawn there, it's left out, and each sample's face is as high as the sample within EDGE_REACH
+	// of it round the outline whose ground is nearest the floor, so faces don't stand along it in
+	// humps (or at all, beside a row of rail cars with no ground seen between them).
+	faceSamples( zone ) {
+
+		const { hw, hl } = zone.frame;
+		const corners = [ [ - hw, - hl ], [ hw, - hl ], [ hw, hl ], [ - hw, hl ] ];
+		const samples = [];
+		for ( let c = 0; c < 4; c ++ ) {
+
+			const [ u0, v0 ] = corners[ c ], [ u1, v1 ] = corners[ ( c + 1 ) % 4 ];
+			const steps = Math.max( 1, Math.ceil( Math.hypot( u1 - u0, v1 - v0 ) / FACE_STEP ) );
+			// Outwards from this side (and from both, at a corner).
+			const nu = Math.sign( v1 - v0 ), nv = - Math.sign( u1 - u0 );
+			for ( let i = 0; i < steps; i ++ ) {
+
+				const u = u0 + ( u1 - u0 ) * i / steps, v = v0 + ( v1 - v0 ) * i / steps;
+				const [ x, z ] = zoneWorld( zone, u, v );
+				const out = i === 0 ? [ u + Math.sign( u ) * CELL, v + Math.sign( v ) * CELL ] : [ u + nu * CELL, v + nv * CELL ];
+				const [ ox, oz ] = zoneWorld( zone, ...out );
+				const a = Math.round( ox / CELL ), b = Math.round( oz / CELL );
+				const chunk = this.owner( a, b );
+				const k = chunk ? ( b - chunk.j0 ) * NODES + a - chunk.i0 : - 1;
+				// Not what's drawn down from something standing there more than LIP_TALL up (a rail car,
+				// a tree: lipHeights caps it at a guess of the ground under it, which is no cut face).
+				const usable = chunk?.drawn && ! chunk.standing[ k ] && Math.abs( chunk.surface[ k ] - chunk.base[ k ] ) <= DISTURBED && chunk.h0[ k ] - chunk.drawn[ k ] <= LIP_TALL;
+				const floor = zone.height( u, v );
+				samples.push( { x, z, floor, off: usable ? chunk.drawn[ k ] - floor : NaN, top: NaN } );
+
+			}
+
+		}
+
+		const reach = Math.round( EDGE_REACH * CELL / FACE_STEP );
+		for ( let i = 0; i < samples.length; i ++ ) {
+
+			let least = NaN;
+			for ( let j = i - reach; j <= i + reach; j ++ ) {
+
+				const o = samples[ ( j + samples.length ) % samples.length ].off;
+				if ( ! Number.isNaN( o ) && ! ( Math.abs( o ) >= Math.abs( least ) ) ) least = o;
+
+			}
+
+			if ( Math.abs( least ) >= this.sideMin ) samples[ i ].top = samples[ i ].floor + least;
+
+		}
+
+		return samples;
+
+	}
+
+	// Draw the faces round every level area holding its floor (faceSamples), with Google tiles:
+	// straight up along its outline, FACE_INSET inside it (behind a surfaced pad's own sides), in
+	// the colour of a cut or of fill, seen from either side.
+	updateFaces() {
+
+		if ( ! this.facesDirty ) return;
+		this.facesDirty = false;
+		const positions = [], colours = [];
+		const zones = this.untouched || ! this.sidesShown ? [] : [ ...this.zones.values() ].filter( zone => zone.chunks && ! zone.graded );
+		for ( const zone of zones ) {
+
+			const samples = this.faceSamples( zone );
+			const inset = ( { x, z } ) => {
+
+				const [ u, v ] = zoneLocal( zone, x, z );
+				const { hw, hl } = zone.frame;
+				return zoneWorld( zone, MathUtils.clamp( u, FACE_INSET - hw, hw - FACE_INSET ), MathUtils.clamp( v, FACE_INSET - hl, hl - FACE_INSET ) );
+
+			};
+			for ( let i = 0; i < samples.length; i ++ ) {
+
+				const a = samples[ i ], b = samples[ ( i + 1 ) % samples.length ];
+				if ( Number.isNaN( a.top ) || Number.isNaN( b.top ) ) continue;
+				const [ ax, az ] = inset( a ), [ bx, bz ] = inset( b );
+				positions.push( ax, a.floor, az, bx, b.floor, bz, bx, b.top, bz, ax, a.floor, az, bx, b.top, bz, ax, a.top, az );
+				const colour = this.palette[ a.top > a.floor ? CUT : FILL ];
+				for ( let n = 0; n < 6; n ++ ) colours.push( colour.r, colour.g, colour.b );
+
+			}
+
+		}
+
+		const mesh = this.faces;
+		mesh.geometry.dispose();
+		const geometry = new BufferGeometry();
+		const count = positions.length / 3;
+		geometry.setAttribute( 'position', new BufferAttribute( new Float32Array( positions ), 3 ) );
+		geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( colours ), 3 ) );
+		geometry.setAttribute( 'disturbed', new BufferAttribute( new Float32Array( count ).fill( 1 ), 1 ) );
+		geometry.setAttribute( 'clip', new BufferAttribute( new Float32Array( count ).fill( CLIP_OPEN ), 1 ) );
+		geometry.computeVertexNormals();
+		mesh.geometry = geometry;
+		mesh.visible = count > 0;
 
 	}
 
@@ -2493,6 +2739,8 @@ export class Terrain extends EventDispatcher {
 				if ( chunk.shown[ k ] && ! chunk.standing[ k ] ) data[ t + 1 ] = 1;
 				// Finite, as it's mixed between nodes in the shader.
 				data[ t + 2 ] = Math.min( chunk.ceiling[ k ], NO_CEILING );
+				// Where the drawn earth is cut away along a flatten area's outline (sideClip), so is the mask.
+				data[ t + 3 ] = chunk.clip[ k ];
 
 			}
 
@@ -2518,8 +2766,26 @@ export class Terrain extends EventDispatcher {
 		// hidden, so it isn't passed through either: what's seen is what's clicked and stood on.
 		const { twinCutOn, twinCutOrigin: { value: origin }, twinCutSize: { value: size } } = this.mask;
 		if ( ! twinCutOn.value || i < origin.x || j < origin.y || i >= origin.x + size.x || j >= origin.y + size.y ) return false;
+		// Cut away along a flatten area's outline, as the mask is (sideClip).
+		if ( this.clipAt( point.x, point.z ) < 0 ) return false;
 		const y = this.surfaceAt( point.x, point.z );
 		return y !== null && point.y > y + COVER_TOLERANCE && point.y < chunk.ceiling[ ( j - chunk.j0 ) * NODES + i - chunk.i0 ];
+
+	}
+
+	// chunk.clip (sideClip) at (x, z), bilinear between the four nodes round it, as the mask is.
+	clipAt( x, z ) {
+
+		const gx = x / CELL, gz = z / CELL;
+		const i = Math.floor( gx ), j = Math.floor( gz );
+		const at = ( a, b ) => {
+
+			const chunk = this.owner( a, b );
+			return chunk ? chunk.clip[ ( b - chunk.j0 ) * NODES + a - chunk.i0 ] : CLIP_OPEN;
+
+		};
+		const fx = gx - i, fz = gz - j;
+		return MathUtils.lerp( MathUtils.lerp( at( i, j ), at( i + 1, j ), fx ), MathUtils.lerp( at( i, j + 1 ), at( i + 1, j + 1 ), fx ), fz );
 
 	}
 
@@ -3183,8 +3449,9 @@ uniform vec2 twinCutSize;
 uniform float twinCutOn;
 varying vec3 vTwinWorld;
 
-// Inside the drawn earthworks (mask green) and not well below their surface (mask red),
-// bilinear between the four nodes around the point.
+// Inside the drawn earthworks (mask green), not cut away along a flatten area's outline (mask
+// alpha, Terrain.sideClip) and not well below their surface (mask red), bilinear between the four
+// nodes around the point.
 bool twinCovered( vec3 p ) {
 
 	if ( twinCutOn < 0.5 ) return false;
@@ -3193,13 +3460,13 @@ bool twinCovered( vec3 p ) {
 	if ( i.x < 0.0 || i.y < 0.0 || i.x >= twinCutSize.x - 1.0 || i.y >= twinCutSize.y - 1.0 ) return false;
 	vec2 f = g - i;
 	ivec2 c = ivec2( i );
-	vec3 a = texelFetch( twinCutTex, c, 0 ).rgb;
-	vec3 b = texelFetch( twinCutTex, c + ivec2( 1, 0 ), 0 ).rgb;
-	vec3 d = texelFetch( twinCutTex, c + ivec2( 0, 1 ), 0 ).rgb;
-	vec3 e = texelFetch( twinCutTex, c + ivec2( 1, 1 ), 0 ).rgb;
-	vec3 v = mix( mix( a, b, f.x ), mix( d, e, f.x ), f.y );
+	vec4 a = texelFetch( twinCutTex, c, 0 );
+	vec4 b = texelFetch( twinCutTex, c + ivec2( 1, 0 ), 0 );
+	vec4 d = texelFetch( twinCutTex, c + ivec2( 0, 1 ), 0 );
+	vec4 e = texelFetch( twinCutTex, c + ivec2( 1, 1 ), 0 );
+	vec4 v = mix( mix( a, b, f.x ), mix( d, e, f.x ), f.y );
 	// Below a flatten area's 'flatten up to' height (mask blue), as the flattening keeps what's above.
-	return v.g > 0.5 && p.y > v.r - ${ HIDE_BELOW.toFixed( 3 ) } && p.y < v.b;
+	return v.g > 0.5 && v.a >= 0.0 && p.y > v.r - ${ HIDE_BELOW.toFixed( 3 ) } && p.y < v.b;
 
 }
 `;
@@ -3218,8 +3485,8 @@ function createSurfaceMaterial( grid ) {
 
 		Object.assign( shader.uniforms, uniforms );
 		shader.vertexShader = shader.vertexShader
-			.replace( '#include <common>', '#include <common>\nattribute float disturbed;\nvarying float vDisturbed;\nvarying vec2 vGround;' )
-			.replace( '#include <begin_vertex>', '#include <begin_vertex>\nvDisturbed = disturbed;\nvGround = ( modelMatrix * vec4( position, 1.0 ) ).xz;' );
+			.replace( '#include <common>', '#include <common>\nattribute float disturbed;\nattribute float clip;\nvarying float vDisturbed;\nvarying float vClip;\nvarying vec2 vGround;' )
+			.replace( '#include <begin_vertex>', '#include <begin_vertex>\nvDisturbed = disturbed;\nvClip = clip;\nvGround = ( modelMatrix * vec4( position, 1.0 ) ).xz;' );
 		shader.fragmentShader = shader.fragmentShader
 			.replace( '#include <common>', [
 				'#include <common>',
@@ -3229,8 +3496,12 @@ function createSurfaceMaterial( grid ) {
 				'uniform vec3 gridColour;',
 				'uniform vec3 gridCentre;',
 				'varying float vDisturbed;',
+				'varying float vClip;',
 				'varying vec2 vGround;',
 			].join( '\n' ) )
+			// Cut away along a flatten area's outline (Terrain.sideClip): mixed across the triangle
+			// from its corners, it's a straight edge wherever the outline crosses it.
+			.replace( '#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif ( vClip < 0.0 ) discard;' )
 			.replace( '#include <color_fragment>', [
 				'#include <color_fragment>',
 				'float grain = texture2D( detailMap, vGround / 3.1 ).r * 0.6 + texture2D( detailMap, vGround / 0.73 ).r * 0.4;',
