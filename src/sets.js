@@ -256,6 +256,37 @@ export const SETS = [
 			{ item: 'light-tower-led', right: - 8, forward: 2, turn: 0 },
 		],
 	},
+	{
+		id: 'set-dwall-csm',
+		name: 'Diaphragm wall / CSM spread (trench cutter, CSM rig, desander, slurry tanks, silo, mixer, cages, crane)',
+		keywords: 'diaphragm wall slurry wall d-wall csm cutter soil mixing hydromill trench cutter bentonite desander slurry plant rebar cage crawler crane foundation',
+		members: [
+			// Guide walls along the wall line, the trench cutter and the CSM rig facing it with their
+			// cutters over the trench.
+			...[ - 12, - 6, 0, 6, 12 ].map( right => ( { item: 'guide-wall-6m', right, forward: 10, turn: 90 } ) ),
+			{ item: 'trench-cutter-bc32', right: - 6, forward: 3.3, turn: 0 },
+			{ item: 'csm-rig-bg28', right: 10, forward: 6.3, turn: 0 },
+			// The slurry plant behind: desander, two storage tanks, the bentonite silo feeding the
+			// mixer, and the pump sending slurry to the wall.
+			{ item: 'slurry-desander', right: - 15, forward: - 12, turn: 0 },
+			{ item: 'slurry-tank-40m3', right: - 9, forward: - 14, turn: 0 },
+			{ item: 'slurry-tank-40m3', right: - 4.5, forward: - 14, turn: 0 },
+			{ item: 'bentonite-silo', right: 1.5, forward: - 14, turn: 0 },
+			{ item: 'slurry-mixer-skid', right: 6, forward: - 13, turn: 0 },
+			{ item: 'grout-pump-skid', right: 9.5, forward: - 12, turn: 0 },
+			// Cages waiting on the wall's near side for the service crane to pick, the tremie rack by them.
+			{ item: 'rebar-cage-dwall', right: 0, forward: 17, turn: 90 },
+			{ item: 'rebar-cage-dwall', right: 0, forward: 20.5, turn: 90 },
+			{ item: 'tremie-pipe-rack', right: 11, forward: 18, turn: 0 },
+			{ item: 'crane-crawler', right: - 24, forward: 8, turn: 0 },
+			{ item: 'excavator-20t', right: 19, forward: 0, turn: 0 },
+			{ item: 'light-tower-led', right: - 15, forward: 3, turn: 0 },
+			{ item: 'worker-standing', right: - 2, forward: 12.5, turn: 180 },
+			{ item: 'worker-pointing', right: 3, forward: 13, turn: 200 },
+			{ item: 'worker-vest-tool-belt', right: - 10, forward: - 8.5, turn: 160 },
+			{ item: 'worker-standing', right: 4, forward: - 9.5, turn: 180 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out

@@ -21,6 +21,7 @@ import { TRUCK_ITEMS } from './truck-models.js';
 import { KART_ITEM } from './kart.js';
 import { fencePanel } from './fence-panel.js';
 import { EXTRA_ITEMS } from './site-extras.js';
+import { FOUNDATION_ITEMS } from './foundation-rigs.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -97,6 +98,8 @@ export const PROCEDURAL_ITEMS = [
 	KART_ITEM,
 	// Rail track, an indirect-fired heater with its ducts and stop signs (site-extras.js).
 	...EXTRA_ITEMS,
+	// CSM rig, trench cutter, bentonite slurry plant, rebar cages, tremie rack, guide walls (foundation-rigs.js).
+	...FOUNDATION_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
