@@ -341,7 +341,8 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   and turned whole; nothing breaks one apart (a row saved for everyone never could be).
 - **Copy, Cut, Paste, Duplicate:** **Ctrl/Cmd+C** copies what's selected (one or many), **X** cuts
   it, **V** pastes at the point on the ground under the pointer (from the edit bar, the middle of
-  the view), laid out as copied and facing as they did, each snapped to the ground there; pasting
+  the view; with the library closed, walking round, it opens the library and pastes in the middle
+  of the view), laid out as copied and facing as they did, each snapped to the ground there; pasting
   again where the last went puts the next 2 m east and 2 m south of it, so they don't stack.
   **Ctrl/Cmd+D** duplicates in place, 2 m east and south. Pasted and duplicated things are new
   items, saved with the layout like anything placed (never shared or from `config.js`), and come

@@ -1820,7 +1820,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	// Ctrl/Cmd with A, C, X, V, D, Z and Y: select all, copy, cut, paste, duplicate, undo and redo.
 	// Not while typing (a field's own copy and paste...), nor while text on the page is selected
-	// (copying that), nor driving. Paste only while building (the library open). Undo and redo work
+	// (copying that), nor driving. Paste opens the library if it's closed. Undo and redo work
 	// whenever editing, and also from a field of the item's panel: what's typed there is applied as
 	// it's typed, so the field lets go (keeping it, as one step) and that step is undone. A toast says
 	// what was undone, as it may be off screen.
@@ -1851,9 +1851,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 				cutSelection();
 				break;
 			case 'KeyV':
-				if ( busy || ! open ) return;
+				if ( busy ) return;
+				// With the library closed (walking round, the pointer captured to look) it opens, and
+				// what's pasted goes in the middle of the view.
+				if ( ! open ) {
+
+					setOpen( true );
+					startPaste( null );
+
+				} else startPaste();
 				// The browser's paste event brings the system clipboard, if it will; else this browser's.
-				startPaste();
 				break;
 			case 'KeyD':
 				if ( selection.length === 0 || busy ) return;
@@ -1903,10 +1910,10 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
-	function startPaste() {
+	function startPaste( spot = pointer ) {
 
 		clearTimeout( pasting?.timer );
-		const at = pointer ? { ...pointer } : null;
+		const at = spot ? { ...spot } : null;
 		pasting = { at, timer: setTimeout( () => {
 
 			pasting = null;

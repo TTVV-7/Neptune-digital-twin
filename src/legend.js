@@ -199,7 +199,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 			[ [ '~Drag' ], 'The round handle: rotate them about their middle' ],
 			[ [ 'R', '/', 'Shift', '+', 'R' ], 'Turn them 15°' ],
 			[ [ 'Shift', '+', `~${ click }` ], 'Add another, or take one out' ],
-			[ [ mod, '+', 'C' ], 'Copy · X cut · V paste at the pointer' ],
+			[ [ mod, '+', 'C' ], 'Copy · X cut · V paste at the pointer (opens the library)' ],
 			[ [ mod, '+', 'D' ], 'Duplicate them' ],
 			[ [ 'Delete' ], 'Delete them' ],
 			[ [ mod, '+', 'Z' ], 'Undo · Shift+Z redo' ],
