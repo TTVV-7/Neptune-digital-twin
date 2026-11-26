@@ -1812,6 +1812,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		} else if ( ( e.code === 'Delete' || e.code === 'Backspace' ) && selected && ! placing && ! handles.busy ) {
 
 			e.preventDefault();
+			// A point picked out on a flatten area shaped by its points goes, not the area (handles.js).
+			if ( ! group && handles.removePicked() ) return;
 			toolbar.remove( group ?? selected );
 
 		}

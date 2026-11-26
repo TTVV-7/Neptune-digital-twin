@@ -289,10 +289,17 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 		const points = shape === 'points';
 		// A markup's points (markups.js): always as many, so no pluses and none taken out.
 		const fixed = points && kind.resize.fixed;
+		// A flatten area shaped by its points (flatten.js): round its outline, each with a height.
+		const closed = points && kind.resize.closed;
 		return { title: `Selected: ${ entry.state.name ?? '' }`, rows: [
 			[ [ '~Drag' ], 'Move it' ],
 			...turns ? [ [ [ '~Drag' ], 'The round handle: rotate' ] ] : [],
-			...fixed ? [ [ [ '~Drag' ], 'A dot: move that point' ] ] : points ? [
+			...fixed ? [ [ [ '~Drag' ], 'A dot: move that point' ] ] : closed ? [
+				[ [ '~Drag' ], 'A dot: move that corner' ],
+				[ [ '~Drag' ], 'A plus: add a corner there (or click it)' ],
+				[ mouse ? [ '~Click', '+', 'Delete' ] : [ '~Double-tap' ], 'A dot: take that corner out' ],
+				...mouse ? [ [ [ 'Alt', '+', '~Drag' ], 'A dot up or down: its height' ] ] : [],
+			] : points ? [
 				[ [ '~Drag' ], 'A dot: move that point of the line' ],
 				[ [ '~Drag' ], 'A plus: add a point there (or click it)' ],
 				[ [ mouse ? '~Double-click' : '~Double-tap' ], 'A dot: take that point out' ],
@@ -304,7 +311,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 				[ [ 'Ctrl', '+', 'Z' ], 'Undo that (Shift for redo)' ],
 			] : [],
 			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
-			[ [ 'P' ], fixed ? 'Its words, colour and position' : points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : settings ? 'Its settings and exact position' : 'Exact position' ],
+			[ [ 'P' ], fixed ? 'Its words, colour and position' : closed ? 'Surface, ground, heights at its corners' : points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : settings ? 'Its settings and exact position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
 			[ [ 'Shift', '+', `~${ click }` ], 'Another: select it too' ],
 			[ [ mod, '+', 'C' ], 'Copy · D duplicate · Z undo' ],

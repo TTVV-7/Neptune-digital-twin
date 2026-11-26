@@ -5,6 +5,7 @@ import { salesOn } from './billing.js';
 import { search } from './search.js';
 import { VIEW_PIXELS, base64, siteView, tilesKey } from './site-view.js';
 import CATALOG from './build-catalog.json' with { type: 'json' };
+import { MAX_POINTS, MIN_POINTS, isSimple, polygonArea } from '../../src/polygon.js';
 
 // World Drive Build's MCP server (worlddrive.app/mcp, docs/build.md): Claude (or any MCP client)
 // connected to someone's World Drive account through OAuth (oauth.js) lays out their construction
@@ -38,9 +39,12 @@ const FENCES = Object.keys( FENCE_NAMES );
 // src/flatten.js's surfaces (gravel is road base).
 const SURFACES = [ 'gravel', 'clear-crush', 'pea-gravel', 'drain-rock', 'crusher-dust', 'pit-run', 'recycled-concrete', 'rip-rap', 'millings', 'asphalt', 'concrete', 'none' ];
 // src/grade.js's grades, and what each takes.
-const GRADES = [ 'level', 'follow', 'plane', 'slope', 'ridge', 'valley', 'terraces' ];
+const GRADES = [ 'level', 'follow', 'plane', 'slope', 'ridge', 'valley', 'terraces', 'points' ];
 const TOWARD = [ 'front', 'back', 'left', 'right' ];
 const BATTERS = [ 1.5, 2, 3 ];
+// How high or low a flatten area's point can be set from the area's height (src/flatten.js's
+// POINT_HEIGHT), m.
+const POINT_HEIGHT = 50;
 // What a flatten area keeps overhead (src/flatten.js's KEEPS).
 const KEEPS = [ 'off', 'auto', 'height' ];
 // Pieces placed touching end to end in a row; anything else a metre apart.
@@ -191,8 +195,8 @@ const TOOLS = [
 		run: placeRow,
 	},
 	{
-		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat), grade it and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none. Graded (anything but level), its edges meet the ground on batters: an embankment where it\'s built up, a cut slope where it\'s dug in; over 300 m wide or long it is only pressed down onto its shape, with no batters. Under a bridge, viaduct, overpass or canopy, keep_overhead keeps what passes over it: auto keeps what has open space under it (a deck, a canopy, and the pillars under it) and clears the rest, hiding the walls Google\'s 3D map hangs from a deck\'s edge; height keeps everything higher than keep_above m over the area\'s floor.',
-		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' }, grade: { type: 'string', enum: GRADES, default: 'follow', description: 'level (dead flat: at the ground\'s usual height under it when surfaced, down to the lowest ground under it with surface none), follow (a smoothed copy of the bare ground: follows the grade as it changes across the area, with what stands on it, bumps and debris taken away, smoothed over `smoothing` m; max_grade caps it), plane (one best-fit slope through the ground, as follow was before; max_grade caps it), slope (one plane falling `fall` % toward a side), ridge (a crown down the middle falling `fall` % to both sides), valley (a swale down the middle), terraces (`steps` level benches down the ground\'s slope)' }, fall: { type: 'number', minimum: 0.5, maximum: 20, default: 2, description: '%, for slope, ridge and valley' }, toward: { type: 'string', enum: TOWARD, default: 'front', description: 'the side a slope falls toward (front is the way it faces)' }, ridge_along: { type: 'string', enum: [ 'length', 'width' ], default: 'length', description: 'which way a ridge or valley runs' }, steps: { type: 'integer', minimum: 2, maximum: 8, default: 3, description: 'benches, for terraces' }, smoothing: { type: 'number', minimum: 2, maximum: 50, default: 10, description: 'm a follow area\'s ground is smoothed over: small hugs the ground, large is gentle' }, max_grade: { type: 'number', minimum: 0, maximum: 50, default: 0, description: '% steepest a follow or plane area may be anywhere, 0 for as steep as the ground' }, batter: { type: 'number', enum: BATTERS, default: 2, description: 'edge batters, horizontal to 1 vertical' }, keep_overhead: { type: 'string', enum: KEEPS, default: 'off', description: 'what passing over the area is kept: off (everything above the floor is flattened), auto (what has open space under it at least 2.5 m up: a bridge deck, a viaduct, a canopy, and its pillars), height (everything higher than keep_above)' }, keep_above: { type: 'number', minimum: 0.5, maximum: 200, default: 5, description: 'm above the area\'s floor, for keep_overhead height' }, raise: { type: 'number', minimum: - 30, maximum: 30, default: 0, description: 'm to raise (positive) or lower (negative) the whole finished area, every shape and its batters, from the ground\'s height it otherwise takes; it keeps this wherever it\'s moved' }, finished_height: { type: 'number', minimum: - 500, maximum: 9000, description: 'an exact finished height instead of raise: m above the project site\'s origin, as the editor\'s "up" (it stays there wherever it\'s moved)' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
+		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle (east, north, width, length) or any other shape (points: its corners in order, 3 to 50, no edges crossing) of the 3D map (what\'s there is pressed flat), grade it and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none. Graded (anything but level), its edges meet the ground on batters: an embankment where it\'s built up, a cut slope where it\'s dug in; over 300 m wide or long it is only pressed down onto its shape, with no batters. Under a bridge, viaduct, overpass or canopy, keep_overhead keeps what passes over it: auto keeps what has open space under it (a deck, a canopy, and the pillars under it) and clears the rest, hiding the walls Google\'s 3D map hangs from a deck\'s edge; height keeps everything higher than keep_above m over the area\'s floor. Your own slopes: give points an up each (m above or below the area\'s own height, the ground\'s height it snaps to plus any raise) and grade points: the ground is the triangles between the points, each a plane through the heights at its corners; a point without one takes the plane through those that have one.',
+		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading (a rectangle)' }, length: { type: 'number', description: 'm, along its heading (a rectangle)' }, points: { type: 'array', minItems: MIN_POINTS, maxItems: MAX_POINTS, description: 'instead of east, north, width and length: the area\'s corners in order round it (any shape, edges not crossing), metres east and north of the site point, each with an optional up (m from the area\'s height) for grade points', items: { type: 'object', properties: { east: { type: 'number' }, north: { type: 'number' }, up: { type: 'number', minimum: - POINT_HEIGHT, maximum: POINT_HEIGHT } }, required: [ 'east', 'north' ] } }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' }, grade: { type: 'string', enum: GRADES, default: 'follow', description: 'level (dead flat: at the ground\'s usual height under it when surfaced, down to the lowest ground under it with surface none), follow (a smoothed copy of the bare ground: follows the grade as it changes across the area, with what stands on it, bumps and debris taken away, smoothed over `smoothing` m; max_grade caps it), plane (one best-fit slope through the ground, as follow was before; max_grade caps it), slope (one plane falling `fall` % toward a side), ridge (a crown down the middle falling `fall` % to both sides), valley (a swale down the middle), terraces (`steps` level benches down the ground\'s slope), points (your own slopes: the heights given at its points, the default when any point has an up)' }, fall: { type: 'number', minimum: 0.5, maximum: 20, default: 2, description: '%, for slope, ridge and valley' }, toward: { type: 'string', enum: TOWARD, default: 'front', description: 'the side a slope falls toward (front is the way it faces)' }, ridge_along: { type: 'string', enum: [ 'length', 'width' ], default: 'length', description: 'which way a ridge or valley runs' }, steps: { type: 'integer', minimum: 2, maximum: 8, default: 3, description: 'benches, for terraces' }, smoothing: { type: 'number', minimum: 2, maximum: 50, default: 10, description: 'm a follow area\'s ground is smoothed over: small hugs the ground, large is gentle' }, max_grade: { type: 'number', minimum: 0, maximum: 50, default: 0, description: '% steepest a follow or plane area may be anywhere, 0 for as steep as the ground' }, batter: { type: 'number', enum: BATTERS, default: 2, description: 'edge batters, horizontal to 1 vertical' }, keep_overhead: { type: 'string', enum: KEEPS, default: 'off', description: 'what passing over the area is kept: off (everything above the floor is flattened), auto (what has open space under it at least 2.5 m up: a bridge deck, a viaduct, a canopy, and its pillars), height (everything higher than keep_above)' }, keep_above: { type: 'number', minimum: 0.5, maximum: 200, default: 5, description: 'm above the area\'s floor, for keep_overhead height' }, raise: { type: 'number', minimum: - 30, maximum: 30, default: 0, description: 'm to raise (positive) or lower (negative) the whole finished area, every shape and its batters, from the ground\'s height it otherwise takes; it keeps this wherever it\'s moved' }, finished_height: { type: 'number', minimum: - 500, maximum: 9000, description: 'an exact finished height instead of raise: m above the project site\'s origin, as the editor\'s "up" (it stays there wherever it\'s moved)' } }, required: [ 'project_id' ] },
 		run: addFlatten,
 	},
 	{
@@ -391,6 +395,8 @@ function describe( item, index ) {
 	const known = ITEMS.get( item.library );
 	const out = { index, item: item.library ?? item.kind ?? null, name: item.name ?? known?.name ?? item.kind, east: item.east, north: item.north, heading: item.heading ?? 0 };
 	if ( item.kind && item.params ) out.params = item.params;
+	// A flatten area shaped by its points: where they are on the site, as add_flatten_area takes them.
+	if ( item.kind === 'flatten-zone' && Array.isArray( item.params?.points ) && Number.isFinite( item.east ) && Number.isFinite( item.north ) ) out.points = pointsOut( item );
 	// A dimension's length (or height) as its label in the editor says it.
 	const [ a, b ] = item.kind === 'markup' && item.params?.type === 'dimension' && Array.isArray( item.params.points ) ? item.params.points : [];
 	if ( a && b ) out.measures = `${ ( item.params.vertical ? Math.abs( ( b[ 2 ] ?? 0 ) - ( a[ 2 ] ?? 0 ) ) : Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] ) ).toFixed( 1 ) } m`;
@@ -751,17 +757,82 @@ async function addFlatten( context, args ) {
 	const surface = SURFACES.includes( args.surface ) ? args.surface : 'gravel';
 	const fence = FENCES.includes( args.fence ) ? args.fence : 'none';
 	const gates = fence === 'none' ? 0 : Math.min( 8, Math.max( 0, Math.round( Number( args.entrances ) || 0 ) ) );
-	const grading = gradeOf( args );
+	const heading = turned( args.heading );
+	const shape = args.points === undefined || args.points === null ? null : shapeOf( args.points, heading );
+	// Heights given at its points: graded by them, unless another grade is asked for.
+	const grading = gradeOf( shape?.heights && args.grade === undefined ? { ...args, grade: 'points' } : args );
 	const overhead = keepOf( args );
 	const height = heightOf( args );
-	const params = { width: size( args.width, 'width', 2000 ), length: size( args.length, 'length', 2000 ), height: overhead.height, ...overhead.params, ...height.params, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params };
-	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
+	const box = shape ? { width: shape.width, length: shape.length } : { width: size( args.width, 'width', 2000 ), length: size( args.length, 'length', 2000 ) };
+	const params = { ...box, height: overhead.height, ...overhead.params, ...height.params, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params, ...( shape ? { points: shape.points } : {} ) };
+	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...( shape ? { east: shape.east, north: shape.north } : where( args ) ), up: null, heading, scale: 1 };
 	return await change( context, args.project_id, layout => {
 
 		layout.items.push( config );
-		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }, ${ grading.text }${ height.text }${ overhead.text }.`;
+		return `Flattened ${ shape ? `a ${ shape.points.length }-point area of ${ Math.round( polygonArea( shape.points ) ).toLocaleString( 'en-CA' ) } m² (${ params.width } × ${ params.length } m across)` : `${ params.width } × ${ params.length } m` }${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }, ${ grading.text }${ height.text }${ overhead.text }.`;
 
 	} );
+
+}
+
+// A flatten area shaped by its points (src/flatten.js's points), from [ { east, north, up? } ] in the
+// site's frame: its middle (the box round them, as the editor keeps it), and each point [ east,
+// north, height? ] from there as if it faced north (turned back by its heading), to the
+// centimetre. Refused unless there are 3 to 50, no edge crosses another and it's no more than
+// 2000 m across.
+function shapeOf( list, heading ) {
+
+	if ( ! Array.isArray( list ) || list.length < MIN_POINTS || list.length > MAX_POINTS ) throw new ToolError( `points: ${ MIN_POINTS } to ${ MAX_POINTS } corners, in order round the area` );
+	const given = list.map( ( p, i ) => {
+
+		if ( ! p || typeof p !== 'object' ) throw new ToolError( `points[ ${ i } ]: { east, north, up? }` );
+		const at = { east: number( p.east, `points[ ${ i } ].east`, { min: - 20000, max: 20000 } ), north: number( p.north, `points[ ${ i } ].north`, { min: - 20000, max: 20000 } ) };
+		if ( p.up !== undefined && p.up !== null ) at.up = round( number( p.up, `points[ ${ i } ].up`, { min: - POINT_HEIGHT, max: POINT_HEIGHT } ) );
+		return at;
+
+	} );
+	const span = k => Math.max( ...given.map( p => p[ k ] ) ) - Math.min( ...given.map( p => p[ k ] ) );
+	const middle = k => round( ( Math.max( ...given.map( p => p[ k ] ) ) + Math.min( ...given.map( p => p[ k ] ) ) ) / 2 );
+	const east = middle( 'east' ), north = middle( 'north' );
+	const r = heading * Math.PI / 180;
+	const cos = Math.cos( r ), sin = Math.sin( r );
+	const points = given.map( p => {
+
+		const de = p.east - east, dn = p.north - north;
+		const at = [ round( de * cos - dn * sin ), round( de * sin + dn * cos ) ];
+		return p.up === undefined ? at : [ ...at, p.up ];
+
+	} );
+	if ( ! isSimple( points ) ) throw new ToolError( 'points: the edges cross (or two corners are in the same place); give the corners in order round the area' );
+	const across = k => round( Math.max( ...points.map( p => p[ k ] ) ) - Math.min( ...points.map( p => p[ k ] ) ) );
+	const width = across( 0 ), length = across( 1 );
+	if ( Math.max( width, length, span( 'east' ), span( 'north' ) ) > 2000 ) throw new ToolError( 'points: an area is no more than 2000 m across' );
+	if ( polygonArea( points ) < 1 ) throw new ToolError( 'points: the area is too small (under 1 m²)' );
+	// Turned, the box round them has its middle somewhere else: set it there, as the editor does.
+	const mu = ( Math.max( ...points.map( p => p[ 0 ] ) ) + Math.min( ...points.map( p => p[ 0 ] ) ) ) / 2;
+	const mv = ( Math.max( ...points.map( p => p[ 1 ] ) ) + Math.min( ...points.map( p => p[ 1 ] ) ) ) / 2;
+	return {
+		east: round( east + mu * cos + mv * sin ),
+		north: round( north - mu * sin + mv * cos ),
+		points: points.map( ( [ u, v, ...rest ] ) => [ round( u - mu ), round( v - mv ), ...rest ] ),
+		width: Math.max( 1, width ),
+		length: Math.max( 1, length ),
+		heights: given.some( p => p.up !== undefined ),
+	};
+
+}
+
+// A flatten area shaped by its points, as get_project gives them: each { east, north } in the site's
+// frame, with up where it has a height (m from the area's height).
+function pointsOut( item ) {
+
+	const r = ( item.heading ?? 0 ) * Math.PI / 180;
+	const cos = Math.cos( r ), sin = Math.sin( r );
+	return item.params.points.map( ( [ e, n, h ] ) => ( {
+		east: round( item.east + e * cos + n * sin ),
+		north: round( item.north - e * sin + n * cos ),
+		...( Number.isFinite( h ) ? { up: h } : {} ),
+	} ) );
 
 }
 
@@ -821,6 +892,12 @@ function gradeOf( args ) {
 
 		params.steps = Math.round( clamp( args.steps, 'steps', 2, 8, 3 ) );
 		text = `in ${ params.steps } terraces`;
+
+	} else if ( grade === 'points' ) {
+
+		// (A rectangle graded by points is shaped by its four corners, with no heights yet: level
+		// until some are set in the editor.)
+		text = 'graded through the heights at its points';
 
 	} else {
 

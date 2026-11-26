@@ -539,7 +539,11 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
   of large triangles, and ones that cross the edge slope up to the uncleared side. Areas show as red
   boxes while the library is open (the Show panel hides them); select one to move, turn, resize or
   delete it, which brings the original back, and **B** shows the original everywhere for a moment.
-  It only changes what this app draws; Google's data isn't touched.
+  It only changes what this app draws; Google's data isn't touched. Its P panel's **shape: by points
+  (any shape)** makes it a triangle, an L or any other outline: drag its corners, click the plus on
+  an edge to add one, click a corner and press Delete to take it out (edges never cross); give the
+  corners heights (or Alt-drag them up and down) and its ground **by points** slopes through them,
+  batters and all (docs/build.md, *Flatten areas: any shape, by its points*).
   - **Surface:** a flattened area is laid with **gravel** to start, so it reads as a finished pad
     instead of Google's photo of what stood there, pressed flat. Its P panel (and the selection's
     Size editor) switches it to **asphalt**, **concrete** or **none (just flatten)**, and the next

@@ -11,7 +11,11 @@ import { setFromView } from './view-ray.js';
 // front of it to turn it, and for areas (kinds with `resize`, see kinds.js) squares on the corners
 // and edges to resize them, one on the edge of a round pile, and an arrow in the middle of a pit to
 // set its depth. A row of items (rows.js) has a dot on each point of its line to move it, a plus
-// halfway along each stretch to add a point there, and its line drawn through them. The handles
+// halfway along each stretch to add a point there, and its line drawn through them. A flatten area
+// shaped by its points (flatten.js, resize.closed) is the same round its outline, the last point
+// joined to the first: a click picks a point out and Delete takes it out (leaving at least three),
+// Alt-dragging a point up or down sets its height, and a drag that would make edges cross isn't
+// taken (resize.valid). The handles
 // are elements over the canvas, so they are the same size on screen at any distance, stay on top
 // of the map and the models, and a press on one never reaches the scene (where it would move the
 // item instead). The ring and the outlines are lines drawn over everything.
@@ -23,9 +27,12 @@ const SIZE_STEP = 0.5;
 const FREE_STEP = 0.1;
 const DEPTH_STEP = 0.1;
 const DEPTH_FREE = 0.01;
-// A flatten area's raise snaps to RAISE_STEP metres, or to RAISE_FREE with Shift.
+// A flatten area's raise snaps to RAISE_STEP metres, or to RAISE_FREE with Shift; so does a
+// point's height dragged with Alt.
 const RAISE_STEP = 0.05;
 const RAISE_FREE = 0.01;
+// How long (ms) a word on why a point can't be taken out stays.
+const NOTICE_TIME = 1600;
 // Dragging the depth arrow takes at least this many pixels per metre.
 const MIN_PER_METRE = 16;
 // Shift snaps the knob to this many degrees; otherwise it turns in whole degrees.
@@ -136,6 +143,10 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 		: { type, index: i, className: 'insert', html: INSERT_ICON, title: 'Drag, or click, to add a point here' } );
 	// The last click on a point, to tell a double-click: { entry, index, time }.
 	let lastClick = null;
+	// The point picked out by a click on a closed outline's (a flatten area's), which Delete takes
+	// out: { entry, index }, or null.
+	let picked = null;
+	let noticeTimer = 0;
 
 	// The ring (a dark halo under a light line, to show on bright concrete and dark water alike),
 	// the accent arc either side of the knob, the outline a resize will give, the floor of a pit
@@ -197,8 +208,15 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 		};
 		if ( handle.type !== 'raise' ) onPress( target );
 		if ( handle.type === 'depth' || handle.type === 'raise' ) measureDepthDrag( drag );
-		// A point is moved on a level plane through where it is, rather than the item's base.
+		// A point is moved on a level plane through where it is, rather than the item's base. With Alt
+		// (a kind that keeps a height at each point), it's raised or lowered instead, as the raise arrow.
 		if ( handle.type === 'point' || handle.type === 'insert' ) drag.base = handle.world.y;
+		if ( handle.type === 'point' && e.altKey && drag.kind.resize.pointHeight ) {
+
+			drag.height = drag.kind.resize.pointHeight( params, handle.index );
+			measureDepthDrag( drag );
+
+		}
 		root.classList.add( 'dragging' );
 		handle.element.classList.add( 'active' );
 		showLabel( e, handle.type === 'turn' ? `${ Math.round( state.heading ) }°` : handle.type === 'raise' ? drag.kind.resize.raiseLabel( params, target ) : drag.kind.resize.label( params, state.heading ) );
@@ -243,6 +261,19 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 		}
 
+		if ( handle.type === 'point' && drag.height !== undefined ) {
+
+			// Up the screen raises the point, as the raise arrow does the area.
+			const { axis, perMetre } = drag;
+			const down = ( e.clientX - drag.press.x ) * axis.x + ( e.clientY - drag.press.y ) * axis.y;
+			const height = snap( drag.height - down / perMetre, e.shiftKey ? RAISE_FREE : RAISE_STEP );
+			const list = kind.resize.points( start.params ).map( ( p, i ) => i === handle.index ? [ p[ 0 ], p[ 1 ], height ] : p );
+			setDraft( e, withPoints( list, drag, handle.index, true ) );
+			showLabel( e, `point ${ handle.index + 1 }: ${ height > 0 ? '+' : height < 0 ? '−' : '±' }${ Math.abs( height ).toFixed( 2 ) } m` );
+			return;
+
+		}
+
 		const point = planePoint( e.clientX, e.clientY, drag.base );
 		if ( ! point ) return;
 		const de = - point.x - start.east;
@@ -274,7 +305,8 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 			const list = kind.resize.points( start.params );
 			// A loop's first point is its last too: they move together, so it stays closed.
 			const moves = i => i === handle.index || ( handle.index === 0 && i === list.length - 1 && isLoop( list, kind ) );
-			const next = handle.type === 'point' ? list.map( ( p, i ) => moves( i ) ? at : p ) : [ ...list.slice( 0, handle.index + 1 ), at, ...list.slice( handle.index + 1 ) ];
+			// (What else a point keeps, a flatten area's height there, goes with it.)
+			const next = handle.type === 'point' ? list.map( ( p, i ) => moves( i ) ? [ ...at, ...p.slice( 2 ) ] : p ) : [ ...list.slice( 0, handle.index + 1 ), at, ...list.slice( handle.index + 1 ) ];
 			setDraft( e, withPoints( next, drag, handle.type === 'point' ? handle.index : - 1 ) );
 			return;
 
@@ -316,6 +348,14 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 	function setDraft( e, draft ) {
 
+		// A shape the kind won't have (an outline whose edges cross): the last one stands.
+		if ( drag.kind.resize.valid && ! drag.kind.resize.valid( draft.params ) ) {
+
+			showLabel( e, 'Edges can\'t cross: move it back' );
+			return;
+
+		}
+
 		drag.draft = draft;
 		// The heading too, for what's said by the compass (a graded area's downhill side).
 		showLabel( e, drag.handle.type === 'raise' ? drag.kind.resize.raiseLabel( draft.params, drag.entry ) : drag.kind.resize.label( draft.params, draft.heading ?? drag.entry.state.heading ) );
@@ -355,35 +395,103 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 	}
 
 	// A click on a plus adds a point there; a second click on a point straight after the first
-	// takes it out, leaving at least two.
+	// takes it out, leaving at least two (three round a closed outline). A click on a point of a
+	// closed outline picks it out, for Delete. Each change is a step (onPress before, onEnd after).
 	function clickPoint( handle ) {
 
 		const { entry, kind, start } = drag;
 		end();
-		onEnd( entry );
 		const list = kind.resize.points( start.params );
 		const now = performance.now();
+		const least = kind.resize.closed ? 3 : 2;
+		const change = points => {
+
+			const next = withPoints( points, { entry, kind, start } );
+			if ( ! kind.resize.valid || kind.resize.valid( next.params ) ) place( entry, next );
+
+		};
 		if ( handle.type === 'insert' ) {
 
-			const [ a, b ] = [ list[ handle.index ], list[ handle.index + 1 ] ];
+			const [ a, b ] = [ list[ handle.index ], list[ ( handle.index + 1 ) % list.length ] ];
 			const middle = [ ( a[ 0 ] + b[ 0 ] ) / 2, ( a[ 1 ] + b[ 1 ] ) / 2 ];
-			place( entry, withPoints( [ ...list.slice( 0, handle.index + 1 ), middle, ...list.slice( handle.index + 1 ) ], { entry, kind, start } ) );
+			change( [ ...list.slice( 0, handle.index + 1 ), middle, ...list.slice( handle.index + 1 ) ] );
 			lastClick = null;
+			picked = null;
 
 		} else if ( ! kind.resize.fixed && lastClick?.entry === entry && lastClick.index === handle.index && now - lastClick.time < DOUBLE_CLICK ) {
 
 			lastClick = null;
-			if ( list.length > 2 ) place( entry, withPoints( withoutPoint( list, handle.index ), { entry, kind, start } ) );
+			picked = null;
+			if ( list.length > least ) change( withoutPoint( list, handle.index, kind ) );
 
-		} else lastClick = { entry, index: handle.index, time: now };
+		} else {
+
+			lastClick = { entry, index: handle.index, time: now };
+			if ( kind.resize.closed ) picked = picked?.entry === entry && picked.index === handle.index ? null : { entry, index: handle.index };
+
+		}
+
+		onEnd( entry );
+
+	}
+
+	// Take out the point picked out on the selected item (Delete): true if there was one, whether
+	// or not it could go (it can't with only three left, or if the edges would cross without it).
+	function removePicked() {
+
+		if ( ! picked || drag || picked.entry !== target ) return false;
+		const entry = target;
+		const kind = getKind( entry.kind );
+		const list = kind.resize.points( entry.params );
+		const { index } = picked;
+		const handle = points[ index ];
+		const notice = text => {
+
+			showLabel( { clientX: handle?.screen.x ?? 0, clientY: handle?.screen.y ?? 0 }, text );
+			clearTimeout( noticeTimer );
+			noticeTimer = setTimeout( () => {
+
+				if ( ! drag ) label.hidden = true;
+
+			}, NOTICE_TIME );
+
+		};
+		if ( index >= list.length ) {
+
+			picked = null;
+			return false;
+
+		}
+
+		if ( list.length <= 3 ) {
+
+			notice( 'An area keeps at least 3 points' );
+			return true;
+
+		}
+
+		const start = { east: entry.state.east, north: entry.state.north, heading: entry.state.heading, params: { ...entry.params } };
+		const next = withPoints( withoutPoint( list, index, kind ), { kind, start } );
+		if ( kind.resize.valid && ! kind.resize.valid( next.params ) ) {
+
+			notice( 'Without it the edges would cross' );
+			return true;
+
+		}
+
+		onPress( entry );
+		place( entry, next );
+		onEnd( entry );
+		picked = null;
+		return true;
 
 	}
 
 	// The points without one. A loop (a fence round an area) stays closed, its first point its last,
 	// unless too few are left for one.
-	function withoutPoint( list, index ) {
+	function withoutPoint( list, index, kind = null ) {
 
-		if ( ! isLoop( list ) ) return list.filter( ( _, i ) => i !== index );
+		if ( ! isLoop( list, kind ) ) return list.filter( ( _, i ) => i !== index );
 		const ring = list.slice( 0, - 1 ).filter( ( _, i ) => i !== index );
 		return ring.length >= 3 ? [ ...ring, ring[ 0 ] ] : ring;
 
@@ -393,7 +501,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 	// middle of them so that it keeps turning about its middle. The drag's kind and start, or another's.
 	// `moved`: the index of the point dragged, for kinds that keep more about each point (a markup's
 	// height and what it's pinned to, markups.js), -1 for none.
-	function withPoints( list, { kind, start } = drag, moved = - 1 ) {
+	function withPoints( list, { kind, start } = drag, moved = - 1, height = false ) {
 
 		const middle = [ 0, 1 ].map( k => ( Math.min( ...list.map( p => p[ k ] ) ) + Math.max( ...list.map( p => p[ k ] ) ) ) / 2 );
 		const rad = start.heading * DEG;
@@ -403,7 +511,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 			east: round( start.east + middle[ 0 ] * cos + middle[ 1 ] * sin ),
 			north: round( start.north - middle[ 0 ] * sin + middle[ 1 ] * cos ),
 			heading: start.heading,
-			params: kindParams( kind, kind.resize.withPoints( start.params, list.map( ( [ e, n ] ) => [ round( e - middle[ 0 ] ), round( n - middle[ 1 ] ) ] ), { moved } ) ),
+			params: kindParams( kind, kind.resize.withPoints( start.params, list.map( ( [ e, n, ...rest ] ) => [ round( e - middle[ 0 ] ), round( n - middle[ 1 ] ), ...rest ] ), { moved, height } ) ),
 		};
 
 	}
@@ -475,6 +583,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 	function update( entry, box ) {
 
 		if ( entry !== target && drag ) cancel();
+		if ( entry !== target ) picked = null;
 		target = entry;
 		root.hidden = ! entry;
 		for ( const line of lines ) line.visible = false;
@@ -634,19 +743,25 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 		const adding = drag?.handle.type === 'insert' ? drag.handle.index + 1 : - 1;
 		// A loop's last point is its first: one dot for both, the first's.
 		const shut = isLoop( line, kind ) ? line.length - 1 : - 1;
+		// A closed outline (a flatten area's) joins its last point to its first without repeating it.
+		const closed = !! kind?.resize?.closed && line.length > 2;
+		if ( picked && ( picked.entry !== entry || picked.index >= line.length ) ) picked = null;
 		for ( const handle of [ ...points, ...inserts ] ) handle.active = false;
 		line.forEach( ( [ e, n ], i ) => {
 
 			const handle = pointHandle( points, i, 'point' );
 			handle.active = i !== adding && i !== shut;
+			const title = closed ? 'Drag to move this point, Alt-drag up or down to set its height. Click it and press Delete to take it out' : 'Drag to move this point. Double-click to take it out';
+			if ( handle.element.title !== title ) handle.element.title = title;
+			handle.element.classList.toggle( 'selected', picked?.index === i );
 			handle.world.set( - at.east, entry.state.up + ( heights?.[ i ] ?? 0 ), at.north ).addScaledVector( right, e ).addScaledVector( front, n );
 			toScreen( handle.world, camera, rect, handle.screen );
 
 		} );
-		for ( let i = 0; i < line.length - 1; i ++ ) {
+		for ( let i = 0; i < line.length - ( closed ? 0 : 1 ); i ++ ) {
 
 			const handle = pointHandle( inserts, i, 'insert' );
-			const [ a, b ] = [ points[ i ], points[ i + 1 ] ];
+			const [ a, b ] = [ points[ i ], points[ ( i + 1 ) % line.length ] ];
 			if ( drag?.handle === handle ) handle.world.copy( points[ adding ].world );
 			else handle.world.addVectors( a.world, b.world ).multiplyScalar( 0.5 );
 			toScreen( handle.world, camera, rect, handle.screen );
@@ -656,7 +771,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 		}
 
 		if ( line.length < 2 ) return;
-		const positions = line.flatMap( ( _, i ) => [ points[ i ].world.x, points[ i ].world.y + LIFT, points[ i ].world.z ] );
+		const positions = [ ...line.keys(), ...( closed ? [ 0 ] : [] ) ].flatMap( i => [ points[ i ].world.x, points[ i ].world.y + LIFT, points[ i ].world.z ] );
 		const key = positions.map( v => v.toFixed( 2 ) ).join();
 		if ( key !== pathKey ) {
 
@@ -719,6 +834,13 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 		update,
 		cancel,
+		removePicked,
+		// The point picked out (a click on a flatten area's), as { index }, or null (for tests).
+		get picked() {
+
+			return picked && picked.entry === target ? { index: picked.index } : null;
+
+		},
 		// A handle is being dragged.
 		get busy() {
 
@@ -779,10 +901,11 @@ function resizeCursor( dx, dy ) {
 }
 
 // Whether points ([ east, north ]) end where they start: a loop, such as a fence round an area.
-// Never for a kind with a fixed number of points (a markup).
+// Never for a kind with a fixed number of points (a markup), nor for a closed outline (a flatten
+// area's), which joins its last point to its first without repeating it.
 function isLoop( list, kind = null ) {
 
-	return ! kind?.resize?.fixed && list.length > 3 && Math.hypot( list[ 0 ][ 0 ] - list[ list.length - 1 ][ 0 ], list[ 0 ][ 1 ] - list[ list.length - 1 ][ 1 ] ) < 0.05;
+	return ! kind?.resize?.fixed && ! kind?.resize?.closed && list.length > 3 && Math.hypot( list[ 0 ][ 0 ] - list[ list.length - 1 ][ 0 ], list[ 0 ][ 1 ] - list[ list.length - 1 ][ 1 ] ) < 0.05;
 
 }
 
