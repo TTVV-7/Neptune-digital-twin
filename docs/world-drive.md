@@ -8466,6 +8466,7 @@ Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler
 | Secret | What it is |
 | --- | --- |
 | `GOOGLE_MAPS_API_KEY` | The Maps key from World Drive's own Google Cloud project (below). A secret named `Google_maps_api`, in any case, is taken too. |
+| `GOOGLE_TILES_KEY` | Optional: a key for World Drive Build's `view_site` satellite pictures alone (Map Tiles API); unset, they use the Maps key |
 | `TURNSTILE_SECRET` | The Turnstile widget's secret key |
 | `STRIPE_WEBHOOK_SECRET` | The Supporter Pass webhook's signing secret, `whsec_...`; buying stays off without it |
 | `SUPPORTER_EMAILS` | Optional, comma-separated: people with the pass without paying |
@@ -9089,13 +9090,20 @@ Keep World Drive's key apart from the construction app's, so its limits and its 
    - Application restrictions: **Websites**, with `https://worlddrive.app/*` and
      `https://www.worlddrive.app/*`. (A copied key then doesn't work from other sites.)
    - API restrictions: **Restrict key** → **Map Tiles API** only.
+
+   World Drive Build's Claude connector uses the same key from the Worker for `view_site`'s
+   satellite pictures (the Map Tiles API's 2D tiles, docs/build.md), sending
+   `Referer: https://worlddrive.app/build/app/` so the Websites restriction lets it through. To keep
+   those apart (their own limits and bill), make a second key restricted to the Map Tiles API
+   alone and set it as the secret `GOOGLE_TILES_KEY`.
 4. **A daily quota cap.** APIs & Services → Map Tiles API → **Quotas & system limits**: lower the
    per-day limit on 3D Tiles root tileset requests (the sessions) to well over `DAILY_VISITS`,
    which supporters' drives aren't counted in (e.g. 1,000 with `DAILY_VISITS` at 500), and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
    loads a few thousand tiles). The console's names for these change now and then: look for the
    per-day ones. It's the backstop if the key is copied and used from somewhere the referrer check
    doesn't stop; once a limit is reached, tiles stop loading until midnight Pacific time rather than
-   costing more.
+   costing more. Build's `view_site` uses 2D tile requests (at most 49 a look, none for one
+   Cloudflare has cached): cap those per day too.
    The admin page's **Google Maps cost** card estimates the bill from the Earth drives counted
    (`MAPS_PER_1000`, `MAPS_FREE_MONTHLY` and `MAPS_DAILY_CAP` in `drive/public/admin.html`: change
    them when Google's price or `DAILY_VISITS` does).

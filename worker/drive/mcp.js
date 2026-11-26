@@ -1,24 +1,28 @@
 import { HttpError, json, randomToken } from '../http.js';
 import { bearerAccount } from './oauth.js';
-import { ACCOUNT_BYTES, LOG_KEEP_MS, limitsOf, planOf } from './build.js';
+import { ACCOUNT_BYTES, LOG_KEEP_MS, countView, limitsOf, mayView, planOf } from './build.js';
 import { salesOn } from './billing.js';
 import { search } from './search.js';
+import { VIEW_PIXELS, base64, siteView, tilesKey } from './site-view.js';
 import CATALOG from './build-catalog.json' with { type: 'json' };
 
 // World Drive Build's MCP server (worlddrive.app/mcp, docs/build.md): Claude (or any MCP client)
 // connected to someone's World Drive account through OAuth (oauth.js) lays out their construction
-// sites: finds a site by address, makes a project there, looks up the library (build-catalog.json,
-// npm run make-build-catalog: every item with its real size, and the sets) and places equipment,
-// sets, rows, flatten areas, laydown areas, stockpiles and markups (dimensions, arrows and notes),
-// moves and removes them, and shares the
-// project. Projects are World Drive Build's own (build_layouts, build.js), so what Claude lays out
-// opens in the editor (/build/app/), and the other way round. Build Pro and the owner only.
+// sites: finds a site by address, makes a project there, looks at it from above (view_site: Google's
+// satellite imagery with a metre grid and what's placed drawn on, site-view.js), looks up the
+// library (build-catalog.json, npm run make-build-catalog: every item with its real size, and the
+// sets) and places equipment, sets, rows, flatten areas, laydown areas, stockpiles and markups
+// (dimensions, arrows and notes), moves and removes them, and shares the project. Projects are
+// World Drive Build's own (build_layouts, build.js), so what Claude lays out opens in the editor
+// (/build/app/), and the other way round. Build Pro and the owner only.
 //
 // Streamable HTTP, stateless: each POST is a JSON-RPC message (or a batch) answered with JSON; no
 // event stream and no session. Positions are metres east and north of the project's site point (its
 // lat and lon), headings degrees clockwise from north (the way an item's front faces).
 //
-// Settings: MCP_HOURLY, the tool calls an account may make an hour (300 if unset).
+// Settings: MCP_HOURLY, the tool calls an account may make an hour (300 if unset). view_site's
+// pictures are each one of those and one of the plan's map views a month as well (BUILD_PRO_MONTHLY,
+// build.js), as the editor's 3D map is: Google bills both.
 
 const PROTOCOLS = [ '2025-06-18', '2025-03-26', '2024-11-05' ];
 const PROJECT_ITEMS = 2000;
@@ -129,7 +133,7 @@ async function handle( context, message ) {
 
 }
 
-const INSTRUCTIONS = `World Drive Build lays out construction sites on a 3D map of anywhere (worlddrive.app/build). Start with find_site for the address, then create_project there (or list_projects / get_project for one already made). Positions are metres east and north of the project's site point; a heading is degrees clockwise from north, the way an item's front faces. Look sizes up with search_library before laying things out so they fit (a site office trailer is about 12 x 5 m, a 20 t excavator about 10 x 3 m, a tri-tri about 22 m long). Give the person the editor link at the end: they see it in 3D there.`;
+const INSTRUCTIONS = `World Drive Build lays out construction sites on a 3D map of anywhere (worlddrive.app/build). Start with find_site for the address, then create_project there (or list_projects / get_project for one already made). Positions are metres east and north of the project's site point; a heading is degrees clockwise from north, the way an item's front faces. Before laying anything out, look at the site with view_site: a satellite picture, north up, with a grid in metres east and north of the site point, so you can see the roads, buildings, trees and open ground and read positions off it; look again afterwards to check what you placed (it's drawn on, numbered by index). Look sizes up with search_library before laying things out so they fit (a site office trailer is about 12 x 5 m, a 20 t excavator about 10 x 3 m, a tri-tri about 22 m long). Give the person the editor link at the end: they see it in 3D there.`;
 
 // --- tools ------------------------------------------------------------------------------------
 
@@ -156,6 +160,11 @@ const TOOLS = [
 	{
 		name: 'get_project', title: 'What\'s in a project', description: 'Everything placed in a project, each with its index (for move_item and remove_items), what it is, where and which way it faces, and its size; and the project\'s version, which move_item and remove_items take so they don\'t act on indexes that have changed since.',
 		inputSchema: { type: 'object', properties: { ...project }, required: [ 'project_id' ] }, annotations: { readOnlyHint: true }, run: getProject,
+	},
+	{
+		name: 'view_site', title: 'Look at the site', description: `A top-down satellite picture of the project's site (Google's imagery), north up, ${ VIEW_PIXELS } px square: a grid every few metres labelled in metres east (along the top, E+20) and north (down the left, N+20) of the site point (a red cross), and everything placed drawn on as its footprint, numbered with its get_project index (equipment yellow, with a tick to its front; flatten areas cyan; laydown areas their own colour; stockpiles orange; markups their colour). Look before laying out, to see roads, buildings, trees, parking and open ground and to read positions for place_items off the grid, and again after, to check. The imagery can be a few years old. Each look is one of the plan's map views this month.`,
+		inputSchema: { type: 'object', properties: { ...project, size: { type: 'number', minimum: 20, maximum: 2000, default: 150, description: 'Metres across (and up and down): 150 for a building lot, 400 or more for the streets round it' }, east: { type: 'number', description: 'The middle, metres east of the site point (default 0)' }, north: { type: 'number', description: 'The middle, metres north of the site point (default 0)' } }, required: [ 'project_id' ] },
+		annotations: { readOnlyHint: true }, run: viewSite,
 	},
 	{
 		name: 'search_library', title: 'Search the library', description: 'Equipment, vehicles, trailers, barriers, materials and people to place, each with its id and real size in metres (length along its front, width, height). With no query: the categories.',
@@ -396,6 +405,103 @@ async function getProject( { env, account, url }, args ) {
 
 	const row = await ownProject( env, account, args.project_id );
 	return text( { project_id: row.id, name: row.name, site: row.site, lat: row.lat, lon: row.lon, version: row.updated_at, editor: editorLink( url.origin, row ), items: row.layout.items.map( describe ) } );
+
+}
+
+// --- looking at the site ---------------------------------------------------------------------
+
+// What's placed is drawn in these (r, g, b); laydown areas and markups in their own colours.
+const COLOURS = {
+	equipment: [ 255, 225, 77 ], flatten: [ 56, 217, 255 ], laydown: [ 255, 214, 10 ], stockpile: [ 255, 154, 60 ],
+	red: [ 255, 59, 48 ], amber: [ 255, 176, 0 ], blue: [ 58, 134, 255 ], green: [ 52, 199, 89 ], white: [ 255, 255, 255 ],
+};
+// src/terrain.js's materials' angles of repose (degrees), for a cone pile's footprint.
+const REPOSE = { gravel: 37, sand: 33, topsoil: 35, soil: 34, 'road-base': 38, riprap: 40, coal: 38, potash: 32 };
+
+const rgbOf = hex => /^#[0-9a-f]{6}$/i.test( hex ?? '' ) ? [ 1, 3, 5 ].map( k => parseInt( hex.slice( k, k + 2 ), 16 ) ) : null;
+const short = words => words.length > 24 ? `${ words.slice( 0, 23 ) }…` : words;
+
+// A placed thing as view_site draws it (site-view.js's shapes): its footprint from its size and
+// heading, numbered with its index. Areas go under everything else, and their labels after.
+function shapeOf( item, index ) {
+
+	const at = { east: Number( item.east ) || 0, north: Number( item.north ) || 0 };
+	const heading = Number( item.heading ) || 0;
+	const scale = Number( item.scale ) || 1;
+	const p = item.params ?? {};
+	const label = String( index );
+	const sized = Number( p.width ) > 0 && Number( p.length ) > 0;
+	if ( item.kind === 'flatten-zone' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: COLOURS.flatten, fill: 0.12, label, area: true };
+	if ( item.kind === 'laydown' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: rgbOf( p.colour ) ?? COLOURS.laydown, fill: 0.15, label: p.label ? `${ index } ${ short( String( p.label ) ) }` : label, area: true };
+	if ( item.kind === 'stockpile' ) {
+
+		if ( p.shape === 'ridge' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: COLOURS.stockpile, fill: 0.2, label };
+		// A cone at its material's angle of repose (src/terrain.js's coneRadius).
+		const tan = Math.tan( ( REPOSE[ p.material ] ?? 37 ) * Math.PI / 180 );
+		return { type: 'circle', ...at, radius: Math.cbrt( 3 * ( Number( p.volume ) || 50 ) * tan * tan / Math.PI ) / tan, colour: COLOURS.stockpile, label };
+
+	}
+
+	if ( item.kind === 'markup' && Array.isArray( p.points ) && p.points.length ) {
+
+		const colour = COLOURS[ p.colour ] ?? COLOURS.white;
+		const points = p.points.map( q => [ at.east + ( Number( q[ 0 ] ) || 0 ), at.north + ( Number( q[ 1 ] ) || 0 ) ] );
+		const words = String( p.text ?? '' ).trim();
+		if ( p.type === 'note' || points.length < 2 ) return { type: 'spot', east: points[ 0 ][ 0 ], north: points[ 0 ][ 1 ], colour, label: words ? `${ index } ${ short( words ) }` : label };
+		if ( p.type === 'arrow' ) return { type: 'line', points, arrow: true, colour, label: words ? `${ index } ${ short( words ) }` : label };
+		return { type: 'line', points, colour, label: p.vertical ? label : `${ index } ${ describe( item, index ).measures ?? '' }`.trim() };
+
+	}
+
+	// A tower crane stands by its mast (placedBy): its jib out in front, its counter-jib behind.
+	if ( item.kind === 'tower-crane' ) {
+
+		const jib = Math.min( 80, Math.max( 20, Number( p.jib ) || 50 ) );
+		const front = jib + 1, back = Math.max( 12, Math.round( jib * 0.32 ) );
+		const h = heading * Math.PI / 180;
+		const ahead = ( front - back ) / 2;
+		return { type: 'box', east: at.east + Math.sin( h ) * ahead, north: at.north + Math.cos( h ) * ahead, heading, length: front + back, width: 4, colour: COLOURS.equipment, front: true, label };
+
+	}
+
+	const known = ITEMS.get( item.library )?.dimensions;
+	if ( known ) return { type: 'box', ...at, heading, length: known.length * scale, width: known.width * scale, colour: COLOURS.equipment, front: true, label };
+	// Anything else with a size (another kind of area), else a spot where it is.
+	if ( sized ) return { type: 'box', ...at, heading, width: p.width * scale, length: p.length * scale, colour: COLOURS.equipment, fill: 0.1, label, area: true };
+	return { type: 'spot', ...at, colour: COLOURS.equipment, label };
+
+}
+
+async function viewSite( context, args ) {
+
+	const { env, account, now, url, ctx } = context;
+	const row = await ownProject( env, account, args.project_id );
+	if ( row.lat === null || row.lon === null ) throw new ToolError( 'The project has no site point on the map to look at. Open it in the editor and save it there first.' );
+	const key = tilesKey( env, context.mapsKey );
+	if ( ! key ) throw new ToolError( 'There\'s no Google map key on the server, so no pictures of sites for now. Carry on without: get_project has what\'s placed.' );
+	const size = round( number( args.size, 'size', { min: 20, max: 2000, fallback: 150 } ) );
+	const centre = {
+		east: round( number( args.east, 'east', { min: - 20000, max: 20000, fallback: 0 } ) ),
+		north: round( number( args.north, 'north', { min: - 20000, max: 20000, fallback: 0 } ) ),
+	};
+	const { tier } = await planOf( env, account, now );
+	const allowed = await mayView( env, account, tier, now );
+	if ( ! allowed.ok ) throw new ToolError( `This month's map views are used up (${ allowed.limit } on the plan: each look with view_site is one, as each time the editor opens the 3D map is). They start again on the 1st. Carry on without the picture: get_project has what's placed.` );
+	const shapes = row.layout.items.map( shapeOf );
+	const ordered = [ ...shapes.filter( s => s.area ), ...shapes.filter( s => ! s.area ) ];
+	const view = await siteView( { env, ctx, key, origin: url.origin }, { at: { lat: row.lat, lon: row.lon }, centre, size, shapes: ordered } );
+	await countView( env, account, tier, now );
+	const m = v => round( v );
+	const counted = allowed.limit === null ? 'The owner\'s views aren\'t counted.' : `This was one of the plan's map views: ${ allowed.used + 1 } of ${ allowed.limit } this month.`;
+	const words = [
+		`${ row.site }, from above (Google's satellite imagery), north up: ${ m( size ) } m across in ${ view.width } × ${ view.height } px, ${ m( view.metresPerPixel ) } m a pixel. It runs from ${ m( view.east[ 0 ] ) } to ${ m( view.east[ 1 ] ) } m east and ${ m( view.north[ 0 ] ) } to ${ m( view.north[ 1 ] ) } m north of the site point (the red cross, 0, 0).`,
+		`Grid lines every ${ view.step } m, labelled along the top in metres east (E+${ view.step }) and down the left in metres north (N+${ view.step }) of the site point: read positions for place_items off them. Left (west) is negative east, down (south) is negative north.`,
+		`Drawn on: ${ view.shown } of the project's ${ row.layout.items.length } things in view, each numbered with its get_project index: equipment yellow (a tick from its middle to its front), flatten areas cyan, laydown areas their own colour with their label, stockpiles orange, markups their colour.`,
+		'The imagery can be a few years old, and trees, shadows and bridges hide the ground: what\'s on site now may differ.',
+		counted,
+		`Imagery: Google, ${ view.copyright }.`,
+	].join( '\n' );
+	return { content: [ { type: 'text', text: words }, { type: 'image', data: base64( view.bytes ), mimeType: view.mimeType } ] };
 
 }
 

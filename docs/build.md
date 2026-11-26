@@ -73,7 +73,8 @@ and the Neptune twin.
 
 - **A 3D map view** is a page load that's handed the Maps key: one billed Google 3D tiles session
   (about US$0.006). Signed out, or past the month's views, the page opens on flat ground and says
-  why; everything else works.
+  why; everything else works. Claude's `view_site` (a satellite picture of the site, below) counts
+  one too, out of the same allowance.
 - **Free views for everyone together** are capped at `BUILD_FREE_DAILY` a day (200: at most about
   US$1.20 a day), then free accounts get flat ground till midnight UTC.
 - **The site** is wherever the project is: the **Site** button (top) searches an address (World
@@ -506,9 +507,60 @@ selected, box-selected, moved, turned, copied and pasted, hidden, deleted and un
   `migrations/0018_build_mcp.sql`). Its tools find a site, make and read projects, search the
   library and sets (`build-catalog.json`, made by `npm run make-build-catalog` whenever the library
   changes), place items, sets and rows, add flatten, laydown and stockpile areas and markups
-  (`add_markup`: dimensions, arrows and notes), move and remove things and share a project; each answer has the editor link. `MCP_HOURLY` (default 300) caps an
-  account's tool calls an hour. The dashboard's **Build with Claude** box shows the address and
-  disconnects every connected app.
+  (`add_markup`: dimensions, arrows and notes), move and remove things and share a project; each
+  answer has the editor link. `MCP_HOURLY` (default 300) caps an account's tool calls an hour. The
+  dashboard's **Build with Claude** box shows the address and disconnects every connected app.
+- **Claude looks at the site (`view_site`, `worker/drive/site-view.js`):** so Claude doesn't lay a
+  site out blind, `view_site` answers with a picture (an MCP `image` block, a 768 × 768 JPEG) and
+  words. The picture is Google's satellite imagery from straight above, north up, `size` metres
+  across (150 by default, 20 to 2000) round the project's site point or a given `east`/`north`,
+  with a grid every 1 to 1000 m (at most eight lines across) labelled along the top in metres east
+  (`E+20`) and down the left in metres north (`N+20`) of the site point, the site point as a red
+  cross, an arrow to north, and everything placed drawn on as its footprint (from its size in the
+  library and its heading, as `get_project` has them) numbered with its `get_project` index:
+  equipment yellow with a tick from its middle to its front, flatten areas cyan, laydown areas in
+  their own colour with their label, stockpiles orange (a cone as wide as its volume makes it),
+  markups in their colour (a dimension with its length, an arrow with its words, a note as a spot),
+  a tower crane from its counter-jib to its jib's end. The words give the scale (m a pixel), the
+  edges in metres east and north, the grid's step, what the colours are, the map views used, and
+  Google's attribution. The server's instructions and the tool's description tell Claude to look
+  before laying out and again after.
+  - **Imagery:** the Map Tiles API's 2D tiles (`mapType` satellite, PNG): the same API, and the
+    same key, as the editor's 3D map, so nothing new has to be turned on (checked against the real
+    API: a session, the viewport's attribution, and z19 tiles over Vancouver, with the Maps key
+    and no referrer). A session (`POST /v1/createSession`) is kept while it lasts (about two
+    weeks); the viewport (`GET /tile/v1/viewport`) gives the copyright line and the most the
+    imagery zooms there; the tiles (`GET /v1/2dtiles/z/x/y`) at the zoom nearest the picture's
+    scale (a view is 9 to 36 of them, never more than 49) are laid together and resampled into the
+    picture. Where Google has no tile at that zoom it tries the zooms below. Google's Static Maps
+    API would draw a picture in one request, but it's another API to turn on for the key and it
+    can't draw a labelled metre grid, so it isn't used.
+  - **No canvas in a Worker,** and no packages: the tiles are decoded (inflated with the runtime's
+    `DecompressionStream`), and the picture is drawn (lines with smoothed edges, translucent fills,
+    DejaVu Sans Mono Bold at 12 px as a bitmap for the labels, each with a dark halo) and encoded as
+    a baseline JPEG in plain JavaScript in `site-view.js`. A JPEG (quality 88, colour not
+    subsampled so the labels stay sharp) is about 250 KB for a city block, five times smaller than
+    the same picture as a PNG. Making one takes about a third of a second of CPU (a paid Worker's
+    limit is 30 s).
+  - **Google's terms:** "Google" and the imagery's copyright are drawn along the foot of the
+    picture and repeated in the words. Tiles are kept in Cloudflare's cache a day (Google's own
+    `Cache-Control: max-age=86400`), so a second look at a site fetches nothing from Google;
+    `MAP_TILES_CACHE` `off` keeps none. Google's terms ask for its logo with 2D tiles: the picture
+    has the word "Google" in white, not the logo image; if that's not enough, the logo
+    (`google-maps-logo.svg`, already in the editor) would have to be drawn into the picture.
+  - **What it costs and counts:** each look is one tool call (`MCP_HOURLY`) and one of the plan's
+    map views this month (`BUILD_PRO_MONTHLY`, as the editor's 3D map; the owner's aren't
+    counted), asked before Google is and counted only once the picture is made. Past them Claude
+    is told the views are used up and carries on without it. Google bills 2D tiles per thousand
+    (see Google's Map Tiles API usage and billing page): at most 49 tiles a look, and none for a
+    cached one. The admin page's map views (and their cost estimate) count these looks with the
+    editor's 3D ones.
+  - **The key:** `GOOGLE_TILES_KEY` (a secret, optional) is a key for this alone, else the Maps key
+    the editor is handed. The Worker sends the tile requests with `Referer:
+    https://worlddrive.app/build/app/`, so a Maps key restricted to worlddrive.app's pages works;
+    a key restricted to the Map Tiles API (an API restriction, not a referrer one) as
+    `GOOGLE_TILES_KEY` is the tidier choice. With no key at all, `view_site` says there are no
+    pictures; when Google turns the key away (403) it says the Map Tiles API has to be on for it.
 - **Legal pages:** `/build/terms/`, `/build/privacy/` (with **Cookies and storage**, `#cookies`),
   `/build/refunds/`, `/build/acceptable-use/` and `/build/credits/` (every model in
   `public/library/CREDITS.md`), made by `drive/site/legal.js`'s `buildLegalPages` with the game's
@@ -535,7 +587,9 @@ selected, box-selected, moved, turned, copied and pasted, hidden, deleted and un
   `npm run test:build-ui` (the built page in a browser against the Worker),
   `npm run test:logo-background` (the logo's background removal on images made in the test, the
   dashboard's editor saving a PNG with alpha, and an excavator wearing it) and `npm run test:logo-ui`,
-  `npm run test:build-mcp` (connecting as Claude does, every tool, and the result in the editor),
+  `npm run test:build-mcp` (connecting as Claude does, every tool, and the result in the editor;
+  `view_site` against a stand-in for Google's Map Tiles API, its picture decoded and checked pixel
+  by pixel, with `TEST_SCREENSHOTS=<dir>` keeping it as `view-site.jpg`),
   `npm run test:build-admin` (the admin numbers from seeded rows, and the Build tab) and
   `npm run test:build-legal` (the legal pages, the cookie and storage list against the code, and no
   tracking in anything built for Build).
@@ -694,4 +748,7 @@ In Claude: *Settings → Connectors → Add custom connector*, name it "World Dr
 `https://worlddrive.app/mcp`. Claude opens a worlddrive.app page: sign in with Google and press
 **Allow** (a free account is told it needs Build Pro). Then ask it, e.g. "lay out a staging area for
 a 3-storey build at 453 W 12th Ave, Vancouver: site office, two 40 ft containers, fencing along the
-lane, a gravel pad for trucks", and open the editor link it gives you.
+lane, a gravel pad for trucks", and open the editor link it gives you. It looks at the site from
+above first (`view_site`, a satellite picture with a metre grid) to see where the lane, the
+buildings and the open ground are, and again afterwards to check what it placed; each look is one
+of the month's map views.

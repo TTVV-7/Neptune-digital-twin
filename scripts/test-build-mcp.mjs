@@ -4,18 +4,22 @@
 // Build Pro and the owner can), the code and PKCE verifier become tokens, and every tool lays out a
 // project, which then opens in the real editor (/build/app/) in a browser with what was placed. And:
 // codes are used once, refresh tokens are replaced, signing out everywhere disconnects, a plan that
-// lapses stops the tools, and the hourly limit holds.
+// lapses stops the tools, and the hourly limit holds. view_site's satellite picture is made from a
+// stand-in for Google's Map Tiles API (solid-colour tiles), decoded and looked at pixel by pixel:
+// its size, the grid, what's placed drawn where it is, the attribution, the cache, the map views it
+// counts, and its errors. TEST_SCREENSHOTS=<dir> keeps the picture.
 //
 // Needs Playwright with Chromium, and the built site (npm run build:drive; built if missing).
 
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { join, relative } from 'node:path';
 import { after, before, test } from 'node:test';
+import { deflateSync } from 'node:zlib';
 import { CLIENT_ID, ROOT, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
@@ -26,12 +30,19 @@ const DIST = join( ROOT, 'dist-drive', 'build' );
 const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
 const WEBHOOK_SECRET = 'whsec_test_mcp';
 const BUILD_LINK_ID = 'plink_build0000000000000001';
-const HOURLY = 80;
+const HOURLY = 120;
+// Build Pro's map views a month here: view_site's pictures count against them.
+const PRO_MONTHLY = 6;
+const SCREENSHOTS = process.env.TEST_SCREENSHOTS;
+// The stand-in tiles' colour, and the attribution its viewport gives.
+const GROUND = [ 40, 110, 50 ];
+const COPYRIGHT = 'Imagery ©2026 Test Imagery Co.';
 
 let server;
 let keys;
 let googleKey;
 let upstream;
+let tiles;
 let client;
 let tokens;
 let project;
@@ -180,6 +191,7 @@ before( async () => {
 
 	} );
 	await new Promise( resolve => upstream.listen( 0, '127.0.0.1', resolve ) );
+	tiles = await serveTiles();
 	googleKey = await makeKey( 'mcp-test-key-1' );
 	keys = await serveKeys( [ googleKey.jwk ] );
 	server = await startWorker( { port: PORT, config: 'wrangler.drive.jsonc', vars: workerVars(), assets: assetsOf() } );
@@ -202,6 +214,8 @@ function workerVars( extra = {} ) {
 		MCP_HOURLY: String( HOURLY ),
 		BUILD_LAYOUT_LIMIT: '2',
 		SEARCH_UPSTREAM: `http://127.0.0.1:${ upstream.address().port }/search`,
+		MAP_TILES_UPSTREAM: tiles.url,
+		BUILD_PRO_MONTHLY: String( PRO_MONTHLY ),
 		...extra,
 	};
 
@@ -213,8 +227,124 @@ after( async () => {
 	server?.stop();
 	keys?.close();
 	upstream?.close();
+	tiles?.server.close();
 
 } );
+
+// A stand-in for Google's Map Tiles API: a session, the viewport's attribution, and every 2D tile a
+// PNG of one colour. It keeps what it was asked ({ sessions, tiles, keys, referers }), and with
+// refuse set turns everything away as Google does a key without the API on.
+async function serveTiles() {
+
+	const png = solidPng( 256, 256, GROUND );
+	const state = { sessions: 0, tiles: 0, keys: new Set(), referers: new Set(), refuse: false, bodies: [] };
+	const server = createServer( ( req, res ) => {
+
+		const url = new URL( req.url, 'http://localhost' );
+		state.keys.add( url.searchParams.get( 'key' ) );
+		state.referers.add( req.headers.referer );
+		if ( state.refuse ) {
+
+			res.writeHead( 403, { 'Content-Type': 'application/json' } );
+			return res.end( JSON.stringify( { error: { code: 403, message: 'Map Tiles API has not been used in project 1 before or it is disabled.', status: 'PERMISSION_DENIED' } } ) );
+
+		}
+
+		if ( req.method === 'POST' && url.pathname === '/v1/createSession' ) {
+
+			let body = '';
+			req.on( 'data', chunk => body += chunk );
+			req.on( 'end', () => {
+
+				state.sessions ++;
+				state.bodies.push( JSON.parse( body ) );
+				res.writeHead( 200, { 'Content-Type': 'application/json' } );
+				res.end( JSON.stringify( { session: 'fake-session', expiry: String( Math.floor( Date.now() / 1000 ) + 14 * 86400 ), tileWidth: 256, tileHeight: 256, imageFormat: 'png' } ) );
+
+			} );
+			return;
+
+		}
+
+		if ( url.pathname === '/tile/v1/viewport' && url.searchParams.get( 'session' ) === 'fake-session' ) {
+
+			res.writeHead( 200, { 'Content-Type': 'application/json' } );
+			return res.end( JSON.stringify( { copyright: COPYRIGHT, maxZoomRects: [ { maxZoom: 19, north: 90, south: - 90, east: 180, west: - 180 } ] } ) );
+
+		}
+
+		if ( /^\/v1\/2dtiles\/\d+\/\d+\/\d+$/.test( url.pathname ) && url.searchParams.get( 'session' ) === 'fake-session' ) {
+
+			state.tiles ++;
+			res.writeHead( 200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400' } );
+			return res.end( png );
+
+		}
+
+		res.writeHead( 404 );
+		res.end();
+
+	} );
+	await new Promise( resolve => server.listen( 0, '127.0.0.1', resolve ) );
+	return Object.assign( state, { server, url: `http://127.0.0.1:${ server.address().port }` } );
+
+}
+
+// A PNG of one colour, made here (8-bit RGB, no filtering).
+function solidPng( width, height, [ r, g, b ] ) {
+
+	const crcTable = Array.from( { length: 256 }, ( _, n ) => {
+
+		let c = n;
+		for ( let k = 0; k < 8; k ++ ) c = c & 1 ? 0xedb88320 ^ ( c >>> 1 ) : c >>> 1;
+		return c >>> 0;
+
+	} );
+	const crc = bytes => {
+
+		let c = 0xffffffff;
+		for ( const byte of bytes ) c = crcTable[ ( c ^ byte ) & 0xff ] ^ ( c >>> 8 );
+		return ( c ^ 0xffffffff ) >>> 0;
+
+	};
+	const chunk = ( name, body ) => {
+
+		const head = Buffer.alloc( 8 );
+		head.writeUInt32BE( body.length, 0 );
+		head.write( name, 4, 'latin1' );
+		const tail = Buffer.alloc( 4 );
+		tail.writeUInt32BE( crc( Buffer.concat( [ head.subarray( 4 ), body ] ) ), 0 );
+		return Buffer.concat( [ head, body, tail ] );
+
+	};
+	const header = Buffer.alloc( 13 );
+	header.writeUInt32BE( width, 0 );
+	header.writeUInt32BE( height, 4 );
+	header.set( [ 8, 2, 0, 0, 0 ], 8 );
+	const row = Buffer.alloc( 1 + width * 3 );
+	for ( let x = 0; x < width; x ++ ) row.set( [ r, g, b ], 1 + x * 3 );
+	const raw = Buffer.concat( Array.from( { length: height }, () => row ) );
+	return Buffer.concat( [ Buffer.from( [ 137, 80, 78, 71, 13, 10, 26, 10 ] ), chunk( 'IHDR', header ), chunk( 'IDAT', deflateSync( raw ) ), chunk( 'IEND', Buffer.alloc( 0 ) ) ] );
+
+}
+
+// view_site's answer, its picture decoded: { error, text, image: { width, height, at( x, y ) }, bytes }.
+async function look( args, token ) {
+
+	const result = await rpc( 'tools/call', { name: 'view_site', arguments: args }, token );
+	const text = result.content.find( c => c.type === 'text' )?.text ?? '';
+	const picture = result.content.find( c => c.type === 'image' );
+	if ( result.isError || ! picture ) return { error: !! result.isError, text };
+	assert.equal( picture.mimeType, 'image/jpeg' );
+	const bytes = Buffer.from( picture.data, 'base64' );
+	const sharp = require( 'sharp' );
+	const { data, info } = await sharp( bytes ).raw().toBuffer( { resolveWithObject: true } );
+	const at = ( x, y ) => [ ...data.subarray( ( y * info.width + x ) * info.channels, ( y * info.width + x ) * info.channels + 3 ) ];
+	return { error: false, text, bytes, image: { width: info.width, height: info.height, format: ( await sharp( bytes ).metadata() ).format, at } };
+
+}
+
+const near = ( got, want, by = 40 ) => got.every( ( v, k ) => Math.abs( v - want[ k ] ) <= by );
 
 test( 'without a token, /mcp says where to connect; the metadata says how', async () => {
 
@@ -292,8 +422,9 @@ test( 'initialize, tools/list and a notification', async () => {
 	assert.equal( init.protocolVersion, '2025-06-18' );
 	assert.equal( init.serverInfo.name, 'world-drive-build' );
 	assert.match( init.instructions, /find_site/ );
+	assert.match( init.instructions, /view_site/ );
 	const { tools } = await rpc( 'tools/list', {} );
-	assert.deepEqual( tools.map( t => t.name ), [ 'find_site', 'create_project', 'list_projects', 'get_project', 'search_library', 'list_sets', 'place_items', 'place_set', 'place_row', 'add_flatten_area', 'add_laydown_area', 'add_stockpile', 'add_markup', 'move_item', 'remove_items', 'share_project' ] );
+	assert.deepEqual( tools.map( t => t.name ), [ 'find_site', 'create_project', 'list_projects', 'get_project', 'view_site', 'search_library', 'list_sets', 'place_items', 'place_set', 'place_row', 'add_flatten_area', 'add_laydown_area', 'add_stockpile', 'add_markup', 'move_item', 'remove_items', 'share_project' ] );
 	for ( const t of tools ) assert.equal( t.inputSchema.type, 'object', t.name );
 	const note = await call( '/mcp', { method: 'POST', body: { jsonrpc: '2.0', method: 'notifications/initialized' }, headers: { Authorization: `Bearer ${ tokens.access_token }` } } );
 	assert.equal( note.status, 202 );
@@ -452,6 +583,79 @@ test( 'the tools lay out a site', async () => {
 
 } );
 
+test( 'view_site: the site from above, with the grid and what\'s placed drawn on', async () => {
+
+	const proCookie = await signIn( { sub: 'mcp-pro', email: 'pro@example.com', name: 'Pat Pro' } );
+	const viewsUsed = async () => ( await call( '/build/api/me', { headers: { Cookie: proCookie } } ) ).json.plan.views.used;
+	const before = await viewsUsed();
+	const seen = await look( { project_id: project } );
+	assert.equal( seen.error, false, seen.text );
+	assert.equal( seen.image.format, 'jpeg' );
+	assert.deepEqual( [ seen.image.width, seen.image.height ], [ 768, 768 ] );
+	if ( SCREENSHOTS ) {
+
+		mkdirSync( SCREENSHOTS, { recursive: true } );
+		writeFileSync( join( SCREENSHOTS, 'view-site.jpg' ), seen.bytes );
+
+	}
+
+	// 150 m across by default, round the site point: 0.195 m a pixel, the site point in the middle.
+	assert.match( seen.text, /150 m across in 768 × 768 px, 0\.2 m a pixel\. It runs from -75 to 75 m east and -75 to 75 m north/ );
+	assert.match( seen.text, /Grid lines every 20 m/ );
+	assert.ok( seen.text.includes( `Imagery: Google, ${ COPYRIGHT }.` ), seen.text );
+	assert.match( seen.text, /one of the plan's map views: \d+ of 6 this month/ );
+	const px = ( east, north ) => [ Math.floor( east / ( 150 / 768 ) + 384 ), Math.floor( 384 - north / ( 150 / 768 ) ) ];
+	// Open ground away from everything is the tiles' own colour.
+	assert.ok( near( seen.image.at( ...px( - 65, 65 ) ), GROUND, 12 ), String( seen.image.at( ...px( - 65, 65 ) ) ) );
+	// The office trailer at 0, 20 facing south: 12.29 m across, 5.83 m along its heading, so its
+	// north edge 2.9 m north of its middle, drawn yellow, numbered with its index.
+	const edge = seen.image.at( ...px( 3, 22.92 ) );
+	assert.ok( edge[ 0 ] > 200 && edge[ 1 ] > 170 && edge[ 2 ] < 150, `the trailer's edge is ${ edge }` );
+	const trailer = ( await tool( 'get_project', { project_id: project } ) ).value.items.find( i => i.item === 'office-trailer-10x40' );
+	assert.match( seen.text, /Drawn on: \d+ of the project's \d+ things in view, each numbered with its get_project index/ );
+	assert.ok( Number.isInteger( trailer.index ) );
+	// The grid: a line every 20 m (lighter than the ground), and the site point's red cross.
+	const line = seen.image.at( px( - 60, 0 )[ 0 ], px( 0, - 65 )[ 1 ] );
+	assert.ok( line[ 0 ] > GROUND[ 0 ] + 60, `the grid line at 60 m west is ${ line }` );
+	const cross = seen.image.at( 384, 378 );
+	assert.ok( cross[ 0 ] > 200 && cross[ 1 ] < 110 && cross[ 2 ] < 110, `the site point's cross is ${ cross }` );
+	// The labels along the top are white, and "Google" and the copyright darken the foot.
+	const top = Array.from( { length: 14 * 768 }, ( _, k ) => seen.image.at( k % 768, 4 + Math.floor( k / 768 ) ) );
+	assert.ok( top.some( p => p.every( v => v > 220 ) ), 'no white labels along the top' );
+	const foot = seen.image.at( 380, 762 );
+	assert.ok( foot[ 1 ] < GROUND[ 1 ] - 20 || foot.every( v => v > 200 ), `the foot is ${ foot }` );
+	// One map view counted; the key the editor's handed, as from the site's own pages; satellite, PNG tiles.
+	assert.equal( await viewsUsed(), before + 1 );
+	assert.deepEqual( [ ...tiles.keys ], [ 'test-maps-key-not-real' ] );
+	assert.ok( [ ...tiles.referers ].every( r => /\/build\/app\/$/.test( r ) ), [ ...tiles.referers ].join() );
+	assert.deepEqual( tiles.bodies[ 0 ], { mapType: 'satellite', language: 'en-US', region: 'US', imageFormat: 'png' } );
+
+	// The same view again: the tiles come from the cache, and the session is kept.
+	const fetched = tiles.tiles;
+	assert.ok( fetched > 0 && fetched <= 49, `${ fetched } tiles` );
+	assert.equal( ( await look( { project_id: project } ) ).error, false );
+	assert.equal( tiles.tiles, fetched, 'the tiles were fetched again' );
+	assert.equal( tiles.sessions, 1 );
+	// Somewhere else, bigger: 400 m round 100 m east, the trailer a few pixels, still drawn.
+	const wide = await look( { project_id: project, east: 100, north: 0, size: 400 } );
+	assert.match( wide.text, /400 m across .* -100 to 300 m east and -200 to 200 m north/ );
+	assert.match( wide.text, /Grid lines every 50 m/ );
+	assert.equal( await viewsUsed(), before + 3 );
+
+	// Refused: no such project, a size out of range, and Google turning the key away (nothing counted).
+	assert.match( ( await look( { project_id: 'nope' } ) ).text, /No such project/ );
+	assert.match( ( await look( { project_id: project, size: 5 } ) ).text, /size must be a number from 20 to 2000/ );
+	tiles.refuse = true;
+	const refused = await look( { project_id: project, size: 160 } );
+	tiles.refuse = false;
+	assert.equal( refused.error, true );
+	assert.match( refused.text, /turned the key away \(403\)\. .*Map Tiles API/ );
+	assert.doesNotMatch( refused.text, /test-maps-key-not-real/ );
+	assert.equal( await viewsUsed(), before + 3 );
+	assert.equal( ( await look( { project_id: project, size: 160 } ) ).error, false, 'a new session once Google takes the key again' );
+
+} );
+
 test( 'the project opens in the editor with what was placed', async () => {
 
 	const { chromium } = require( 'playwright' );
@@ -493,6 +697,18 @@ test( 'the project opens in the editor with what was placed', async () => {
 	const heights = await page.evaluate( () => window.twin.models.entries.filter( e => e.kind === 'flatten-zone' ).map( e => [ e.params.raise, e.params.finished ] ) );
 	assert.ok( heights.some( ( [ r, f ] ) => r === 1.25 && f === null ) && heights.some( ( [ r, f ] ) => r === - 30 ) && heights.some( ( [ , f ] ) => f === 42.5 ), JSON.stringify( heights ) );
 	assert.deepEqual( errors, [] );
+
+} );
+
+test( 'view_site stops when the month\'s map views are used up', async () => {
+
+	const proCookie = await signIn( { sub: 'mcp-pro', email: 'pro@example.com', name: 'Pat Pro' } );
+	const { used, limit } = ( await call( '/build/api/me', { headers: { Cookie: proCookie } } ) ).json.plan.views;
+	assert.equal( limit, PRO_MONTHLY );
+	for ( let i = used; i < limit; i ++ ) assert.equal( ( await look( { project_id: project } ) ).error, false );
+	const out = await look( { project_id: project } );
+	assert.equal( out.error, true );
+	assert.match( out.text, /map views are used up \(6 on the plan/ );
 
 } );
 
@@ -545,7 +761,8 @@ test( 'a plan that lapses stops the tools; the hourly limit holds', async () => 
 test( 'with BUILD_SALES on: the authorize page and the tools offer Build Pro to the free plan', async () => {
 
 	server?.stop();
-	server = await startWorker( { port: SALES_PORT, config: 'wrangler.drive.jsonc', vars: workerVars( { BUILD_SALES: 'on' } ), assets: assetsOf() } );
+	// And no Maps key: view_site says there are no pictures.
+	server = await startWorker( { port: SALES_PORT, config: 'wrangler.drive.jsonc', vars: workerVars( { BUILD_SALES: 'on', GOOGLE_MAPS_API_KEY: '' } ), assets: assetsOf() } );
 	const registered = await call( '/oauth/register', { method: 'POST', body: { redirect_uris: [ REDIRECT ], client_name: 'Claude' } } );
 	assert.equal( registered.status, 201, registered.text );
 	client = registered.json;
@@ -564,6 +781,10 @@ test( 'with BUILD_SALES on: the authorize page and the tools offer Build Pro to 
 	const connected = await connect( cookie );
 	assert.ok( connected.tokens, connected.page?.text.slice( -600 ) );
 	assert.equal( ( await tool( 'list_projects', {}, connected.tokens.access_token ) ).error, false );
+	const made = await tool( 'create_project', { name: 'No map', place: 'Somewhere', lat: 49.2827, lon: - 123.1207 }, connected.tokens.access_token );
+	const keyless = await look( { project_id: made.value.project_id }, connected.tokens.access_token );
+	assert.equal( keyless.error, true );
+	assert.match( keyless.text, /no Google map key on the server/ );
 	await webhook( { id: 'evt_sales_pro_end', object: 'event', type: 'customer.subscription.deleted', livemode: false, created: Math.floor( Date.now() / 1000 ) + 10, data: { object: { id: 'sub_sales_pro', object: 'subscription', status: 'canceled' } } } );
 	const lapsed = await tool( 'list_projects', {}, connected.tokens.access_token );
 	assert.equal( lapsed.error, true );

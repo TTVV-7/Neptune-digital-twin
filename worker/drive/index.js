@@ -121,8 +121,11 @@ export { DriveRoom } from './live.js';
 //                         Google a day from everyone together (300 if unset), GEOCODE_PER_VISITOR
 //                         the most of them for one visitor (an address, an IPv6 /48, or a Build
 //                         account; 30 if unset)
+//   GOOGLE_TILES_KEY      a secret, optional: the server's own key for the Map Tiles API, for the
+//                         MCP server's view_site (site-view.js); unset, it uses the Maps key
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, GEOCODING_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests
-//                         only (see scripts/test-drive-worker.mjs)
+//                         only (see scripts/test-drive-worker.mjs); MAP_TILES_UPSTREAM the same
+//                         (scripts/test-build-mcp.mjs)
 
 // Other names the Maps key may be set under (see mapsKey).
 const KEY_NAMES = /^google_maps_api(_key)?$/i;
@@ -211,7 +214,8 @@ export default {
 			try {
 
 				const limits = env.LIMITS.get( env.LIMITS.idFromName( 'global' ) );
-				const context = { request, env, url, ctx, limits, now: clock( request, env ) };
+				// The Maps key too, for view_site's satellite pictures (mcp.js, site-view.js).
+				const context = { request, env, url, ctx, limits, now: clock( request, env ), mapsKey: mapsKey( env ) };
 				return await ( isMcp( url ) ? mcp( context ) : oauth( context ) );
 
 			} catch ( err ) {

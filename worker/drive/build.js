@@ -230,23 +230,41 @@ async function viewsOf( env, account, tier, now ) {
 async function takeView( env, account, tier, mapsKey, now ) {
 
 	if ( ! mapsKey ) return { ok: false, reason: 'off' };
-	if ( tier === 'owner' ) return { ok: true };
+	const allowed = await mayView( env, account, tier, now );
+	if ( allowed.ok ) await countView( env, account, tier, now );
+	return allowed;
+
+}
+
+// Whether this account may have a map view now, not yet counted: { ok, reason?, limit, used }
+// (limit null for the owner's, never counted). The MCP server's view_site asks this before it
+// fetches Google's imagery, and counts the view (countView) once it has the picture.
+export async function mayView( env, account, tier, now ) {
+
+	if ( tier === 'owner' ) return { ok: true, limit: null, used: 0 };
 	const { limit, used } = await viewsOf( env, account, tier, now );
-	if ( used >= limit ) return { ok: false, reason: 'used-up' };
+	if ( used >= limit ) return { ok: false, reason: 'used-up', limit, used };
 	if ( tier === 'free' ) {
 
 		const today = Math.floor( now / DAY_MS ) * DAY_MS;
 		const row = await env.DB.prepare( 'SELECT COUNT(*) AS n FROM build_views WHERE tier = \'free\' AND at >= ? AND at < ?' ).bind( today, today + DAY_MS ).first();
-		if ( ( row?.n ?? 0 ) >= limitsOf( env ).freeDaily ) return { ok: false, reason: 'busy' };
+		if ( ( row?.n ?? 0 ) >= limitsOf( env ).freeDaily ) return { ok: false, reason: 'busy', limit, used };
 
 	}
 
+	return { ok: true, limit, used };
+
+}
+
+// Counts a map view (the owner's never are).
+export async function countView( env, account, tier, now ) {
+
+	if ( tier === 'owner' ) return;
 	// Views older than the Privacy Policy keeps them (LOG_KEEP_MS) go as new ones come, a few at a time.
 	await env.DB.batch( [
 		env.DB.prepare( 'INSERT INTO build_views ( account_id, tier, at ) VALUES ( ?, ?, ? )' ).bind( account.id, tier, now ),
 		env.DB.prepare( 'DELETE FROM build_views WHERE rowid IN ( SELECT rowid FROM build_views WHERE at < ? LIMIT 100 )' ).bind( now - LOG_KEEP_MS ),
 	] );
-	return { ok: true };
 
 }
 
