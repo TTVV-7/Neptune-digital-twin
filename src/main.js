@@ -1,4 +1,5 @@
 import './style.css';
+import './build-theme.css';
 import { PerspectiveCamera, Scene, Timer, Vector3, WebGLRenderer } from 'three';
 import { MODELS, PLAYER, SITE, START } from './config.js';
 import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
@@ -49,6 +50,8 @@ async function boot() {
 	// World Drive Build: the key is the account's plan's to give (worker/drive/build.js), never asked for.
 	if ( BUILD_APP ) {
 
+		// Build's own look (build-theme.css).
+		document.body.classList.add( 'build-app' );
 		const config = await loadConfig();
 		start( config?.mapsKey ?? null, 'World Drive Build', noMapReason( config ? config.mapsReason : 'unreachable', config?.plan, config?.premium?.billing?.hidden === true ) );
 		return;
