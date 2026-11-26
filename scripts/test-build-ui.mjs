@@ -82,9 +82,31 @@ function assetsOf() {
 
 }
 
+// The newest change under the pages' sources (src/, drive/build/, vite.drive.config.js), so a build
+// left from older code is rebuilt rather than tested.
+function newestSource() {
+
+	let newest = statSync( join( ROOT, 'vite.drive.config.js' ) ).mtimeMs;
+	const walk = dir => {
+
+		for ( const entry of readdirSync( dir, { withFileTypes: true } ) ) {
+
+			const path = join( dir, entry.name );
+			if ( entry.isDirectory() ) walk( path );
+			else newest = Math.max( newest, statSync( path ).mtimeMs );
+
+		}
+
+	};
+	for ( const dir of [ join( ROOT, 'src' ), join( ROOT, 'drive', 'build' ) ] ) if ( existsSync( dir ) ) walk( dir );
+	return newest;
+
+}
+
 before( async () => {
 
-	if ( ! existsSync( join( DIST, 'app', 'index.html' ) ) ) {
+	const index = join( DIST, 'app', 'index.html' );
+	if ( ! existsSync( index ) || statSync( index ).mtimeMs < newestSource() ) {
 
 		const built = spawnSync( process.execPath, [ join( ROOT, 'node_modules', 'vite', 'bin', 'vite.js' ), 'build', '--config', 'vite.drive.config.js', '--logLevel', 'error' ], { cwd: ROOT, encoding: 'utf8' } );
 		assert.equal( built.status, 0, built.stderr );
