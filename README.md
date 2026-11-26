@@ -893,7 +893,7 @@ player's best stunt run today, this week and all time (a nickname, no sign-up) i
 posted with the visit's signed token and checked against what the game can score.
 
 **World Drive Build** (`/build/`, [docs/build.md](docs/build.md)): this construction app offered to
-anyone on World Drive's site and accounts, at any address, with a free plan (33 everyday items, 15
+anyone on World Drive's site and accounts, at any address, with a free plan (35 everyday items, 15
 3D map views a month, one saved project) and **Build Pro** (everything, 300 views, 200 projects
 and share links; US$5/month or US$50/year) sold through Stripe; World Drive's owner has everything.
 

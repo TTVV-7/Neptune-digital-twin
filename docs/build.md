@@ -16,7 +16,7 @@ and the Neptune twin.
   settings: no prices, no Go Build Pro, Subscribe with Stripe or monthly/yearly choice, no "Build
   Pro opens soon", no renewal lines, and `POST /build/api/billing/checkout` answers 404 ("Build Pro
   isn't available to buy right now"). The plans and their limits are exactly as below: free
-  accounts keep the 33 items, 15 3D map views a month and 1 project, and Build Pro comes from the
+  accounts keep the 35 items, 15 3D map views a month and 1 project, and Build Pro comes from the
   owner's comps, `BUILD_EMAILS` or `ADMIN_EMAILS`. The server says so in every plan payload
   (`/build/api/config`, `me`, `home`): `premium.billing` is `{ enabled: false, hidden: true,
   monthly: null, annual: null, portal }`, with no `premium.price`, and `plan.priceLabel` is null.
@@ -66,7 +66,7 @@ and the Neptune twin.
 | | Free | Build Pro | Owner |
 |---|---|---|---|
 | Who | anyone signed in with Google | a subscription bought through Stripe Checkout (US$5/month or US$50/year; only while `BUILD_SALES` is `on`), given by the owner (comps), or listed in `BUILD_EMAILS` | `ADMIN_EMAILS` (World Drive's owner) |
-| Library | 33 everyday items (`FREE_ITEMS` in `src/product.js`) | everything, sets included | everything |
+| Library | 35 everyday items (`FREE_ITEMS` in `src/product.js`) | everything, sets included | everything |
 | 3D map views a month | 15 (`BUILD_FREE_MONTHLY`) | 300 (`BUILD_PRO_MONTHLY`) | unlimited, not counted |
 | Saved projects | 1 | 200 (`BUILD_LAYOUT_LIMIT`) | 200 |
 | Share links | no | yes (their viewers get the map on the owner's views) | yes |

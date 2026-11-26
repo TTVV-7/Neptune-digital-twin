@@ -714,7 +714,7 @@ describe( 'the page, buying hidden (BUILD_SALES unset)', () => {
 		assert.equal( plan.title, 'Plan' );
 		assert.equal( plan.nav, 'Plan' );
 		assert.match( plan.text, /Free/ );
-		assert.match( plan.text, /33 everyday site pieces, 15 3D map views a month, 1 saved project/ );
+		assert.match( plan.text, /35 everyday site pieces, 15 3D map views a month, 1 saved project/ );
 		assert.match( plan.text, /300 3D map views a month, 200 projects/ );
 		assert.match( plan.text, /isn't available to buy right now/ );
 		assert.doesNotMatch( plan.text, BUYING_WORDS );

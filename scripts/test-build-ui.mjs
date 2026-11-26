@@ -856,7 +856,7 @@ test( 'buying hidden, the dashboard: the plans and their limits, the views gauge
 		buy: !! document.querySelector( '.go-pro, .upgrade .intervals' ),
 	} ) );
 	assert.deepEqual( out.plans, [ 'Free', 'Build Pro' ] );
-	assert.match( out.blurbs[ 0 ], /33 everyday site pieces, 15 3D map views a month, 1 saved project/ );
+	assert.match( out.blurbs[ 0 ], /35 everyday site pieces, 15 3D map views a month, 1 saved project/ );
 	assert.match( out.blurbs[ 1 ], /300 3D map views a month, 200 projects/ );
 	assert.doesNotMatch( out.text, BUYING_WORDS );
 	assert.equal( out.buy, false );
@@ -873,7 +873,7 @@ test( 'buying hidden, the dashboard: the plans and their limits, the views gauge
 		buy: !! document.querySelector( '.go-pro, .upgrade .intervals, .manage' ),
 	} ) );
 	assert.equal( free.tier, 'Free' );
-	assert.match( free.blurb, /33 everyday site pieces, 15 3D map views a month, 1 saved project/ );
+	assert.match( free.blurb, /35 everyday site pieces, 15 3D map views a month, 1 saved project/ );
 	assert.match( free.views, /^\d+ \/ 15$/ );
 	assert.match( free.pro, /^Build Pro: the whole library and sets, 300 3D map views a month/ );
 	assert.doesNotMatch( free.text, BUYING_WORDS );
