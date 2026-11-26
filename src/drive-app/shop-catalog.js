@@ -17,8 +17,8 @@ export const MAX_LINES = 12;
 // A coaster set's soft-grip TPU base (its floor printed in TPU, the walls in PETG), per set.
 export const TPU_PRICE = 200;
 
-// The coasters' designs: the four open patterns (each with the mark in the middle), the two solid ones,
-// and a set of one of each open pattern.
+// The coasters' designs: the four open patterns (each with the mark in the middle), the two solid
+// discs, the logo cut to its own shape, and a set of one of each open pattern.
 export const COASTER_DESIGNS = [
 	{ id: 'mixed', name: 'Mixed: one of each pattern', setOnly: true },
 	{ id: 'topo', name: 'Topo map' },
@@ -27,6 +27,8 @@ export const COASTER_DESIGNS = [
 	{ id: 'globe', name: 'Globe' },
 	{ id: 'badge', name: 'Badge' },
 	{ id: 'mark', name: 'Mark' },
+	// The mark itself, die-cut to the globe and the road round it (wd_coaster_logo, 110 mm).
+	{ id: 'logo', name: 'Logo: the globe and road' },
 ];
 
 // One sticker's designs: the mark, or a ride from the game.
@@ -44,7 +46,7 @@ export const STICKER_DESIGNS = [
 // choices, the first the default. tpu: offers the TPU base.
 export const ITEMS = [
 	{ id: 'coaster-set', group: 'coasters', name: 'Coaster set of 4', note: 'Mixed patterns, or 4 of one design · 100 mm', price: 500, parcel: true, designs: COASTER_DESIGNS, tpu: true, image: 'shop/coasters-mixed.webp' },
-	{ id: 'coaster', group: 'coasters', name: 'Single coaster', note: 'Any of the six designs · 100 mm', price: 300, parcel: true, designs: COASTER_DESIGNS.filter( design => ! design.setOnly ), image: 'shop/coaster-topo.webp' },
+	{ id: 'coaster', group: 'coasters', name: 'Single coaster', note: 'Any of the seven designs · about 100 mm', price: 300, parcel: true, designs: COASTER_DESIGNS.filter( design => ! design.setOnly ), image: 'shop/coaster-topo.webp' },
 	{ id: 'keychain', group: 'keychains', name: 'Globe keychain', note: 'The mark, die-cut · 45 mm', price: 500, image: 'shop/keychain.webp' },
 	{ id: 'keychain-nfc', group: 'keychains', name: 'NFC keychain', note: 'Tap it on a phone and World Drive opens · 50 mm', price: 700, image: 'shop/keychain-nfc.webp' },
 	{ id: 'keychain-wordmark', group: 'keychains', name: 'Wordmark keychain', note: 'The mark and WORLD DRIVE · 80 × 35 mm', price: 500, image: 'shop/keychain-wordmark.webp' },

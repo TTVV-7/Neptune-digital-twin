@@ -8563,7 +8563,7 @@ the game itself to Canada and the US. Shut until the owner opens it (`SHOP_SALES
   Stripe sends the buyer back to `/?shop=done` (a thank-you in the window) or `/?shop=cancelled`
   (the window again, bag as it was). No account is needed to buy.
 - **What's for sale** is `src/drive-app/shop-catalog.js`, shared by the page and the Worker, prices
-  in Canadian cents: a coaster set of 4 ($5: mixed, or 4 of one of six designs; soft-grip TPU base
+  in Canadian cents: a coaster set of 4 ($5: mixed, or 4 of one of seven designs, the logo cut to its shape among them; soft-grip TPU base
   +$2), a single coaster ($3), the globe, NFC and wordmark keychains ($5, $7, $5), 10 stickers ($5),
   and one sticker ($1, only with something else: a bag of single stickers alone is turned away). The
   Worker takes only ids, designs and how many from the page, never a price. The pictures are
