@@ -816,6 +816,13 @@ function markupOf( args ) {
 
 	}
 
+	if ( kind === 'arrow' ) {
+
+		const [ a, b ] = points;
+		if ( Math.hypot( b.east - a.east, b.north - a.north, heights ? b.up - a.up : 0 ) < 0.05 ) throw new ToolError( 'points: an arrow\'s points must be apart' );
+
+	}
+
 	const name = kind === 'dimension' ? ( height ? 'Height' : 'Dimension' ) : kind === 'arrow' ? 'Arrow' : 'Note';
 	return { config: { name, kind: 'markup', params, east, north, up, heading: 0, scale: 1 }, measured };
 

@@ -430,6 +430,8 @@ test( 'the tools lay out a site', async () => {
 		[ { kind: 'note', points: [ { east: 0, north: 0 } ], text: 'x', colour: 'purple' }, /colour must be one of/ ],
 		[ { kind: 'note', points: [ { east: 0, north: 0 } ], text: 'x'.repeat( 501 ) }, /at most 500 characters/ ],
 		[ { kind: 'dimension', points: [ { east: 3, north: 3 }, { east: 3, north: 3 } ] }, /must be apart/ ],
+		[ { kind: 'arrow', points: [ { east: 0, north: 0 }, { east: 0, north: 0 } ], text: 'x' }, /an arrow's points must be apart/ ],
+		[ { kind: 'arrow', points: [ { east: 2, north: 2, up: 1 }, { east: 2, north: 2, up: 1 } ], text: 'x' }, /an arrow's points must be apart/ ],
 		[ { kind: 'dimension', height: true, points: [ { east: 0, north: 0 }, { east: 1, north: 0 } ] }, /needs up for both points/ ],
 		[ { kind: 'dimension', points: [ { east: 0, north: 0, up: 1 }, { east: 1, north: 0 } ] }, /up for every point or for none/ ],
 		[ { kind: 'arrow', height: true, points: [ { east: 0, north: 0 }, { east: 1, north: 0 } ] }, /only for a dimension/ ],

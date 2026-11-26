@@ -38,7 +38,8 @@ import { setFromView } from './view-ray.js';
 //   attach: [ { item: id, at: [ x, y, z ] } or null, ... ] (only when some point is pinned): the
 //           item each point is pinned to and where on it, in the item's own frame
 // Its origin is the middle of its points on plan, its up the first point's height, or null to sit
-// on the ground (a markup pasted, or made by Claude without heights: the MCP server's add_markup).
+// on the ground (a markup pasted, its lowest point then on the ground, or made by Claude without
+// heights: the MCP server's add_markup).
 //
 // Lines, ticks and arrowheads are drawn over everything, and the labels are HTML over the scene,
 // the same size on screen at any distance. Invisible boxes over the lines and labels (sized to the
@@ -51,7 +52,7 @@ const TYPES = [ 'dimension', 'arrow', 'note' ];
 const DEFAULT_COLOUR = { dimension: 'white', arrow: 'red', note: 'blue' };
 export const MAX_TEXT = 500;
 const MAX_OFFSET = 1000;
-// A dimension shorter than this (m) isn't one: a second click on the first point, say.
+// A dimension or arrow shorter than this (m) isn't one: a second click on the first point, say.
 const MIN_LENGTH = 0.05;
 
 // Pixels, at any distance.
@@ -343,6 +344,10 @@ export function setUpMarkups( { camera, canvas, models, sidebar, layout, getGrou
 
 			// Pinned to items where it was copied from, not where it's pasted.
 			delete params.attach;
+			// Its origin goes on the ground where it's pasted, so its lowest point sits there and the
+			// rest keep their heights above it (not below the ground, from a first point up on an item).
+			const low = Math.min( ...params.points.map( pt => pt[ 2 ] ) );
+			if ( Number.isFinite( low ) && low !== 0 ) params.points = params.points.map( pt => [ pt[ 0 ], pt[ 1 ], round( pt[ 2 ] - low ) ] );
 			return params;
 
 		},
@@ -619,7 +624,15 @@ export function setUpMarkups( { camera, canvas, models, sidebar, layout, getGrou
 
 		}
 
-		// An arrow: where the words go.
+		// An arrow: where the words go, away from its tip.
+		const tip = d.points[ 0 ];
+		if ( Math.hypot( point.east - tip.east, point.north - tip.north, ( point.up ?? 0 ) - ( tip.up ?? 0 ) ) < MIN_LENGTH ) {
+
+			toast( 'Click where the words go, away from the tip' );
+			return;
+
+		}
+
 		d.points.push( point );
 		d.cursor = point;
 		follow( d, e );

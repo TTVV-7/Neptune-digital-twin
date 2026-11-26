@@ -512,6 +512,60 @@ test( 'several copied and pasted, laid out as they were; deleted, undone and red
 
 } );
 
+test( 'pasted off a container\'s top onto flat ground, no point is below the ground; an arrow needs two points apart', async () => {
+
+	await clearMarkups();
+	await placeContainer( 10, 0 );
+	await settle( page, 300 );
+	const { top } = await containerTop();
+	await startTool( 'arrow' );
+	await clickAt( await screen( 10, 0, top ) );
+	// A second click on the tip isn't a tail.
+	await clickAt( await screen( 10, 0, top ) );
+	assert.equal( await page.evaluate( () => document.activeElement?.closest( '.markup-editor' ) !== null ), false );
+	await clickAt( await screen( 0, 10 ) );
+	await page.keyboard.type( 'Tail' );
+	await page.keyboard.press( 'Enter' );
+	await settle( page, 200 );
+	const [ arrow ] = await markups();
+	near( arrow.points[ 0 ].up, top, 'tip on the container', 0.15 );
+	near( arrow.points[ 1 ].up, 0, 'tail on the ground', 0.15 );
+	assert.ok( Math.hypot( arrow.params.points[ 0 ][ 0 ] - arrow.params.points[ 1 ][ 0 ], arrow.params.points[ 0 ][ 1 ] - arrow.params.points[ 1 ][ 1 ] ) > 5 );
+
+	await page.evaluate( () => window.twin.sidebar.setSelection( window.twin.models.entries.filter( e => e.kind === 'markup' ) ) );
+	await settle( page, 200 );
+	await page.keyboard.press( 'Control+C' );
+	const spot = await screen( 30, - 10 );
+	await page.mouse.move( spot.x, spot.y );
+	await page.keyboard.press( 'Control+V' );
+	await settle( page, 600 );
+	const pasted = ( await markups() ).at( - 1 );
+	assert.equal( ( await markups() ).length, 2 );
+	assert.equal( pasted.params.attach, undefined );
+	// Flat ground there: its lowest point on it, the other as far above it as when copied.
+	const lowest = Math.min( ...pasted.points.map( p => p.up ) );
+	near( lowest, 0, 'lowest point on the ground', 0.15 );
+	near( pasted.points[ 0 ].up - pasted.points[ 1 ].up, arrow.points[ 0 ].up - arrow.points[ 1 ].up, 'heights apart as copied', 0.05 );
+
+	// A height dimension whose first point was the high one pastes the right way up too.
+	await clearMarkups();
+	await page.evaluate( async () => {
+
+		const entry = await window.twin.models.load( { kind: 'markup', name: 'Height', params: { type: 'dimension', vertical: true, points: [ [ 0, 0, 0 ], [ 0, 0, - 3 ] ] }, east: 0, north: 0, up: 3, heading: 0 } );
+		window.twin.sidebar.setSelection( [ entry ] );
+
+	} );
+	await settle( page, 200 );
+	await page.keyboard.press( 'Control+D' );
+	await settle( page, 600 );
+	const copy = ( await markups() ).at( - 1 );
+	assert.equal( ( await markups() ).length, 2 );
+	near( Math.min( ...copy.points.map( p => p.up ) ), 0, 'height dimension on the ground', 0.15 );
+	near( copy.points[ 0 ].up - copy.points[ 1 ].up, 3, 'first point still the high one', 0.05 );
+	await clearMarkups();
+
+} );
+
 test( 'Esc cancels a markup half drawn, or a note being typed', async () => {
 
 	await clearMarkups();
