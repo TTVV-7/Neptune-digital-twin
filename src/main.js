@@ -25,6 +25,7 @@ import { setUpExcavator } from './excavator.js';
 import { setUpLaydown } from './laydown.js';
 import { setUpTowerCranes } from './tower-crane.js';
 import { setUpRows } from './rows.js';
+import { setUpMarkups } from './markups.js';
 import { accountMapsKey, loadConfig, setUpCloud } from './cloud.js';
 import { BUILD_APP, noMapReason, setUpLegalLinks, setUpSitePicker } from './product.js';
 import { setUpLogo } from './logo.js';
@@ -35,7 +36,7 @@ import { createLayers } from './layers.js';
 import { setUpZoom } from './zoom.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
-const FEATURES = [ setUpEarthworks, setUpExcavator, setUpLaydown, setUpTowerCranes, setUpRows, setUpCloud ];
+const FEATURES = [ setUpEarthworks, setUpExcavator, setUpLaydown, setUpTowerCranes, setUpRows, setUpMarkups, setUpCloud ];
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
 const ENV_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';

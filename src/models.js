@@ -146,6 +146,9 @@ export class ModelManager extends EventDispatcher {
 			inConfig: !! config.inConfig,
 			// Saved for everyone by the admin (shared-items.js): its id there.
 			sharedId: config.sharedId ?? null,
+			// Its own id in the layout, given only once something refers to it (a markup pinned to
+			// it, markups.js), and saved with it from then on.
+			id: typeof config.id === 'string' && config.id ? config.id : null,
 			// Hidden by hand (the selection toolbar's Hide): saved with the layout.
 			hidden: config.hidden === true,
 			footprint: new Box3().setFromObject( content ),
@@ -710,6 +713,7 @@ export class ModelManager extends EventDispatcher {
 		if ( entry.hidden ) config.hidden = true;
 		if ( entry.pivotAhead ) config.pivot = { ahead: round( entry.pivotAhead * state.scale ) };
 		if ( entry.library && ! entry.kind ) config.library = entry.library;
+		if ( entry.id ) config.id = entry.id;
 		return config;
 
 	}

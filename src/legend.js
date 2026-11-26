@@ -109,6 +109,9 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 		const sidebar = getSidebar();
 		const line = sidebar?.getLine();
 		if ( line ) return lineRows( line );
+		// A tool that says what it does itself (a markup, markups.js), given how the pointer clicks.
+		const own = sidebar?.getTool?.()?.legend?.( { click, mouse } );
+		if ( own ) return own;
 		const tool = library.querySelector( '.card.tool.active' );
 		if ( tool ) return drawingRows( tool.querySelector( '.name' )?.textContent ?? '' );
 		if ( library.classList.contains( 'placing' ) ) return placingRows( models.entries.find( entry => entry.placing )?.state.name ?? '' );
@@ -284,10 +287,12 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 		const settings = ! shape && kind?.fields?.length > 0;
 		const buttons = [ turns && 'rotate', sized && 'size', drivable && 'drive', ...extras.map( text => text.toLowerCase() ), 'edit', 'hide', 'delete' ].filter( Boolean );
 		const points = shape === 'points';
+		// A markup's points (markups.js): always as many, so no pluses and none taken out.
+		const fixed = points && kind.resize.fixed;
 		return { title: `Selected: ${ entry.state.name ?? '' }`, rows: [
 			[ [ '~Drag' ], 'Move it' ],
 			...turns ? [ [ [ '~Drag' ], 'The round handle: rotate' ] ] : [],
-			...points ? [
+			...fixed ? [ [ [ '~Drag' ], 'A dot: move that point' ] ] : points ? [
 				[ [ '~Drag' ], 'A dot: move that point of the line' ],
 				[ [ '~Drag' ], 'A plus: add a point there (or click it)' ],
 				[ [ mouse ? '~Double-click' : '~Double-tap' ], 'A dot: take that point out' ],
@@ -299,7 +304,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 				[ [ 'Ctrl', '+', 'Z' ], 'Undo that (Shift for redo)' ],
 			] : [],
 			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
-			[ [ 'P' ], points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : settings ? 'Its settings and exact position' : 'Exact position' ],
+			[ [ 'P' ], fixed ? 'Its words, colour and position' : points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : settings ? 'Its settings and exact position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
 			[ [ 'Shift', '+', `~${ click }` ], 'Another: select it too' ],
 			[ [ mod, '+', 'C' ], 'Copy · D duplicate · Z undo' ],

@@ -84,10 +84,18 @@
 //                              // double-click on a point takes it out
 //       points( params ),      // the points, as [ east, north ] metres from its origin as if it
 //                              // faced north (heading 0)
-//       withPoints( params, points ),  // the params with these points instead
+//       withPoints( params, points, { moved } ),  // the params with these points instead
+//                              // (moved: the index of the point dragged, or -1)
 //       heights( entry ),      // the ground under each point, in metres above its base (optional)
+//       fixed: true,           // always this many points: no pluses to add one, no double-click
+//                              // to take one out, and never a loop (a markup, markups.js)
 //       live, label,           // as above
 //     },
+//
+// And any kind:
+//
+//     pasted( params ) { return params; },  // the params a copy is pasted with (clipboard.js), e.g.
+//                              // without what pins a markup to the item it was copied beside
 
 const kinds = new Map();
 

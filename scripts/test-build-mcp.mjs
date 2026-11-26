@@ -293,7 +293,7 @@ test( 'initialize, tools/list and a notification', async () => {
 	assert.equal( init.serverInfo.name, 'world-drive-build' );
 	assert.match( init.instructions, /find_site/ );
 	const { tools } = await rpc( 'tools/list', {} );
-	assert.deepEqual( tools.map( t => t.name ), [ 'find_site', 'create_project', 'list_projects', 'get_project', 'search_library', 'list_sets', 'place_items', 'place_set', 'place_row', 'add_flatten_area', 'add_laydown_area', 'add_stockpile', 'move_item', 'remove_items', 'share_project' ] );
+	assert.deepEqual( tools.map( t => t.name ), [ 'find_site', 'create_project', 'list_projects', 'get_project', 'search_library', 'list_sets', 'place_items', 'place_set', 'place_row', 'add_flatten_area', 'add_laydown_area', 'add_stockpile', 'add_markup', 'move_item', 'remove_items', 'share_project' ] );
 	for ( const t of tools ) assert.equal( t.inputSchema.type, 'object', t.name );
 	const note = await call( '/mcp', { method: 'POST', body: { jsonrpc: '2.0', method: 'notifications/initialized' }, headers: { Authorization: `Bearer ${ tokens.access_token }` } } );
 	assert.equal( note.status, 202 );
@@ -411,6 +411,39 @@ test( 'the tools lay out a site', async () => {
 	} );
 	for ( const [ a, b ] of ends ) for ( const [ e, n ] of [ a, b ] ) assert.ok( e > 99.98 && e < 110.02 && n > - 0.02 && n < 10.02, `${ e }, ${ n } is outside the square` );
 	for ( let i = 1; i < ends.length; i ++ ) assert.ok( Math.hypot( ends[ i ][ 0 ][ 0 ] - ends[ i - 1 ][ 1 ][ 0 ], ends[ i ][ 0 ][ 1 ] - ends[ i - 1 ][ 1 ][ 1 ] ) < 0.03, `a gap before barrier ${ i }` );
+	// Markups: a dimension (its length on plan), a height dimension, an arrow and a note, each
+	// returned as stored; bad ones are refused, saying why.
+	const dimension = await tool( 'add_markup', { project_id: project, kind: 'dimension', points: [ { east: 0, north: 0 }, { east: 24.6, north: 0 } ], offset: 3 } );
+	assert.equal( dimension.error, false, dimension.text );
+	assert.match( dimension.text, /a dimension of 24\.6 m \(white\)/ );
+	const stored = JSON.parse( dimension.text.slice( dimension.text.indexOf( '{' ), dimension.text.lastIndexOf( '}' ) + 1 ) );
+	assert.deepEqual( stored, { name: 'Dimension', kind: 'markup', params: { type: 'dimension', points: [ [ - 12.3, 0, 0 ], [ 12.3, 0, 0 ] ], colour: 'white', text: '', offset: 3, vertical: false }, east: 12.3, north: 0, up: null, heading: 0, scale: 1 } );
+	assert.match( ( await tool( 'add_markup', { project_id: project, kind: 'dimension', height: true, points: [ { east: 5, north: 5, up: 10 }, { east: 5, north: 5, up: 11.2 } ] } ) ).text, /a height dimension of 1\.2 m/ );
+	assert.match( ( await tool( 'add_markup', { project_id: project, kind: 'arrow', points: [ [ 10, 0 ], [ 16, 6 ] ], text: 'Gas main', colour: 'amber' } ) ).text, /an arrow saying "Gas main" \(amber\)/ );
+	const note = await tool( 'add_markup', { project_id: project, kind: 'note', points: [ { east: 20, north: 30 } ], text: 'Hazard: open trench', colour: 'red' } );
+	assert.match( note.text, /a note saying "Hazard: open trench" \(red\).*"kind":"markup"/ );
+	for ( const [ args, why ] of [
+		[ { kind: 'circle', points: [ { east: 0, north: 0 } ] }, /kind must be one of dimension, arrow, note/ ],
+		[ { kind: 'dimension', points: [ { east: 0, north: 0 } ] }, /a dimension takes 2 points/ ],
+		[ { kind: 'note', points: [ { east: 0, north: 0 } ] }, /what the note says/ ],
+		[ { kind: 'note', points: [ { east: 'here', north: 0 } ], text: 'x' }, /east must be a number/ ],
+		[ { kind: 'note', points: [ { east: 0, north: 0 } ], text: 'x', colour: 'purple' }, /colour must be one of/ ],
+		[ { kind: 'note', points: [ { east: 0, north: 0 } ], text: 'x'.repeat( 501 ) }, /at most 500 characters/ ],
+		[ { kind: 'dimension', points: [ { east: 3, north: 3 }, { east: 3, north: 3 } ] }, /must be apart/ ],
+		[ { kind: 'dimension', height: true, points: [ { east: 0, north: 0 }, { east: 1, north: 0 } ] }, /needs up for both points/ ],
+		[ { kind: 'dimension', points: [ { east: 0, north: 0, up: 1 }, { east: 1, north: 0 } ] }, /up for every point or for none/ ],
+		[ { kind: 'arrow', height: true, points: [ { east: 0, north: 0 }, { east: 1, north: 0 } ] }, /only for a dimension/ ],
+		[ { kind: 'dimension', offset: 5000, points: [ { east: 0, north: 0 }, { east: 1, north: 0 } ] }, /offset must be a number/ ],
+	] ) {
+
+		const refused = await tool( 'add_markup', { project_id: project, ...args } );
+		assert.ok( refused.error, `${ JSON.stringify( args ) } was taken` );
+		assert.match( refused.text, why );
+
+	}
+
+	const listed = ( await tool( 'get_project', { project_id: project } ) ).value.items.filter( i => i.item === 'markup' );
+	assert.deepEqual( listed.map( i => [ i.name, i.params.type, i.measures ?? null ] ), [ [ 'Dimension', 'dimension', '24.6 m' ], [ 'Height', 'dimension', '1.2 m' ], [ 'Arrow', 'arrow', null ], [ 'Note', 'note', null ] ] );
 	const shared = await tool( 'share_project', { project_id: project } );
 	assert.match( shared.value.share, /\/build\/app\/\?at=49\.282700%2C-123\.120700&place=Vancouver\+City\+Hall&view=[\w-]{22}$/ );
 	assert.match( ( await tool( 'list_projects', {} ) ).text, /City hall staging/ );
@@ -447,7 +480,11 @@ test( 'the project opens in the editor with what was placed', async () => {
 		site: window.twin.SITE,
 	} ) );
 	assert.equal( loaded.site.name, 'Vancouver City Hall' );
-	assert.ok( loaded.kinds.includes( 'flatten-zone' ) && loaded.kinds.includes( 'laydown' ) && loaded.kinds.includes( 'stockpile' ), loaded.kinds.join() );
+	assert.ok( loaded.kinds.includes( 'flatten-zone' ) && loaded.kinds.includes( 'laydown' ) && loaded.kinds.includes( 'stockpile' ) && loaded.kinds.includes( 'markup' ), loaded.kinds.join() );
+	// Claude's markups, labelled in the editor as get_project measured them.
+	await page.waitForFunction( () => [ ...document.querySelectorAll( '.markup-label' ) ].some( l => l.textContent === '24.6 m' ) );
+	const labels = await page.evaluate( () => [ ...document.querySelectorAll( '.markup-label' ) ].map( l => l.textContent ).sort() );
+	assert.deepEqual( labels, [ '1.2 m', '24.6 m', 'Gas main', 'Hazard: open trench' ] );
 	assert.equal( loaded.trailer.east, 0 );
 	assert.equal( loaded.trailer.north, 20 );
 	// The raised and the exact-height areas as Claude made them.

@@ -273,9 +273,9 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 			const at = [ de * Math.cos( rad ) - dn * Math.sin( rad ), de * Math.sin( rad ) + dn * Math.cos( rad ) ];
 			const list = kind.resize.points( start.params );
 			// A loop's first point is its last too: they move together, so it stays closed.
-			const moves = i => i === handle.index || ( handle.index === 0 && i === list.length - 1 && isLoop( list ) );
+			const moves = i => i === handle.index || ( handle.index === 0 && i === list.length - 1 && isLoop( list, kind ) );
 			const next = handle.type === 'point' ? list.map( ( p, i ) => moves( i ) ? at : p ) : [ ...list.slice( 0, handle.index + 1 ), at, ...list.slice( handle.index + 1 ) ];
-			setDraft( e, withPoints( next ) );
+			setDraft( e, withPoints( next, drag, handle.type === 'point' ? handle.index : - 1 ) );
 			return;
 
 		}
@@ -370,7 +370,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 			place( entry, withPoints( [ ...list.slice( 0, handle.index + 1 ), middle, ...list.slice( handle.index + 1 ) ], { entry, kind, start } ) );
 			lastClick = null;
 
-		} else if ( lastClick?.entry === entry && lastClick.index === handle.index && now - lastClick.time < DOUBLE_CLICK ) {
+		} else if ( ! kind.resize.fixed && lastClick?.entry === entry && lastClick.index === handle.index && now - lastClick.time < DOUBLE_CLICK ) {
 
 			lastClick = null;
 			if ( list.length > 2 ) place( entry, withPoints( withoutPoint( list, handle.index ), { entry, kind, start } ) );
@@ -391,7 +391,9 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 	// A placement with these points (in its frame as when the drag began), its origin moved to the
 	// middle of them so that it keeps turning about its middle. The drag's kind and start, or another's.
-	function withPoints( list, { kind, start } = drag ) {
+	// `moved`: the index of the point dragged, for kinds that keep more about each point (a markup's
+	// height and what it's pinned to, markups.js), -1 for none.
+	function withPoints( list, { kind, start } = drag, moved = - 1 ) {
 
 		const middle = [ 0, 1 ].map( k => ( Math.min( ...list.map( p => p[ k ] ) ) + Math.max( ...list.map( p => p[ k ] ) ) ) / 2 );
 		const rad = start.heading * DEG;
@@ -401,7 +403,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 			east: round( start.east + middle[ 0 ] * cos + middle[ 1 ] * sin ),
 			north: round( start.north - middle[ 0 ] * sin + middle[ 1 ] * cos ),
 			heading: start.heading,
-			params: kindParams( kind, kind.resize.withPoints( start.params, list.map( ( [ e, n ] ) => [ round( e - middle[ 0 ] ), round( n - middle[ 1 ] ) ] ) ) ),
+			params: kindParams( kind, kind.resize.withPoints( start.params, list.map( ( [ e, n ] ) => [ round( e - middle[ 0 ] ), round( n - middle[ 1 ] ) ] ), { moved } ) ),
 		};
 
 	}
@@ -631,7 +633,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 		const heights = line.length > 0 ? kind.resize.heights?.( entry ) : null;
 		const adding = drag?.handle.type === 'insert' ? drag.handle.index + 1 : - 1;
 		// A loop's last point is its first: one dot for both, the first's.
-		const shut = isLoop( line ) ? line.length - 1 : - 1;
+		const shut = isLoop( line, kind ) ? line.length - 1 : - 1;
 		for ( const handle of [ ...points, ...inserts ] ) handle.active = false;
 		line.forEach( ( [ e, n ], i ) => {
 
@@ -648,7 +650,8 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 			if ( drag?.handle === handle ) handle.world.copy( points[ adding ].world );
 			else handle.world.addVectors( a.world, b.world ).multiplyScalar( 0.5 );
 			toScreen( handle.world, camera, rect, handle.screen );
-			handle.active = ! drag && Math.hypot( a.screen.x - b.screen.x, a.screen.y - b.screen.y ) >= INSERT_ROOM;
+			// A kind with a fixed number of points (a markup's) has no pluses.
+			handle.active = ! drag && ! kind.resize.fixed && Math.hypot( a.screen.x - b.screen.x, a.screen.y - b.screen.y ) >= INSERT_ROOM;
 
 		}
 
@@ -776,9 +779,10 @@ function resizeCursor( dx, dy ) {
 }
 
 // Whether points ([ east, north ]) end where they start: a loop, such as a fence round an area.
-function isLoop( list ) {
+// Never for a kind with a fixed number of points (a markup).
+function isLoop( list, kind = null ) {
 
-	return list.length > 3 && Math.hypot( list[ 0 ][ 0 ] - list[ list.length - 1 ][ 0 ], list[ 0 ][ 1 ] - list[ list.length - 1 ][ 1 ] ) < 0.05;
+	return ! kind?.resize?.fixed && list.length > 3 && Math.hypot( list[ 0 ][ 0 ] - list[ list.length - 1 ][ 0 ], list[ 0 ][ 1 ] - list[ list.length - 1 ][ 1 ] ) < 0.05;
 
 }
 

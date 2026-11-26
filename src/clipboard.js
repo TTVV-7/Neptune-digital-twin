@@ -1,4 +1,5 @@
 import { SITE } from './config.js';
+import { getKind } from './kinds.js';
 
 // The editor's clipboard (sidebar.js): what Copy or Cut took, kept in this browser's localStorage
 // so that it can be pasted into another project, tab or site, and put on the system clipboard as
@@ -114,9 +115,13 @@ export function readStoredClipboard() {
 // The config a pasted item is loaded with: the copied one where it lands, as a new item. It's
 // snapped to the ground there (a height kept from another place would be wrong), keeping how it was
 // parked (tilted on a pile, say), which is relative to the ground.
+// A new item has no id of its own yet (models.js: what a markup is pinned to), and a kind can
+// leave out what only made sense where it was copied (kinds.js pasted).
 export function pastedConfig( { config }, at ) {
 
-	const { inConfig, sharedId, hidden, ...rest } = config;
+	const { inConfig, sharedId, hidden, id, ...rest } = config;
+	const kind = rest.kind && rest.params ? getKind( rest.kind ) : null;
+	if ( kind?.pasted ) rest.params = kind.pasted( { ...rest.params } );
 	return { ...rest, east: round( at.east ), north: round( at.north ), up: null };
 
 }

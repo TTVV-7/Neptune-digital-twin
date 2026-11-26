@@ -219,7 +219,10 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// A tool card. spec:
 	//   name, hint (shown under the name), title (tooltip), icon (SVG markup, 64 x 64 viewBox)
 	//   mode: 'rect' to drag out a rectangle lined up with the way you're looking (a click without
-	//         a drag makes one defaultSize = [ width, length ] in metres), or 'point' to click a spot
+	//         a drag makes one defaultSize = [ width, length ] in metres), 'point' to click a spot,
+	//         or 'custom' for a tool that takes the presses itself (markups.js): onStart() when it's
+	//         picked, onPress( e ) and onMove( e ) with the scene's pointer events, onCancel() when
+	//         it ends (Esc, another tool, or cancelDrawing() once it has done its work)
 	//   color: outline colour while dragging
 	//   onDone( shape ): called with { east, north, height, heading, width, length, dragged } (just
 	//         east/north/height/heading for 'point'); may return a placed entry (or a promise of
@@ -1435,6 +1438,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		entry.pivot.updateWorldMatrix( true, false );
 		const line = kind?.resize?.shape === 'points' ? kind.resize.points( entry.params ) : null;
 		const points = [];
+		// A single point (a note, markups.js): just that.
+		if ( line?.length === 1 ) points.push( new Vector3( line[ 0 ][ 0 ], 0, - line[ 0 ][ 1 ] ) );
 		if ( line ) {
 
 			for ( let i = 0; i < line.length - 1; i ++ ) {
@@ -1536,6 +1541,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		if ( drawing?.start ) updateDrawing();
 		if ( drawing?.tool.mode === 'line' ) moveLine( e );
+		if ( drawing?.tool.mode === 'custom' ) drawing.tool.onMove?.( e );
 		if ( placing ) followPointer();
 		// A press on an item selects it; it only moves once the pointer has gone further than a
 		// click's slip, since from afar one pixel of jitter covers metres of ground.
@@ -1583,6 +1589,15 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( drawing?.tool.mode === 'line' ) {
 
 			pressLine( e );
+			suppressClick = true;
+			return;
+
+		}
+
+		// A tool that takes the clicks itself (a markup, markups.js).
+		if ( drawing?.tool.mode === 'custom' ) {
+
+			drawing.tool.onPress?.( e );
 			suppressClick = true;
 			return;
 
@@ -1924,6 +1939,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		drawing = { tool, start: null, heading: getPlayer().heading, outline };
 		root.classList.add( 'placing' );
 		tool.card.classList.add( 'active' );
+		tool.onStart?.();
 
 	}
 
@@ -2342,6 +2358,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		undoPoint,
 		cancelPlacing,
 		cancelDrawing,
+		// The tool in use, if any (a markup's: markups.js).
+		getTool: () => drawing?.tool ?? null,
 		// The line being drawn, if any: { name, points } (how many).
 		getLine: () => drawing?.tool.mode === 'line' ? { name: drawing.tool.name, points: drawing.points.length } : null,
 		cardFor: id => cards.find( c => c.item.id === id )?.card ?? null,

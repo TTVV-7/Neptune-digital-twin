@@ -1251,6 +1251,8 @@ src/shoring-models.js  the shoring pieces, for pits and the library's Shoring ca
 src/shoring-ground.js  draws a shored pit's walls straight up behind the shoring
 src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
 src/rows.js         rows: many of one library item along a line drawn on the ground (Row on a card)
+src/markups.js      markups: dimensions, height dimensions, arrows and notes, pinned to items they're
+                    drawn on (docs/build.md)
 src/excavator.js    digging with an excavator; src/excavator-model.js builds the machines
 src/cloud.js        sign in with Google, layouts in your account, share links (needs the Worker)
 src/premium.js      the Pro equipment pack: locked cards and the buy dialog (needs the Worker)

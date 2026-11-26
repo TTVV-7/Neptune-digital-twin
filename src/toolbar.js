@@ -15,7 +15,7 @@ const UNDO_TIME = 5000;
 const GAP = 12;
 const MARGIN = 8;
 // Labels floating over placed things (earthworks.js, laydown.js), which the toolbar goes above.
-const LABELS = '.earthworks-labels .label, .laydown-label';
+const LABELS = '.earthworks-labels .label, .laydown-label, .markup-label';
 // The Show and Controls panels on the right (layers.js, legend.js), or their buttons, which the
 // toolbar keeps beside, as it does the P panel.
 const PANELS = '#layers > :not([hidden]), #legend > :not([hidden])';

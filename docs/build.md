@@ -363,6 +363,53 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   selecting a hidden item; Ctrl+V/Z doing nothing with the library closed; cutting Pro items on a
   free account leaving them; 80 selected not measured every frame, outlines following a turn).
 
+## Markups: dimensions, arrows and notes
+
+Site markups as on a marked-up drawing (Bluebeam Revu, SketchUp), in `src/markups.js`. Each is a
+placed kind (`markup`, `src/kinds.js`), so it's saved with the layout (and to the account),
+selected, box-selected, moved, turned, copied and pasted, hidden, deleted and undone like any item.
+
+- **Tools** (with the other tools at the top of the library): **Dimension**: click A, click B, then
+  click where the dimension line goes; it's drawn offset sideways from the points, with end ticks,
+  extension lines back to them and the distance on plan to a tenth of a metre ("24.6 m"). **Shift**
+  on the second click squares it to north or east (whichever it's nearer). **Height** (or **Alt** on
+  a dimension's second click): the difference in height between the two points ("2.6 m").
+  **Arrow**: click what it points at (the arrowhead), then where its words go, and type them.
+  **Note**: click a spot and type; red (hazard), amber (caution), blue (information), green or
+  white. **Enter** puts it down (Shift+Enter for a new line), **Esc** cancels at any step. While a
+  tool is in use the Controls panel says what the next click does (the sidebar's `custom` tool mode).
+- **Points snap** to what's under the pointer: the ground, or a placed item's surface. A point put on
+  an item is pinned to it: the item is given an `id` (saved with it from then on; `models.js`), and
+  the point follows it when it's moved or turned, here or after a reload; the markup's other points
+  stay. Dragging the point's dot (or the markup) away from the item lets go of it. Pasted markups
+  aren't pinned (`kinds.js` `pasted`), and a copy of an item gets no id.
+- **Seen at any distance:** lines, ticks and arrowheads are drawn over everything at a fixed width
+  in pixels; labels are HTML over the scene, the same size on screen. Invisible boxes sized to the
+  screen each frame over the lines and labels make them clickable in build mode only (walking
+  doesn't bump into them).
+- **Changing them:** dots on a selected markup's points to drag (always as many: no pluses, none
+  taken out; `resize.fixed` in `handles.js`); **double-click** a note or arrow (or **Text** on its
+  toolbar) to change its words and colour; the P panel has the words, colour and a dimension's
+  offset. Adding one, changing its words, and dragging a point are each one step in the shared undo
+  (`src/history.js`).
+- **Show panel:** a **Markups** row with how many, to hide them all.
+- **Saved as** `{ kind: 'markup', name, east, north, up, heading, params }` with params `type`
+  (`dimension`, `arrow`, `note`), `points` (`[ east, north, up ]` metres from its origin, which is the
+  middle of the points on plan at the first one's height, or `up: null` to sit on the ground),
+  `text`, `colour`, a dimension's `offset` (m left of A to B) and `vertical` (a height), and, when a
+  point is pinned, `attach` (`[ { item: id, at: [ x, y, z ] } or null ]`, `at` in the item's own
+  frame). Layouts without markups load as before.
+- **Claude (MCP):** `add_markup` takes `kind` (`dimension`, `arrow`, `note`), `points`
+  (`{ east, north, up? }`: up for all or none), `text`, `colour`, `height` (a height dimension) and
+  `offset`, refuses what doesn't make sense (a note without words, points in the same place, a
+  height without ups) and returns the markup as stored. `get_project` lists markups (a dimension
+  with what it `measures`) and `remove_items` takes them away.
+- **Tests:** `npm run test:markups-ui` (each kind placed by clicking, the length label, Shift
+  squaring, height by tool and by Alt, words typed and changed as one undo step with the camera
+  still, the Show panel's row, save and reload, a point following a dragged item and back on Undo,
+  copy and paste of several, delete, undo and redo, Esc at each step, layouts from before), and
+  `npm run test:build-mcp` (`add_markup`, good and bad, and the markups in the editor).
+
 ## How it's put together
 
 - **Pages:** `npm run build:drive` builds the dashboard into `dist-drive/build/` and the app a
@@ -433,8 +480,8 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   kept only as hashes, access an hour, refresh 30 days and replaced on use;
   `migrations/0018_build_mcp.sql`). Its tools find a site, make and read projects, search the
   library and sets (`build-catalog.json`, made by `npm run make-build-catalog` whenever the library
-  changes), place items, sets and rows, add flatten, laydown and stockpile areas, move and remove
-  things and share a project; each answer has the editor link. `MCP_HOURLY` (default 300) caps an
+  changes), place items, sets and rows, add flatten, laydown and stockpile areas and markups
+  (`add_markup`: dimensions, arrows and notes), move and remove things and share a project; each answer has the editor link. `MCP_HOURLY` (default 300) caps an
   account's tool calls an hour. The dashboard's **Build with Claude** box shows the address and
   disconnects every connected app.
 - **Legal pages:** `/build/terms/`, `/build/privacy/` (with **Cookies and storage**, `#cookies`),
