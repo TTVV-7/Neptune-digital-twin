@@ -94,7 +94,7 @@ test( 'with premium not set up, the Pro equipment places like everything else', 
 	assert.deepEqual( ( await api( page, 'GET', '/api/config' ) ).premium, { enabled: false } );
 	assert.equal( await page.locator( '#library .card.locked' ).count(), 0 );
 	assert.equal( await page.locator( '#library .card .pro:visible' ).count(), 0 );
-	await page.locator( '#library .card', { hasText: 'Scissor lift' } ).click();
+	await page.locator( '#library .card[data-item="scissor-lift-32ft"]' ).click();
 	await page.waitForFunction( () => window.twin.models.entries.some( e => e.placing && e.library === 'scissor-lift-32ft' ) );
 	assert.equal( await page.locator( '.premium-dialog' ).count(), 0 );
 	await page.keyboard.press( 'Escape' );
@@ -545,17 +545,17 @@ test( 'the timeline plays the B2D2 repairs back: no area before its day, each at
 	// off in the twin stays off rather than coming back from the drawing.
 	const numbers = () => page.evaluate( () => [ ...document.querySelectorAll( '#layers .layer' ) ].find( row => /Panel numbers/.test( row.textContent ) )?.querySelector( '.count' )?.textContent );
 	const numbered = areas.filter( a => a.no );
-	assert.equal( numbered.length, 46 );
-	await page.waitForFunction( () => [ ...document.querySelectorAll( '#layers .layer' ) ].some( row => /Panel numbers/.test( row.textContent ) && row.querySelector( '.count' )?.textContent === '46' ) );
+	assert.equal( numbered.length, 78 );
+	await page.waitForFunction( () => [ ...document.querySelectorAll( '#layers .layer' ) ].some( row => /Panel numbers/.test( row.textContent ) && row.querySelector( '.count' )?.textContent === '78' ) );
 	await page.locator( '#views .edit-areas' ).click();
 	await page.evaluate( id => window.twin.repairAreas.select( id ), numbered[ 0 ].id );
 	assert.equal( await page.locator( '#area-editor [data-field=no]' ).inputValue(), numbered[ 0 ].no );
 	await page.locator( '#area-editor [data-field=no]' ).fill( '' );
 	await page.locator( '#area-editor [data-field=no]' ).press( 'Enter' );
 	assert.equal( ( await page.evaluate( id => window.twin.repairAreas.areas().find( a => a.id === id ), numbered[ 0 ].id ) ).no, '' );
-	assert.equal( await numbers(), '45' );
+	assert.equal( await numbers(), '77' );
 	await page.evaluate( () => window.twin.repairAreas.undo() );
-	assert.equal( await numbers(), '46' );
+	assert.equal( await numbers(), '78' );
 
 	// One area taken on two stages, not saved: sandblasted on the 6th, epoxy coated today.
 	const taken = areas.find( a => chipped( a ) === first );
