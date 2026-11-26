@@ -1187,8 +1187,11 @@ test( 'an area deleted and put back with the toast\'s Undo keeps its raise steps
 	near( await raiseOf(), 0.75, 1e-6, 'raised by PageUp three times' );
 	const steps = await page.evaluate( () => window.twin.sidebar.history.size );
 	await page.keyboard.press( 'Delete' );
+	assert.deepEqual( await page.evaluate( () => window.twin.sidebar.history.size ), { undo: steps.undo + 1, redo: 0 }, 'the delete is one step' );
 	await page.locator( '.undo-toast button' ).click();
 	await page.waitForFunction( () => window.twin.sidebar.getSelected()?.kind === 'flatten-zone' );
+	// The toast's Undo undoes that step, in the one history: Ctrl+Y would delete it again.
+	assert.deepEqual( await page.evaluate( () => window.twin.sidebar.history.size ), { undo: steps.undo, redo: 1 }, 'the toast undid the delete step' );
 	const back = await page.evaluate( i => {
 
 		const entry = window.twin.sidebar.getSelected();
@@ -1202,7 +1205,7 @@ test( 'an area deleted and put back with the toast\'s Undo keeps its raise steps
 	await page.keyboard.press( 'Control+z' );
 	await page.waitForTimeout( 100 );
 	near( await raiseOf(), 0.25, 1e-6, 'and the one before' );
-	assert.deepEqual( await page.evaluate( () => window.twin.sidebar.history.size ), { undo: steps.undo - 2, redo: 2 } );
+	assert.deepEqual( await page.evaluate( () => window.twin.sidebar.history.size ), { undo: steps.undo - 2, redo: 3 }, 'the two raises and the delete to redo' );
 
 	// Another layout (a project opened, a share link) takes every step with what was placed.
 	const after = await page.evaluate( async () => {

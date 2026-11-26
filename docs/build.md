@@ -145,8 +145,9 @@ flattening, the terrain and the surface so they agree):
   the exact-height box, Back to the ground's height) is one undo step: **Ctrl/Cmd+Z** undoes,
   **Ctrl/Cmd+Shift+Z** or **Ctrl+Y** redoes (`src/history.js`, in `sidebar.js`; while the library is
   open or something is selected). An area deleted and put back with the Undo toast is a new entry:
-  its steps follow it there (`toolbar.js` `onPutBack` → `history.replace`); a step whose area is
-  gone for good says so rather than doing nothing. Opening another layout (a project, a share link)
+  its steps follow it there (the delete is a step itself, `sidebar.js` `deleteItems`, whose undo
+  calls `history.replace`; the toast's Undo undoes that step, so Ctrl+Y deletes it again); a step
+  whose area is gone for good says so rather than doing nothing. Opening another layout (a project, a share link)
   or clearing everything clears the steps (`layout.onReplace` → `history.clear`). The P panel's −
   and + keep the focus once clicked, but only a field being typed in is left alone by its refresh
   (`placement.js`), so the number still follows PageUp and undo meanwhile. With keep what's
