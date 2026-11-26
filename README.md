@@ -133,7 +133,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | Showing | |
 | --- | --- |
 | B | Before / after: the site as Google captured it (nothing flattened, dug, piled or placed), or with your changes |
-| Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, tieback no-dig zones, labels, or a whole category such as Vehicles |
+| Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, tieback no-dig zones, the cut & fill sides round flatten areas, labels, or a whole category such as Vehicles |
 | Hide (toolbar) | Hide just the selected item; the Show panel lists it to show again |
 
 | Other | |

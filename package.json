@@ -48,6 +48,7 @@
     "test:sets-flatten-ui": "node --test scripts/test-sets-flatten-ui.mjs",
     "test:grade-surface": "node --test scripts/test-grade-surface.mjs",
     "test:grading-ui": "node --test scripts/test-grading-ui.mjs",
+    "test:sides-ui": "node --test scripts/test-sides-ui.mjs",
     "test:earthworks-slope-ui": "node --test scripts/test-earthworks-slope-ui.mjs",
     "test:city-drive-ui": "node --test scripts/test-city-drive-ui.mjs",
     "test:build-worker": "node --test scripts/test-build-worker.mjs",
