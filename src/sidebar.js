@@ -110,7 +110,11 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		drive,
 		canDrive: entry => vehicles.has( entry.library ),
 		hide: entry => models.setHidden( entry, true ),
+		onPutBack: ( entry, back ) => history.replace( entry, back ),
 	} );
+	// Another layout opened (a project, a shared link) or everything cleared: the steps belonged to
+	// what was there and would act on nothing.
+	layout?.onReplace?.( () => history.clear() );
 	// The P panel's Remove deletes as the toolbar does, with Undo, so a misclick there isn't final.
 	panel.onRemove = entry => toolbar.remove( entry );
 

@@ -187,8 +187,12 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 	}
 
+	// Called once what's placed has been thrown away for another layout (replace) or nothing (clear).
+	const replacedListeners = new Set();
+
 	function clearAll() {
 
+		for ( const listener of replacedListeners ) listener();
 		unloaded = [];
 		pendingExtras = {};
 		for ( const entry of placed() ) models.remove( entry );
@@ -197,6 +201,14 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	}
 
 	return {
+
+		// fn() whenever replace() or clear() throws away what's placed (the undo steps for it go too).
+		onReplace( fn ) {
+
+			replacedListeners.add( fn );
+			return () => replacedListeners.delete( fn );
+
+		},
 
 		async restore() {
 

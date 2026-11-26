@@ -144,8 +144,13 @@ flattening, the terrain and the surface so they agree):
   at the ground's height and save as before. Each change (a drag let go, a key, a field, a − or +,
   the exact-height box, Back to the ground's height) is one undo step: **Ctrl/Cmd+Z** undoes,
   **Ctrl/Cmd+Shift+Z** or **Ctrl+Y** redoes (`src/history.js`, in `sidebar.js`; while the library is
-  open or something is selected). With keep what's overhead, what's kept is measured from the
-  raised floor.
+  open or something is selected). An area deleted and put back with the Undo toast is a new entry:
+  its steps follow it there (`toolbar.js` `onPutBack` → `history.replace`); a step whose area is
+  gone for good says so rather than doing nothing. Opening another layout (a project, a share link)
+  or clearing everything clears the steps (`layout.onReplace` → `history.clear`). The P panel's −
+  and + keep the focus once clicked, but only a field being typed in is left alone by its refresh
+  (`placement.js`), so the number still follows PageUp and undo meanwhile. With keep what's
+  overhead, what's kept is measured from the raised floor.
 - **Ground from the coarsest tiles is never used.** While the camera moves (and as tiles refine and
   fade) Google's globe-level tiles (a geometric error of kilometres) can be all a vertical line
   meets, or the first it meets; in North Vancouver they lie about 1,500 m above the ground. A graded
@@ -179,7 +184,9 @@ flattening, the terrain and the surface so they agree):
   and a shed, a car, a stand of trees and a 30 m building still left out), with
   `test:sets-flatten-ui`, `test:excavation-ui` and `test:build-mcp`. Raising and lowering (`test:grading-ui`): the arrow dragged up
   (0.05 m steps, its label, more fill and less cut), PageUp, Shift+PageDown, Ctrl+PageUp, each
-  undone and redone, the P panel's number, − and +, an exact height that stays put when moved and
+  undone and redone, the P panel's number, − and +, + clicked for real (focused) still showing
+  PageUp and undo and going on from there, an area deleted and put back with the toast's Undo still
+  undoing its raises, another layout clearing the steps, an exact height that stays put when moved and
   goes back to a raise where it stood, Back to the ground's height, a raise kept when moved, saved
   and loaded (and one saved before at the ground's height, saving as before); every shape, a level
   floor and one keeping what's overhead shifted 1 m whole. And ground read from the coarsest tiles
@@ -201,9 +208,12 @@ flattening, the terrain and the surface so they agree):
   `noCollide` (3 cm above the floor). Over about 500 m square (`MAX_FLOOR_CHUNKS`) an area is only
   pressed down, as before. The ring of terrain nodes just outside the area (drawn with it) is read
   from above, so beside a tree or a roof it rose to that as a spike of earth off the edge; it's
-  drawn no higher than the lowest ground outside the area within 3 m, nor lower than the edge's
-  floor (`terrain.js` `zoneLips`, as `lipHeights` does round a pit), so where the area is dug into
-  a hillside the cut face still rises to the ground.
+  drawn no higher than the lowest ground outside the area within 3 m, nor than the ground within
+  6 m rising at 30% from there (`EDGE_REACH`, `EDGE_SLOPE`: a conifer's crown is wider than 3 m),
+  nor lower than the edge's floor (`terrain.js` `zoneLips` and `edgeGround`, as `lipHeights` does
+  round a pit), so where the area is dug into a hillside the cut face still rises to the ground. A
+  node read more than 2 m above that is marked standing (below), so the tree shows there; a small
+  nub of earth can remain where the ground under a wide crown is guessed high.
 - **Trees beside an area's edge** (`terrain.js` `edgeLips`). The ground round an area is read from
   above off Google's mesh, so beside a stand of trees it is the trees' crowns. The ring of nodes
   drawn just past what an area changes, and the drawn cells' outer corners past that, were at that
@@ -212,13 +222,15 @@ flattening, the terrain and the surface so they agree):
   batter's foot up to them, in the cut colour). Now, round every area that holds its ground in
   chunks (graded or level): the ring round a graded area is drawn no higher than the bare ground its
   batters meet there (`chunk.bare`, from `composeGrading`) or the highest it changed within two
-  nodes; any node there (a batter's included) whose ground as read is more than 2 m
-  (`LIP_TALL`) above that is what stands there (`chunk.standing`): a corner is drawn at the ground,
+  nodes; any node there (a cut batter's included) whose ground as read is more than 2 m
+  (`LIP_TALL`) above that is what stands there (`chunk.standing`): it is drawn at the ground,
   and Google's mesh over it isn't hidden (the mask and `covers()` leave it out), so the trees stand,
   their crowns' sides draped down to the pad's edge as Google made them, and walking bumps into
   them. (Google's mesh is a shell over the trees with nothing under a crown: cutting a crown off
   cleanly would leave a hole to the sky, so they're kept.) Small slivers of sky can still show
-  where a crown hangs over a batter's foot.
+  where a crown hangs over a batter's foot. A fill embankment's nodes are never standing: raised,
+  a pad's embankment buries the trees and sheds under it, hidden and walked on as earth (a 60 × 40 m
+  follow pad raised 3 m showed crowns through its fill before).
 - **Drawn over the pad.** The surface is drawn after the ground without writing depth
   (`SURFACE_ORDER`), so anything drawn before it went under it. What's placed was already drawn
   after it (`PLACED_ORDER`); now the walking character (`player.js`), a repair crew, a truck's load
@@ -271,9 +283,11 @@ flattening, the terrain and the surface so they agree):
   the deck; not read again from 5 km away with the overpass gone, read again back over it with what
   was found standing, and again with it back; round a level area kept above a height, the ground
   0.5 and 0.75 m outside its uphill edge is the slope and nothing's hidden there up to its limit, and
-  a tree's crown read at a node just outside it is drawn at the ground; an 8 m tree overhanging a
-  follow area's edge on the hillside: no drawn earth there rises more than 1.5 m across a cell,
-  where 8 m before, and the tree is marked standing), `test:build-mcp`.
+  a tree's crown read at a node just outside it is drawn at the ground, and a crown 12 m wide beside
+  it too (under 2 m above the ground, where 7.9 m before) and marked standing; an 8 m tree
+  overhanging a follow area's edge on the hillside: no drawn earth there rises more than 1.5 m
+  across a cell, where 8 m before, and the tree is marked standing, and with the area raised 3 m
+  nothing under its embankment is standing (72 nodes were)), `test:build-mcp`.
 
 ## How it's put together
 

@@ -42,7 +42,9 @@ export function createRaising( { models, history } ) {
 		const set = values => {
 
 			const target = history.resolve( entry );
-			if ( target ) models.setParams( target, values );
+			// Deleted for good: say so rather than spend the step on nothing.
+			if ( ! target ) throw new Error( `${ entry.state.name } is no longer there` );
+			models.setParams( target, values );
 
 		};
 		return history.push( {

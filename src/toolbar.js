@@ -36,7 +36,7 @@ const _anchor = new Vector3();
 
 // rotate( degrees ) turns the selected item, select( entry ) selects one, drive( entry ) gets in,
 // canDrive( entry ) says whether it's a vehicle or a machine, hide( entry ) hides it.
-export function createToolbar( { camera, canvas, models, panel, select, rotate, drive, canDrive, hide } ) {
+export function createToolbar( { camera, canvas, models, panel, select, rotate, drive, canDrive, hide, onPutBack = () => {} } ) {
 
 	const root = document.createElement( 'div' );
 	root.className = 'selection-toolbar';
@@ -330,7 +330,10 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 			try {
 
-				select( await models.load( config ) );
+				// A new entry: undo steps holding the old one (its raises) follow it there.
+				const back = await models.load( config );
+				onPutBack( target, back );
+				select( back );
 
 			} catch ( err ) {
 

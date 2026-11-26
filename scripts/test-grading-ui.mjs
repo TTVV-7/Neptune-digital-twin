@@ -260,6 +260,35 @@ test( 'round a level area its edge is the ground beside it, kept above a height 
 	assert.ok( ring.tree < ring.ground + 0.3, `the tree beside it drawn ${ ( ring.tree - ring.ground ).toFixed( 2 ) } m above the ground, not 6 m` );
 	assert.ok( ring.tree > ring.floor, 'nor down to its floor (it\'s dug in there)' );
 	near( ring.beside, ring.besideGround, 0.3, 'the ground beside it as it is' );
+
+	// A crown 12 m wide and 8 m tall beside its edge, wider than the 3 m the lowest ground
+	// is looked for in: still no spike of earth up its side, and the tree is left standing there.
+	const wide = await page.evaluate( () => {
+
+		const { terrain } = window.twin;
+		const a = Math.round( 49.5 / 0.5 ), b = Math.round( 60 / 0.5 );
+		const chunk = terrain.owner( a, b );
+		const k = ( b - chunk.j0 ) * 65 + a - chunk.i0;
+		const ground = chunk.surface[ k ];
+		const saved = [];
+		for ( const c of terrain.chunks.values() ) for ( let n = 0; n < 65 * 65; n ++ ) {
+
+			if ( Math.hypot( - c.x( n ) + 45, c.z( n ) - 60 ) > 6 || c.graded[ n ] ) continue;
+			saved.push( [ c, n, c.surface[ n ], c.base[ n ] ] );
+			c.surface[ n ] = c.base[ n ] = c.surface[ n ] + 8;
+
+		}
+
+		const changed = new Uint8Array( 65 * 65 );
+		for ( let n = 0; n < changed.length; n ++ ) changed[ n ] = Math.abs( chunk.surface[ n ] - chunk.base[ n ] ) > 0.02 || chunk.graded[ n ] ? 1 : 0;
+		const drawn = terrain.lipHeights( chunk, changed, chunk.shown );
+		const out = { tree: drawn[ k ], ground, standing: chunk.standing[ k ] };
+		for ( const [ c, n, s, base ] of saved ) [ c.surface[ n ], c.base[ n ] ] = [ s, base ];
+		return out;
+
+	} );
+	assert.ok( wide.tree < wide.ground + 2, `a wide crown beside it drawn ${ ( wide.tree - wide.ground ).toFixed( 2 ) } m above the ground, not 8 m` );
+	assert.equal( wide.standing, 1, 'and left standing (Google\'s mesh shows it)' );
 	await page.evaluate( () => window.twin.models.remove( window.areas.pop() ) );
 
 } );
@@ -1029,6 +1058,26 @@ test( 'raising and lowering an area: the arrow, the keys and the P panel, each u
 	await field.evaluate( c => c.querySelectorAll( 'button.nudge' )[ 1 ].click() );
 	near( ( await raised( i ) ).raise, 2.75, 1e-6, 'its + twice' );
 	near( await press( 'Control+z' ), 2.5, 1e-6, 'undo a +' );
+	// Clicked for real, + keeps the focus, inside its field: the field still shows PageUp and undo
+	// done meanwhile, and the next + goes on from there, a step of its own.
+	const plus = await field.evaluateHandle( c => c.querySelectorAll( 'button.nudge' )[ 1 ] );
+	const showing = () => field.evaluate( c => Number( c.querySelector( 'input' ).value ) );
+	const steps = () => page.evaluate( () => window.twin.sidebar.history.size.undo );
+	await plus.click();
+	assert.equal( await page.evaluate( () => document.activeElement?.className ), 'nudge', '+ keeps the focus' );
+	near( ( await raised( i ) ).raise, 2.75, 1e-6, '+ clicked' );
+	near( await press( 'PageUp' ), 3, 1e-6, 'PageUp with + focused' );
+	near( await showing(), 3, 1e-6, 'the field shows PageUp' );
+	const counted = await steps();
+	await plus.click();
+	near( ( await raised( i ) ).raise, 3.25, 1e-6, '+ after PageUp goes on from there' );
+	assert.equal( await steps(), counted + 1, 'a step of its own' );
+	near( await press( 'Control+z' ), 3, 1e-6, 'undo the +' );
+	near( await showing(), 3, 1e-6, 'the field shows the undo' );
+	near( await press( 'Control+z' ), 2.75, 1e-6, 'undo PageUp' );
+	near( await press( 'Control+z' ), 2.5, 1e-6, 'undo the first +' );
+	near( await showing(), 2.5, 1e-6, 'the field shows it' );
+	await plus.evaluate( b => b.blur() );
 	await snapped( i );
 	await settled();
 	const before = await raised( i );
@@ -1120,6 +1169,53 @@ test( 'raising and lowering an area: the arrow, the keys and the P panel, each u
 		window.twin.models.remove( window.areas[ i ] );
 
 	}, i );
+
+} );
+
+test( 'an area deleted and put back with the toast\'s Undo keeps its raise steps; another layout clears them', async () => {
+
+	const i = await area( { params: { width: 16, length: 12, surface: 'gravel', grade: 'slope', fall: 0.5, toward: 'front', batter: 2 }, east: 560, north: 60 } );
+	await page.evaluate( i => {
+
+		window.twin.sidebar.select( window.areas[ i ] );
+		window.twin.panel.gui.hide();
+		document.activeElement?.blur?.();
+
+	}, i );
+	const raiseOf = () => page.evaluate( () => window.twin.sidebar.getSelected()?.params.raise ?? null );
+	for ( let n = 0; n < 3; n ++ ) await page.keyboard.press( 'PageUp' );
+	near( await raiseOf(), 0.75, 1e-6, 'raised by PageUp three times' );
+	const steps = await page.evaluate( () => window.twin.sidebar.history.size );
+	await page.keyboard.press( 'Delete' );
+	await page.locator( '.undo-toast button' ).click();
+	await page.waitForFunction( () => window.twin.sidebar.getSelected()?.kind === 'flatten-zone' );
+	const back = await page.evaluate( i => {
+
+		const entry = window.twin.sidebar.getSelected();
+		return { same: entry === window.areas[ i ], raise: entry.params.raise };
+
+	}, i );
+	assert.deepEqual( back, { same: false, raise: 0.75 }, 'put back as a new entry, raised as it was' );
+	await page.keyboard.press( 'Control+z' );
+	await page.waitForTimeout( 100 );
+	near( await raiseOf(), 0.5, 1e-6, 'its raise steps undo on the one put back' );
+	await page.keyboard.press( 'Control+z' );
+	await page.waitForTimeout( 100 );
+	near( await raiseOf(), 0.25, 1e-6, 'and the one before' );
+	assert.deepEqual( await page.evaluate( () => window.twin.sidebar.history.size ), { undo: steps.undo - 2, redo: 2 } );
+
+	// Another layout (a project opened, a share link) takes every step with what was placed.
+	const after = await page.evaluate( async () => {
+
+		const { layout, sidebar } = window.twin;
+		const entry = sidebar.getSelected();
+		sidebar.deselect();
+		window.twin.models.remove( entry );
+		await layout.replace( layout.getData() );
+		return sidebar.history.size;
+
+	} );
+	assert.deepEqual( after, { undo: 0, redo: 0 }, 'no steps left from the old layout' );
 
 } );
 
@@ -1216,6 +1312,37 @@ test( 'a tree beside an area that follows the ground is no tall wall of earth ro
 	assert.ok( out.n > 0, 'cells drawn by the tree' );
 	assert.ok( out.worst < 1.5, `the earth drawn by the tree rises ${ out.worst.toFixed( 2 ) } m across a cell, not up the tree` );
 	assert.ok( out.standing > 0, 'the tree is left standing: Google\'s mesh shows there' );
+
+	// Raised 3 m, its embankment buries the tree: what pokes through the fill is hidden under it,
+	// not left standing (a crown showing through the earth, and walked through to Google's mesh).
+	await page.evaluate( i => window.twin.sidebar.raising.change( window.areas[ i ], { raise: 3 } ), i );
+	await settle( i );
+	const buried = await page.evaluate( () => {
+
+		const { terrain } = window.twin;
+		let fill = 0, standing = 0;
+		for ( const chunk of terrain.chunks.values() ) {
+
+			if ( ! chunk.shown ) continue;
+			const changed = new Uint8Array( 65 * 65 );
+			for ( let k = 0; k < changed.length; k ++ ) changed[ k ] = Math.abs( chunk.surface[ k ] - chunk.base[ k ] ) > 0.02 || chunk.graded[ k ] ? 1 : 0;
+			terrain.lipHeights( chunk, changed, chunk.shown );
+			for ( let k = 0; k < changed.length; k ++ ) {
+
+				if ( Math.hypot( - chunk.x( k ) - 1025, chunk.z( k ) + 185 ) > 2.5 ) continue;
+				if ( chunk.graded[ k ] !== 2 || chunk.base[ k ] <= chunk.bare[ k ] + 0.02 ) continue;
+				fill ++;
+				if ( chunk.standing[ k ] ) standing ++;
+
+			}
+
+		}
+
+		return { fill, standing };
+
+	} );
+	assert.ok( buried.fill > 0, 'the embankment reaches over the tree' );
+	assert.equal( buried.standing, 0, 'and nothing under it is left standing' );
 	await page.evaluate( i => window.twin.models.remove( window.areas[ i ] ), i );
 
 } );

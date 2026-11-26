@@ -336,7 +336,11 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		if ( ! folder ) return;
 		if ( folder._title !== entry.state.name ) folder.title( entry.state.name );
 		const controllers = folder.controllersRecursive();
-		const editing = controllers.find( c => c.domElement.contains( document.activeElement ) );
+		// Only a field with a caret counts: a − or + button keeps focus after a click, inside its
+		// controller, and that controller must still follow PageUp, undo and the next nudge.
+		const active = document.activeElement;
+		const typing = active?.matches?.( 'input:not([type=checkbox]):not([type=button]), textarea, select' );
+		const editing = typing ? controllers.find( c => c.domElement.contains( active ) ) : undefined;
 		const copy = paramViews.get( entry );
 		if ( copy ) {
 
