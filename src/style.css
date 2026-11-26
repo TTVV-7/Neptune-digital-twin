@@ -1115,3 +1115,14 @@ body.has-site-picker.library-open #banner {
 .site-picker .site-current {
 	min-width: 0;
 }
+
+/* A locked item's settings in the placement panel (sidebar.js locks it): read-only and greyed out,
+   all but its Locked tick box (in red) and Copy config. */
+.lil-gui .lil-controller.locked-field {
+	opacity: 0.45;
+}
+
+.lil-gui .locked-item .lil-controller.lock-toggle .lil-name {
+	color: #ff8a84;
+	font-weight: 600;
+}

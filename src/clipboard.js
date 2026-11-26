@@ -23,8 +23,9 @@ export function clipboardOf( entries, models ) {
 	const configs = entries.map( entry => {
 
 		const config = models.toConfig( entry );
-		// Shown wherever it's pasted, and new there.
+		// Shown wherever it's pasted, and new there: a copy of a locked item isn't locked.
 		delete config.hidden;
+		delete config.locked;
 		return config;
 
 	} );
@@ -115,11 +116,11 @@ export function readStoredClipboard() {
 // The config a pasted item is loaded with: the copied one where it lands, as a new item. It's
 // snapped to the ground there (a height kept from another place would be wrong), keeping how it was
 // parked (tilted on a pile, say), which is relative to the ground.
-// A new item has no id of its own yet (models.js: what a markup is pinned to), and a kind can
+// A new item has no id of its own yet, and isn't locked (models.js: what a markup is pinned to), and a kind can
 // leave out what only made sense where it was copied (kinds.js pasted).
 export function pastedConfig( { config }, at ) {
 
-	const { inConfig, sharedId, hidden, id, ...rest } = config;
+	const { inConfig, sharedId, hidden, locked, id, ...rest } = config;
 	const kind = rest.kind && rest.params ? getKind( rest.kind ) : null;
 	if ( kind?.pasted ) rest.params = kind.pasted( { ...rest.params } );
 	return { ...rest, east: round( at.east ), north: round( at.north ), up: null };

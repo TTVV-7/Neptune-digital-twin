@@ -126,6 +126,8 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	models.addEventListener( 'remove', save );
 	// Hidden by hand: part of the plan (layers.js).
 	models.addEventListener( 'hide', save );
+	// Locked in the editor (sidebar.js): part of the plan too.
+	models.addEventListener( 'lock', save );
 	window.addEventListener( 'pagehide', flush );
 	document.addEventListener( 'visibilitychange', () => {
 
@@ -394,8 +396,8 @@ function resolve( config, library ) {
 	if ( ! item ) return config;
 	const same = item.procedural ? config.procedural === item.id : config.url === `library/${ item.file }`;
 	if ( same ) return config;
-	const { east, north, up, heading } = config;
-	return itemConfig( item, { east, north, up: up ?? null, heading } );
+	const { east, north, up, heading, locked } = config;
+	return { ...itemConfig( item, { east, north, up: up ?? null, heading } ), ...( locked ? { locked } : {} ) };
 
 }
 

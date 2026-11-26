@@ -201,6 +201,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 			[ [ 'Shift', '+', `~${ click }` ], 'Add another, or take one out' ],
 			[ [ mod, '+', 'C' ], 'Copy · X cut · V paste at the pointer (opens the library)' ],
 			[ [ mod, '+', 'D' ], 'Duplicate them' ],
+			[ [ mod, '+', 'L' ], 'Lock them, or unlock them' ],
 			[ [ 'Delete' ], 'Delete them' ],
 			[ [ mod, '+', 'Z' ], 'Undo · Shift+Z redo' ],
 			[ [ 'P' ], 'What they are, and changes to them all' ],
@@ -272,6 +273,16 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 
 	function selectedRows( entry ) {
 
+		// Locked (sidebar.js): it stays as it is, so there's nothing to drag or press but to unlock it.
+		if ( entry.locked ) return { title: `Locked: ${ entry.state.name ?? '' }`, rows: [
+			[ [ mod, '+', 'L' ], 'Unlock it, to move or change it' ],
+			[ [ `~${ click }` ], 'The buttons above it: edit, unlock, hide' ],
+			[ [ 'P' ], 'Its settings (read-only while it\'s locked)' ],
+			[ [ 'Shift', '+', `~${ click }` ], 'Another: select it too' ],
+			[ [ mod, '+', 'C' ], 'Copy it (copies aren\'t locked) · Z undo' ],
+			[ [ 'Esc' ], window.twin?.section?.view ? 'Close the section' : 'Deselect' ],
+		], note: 'Locked, it can\'t be moved, turned, resized or deleted.' };
+
 		// What its handles and toolbar (handles.js, toolbar.js) offer: areas, pits and piles (kinds
 		// with `resize`) have a size to change and a pit a depth; a round pile doesn't turn. Kept
 		// short, as the panel can cover the item's handles: R and Delete are on the buttons' tips.
@@ -285,7 +296,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 		// fields (as toolbar.js's sizeFields picks them), and P is where all its settings are.
 		const sized = !! shape || !! kind?.fields?.some( f => f.size && ! f.type && ( ! f.options || f.editor ) && ( ! f.when || f.when( entry.params ) ) );
 		const settings = ! shape && kind?.fields?.length > 0;
-		const buttons = [ turns && 'rotate', sized && 'size', drivable && 'drive', ...extras.map( text => text.toLowerCase() ), 'edit', 'hide', 'delete' ].filter( Boolean );
+		const buttons = [ turns && 'rotate', sized && 'size', drivable && 'drive', ...extras.map( text => text.toLowerCase() ), 'edit', 'lock', 'hide', 'delete' ].filter( Boolean );
 		const points = shape === 'points';
 		// A markup's points (markups.js): always as many, so no pluses and none taken out.
 		const fixed = points && kind.resize.fixed;
@@ -314,7 +325,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 			[ [ 'P' ], fixed ? 'Its words, colour and position' : closed ? 'Surface, ground, heights at its corners' : points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : settings ? 'Its settings and exact position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
 			[ [ 'Shift', '+', `~${ click }` ], 'Another: select it too' ],
-			[ [ mod, '+', 'C' ], 'Copy · D duplicate · Z undo' ],
+			[ [ mod, '+', 'C' ], 'Copy · D duplicate · L lock · Z undo' ],
 			// An open section closes first (excavation-section.js).
 			[ [ 'Esc' ], window.twin?.section?.view ? 'Close the section' : 'Deselect' ],
 		] };

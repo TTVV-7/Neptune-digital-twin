@@ -162,7 +162,7 @@ const TOOLS = [
 		inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true }, run: listProjects,
 	},
 	{
-		name: 'get_project', title: 'What\'s in a project', description: 'Everything placed in a project, each with its index (for move_item and remove_items), what it is, where and which way it faces, and its size; and the project\'s version, which move_item and remove_items take so they don\'t act on indexes that have changed since.',
+		name: 'get_project', title: 'What\'s in a project', description: 'Everything placed in a project, each with its index (for move_item and remove_items), what it is, where and which way it faces, and its size, and locked: true on those the person locked in the editor (move_item and remove_items leave them be); and the project\'s version, which move_item and remove_items take so they don\'t act on indexes that have changed since.',
 		inputSchema: { type: 'object', properties: { ...project }, required: [ 'project_id' ] }, annotations: { readOnlyHint: true }, run: getProject,
 	},
 	{
@@ -215,12 +215,12 @@ const TOOLS = [
 		run: addMarkup,
 	},
 	{
-		name: 'move_item', title: 'Move an item', description: 'Move or turn something already placed (its index from get_project).',
+		name: 'move_item', title: 'Move an item', description: 'Move or turn something already placed (its index from get_project). Not one that\'s locked: the person unlocks it in the editor first.',
 		inputSchema: { type: 'object', properties: { ...project, ...version, index: { type: 'number' }, east: { type: 'number' }, north: { type: 'number' }, heading: { type: 'number' } }, required: [ 'project_id', 'version', 'index' ] },
 		run: moveItem,
 	},
 	{
-		name: 'remove_items', title: 'Remove items', description: 'Remove things already placed, by their indexes from get_project.',
+		name: 'remove_items', title: 'Remove items', description: 'Remove things already placed, by their indexes from get_project. Not those that are locked: the person unlocks them in the editor first.',
 		inputSchema: { type: 'object', properties: { ...project, ...version, indexes: { type: 'array', items: { type: 'number' } } }, required: [ 'project_id', 'version', 'indexes' ] },
 		annotations: { destructiveHint: true }, run: removeItems,
 	},
@@ -403,6 +403,8 @@ function describe( item, index ) {
 	if ( known?.dimensions ) out.size = known.dimensions;
 	const by = placedBy( item.kind, item.params );
 	if ( by ) out.placed = by;
+	// Locked in the editor, so it isn't changed by accident (move_item and remove_items refuse it).
+	if ( item.locked === true ) out.locked = true;
 	return out;
 
 }
@@ -1032,11 +1034,25 @@ function index( layout, value ) {
 
 }
 
+// Items locked in the editor (the person's Lock, saved as locked: true) aren't moved or removed
+// from here either: they asked for them to stay as they are.
+function refuseLocked( layout, indexes ) {
+
+	const locked = indexes.filter( i => layout.items[ i ].locked === true );
+	if ( locked.length === 0 ) return;
+	const [ first ] = locked;
+	if ( locked.length === 1 ) throw new ToolError( `Item ${ first } (${ layout.items[ first ].name ?? 'it' }) is locked in the editor; unlock it there first. Nothing was changed.` );
+	throw new ToolError( `Items ${ locked.join( ', ' ) } are locked in the editor; unlock them there first. Nothing was changed.` );
+
+}
+
 async function moveItem( context, args ) {
 
 	return await change( context, args.project_id, layout => {
 
-		const item = layout.items[ index( layout, args.index ) ];
+		const i = index( layout, args.index );
+		refuseLocked( layout, [ i ] );
+		const item = layout.items[ i ];
 		if ( args.east !== undefined ) item.east = where( { east: args.east, north: 0 } ).east;
 		if ( args.north !== undefined ) item.north = where( { east: 0, north: args.north } ).north;
 		if ( args.heading !== undefined ) item.heading = turned( args.heading );
@@ -1053,6 +1069,7 @@ async function removeItems( context, args ) {
 	return await change( context, args.project_id, layout => {
 
 		const gone = new Set( indexes.map( i => index( layout, i ) ) );
+		refuseLocked( layout, [ ...gone ] );
 		const names = [ ...gone ].map( i => layout.items[ i ] );
 		layout.items = layout.items.filter( ( _, i ) => ! gone.has( i ) );
 		return `Removed ${ gone.size }: ${ summary( names ) }. The rest are numbered again: get_project for their indexes.`;

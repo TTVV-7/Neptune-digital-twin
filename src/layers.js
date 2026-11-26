@@ -17,6 +17,8 @@ import { toast } from './placement.js';
 // hand are part of the plan: saved with the layout, and hidden on its share link too (models.js).
 // Whatever is hidden isn't drawn, clicked or bumped into; nothing is moved or deleted.
 //
+// It also says how many items are locked in the editor (sidebar.js), with Unlock all.
+//
 // Other modules add layers of their own with addLayer( id, { name, count(), setShown( on ) } )
 // (count() true: always listed, with no number), and follow Before / After with
 // onBeforeAfter( before => ... ).
@@ -40,8 +42,9 @@ const EYE_OFF = icon( `${ EYE_PATHS }<path d="M4 20 20 4"/>` );
 
 // models, layout, library: what's placed, the saved layout and the library's items. flattening:
 // flatten.js, turned off for Before. isDriving: Before / After waits until you get out. legend:
-// the Controls panel, which this one stands on.
-export function createLayers( { models, layout, library, flattening, isDriving, legend } ) {
+// the Controls panel, which this one stands on. setLocked( entries, on ): the editor's locking, a
+// step to undo (sidebar.js).
+export function createLayers( { models, layout, library, flattening, isDriving, legend, setLocked = ( entries, on ) => entries.forEach( entry => models.setLocked( entry, on ) ) } ) {
 
 	const root = document.getElementById( 'layers' );
 	const panel = root.querySelector( '.layers-panel' );
@@ -50,6 +53,8 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 	const hiddenElement = panel.querySelector( '.hidden-items' );
 	const hiddenHeading = hiddenElement.querySelector( '.heading' );
 	const hiddenList = hiddenElement.querySelector( 'ul' );
+	const lockedElement = panel.querySelector( '.locked-items' );
+	const lockedHeading = lockedElement.querySelector( '.heading' );
 	const views = [ ...panel.querySelectorAll( '[data-view]' ) ];
 	const beforeNote = panel.querySelector( '.before-note' );
 	const badge = button.querySelector( '.badge' );
@@ -187,7 +192,7 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 
 	} );
 	// Hidden or shown by hand, or deleted: the panel says so straight away.
-	for ( const type of [ 'remove', 'hide', 'visibility' ] ) models.addEventListener( type, () => render() );
+	for ( const type of [ 'remove', 'hide', 'visibility', 'lock' ] ) models.addEventListener( type, () => render() );
 
 	// --- the panel ---------------------------------------------------------------------------
 
@@ -207,6 +212,20 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 		if ( item ) showItems( [ listed[ Number( item.dataset.item ) ] ].filter( Boolean ) );
 
 	} );
+	lockedElement.querySelector( '.unlock-all' ).addEventListener( 'click', () => {
+
+		const locked = lockedEntries();
+		setLocked( locked, false );
+		toast( locked.length === 1 ? '1 item unlocked' : `${ locked.length } items unlocked` );
+
+	} );
+
+	// What's locked in the editor, of what's placed in this layout.
+	function lockedEntries() {
+
+		return models.entries.filter( entry => entry.locked && ! entry.placing && ! entry.inConfig );
+
+	}
 
 	function setOpen( value ) {
 
@@ -259,7 +278,8 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 		listed = models.entries.filter( entry => entry.hidden && ! entry.placing )
 			.sort( ( a, b ) => a.state.name.localeCompare( b.state.name ) );
 		const hidden = listed.map( entry => [ entry.state.name, layerName( layerOf( entry ) ) ] );
-		const key = JSON.stringify( [ dock.open, before, site, items, hidden ] );
+		const locked = lockedEntries().length;
+		const key = JSON.stringify( [ dock.open, before, site, items, hidden, locked ] );
 		if ( key !== shown ) {
 
 			shown = key;
@@ -289,6 +309,9 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 				return item;
 
 			} ) );
+
+			lockedElement.hidden = locked === 0;
+			lockedHeading.textContent = `Locked items (${ locked })`;
 
 			// Folded, the button says whether anything is hidden, and when it's showing Before.
 			const hiding = hiddenLayers.size > 0 || listed.length > 0;

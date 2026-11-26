@@ -62,6 +62,13 @@ const PASTE_WAIT = 60;
 const BUILD_PRO_SAYING = BUILD_APP ? 'they need Build Pro' : 'they\'re in the Pro equipment pack';
 // A phone: the library is a sheet over the bottom of the screen there (style.css).
 const PHONE = window.matchMedia( '( max-width: 700px )' );
+// Locking what's selected (Ctrl/Cmd+L), as the key is written in what's said about it; and the
+// colour of a locked thing's outline instead of the usual blue, or the amber of several.
+const LOCK_KEY = /Mac|iPhone|iPad/.test( navigator.platform ?? '' ) ? '⌘L' : 'Ctrl+L';
+const LOCKED_COLOR = 0xe5484d;
+const SELECTED_COLOR = 0x3d9be9;
+// The same thing said about a locked item again within this long (ms) isn't said twice.
+const LOCKED_TOAST_TIME = 1500;
 // The padlock on a locked premium item's Pro badge.
 const LOCK_ICON = '<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M3.5 5.5V3.5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="5.5" width="8" height="6" rx="1" fill="currentColor"/></svg>';
 // Three in a line, on the Row button of a card.
@@ -95,6 +102,15 @@ const _box = new Box3();
 // D, and the edit bar's buttons) work on what's selected, through clipboard.js, and moving,
 // turning, resizing, deleting, cutting, pasting and duplicating are steps to undo and redo
 // (Ctrl/Cmd+Z, Shift+Z or Ctrl+Y; history.js).
+//
+// Anything placed can be locked, so it isn't changed by accident (setLocked: the toolbar's and the
+// edit bar's Lock, Ctrl/Cmd+L, or Locked in the P panel; a step to undo, and saved with the layout).
+// A locked thing can still be selected, to see its settings, copy it or unlock it: it's outlined
+// red, it has no handles, its toolbar has no turn, size or delete, and its settings are read-only.
+// Dragging, turning, deleting or cutting it says it's locked instead. Of several selected, the
+// locked ones stay as they are while the rest are moved, turned, deleted or cut, saying how many
+// stayed. Copies of a locked thing aren't locked. This isn't the Pro items' lock (setGate), which
+// is about picking new ones from the library.
 export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, isDriving, onError } ) {
 
 	const root = document.getElementById( 'library' );
@@ -103,7 +119,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	const search = root.querySelector( 'input[type=search]' );
 	const count = root.querySelector( '.count' );
 	const raycaster = new Raycaster();
-	const highlight = new BoxHelper( undefined, 0x3d9be9 );
+	const highlight = new BoxHelper( undefined, SELECTED_COLOR );
 	highlight.visible = false;
 	scene.add( highlight );
 
@@ -164,7 +180,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		onRaised: ( entry, before, after ) => raising.record( entry, before, after ),
 		onPress: target => {
 
-			const members = target.group ? target.members : [ target ];
+			// Of several, the locked ones stay where they are as the rest are turned (groupBase).
+			const members = target.group ? target.members.filter( e => ! e.locked ) : [ target ];
 			if ( target.group ) target.base = groupBase( target );
 			handleStart = { target, members, before: members.map( stateOf ) };
 
@@ -194,15 +211,19 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		copy: () => copySelection(),
 		duplicate: () => duplicateSelection(),
 		edit: target => target.group ? showGroupPanel( true ) : panel.focus( target, true ),
+		lock: () => toggleLock(),
 	} );
 	// The P panel's Remove deletes as the toolbar does, with Undo, so a misclick there isn't final.
 	panel.onRemove = entry => toolbar.remove( entry );
+	// Its Locked tick box locks and unlocks as the toolbar's Lock does, as a step to undo.
+	panel.onLock = ( entry, on ) => setLocked( [ entry ], on );
 	const editBar = createEditBar( {
 		toggleBox: () => setBoxMode( ! boxMode ),
 		copy: () => copySelection(),
 		cut: () => cutSelection(),
 		paste: () => paste( null ),
 		duplicate: () => duplicateSelection(),
+		lock: () => toggleLock(),
 		undo: () => history.undo(),
 		redo: () => history.redo(),
 	} );
@@ -550,6 +571,13 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	} );
 
+	// Locked or unlocked (here, by undo, or by the P panel): outlined in its colour again.
+	models.addEventListener( 'lock', () => {
+
+		groupStale = true;
+
+	} );
+
 	// --- premium items -------------------------------------------------------------------
 
 	function isLocked( item ) {
@@ -848,17 +876,20 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	function rotateSelected( degrees, entry = selected ) {
 
 		if ( ! entry ) return;
-		// Several selected: all of them, about their middle.
+		// Several selected: all of them, about their middle, but for those that are locked.
 		if ( group && selection.includes( entry ) ) {
 
-			const before = selection.map( stateOf );
+			const free = unlockedOf( selection, 'turn', 'turned' );
+			if ( free.length === 0 ) return;
+			const before = free.map( stateOf );
 			turnGroup( groupBase( group ), degrees );
 			group.state.heading = ( group.state.heading + degrees + 360 ) % 360;
-			if ( ! dragging ) recordTransform( `turn ${ selection.length } items`, selection, before, true );
+			if ( ! dragging ) recordTransform( `turn ${ free.length } items`, free, before, true );
 			return;
 
 		}
 
+		if ( unlockedOf( [ entry ], 'turn', 'turned' ).length === 0 ) return;
 		const before = [ stateOf( entry ) ];
 		entry.state.heading = ( entry.state.heading + degrees + 360 ) % 360;
 		models.apply( entry );
@@ -944,6 +975,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			'Copy': () => copySelection(),
 			'Cut': () => cutSelection(),
 			'Duplicate': () => duplicateSelection(),
+			'Lock or unlock them': () => toggleLock(),
 			'Hide them': () => toolbar.hideTarget( group ),
 			'Delete them': () => deleteItems( selection ),
 		}, { open: show } );
@@ -1035,14 +1067,15 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
-	// Where each of the group stands now, and the middle and heading they're turned from.
+	// Where each of the group stands now, and the middle and heading they're turned from. The locked
+	// ones aren't turned, so they're left out.
 	function groupBase( stand ) {
 
 		return {
 			heading: stand.state.heading,
 			east: stand.state.east,
 			north: stand.state.north,
-			members: stand.members.map( entry => ( { entry, east: entry.state.east, north: entry.state.north, heading: entry.state.heading } ) ),
+			members: stand.members.filter( entry => ! entry.locked ).map( entry => ( { entry, east: entry.state.east, north: entry.state.north, heading: entry.state.heading } ) ),
 		};
 
 	}
@@ -1145,15 +1178,25 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	}
 
 	// Delete these, as one step with an Undo toast: undoing loads each back as it was.
+	// Those that are locked stay, which the Undo toast says (or a toast of its own, if that's all).
 	function deleteItems( entries ) {
 
-		const targets = entries.filter( e => models.entries.includes( e ) );
-		if ( targets.length === 0 ) return;
+		const present = entries.filter( e => models.entries.includes( e ) );
+		const targets = present.filter( e => ! e.locked );
+		const kept = present.length - targets.length;
+		if ( targets.length === 0 ) {
+
+			unlockedOf( present, 'delete', 'deleted' );
+			return;
+
+		}
+
 		const name = targets.length === 1 ? targets[ 0 ].state.name : itemCount( targets.length );
 		const step = removalStep( `delete ${ name }`, targets );
 		history.push( step );
 		step.redo();
-		toolbar.offerUndo( `Deleted ${ name }`, () => history.undo( step ) );
+		const note = kept ? ` (${ kept === 1 ? '1 locked item wasn\'t' : `${ kept } locked items weren't` } deleted)` : '';
+		toolbar.offerUndo( `Deleted ${ name }${ note }`, () => history.undo( step ) );
 
 	}
 
@@ -1213,6 +1256,68 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
+	// --- locking -----------------------------------------------------------------------------
+
+	// Lock these (on) or unlock them, as one step to undo. Returns how many changed.
+	function setLocked( entries, on ) {
+
+		const targets = entries.filter( e => models.entries.includes( e ) && ! e.placing && e.locked !== on );
+		if ( targets.length === 0 ) return 0;
+		const refs = [ ...targets ];
+		const put = value => {
+
+			for ( const ref of refs ) {
+
+				const entry = history.resolve( ref );
+				if ( entry ) models.setLocked( entry, value );
+
+			}
+
+		};
+		const name = targets.length === 1 ? targets[ 0 ].state.name : itemCount( targets.length );
+		history.push( { label: `${ on ? 'lock' : 'unlock' } ${ name }`, undo: () => put( ! on ), redo: () => put( on ) } );
+		put( on );
+		return targets.length;
+
+	}
+
+	// The toolbar's and the edit bar's Lock, and Ctrl/Cmd+L: what's selected is unlocked if every
+	// one of it is locked, else it's all locked.
+	function toggleLock() {
+
+		if ( selection.length === 0 ) return;
+		const on = ! selection.every( e => e.locked );
+		const changing = selection.filter( e => e.locked !== on );
+		const name = changing.length === 1 ? changing[ 0 ].state.name : itemCount( changing.length );
+		setLocked( changing, on );
+		toast( on ? `Locked ${ name }: not to be moved, changed or deleted until unlocked (${ LOCK_KEY })` : `Unlocked ${ name }` );
+
+	}
+
+	// Those of `entries` that aren't locked, to be changed. Any that are locked stay as they are,
+	// and a toast says so: `verb` (move) when that's all of them, `done` (moved) when it's some.
+	function unlockedOf( entries, verb, done ) {
+
+		const free = entries.filter( e => ! e.locked );
+		const kept = entries.length - free.length;
+		if ( kept === 0 ) return free;
+		if ( free.length === 0 ) lockedToast( kept === 1 ? `Locked: unlock it to ${ verb } it (${ LOCK_KEY })` : `They're locked: unlock them to ${ verb } them (${ LOCK_KEY })` );
+		else lockedToast( `${ kept === 1 ? '1 locked item wasn\'t' : `${ kept } locked items weren't` } ${ done }` );
+		return free;
+
+	}
+
+	// A toast about something locked; the same one again straight after (R held down) isn't shown.
+	let lockedSaid = { text: '', at: - Infinity };
+	function lockedToast( text ) {
+
+		const now = performance.now();
+		if ( text === lockedSaid.text && now - lockedSaid.at < LOCKED_TOAST_TIME ) return;
+		lockedSaid = { text, at: now };
+		toast( text );
+
+	}
+
 	// --- copy and paste ----------------------------------------------------------------------
 
 	function copySelection( { quiet = false } = {} ) {
@@ -1230,20 +1335,27 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	}
 
 	// Cut: copied and taken away. Pro items stay where they are while they're locked, as paste
-	// wouldn't put them back (a free account would lose them); the rest are cut.
+	// wouldn't put them back (a free account would lose them); so do things locked in the editor;
+	// the rest are cut.
 	function cutSelection() {
 
-		const locked = selection.filter( entry => configLocked( models.toConfig( entry ) ) );
-		const entries = selection.filter( entry => ! locked.includes( entry ) );
-		const note = locked.length ? `${ locked.length === 1 ? '1 Pro item wasn\'t cut' : `${ locked.length } Pro items weren't cut` }: ${ BUILD_PRO_SAYING }` : '';
+		const pinned = selection.filter( entry => entry.locked );
+		const locked = selection.filter( entry => ! entry.locked && configLocked( models.toConfig( entry ) ) );
+		const entries = selection.filter( entry => ! entry.locked && ! locked.includes( entry ) );
+		const notes = [
+			locked.length ? `${ locked.length === 1 ? '1 Pro item wasn\'t cut' : `${ locked.length } Pro items weren't cut` }: ${ BUILD_PRO_SAYING }` : '',
+			pinned.length ? `${ pinned.length === 1 ? '1 locked item wasn\'t cut' : `${ pinned.length } locked items weren't cut` }` : '',
+		].filter( Boolean );
+		const note = notes.join( '; ' );
 		if ( entries.length === 0 ) {
 
-			if ( note ) toast( note );
+			if ( pinned.length && ! locked.length ) lockedToast( pinned.length === 1 ? `Locked: unlock it to cut it (${ LOCK_KEY })` : `They're locked: unlock them to cut them (${ LOCK_KEY })` );
+			else if ( note ) toast( note );
 			return;
 
 		}
 
-		if ( locked.length ) setSelection( entries );
+		if ( locked.length || pinned.length ) setSelection( entries );
 		if ( ! copySelection( { quiet: true } ) ) return;
 		const step = removalStep( `cut ${ itemCount( entries.length ) }`, entries );
 		history.push( step );
@@ -1546,6 +1658,15 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		// A press on an item selects it; it only moves once the pointer has gone further than a
 		// click's slip, since from afar one pixel of jitter covers metres of ground.
 		if ( dragging && ! dragging.moved && Math.hypot( e.clientX - dragging.press.x, e.clientY - dragging.press.y ) < dragging.slop ) return;
+		if ( dragging?.locked ) {
+
+			if ( ! dragging.said ) lockedToast( `Locked: unlock it to move it (${ LOCK_KEY })` );
+			dragging.said = true;
+			return;
+
+		}
+
+		if ( dragging && ! dragging.moved && dragging.kept ) lockedToast( `${ dragging.kept === 1 ? '1 locked item stays' : `${ dragging.kept } locked items stay` } where ${ dragging.kept === 1 ? 'it is' : 'they are' }` );
 		if ( dragging ) {
 
 			const { entry, members } = dragging;
@@ -1647,15 +1768,28 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			// One of several selected: they all move together.
 			const together = selection.length > 1 && selection.includes( hit.entry );
 			if ( ! together && hit.entry !== selected ) select( hit.entry, ! mouse );
-			const members = together ? [ ...selection ] : [ hit.entry ];
+			const slop = e.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP;
+			// A locked one stays put: pressed and dragged, it says so (once the press is a drag).
+			if ( hit.entry.locked ) {
+
+				dragging = { locked: true, members: [], press: { x: e.clientX, y: e.clientY }, slop, moved: false };
+				canvas.setPointerCapture( e.pointerId );
+				suppressClick = true;
+				return;
+
+			}
+
+			// Of several, the locked ones stay where they are while the rest move.
+			const members = together ? selection.filter( m => ! m.locked ) : [ hit.entry ];
 			const ground = groundPoint( e.clientX, e.clientY, members.map( m => m.pivot ) ) ?? hit.point;
 			dragging = {
 				entry: hit.entry,
 				members,
+				kept: together ? selection.length - members.length : 0,
 				before: members.map( stateOf ),
 				offset: _offset.copy( hit.entry.pivot.position ).sub( ground ).setY( 0 ).clone(),
 				press: { x: e.clientX, y: e.clientY },
-				slop: e.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP,
+				slop,
 				moved: false,
 			};
 			canvas.setPointerCapture( e.pointerId );
@@ -1777,7 +1911,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( ( e.code === 'PageUp' || e.code === 'PageDown' ) && canRaise( selected ) && ! placing && ! drawing && ! handles.busy ) {
 
 			e.preventDefault();
-			raising.nudge( selected, e.code === 'PageUp' ? 1 : - 1, e );
+			if ( selected.locked ) lockedToast( `Locked: unlock it to raise or lower it (${ LOCK_KEY })` );
+			else raising.nudge( selected, e.code === 'PageUp' ? 1 : - 1, e );
 			return;
 
 		}
@@ -1820,7 +1955,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}, true );
 
-	// Ctrl/Cmd with A, C, X, V, D, Z and Y: select all, copy, cut, paste, duplicate, undo and redo.
+	// Ctrl/Cmd with A, C, X, V, D, L, Z and Y: select all, copy, cut, paste, duplicate, lock or
+	// unlock, undo and redo.
 	// Not while typing (a field's own copy and paste...), nor while text on the page is selected
 	// (copying that), nor driving. Paste opens the library if it's closed. Undo and redo work
 	// whenever editing, and also from a field of the item's panel: what's typed there is applied as
@@ -1868,6 +2004,12 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 				if ( selection.length === 0 || busy ) return;
 				e.preventDefault();
 				duplicateSelection();
+				break;
+			case 'KeyL':
+				// Not the browser's address bar, while something's selected.
+				if ( selection.length === 0 || busy ) return;
+				e.preventDefault();
+				toggleLock();
 				break;
 			case 'KeyZ':
 				if ( busy ) return;
@@ -2325,7 +2467,12 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 					groupStale = false;
 					measureGroup( group, groupBox );
-					selection.slice( 0, MAX_OUTLINES ).forEach( ( entry, i ) => outlineBox( outlines[ i ], memberBox( entry ) ) );
+					selection.slice( 0, MAX_OUTLINES ).forEach( ( entry, i ) => {
+
+						outlineBox( outlines[ i ], memberBox( entry ) );
+						outlines[ i ].material.color.setHex( entry.locked ? LOCKED_COLOR : GROUP_COLOR );
+
+					} );
 
 				}
 
@@ -2335,6 +2482,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 				_box.setFromObject( selected.pivot );
 				highlight.setFromObject( selected.pivot );
+				highlight.material.color.setHex( selected.locked ? LOCKED_COLOR : SELECTED_COLOR );
 
 			}
 
@@ -2343,7 +2491,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			const target = group ?? selected;
 			const seen = group ? selection.some( e => isVisible( e.pivot ) ) : selected && isVisible( selected.pivot );
 			const shown = target && ! controls.locked && ! isDriving() && seen ? target : null;
-			handles.update( shown, _box );
+			// A locked one has no handles; several have theirs while any of them isn't locked.
+			const fixed = group ? selection.every( e => e.locked ) : !! selected?.locked;
+			handles.update( fixed ? null : shown, _box );
 			// Out of the way while the item is moved or a handle dragged.
 			toolbar.update( dragging?.moved || handles.busy ? null : shown, _box, handles.onScreen() );
 			if ( placing?.entry && placing.commitWhenLoaded ) commitPlacing( false );
@@ -2351,6 +2501,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 				shown: ( open || selection.length > 1 ) && ! isDriving(),
 				boxing: boxMode,
 				selected: selection.length,
+				locked: selection.length > 0 && selection.every( e => e.locked ),
 				canPaste: !! clipboard || hasStoredClipboard(),
 				undo: history.undoLabel,
 				redo: history.redoLabel,
@@ -2370,6 +2521,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		paste: at => paste( at ?? null ),
 		duplicate: () => duplicateSelection(),
 		deleteSelected: () => deleteItems( selection ),
+		// Lock these (on) or unlock them, as one step to undo; toggleLock() does what's selected.
+		setLocked: ( entries, on ) => setLocked( entries, on ),
+		toggleLock: () => toggleLock(),
 		rotateSelected: degrees => rotateSelected( degrees ),
 		setBoxMode: on => setBoxMode( on ),
 		get boxMode() {

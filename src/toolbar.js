@@ -3,7 +3,8 @@ import { getKind, resizeShape } from './kinds.js';
 import { toScreen } from './handles.js';
 
 // The selection toolbar (sidebar.js): a row of buttons over the selected item that follows it on
-// screen, to turn it, type in an area's size, drive it, open its settings, hide it or delete it.
+// screen, to turn it, type in an area's size, drive it, lock it, open its settings, hide it or
+// delete it. Locked (sidebar.js), it only has Unlock, Edit (its settings, read-only) and Hide.
 // Hiding and deleting show an Undo toast for a few seconds instead of asking first. Hidden items
 // stay in the plan, listed in the Show panel (layers.js) to show them again. Other modules add
 // buttons of their own with addButton() (a row of an item, rows.js).
@@ -31,19 +32,23 @@ const ICONS = {
 	remove: icon( '<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/><path d="M10 11v5M14 11v5"/>' ),
 	copy: icon( '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>' ),
 	duplicate: icon( '<rect x="4" y="4" width="11" height="11" rx="2"/><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M14.5 12.5v5M12 15h5"/>' ),
+	lock: icon( '<rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/><path d="M12 15v2"/>' ),
+	unlock: icon( '<rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 7.7-1.5"/><path d="M12 15v2"/>' ),
 };
+const MOD = /Mac|iPhone|iPad/.test( navigator.platform ?? '' ) ? '⌘' : 'Ctrl+';
 
 const _anchor = new Vector3();
 
 // rotate( degrees ) turns the selected item, select( entry ) selects one, drive( entry ) gets in,
 // canDrive( entry ) says whether it's a vehicle or a machine, hide( entry ) hides it, and
 // deleteItems( entries ) deletes them (with Undo), copy() and duplicate() copy or duplicate what's
-// selected, and edit( entry ) opens its settings in the P panel.
+// selected, edit( entry ) opens its settings in the P panel, and lock() locks what's selected, or
+// unlocks it when it's all locked.
 //
 // Several things selected together (sidebar.js) show as one: an entry with `group: true` and its
 // `members`, which the toolbar sits over with how many there are and what can be done to them all:
-// rotate, copy, duplicate, edit (the P panel's "N items"), hide and delete.
-export function createToolbar( { camera, canvas, models, panel, select, rotate, drive, canDrive, hide, deleteItems, copy, duplicate, edit } ) {
+// rotate, copy, duplicate, lock, edit (the P panel's "N items"), hide and delete.
+export function createToolbar( { camera, canvas, models, panel, select, rotate, drive, canDrive, hide, deleteItems, copy, duplicate, edit, lock } ) {
 
 	const root = document.createElement( 'div' );
 	root.className = 'selection-toolbar';
@@ -88,6 +93,7 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		copy: button( 'copy', 'Copy', 'Copy them (Ctrl+C), to paste here or in another project (Ctrl+V)' ),
 		duplicate: button( 'duplicate', 'Duplicate', 'Duplicate them beside themselves (Ctrl+D)' ),
 		edit: button( 'edit', 'Edit', 'All its settings (P)' ),
+		lock: button( 'lock', 'Lock', '' ),
 		hide: button( 'hide', 'Hide', 'Hide it: it stays in the plan, and the Show panel (bottom right) shows it again' ),
 		remove: button( 'remove', 'Delete', 'Delete it (Delete key). You can undo it for a few seconds' ),
 	};
@@ -151,6 +157,12 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 		done( buttons.duplicate );
 		duplicate();
+
+	} );
+	buttons.lock.addEventListener( 'click', () => {
+
+		done( buttons.lock );
+		lock();
 
 	} );
 	buttons.hide.addEventListener( 'click', () => {
@@ -433,15 +445,20 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 		const kind = getKind( entry.kind );
 		const group = !! entry.group;
+		// Locked: it, or every one of several. Then what would change it is left off.
+		const locked = group ? entry.members.every( member => member.locked ) : !! entry.locked;
 		setHidden( count, ! group );
 		if ( group && count.textContent !== entry.state.name ) count.textContent = entry.state.name;
-		setHidden( buttons.left, resizeShape( kind, entry.params ) === 'circle' );
-		setHidden( buttons.right, resizeShape( kind, entry.params ) === 'circle' );
-		setHidden( buttons.size, group || sizeFields( entry ).length === 0 );
-		setHidden( buttons.drive, group || ! canDrive( entry ) );
+		setHidden( buttons.left, locked || resizeShape( kind, entry.params ) === 'circle' );
+		setHidden( buttons.right, locked || resizeShape( kind, entry.params ) === 'circle' );
+		setHidden( buttons.size, locked || group || sizeFields( entry ).length === 0 );
+		setHidden( buttons.drive, locked || group || ! canDrive( entry ) );
 		setHidden( buttons.copy, ! group );
 		setHidden( buttons.duplicate, ! group );
-		for ( const { element, shown } of extras ) setHidden( element, group || ! shown( entry ) );
+		setHidden( buttons.remove, locked );
+		for ( const { element, shown } of extras ) setHidden( element, locked || group || ! shown( entry ) );
+		showLock( locked, group );
+		if ( locked && ! editor.hidden ) closeEditor();
 		if ( ! editor.hidden && entry.params !== editing?.params ) fillEditor( false );
 
 		// Measured again only when it changes size (other buttons, the size editor).
@@ -476,6 +493,22 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 		const y = Math.max( MARGIN, bottom - height );
 		root.style.transform = `translate( ${ Math.round( x ) }px, ${ Math.round( y ) }px )`;
+
+	}
+
+	// Lock, or Unlock (pressed, with a closed padlock) when it's locked.
+	let lockShown = null;
+	function showLock( locked, group ) {
+
+		const key = `${ locked } ${ group }`;
+		if ( key === lockShown ) return;
+		lockShown = key;
+		buttons.lock.setAttribute( 'aria-pressed', String( locked ) );
+		buttons.lock.innerHTML = `${ ICONS[ locked ? 'lock' : 'unlock' ] }<span>${ locked ? 'Unlock' : 'Lock' }</span>`;
+		const it = group ? 'them' : 'it';
+		buttons.lock.title = locked
+			? `Locked: unlock ${ it } (${ MOD }L) to move, turn, resize, change or delete ${ it } again`
+			: `Lock ${ it } (${ MOD }L), so ${ it } can't be moved, turned, resized, changed or deleted by accident`;
 
 	}
 

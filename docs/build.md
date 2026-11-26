@@ -385,11 +385,12 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   (not what's hidden by hand or by the Show panel, nor what loads for everyone: models from
   `config.js` and items saved for everyone, which Shift+click can still add). **Esc** selects nothing.
 - **Seen as selected:** each one outlined in amber, one ring round them all with the turn knob,
-  and the toolbar over them saying **N items** with Rotate left/right, Copy, Duplicate, Edit, Hide
-  and Delete. The **edit bar** along the bottom (while the library is open, or several are
+  and the toolbar over them saying **N items** with Rotate left/right, Copy, Duplicate, Edit, Lock,
+  Hide and Delete. The **edit bar** along the bottom (while the library is open, or several are
   selected; `src/edit-bar.js`) says how many are selected, with Select, Copy, Cut, Paste, Duplicate,
-  Undo and Redo for touch. It keeps between the library and the Show and Controls panels, or goes
-  to the top (under the status) where there's no room, and across the top on a phone.
+  Lock (see [Locking things](#locking-things)), Undo and Redo for touch. It keeps between the
+  library and the Show and Controls panels, or goes to the top (under the status, beside the P
+  panel when that's open) where there's no room, and across the top on a phone.
 - **Together:** dragging any of them moves them all, keeping where they are from each other, each
   settling on the ground where it lands (a flatten area with what stands on it moves with it, and
   they settle on the new ground). The knob, **R** / **Shift+R** and the toolbar turn them all about
@@ -446,6 +447,48 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   cleared when another layout opens; undoing a move keeping a later P-panel width; undo not
   selecting a hidden item; Ctrl+V/Z doing nothing with the library closed; cutting Pro items on a
   free account leaving them; 80 selected not measured every frame, outlines following a turn).
+
+## Locking things
+
+Anything placed (library items, rows, the pieces of a set, flatten and laydown areas, excavations,
+stockpiles, markups) can be locked, so it isn't moved or changed by accident (`src/sidebar.js`).
+This is a different thing from a Pro item's padlock in the library, which is about picking new
+ones on a free account (`sidebar.isLocked`); the editor's lock is `entry.locked`.
+
+- **Locking:** **Ctrl/Cmd+L** locks what's selected, or unlocks it once every one of it is locked;
+  so do **Lock** on the selection toolbar and on the edit bar (pressed, red and saying **Unlock**
+  while it's all locked), the **Locked** tick box at the top of an item's P panel folder, and
+  **Lock or unlock them** in the P panel's **N items**. Each is one step to undo and redo ("lock
+  Shipping container (20 ft)", "unlock 3 items"), and a toast says what was done.
+- **A locked thing** can still be clicked, Shift+clicked, boxed and Ctrl/Cmd+A'd, to see its
+  settings, copy it or unlock it. Selected, it's outlined red instead of blue, it has no handles
+  (turning, resizing, a pit's depth, a flatten area's raise arrow, a row's dots), and its toolbar has
+  only **Edit**, **Unlock** and **Hide**. Dragging it, **R**, **Delete**, the P panel's Remove,
+  **Ctrl/Cmd+X**, **PageUp/PageDown** (a flatten area) and changing a markup's words leave it as it
+  is, with a toast ("Locked: unlock it to move it (Ctrl+L)"). It can't be driven (driving would move
+  it): no Drive, and **V** passes it by. Its P panel fields and buttons are greyed out and can't be
+  used or tabbed into (`inert`), all but **Locked** and **Copy config**; that goes for its
+  settings (surface, colour, words) as well as its size and position. Hiding still works.
+- **Several selected:** the locked ones are outlined red among the amber. Dragging, turning (keys,
+  knob, toolbar) and deleting change the rest and leave the locked ones where they are, saying how
+  many ("1 locked item stays where it is"; on the Undo toast, "Deleted 3 items (2 locked items
+  weren't deleted)"); with all of them locked there are no handles and the toolbar is **Copy**,
+  **Duplicate**, **Edit**, **Unlock** and **Hide**. Cut cuts the rest, as with Pro items. Changes
+  to them all in the P panel's **N items** pass the locked ones by.
+- **Copies aren't locked:** copying, pasting and duplicating a locked thing gives ordinary ones.
+- **Show panel:** **Locked items (N)** with **Unlock all** (one step to undo) while anything is.
+- **Saved** as `locked: true` on the item (`models.toConfig`), with the layout, the project, an
+  export and a share link (which is read-only anyway); layouts and clipboards without it load
+  unlocked, as before. A library item that's made differently now (`resolveItem`) keeps it.
+- **Claude (MCP):** `get_project` says `locked: true` on locked items; `move_item` and
+  `remove_items` refuse them ("Item 3 (Site office trailer) is locked in the editor; unlock it there
+  first. Nothing was changed."), the whole call, so nothing else in it is removed either.
+- **Tests:** `npm run test:lock-ui` (Ctrl+L, undo and redo; the red outline, no handles and the
+  toolbar's buttons; dragging, R, Delete, Ctrl+X, PageUp and driving refused with their toasts; the
+  P panel read-only and its Locked tick box; several with one locked moving, turning and deleting
+  the rest; the edit bar's Lock and Unlock; copies unlocked; the Show panel's Unlock all; saved,
+  reloaded, and an old config unlocked) and `npm run test:build-mcp` (`locked` in `get_project`,
+  `move_item` and `remove_items` refused, then allowed once unlocked).
 
 ## Markups: dimensions, arrows and notes
 
@@ -565,8 +608,8 @@ selected, box-selected, moved, turned, copied and pasted, hidden, deleted and un
   `migrations/0018_build_mcp.sql`). Its tools find a site, make and read projects, search the
   library and sets (`build-catalog.json`, made by `npm run make-build-catalog` whenever the library
   changes), place items, sets and rows, add flatten, laydown and stockpile areas and markups
-  (`add_markup`: dimensions, arrows and notes), move and remove things and share a project; each
-  answer has the editor link. `MCP_HOURLY` (default 300) caps an account's tool calls an hour. The
+  (`add_markup`: dimensions, arrows and notes), move and remove things (not those locked in the
+  editor) and share a project; each answer has the editor link. `MCP_HOURLY` (default 300) caps an account's tool calls an hour. The
   dashboard's **Build with Claude** box shows the address and disconnects every connected app.
 - **Claude looks at the site (`view_site`, `worker/drive/site-view.js`):** so Claude doesn't lay a
   site out blind, `view_site` answers with a picture (an MCP `image` block, a 768 × 768 JPEG) and

@@ -4,10 +4,11 @@
 // Build Pro and the owner can), the code and PKCE verifier become tokens, and every tool lays out a
 // project, which then opens in the real editor (/build/app/) in a browser with what was placed. And:
 // codes are used once, refresh tokens are replaced, signing out everywhere disconnects, a plan that
-// lapses stops the tools, and the hourly limit holds. view_site's satellite picture is made from a
-// stand-in for Google's Map Tiles API (solid-colour tiles), decoded and looked at pixel by pixel:
-// its size, the grid, what's placed drawn where it is, the attribution, the cache, the map views it
-// counts, and its errors. TEST_SCREENSHOTS=<dir> keeps the picture.
+// lapses stops the tools, the hourly limit holds, and items locked in the editor are reported and
+// left alone. view_site's satellite picture is made from a stand-in for Google's Map Tiles API
+// (solid-colour tiles), decoded and looked at pixel by pixel: its size, the grid, what's placed
+// drawn where it is, the attribution, the cache, the map views it counts, and its errors.
+// TEST_SCREENSHOTS=<dir> keeps the picture.
 //
 // Needs Playwright with Chromium, and the built site (npm run build:drive; built if missing).
 
@@ -546,6 +547,35 @@ test( 'the tools lay out a site', async () => {
 	const saved = await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: { ...data, items: data.items.reverse() } }, headers: { Cookie: proCookie, Origin: server.base } } );
 	assert.equal( saved.status, 200, saved.text );
 	assert.match( ( await tool( 'remove_items', { project_id: project, version: before.version, indexes: [ 0 ] } ) ).text, /changed since those indexes were read/ );
+	// Something locked in the editor (saved with locked: true) says so in get_project, and isn't
+	// moved or removed from here: nothing changes, with a remove of it and something else too.
+	// Unlocked again, it moves.
+	const lockedData = ( await call( `/build/api/layouts/${ project }`, { headers: { Cookie: proCookie } } ) ).json.data;
+	lockedData.items[ 0 ].locked = true;
+	assert.equal( ( await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: lockedData }, headers: { Cookie: proCookie, Origin: server.base } } ) ).status, 200 );
+	const withLock = ( await tool( 'get_project', { project_id: project } ) ).value;
+	assert.equal( withLock.items[ 0 ].locked, true );
+	assert.ok( withLock.items.slice( 1 ).every( i => ! ( 'locked' in i ) ) );
+	const lockedMove = await tool( 'move_item', { project_id: project, version: withLock.version, index: 0, east: 50 } );
+	assert.ok( lockedMove.error );
+	assert.match( lockedMove.text, /^Item 0 \(.+\) is locked in the editor; unlock it there first\. Nothing was changed\./ );
+	const lockedRemove = await tool( 'remove_items', { project_id: project, version: withLock.version, indexes: [ 1, 0 ] } );
+	assert.ok( lockedRemove.error );
+	assert.match( lockedRemove.text, /^Item 0 .* is locked in the editor; unlock it there first/ );
+	const untouched = ( await tool( 'get_project', { project_id: project } ) ).value;
+	assert.equal( untouched.version, withLock.version );
+	assert.deepEqual( untouched.items, withLock.items );
+	lockedData.items[ 0 ].locked = true;
+	lockedData.items[ 1 ].locked = true;
+	assert.equal( ( await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: lockedData }, headers: { Cookie: proCookie, Origin: server.base } } ) ).status, 200 );
+	const both = ( await tool( 'get_project', { project_id: project } ) ).value;
+	assert.match( ( await tool( 'remove_items', { project_id: project, version: both.version, indexes: [ 0, 1, 2 ] } ) ).text, /^Items 0, 1 are locked in the editor; unlock them there first/ );
+	delete lockedData.items[ 0 ].locked;
+	delete lockedData.items[ 1 ].locked;
+	assert.equal( ( await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: lockedData }, headers: { Cookie: proCookie, Origin: server.base } } ) ).status, 200 );
+	const unlocked = ( await tool( 'get_project', { project_id: project } ) ).value;
+	assert.ok( unlocked.items.every( i => ! ( 'locked' in i ) ) );
+	assert.equal( ( await tool( 'move_item', { project_id: project, version: unlocked.version, index: 0, east: unlocked.items[ 0 ].east } ) ).error, false );
 
 	// A barrier loop round a 10 m square: end to end all the way, across the corners rather than
 	// short of them or sticking out past them, with what's over left where the loop closes.

@@ -175,13 +175,16 @@
 	opacity: 0.55;
 }
 
-#layers .hidden-items {
+/* Items hidden by hand, and how many are locked in the editor with Unlock all. */
+#layers .hidden-items,
+#layers .locked-items {
 	margin-top: 10px;
 	padding-top: 8px;
 	border-top: 1px solid rgba( 255, 255, 255, 0.1 );
 }
 
-#layers .hidden-items .heading {
+#layers .hidden-items .heading,
+#layers .locked-items .heading {
 	flex: 1;
 	font-weight: 600;
 }
@@ -215,14 +218,16 @@
 	white-space: nowrap;
 }
 
-#layers .hidden-items button {
+#layers .hidden-items button,
+#layers .locked-items button {
 	flex: none;
 	padding: 3px 10px;
 	background: #26323c;
 	font-size: 12px;
 }
 
-#layers .hidden-items button:hover {
+#layers .hidden-items button:hover,
+#layers .locked-items button:hover {
 	background: #33414d;
 }
 
@@ -232,7 +237,8 @@
 		padding: 8px 6px;
 	}
 
-	#layers .hidden-items button {
+	#layers .hidden-items button,
+	#layers .locked-items button {
 		padding: 6px 12px;
 	}
 
