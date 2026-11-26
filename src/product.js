@@ -10,6 +10,7 @@
 // Everywhere else (the Neptune twin), none of this applies.
 
 import { STREET_ONLY, rankedPlaces, searchCredit, streetOnly } from './search-results.js';
+import { BLANK_AT, BLANK_NAME, MAX_SLOPE, blankOf, compassPoint, describeSlope, readSlopeParam, slopeParam } from './blank-site.js';
 
 // (No Vite in Node, where tests load some modules: not Build there.)
 export const BUILD_APP = import.meta.env?.MODE === 'worlddrive';
@@ -22,6 +23,7 @@ const EXAMPLE = { name: 'North Vancouver waterfront (example)', lat: 49.3054, lo
 export const FREE_ITEMS = new Set( [
 	'jersey-barrier', 'water-barrier', 'fence-panel', 'lock-block',
 	'traffic-cone', 'traffic-drum', 'barricade-type-3-road-closed', 'delineator-post',
+	'stop-sign-post', 'stop-sign-portable',
 	'office-trailer-8x20', 'office-trailer-10x40', 'container-20', 'porta-potty',
 	'rolloff-20', 'frontload-6yd',
 	'pickup-truck', 'dump-truck-tandem', 'cargo-van',
@@ -32,10 +34,12 @@ export const FREE_ITEMS = new Set( [
 ] );
 
 // The project's site: ?at=lat,lon&place=Name, else the last one in this browser, else the example.
-// Kept for next time.
+// Kept for next time. ?blank is a blank site instead (blank-site.js): no place on the map, so it
+// isn't kept as the last one; its blank says how its ground slopes.
 export function buildSite() {
 
 	const url = new URL( window.location.href );
+	if ( url.searchParams.has( 'blank' ) ) return { name: BLANK_NAME, ...BLANK_AT, blank: readSlopeParam( url.searchParams.get( 'blank' ) ) };
 	const at = url.searchParams.get( 'at' )?.split( ',' ).map( Number );
 	let site = null;
 	if ( at?.length === 2 && at.every( Number.isFinite ) && Math.abs( at[ 0 ] ) <= 85 && Math.abs( at[ 1 ] ) <= 180 ) {
@@ -71,6 +75,35 @@ export function buildSite() {
 	}
 
 	return site;
+
+}
+
+// The editor's address says where its project is (?at, or ?blank for a blank site). One with just
+// ?project=<id> is at the last place this browser had, on the map: if the project is a blank site,
+// it's opened at its own address instead, asked before the page asks for its config, so that
+// opening it doesn't take a 3D map view on the way. Returns true while going there.
+export async function openBlankProject() {
+
+	const url = new URL( window.location.href );
+	const id = url.searchParams.get( 'project' );
+	if ( ! id || [ 'at', 'blank', 'view' ].some( name => url.searchParams.has( name ) ) ) return false;
+	try {
+
+		const res = await fetch( `api/layouts/${ encodeURIComponent( id ) }`, { headers: { Accept: 'application/json' } } );
+		const blank = res.ok ? blankOf( ( await res.json() ).data ) : null;
+		if ( ! blank ) return false;
+		url.search = '';
+		url.searchParams.set( 'blank', slopeParam( blank ) );
+		url.searchParams.set( 'project', id );
+		window.location.replace( url.href );
+		return true;
+
+	} catch {
+
+		// Not signed in, not found or no server: the page opens as it is.
+		return false;
+
+	}
 
 }
 
@@ -128,6 +161,14 @@ export function setUpSitePicker( site, { toast } ) {
 	const input = form.querySelector( 'input' );
 	const results = form.querySelector( '.site-results' );
 	root.querySelector( '.site-name' ).textContent = site.name;
+	form.append( site.blank ? groundSettings( site.blank, moveTo ) : blankChoice( () => moveTo( null ) ) );
+	if ( site.blank ) {
+
+		current.title = 'A blank site, with no map: click to set its slope or move it to an address';
+		input.placeholder = 'Move it to an address, city or place';
+
+	}
+
 	current.addEventListener( 'click', () => {
 
 		form.hidden = ! form.hidden;
@@ -176,19 +217,65 @@ export function setUpSitePicker( site, { toast } ) {
 
 	} );
 
-	function moveTo( place ) {
+	// To a place, or with none to a blank site (blank-site.js), whose ground slopes as `slope` says.
+	function moveTo( place, slope = null ) {
 
 		const url = new URL( window.location.href );
 		// The open project (cloud.js keeps it in the address) goes with it, and is saved at the new place.
 		const project = url.searchParams.get( 'project' );
 		url.search = '';
 		if ( project ) url.searchParams.set( 'project', project );
-		url.searchParams.set( 'at', `${ place.lat.toFixed( 6 ) },${ place.lon.toFixed( 6 ) }` );
-		url.searchParams.set( 'place', place.name.split( ',' ).slice( 0, 2 ).join( ',' ) );
-		toast?.( 'Moving the project…' );
+		if ( place ) {
+
+			url.searchParams.set( 'at', `${ place.lat.toFixed( 6 ) },${ place.lon.toFixed( 6 ) }` );
+			url.searchParams.set( 'place', place.name.split( ',' ).slice( 0, 2 ).join( ',' ) );
+
+		} else url.searchParams.set( 'blank', slopeParam( slope ) );
+
+		toast?.( place || ! site.blank ? 'Moving the project…' : 'Changing the ground…' );
 		window.location.href = url.href;
 
 	}
+
+}
+
+// Below the search on a site on the map: a blank site instead, with no map at all.
+function blankChoice( go ) {
+
+	const row = document.createElement( 'div' );
+	row.className = 'site-blank';
+	const words = Object.assign( document.createElement( 'span' ), { textContent: 'No address, or no map wanted?' } );
+	const button = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'blank-go', textContent: 'Blank site (no map)', title: 'Lay out on plain ground with a metre grid: no Google map, and no 3D map view used' } );
+	button.addEventListener( 'click', go );
+	row.append( words, button );
+	return row;
+
+}
+
+// Below the search on a blank site: how its ground slopes (moveTo( null, slope ) opens it so).
+function groundSettings( blank, moveTo ) {
+
+	const row = document.createElement( 'div' );
+	row.className = 'site-blank ground';
+	row.innerHTML = `
+		<span class="ground-label">Ground</span>
+		<label>Slope <input type="number" class="ground-slope" min="0" max="${ MAX_SLOPE }" step="0.5" inputmode="decimal" aria-label="Slope in percent"> %</label>
+		<label>falling to the <select class="ground-toward" aria-label="Which way it falls"></select></label>
+		<button type="button" class="ground-apply">Apply</button>
+		<span class="ground-now"></span>`;
+	const slope = row.querySelector( '.ground-slope' );
+	const toward = row.querySelector( '.ground-toward' );
+	slope.value = String( blank.slope );
+	const options = [ 0, 45, 90, 135, 180, 225, 270, 315 ];
+	if ( ! options.includes( blank.toward ) ) options.push( blank.toward );
+	toward.append( ...options.sort( ( a, b ) => a - b ).map( degrees => Object.assign( document.createElement( 'option' ), {
+		value: String( degrees ),
+		textContent: degrees % 45 ? `${ degrees }°` : compassPoint( degrees ),
+	} ) ) );
+	toward.value = String( blank.toward );
+	row.querySelector( '.ground-now' ).textContent = `Now ${ describeSlope( blank ).toLowerCase() }. Or search above to move it to a real address.`;
+	row.querySelector( '.ground-apply' ).addEventListener( 'click', () => moveTo( null, { slope: Number( slope.value ), toward: Number( toward.value ) } ) );
+	return row;
 
 }
 

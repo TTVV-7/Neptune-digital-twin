@@ -129,7 +129,7 @@ describe( 'World Drive Build\'s legal pages', () => {
 		for ( const text of [ terms, sale ] ) assert.ok( ! /per seat|founding|unlimited projects/i.test( text ) );
 		// Buying hidden (as built: BUILD_SALES unset): the plans and their limits, but no price,
 		// checkout or renewal, and it says Build Pro isn't for sale.
-		for ( const words of [ '33 everyday library items, 15 3D map views a month and 1 saved project', 'Build Pro isn\'t for sale just now', 'using Build costs nothing' ] ) assert.ok( terms.includes( words ), `the Terms don't say "${ words }"` );
+		for ( const words of [ '35 everyday library items, 15 3D map views a month and 1 saved project', 'Build Pro isn\'t for sale just now', 'using Build costs nothing' ] ) assert.ok( terms.includes( words ), `the Terms don't say "${ words }"` );
 		assert.ok( ! /US\$5\b|US\$50\b|a month or|checkout|renews automatically|renewal|subscription/i.test( terms ), `the Terms talk about buying while it's hidden: ${ terms.match( /[^.]*(US\$5\b|US\$50\b|a month or|checkout|renews automatically|renewal|subscription)[^.]*/i )?.[ 0 ] }` );
 		assert.ok( ! /buying Build Pro|renewal/i.test( built( '/build/terms/' ).match( /<meta name="description" content="([^"]*)"/ )[ 1 ] ) );
 

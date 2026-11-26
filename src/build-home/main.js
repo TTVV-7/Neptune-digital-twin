@@ -2,6 +2,7 @@ import './style.css';
 import { BILLING_PAGE, PLANS, PRO_PHRASE, SOON, dateOf, intervalChoice, salesHidden } from '../build-plans.js';
 import { TOLERANCE, TOLERANCE_MAX, hex, removeBackground } from '../logo-background.js';
 import { STREET_ONLY, rankedPlaces, searchCredit, streetOnly } from '../search-results.js';
+import { BLANK_AT, BLANK_NAME, describeSlope, slopeParam } from '../blank-site.js';
 
 // World Drive Build's dashboard (worlddrive.app/build/, drive/build/index.html, docs/build.md): find a
 // site by address and open the editor there (/build/app/), your saved projects, your plan, and
@@ -46,11 +47,13 @@ function toast( text ) {
 
 // --- finding a site ------------------------------------------------------------------------
 
-function editorAt( { lat, lon, name, project } ) {
+// blank: a blank site's { slope, toward } (blank-site.js), which opens with ?blank in place of a place.
+function editorAt( { lat, lon, name, project, blank = null } ) {
 
 	const url = new URL( EDITOR, location.href );
-	if ( Number.isFinite( lat ) && Number.isFinite( lon ) ) url.searchParams.set( 'at', `${ lat.toFixed( 6 ) },${ lon.toFixed( 6 ) }` );
-	if ( name ) url.searchParams.set( 'place', name );
+	if ( blank ) url.searchParams.set( 'blank', slopeParam( blank ) );
+	else if ( Number.isFinite( lat ) && Number.isFinite( lon ) ) url.searchParams.set( 'at', `${ lat.toFixed( 6 ) },${ lon.toFixed( 6 ) }` );
+	if ( name && ! blank ) url.searchParams.set( 'place', name );
 	if ( project ) url.searchParams.set( 'project', project );
 	return url.href;
 
@@ -156,6 +159,41 @@ function startHere( place ) {
 
 }
 
+// A blank site (blank-site.js): no map, so nothing to search for. Signed out it just opens one to
+// look round; signed in, "Start a blank project" saves an empty one (flat: its slope is set in the
+// editor's Site button) and opens it, as Start a project here does at a place.
+function showBlankChoice() {
+
+	const signedIn = !! home?.signedIn;
+	$( 'blank-open' ).hidden = signedIn;
+	$( 'blank-start' ).hidden = ! signedIn;
+
+}
+
+$( 'blank-start' ).addEventListener( 'submit', async e => {
+
+	e.preventDefault();
+	const create = e.target.querySelector( 'button' );
+	const said = $( 'blank-note' );
+	create.disabled = true;
+	try {
+
+		const blank = { slope: 0, toward: 0 };
+		const data = { version: 2, site: BLANK_NAME, ...BLANK_AT, blank, items: [], extras: {} };
+		const made = await call( 'POST', 'layouts', { site: BLANK_NAME, name: $( 'blank-name' ).value.trim() || BLANK_NAME, data } );
+		location.href = editorAt( { blank, project: made.id } );
+
+	} catch ( err ) {
+
+		said.hidden = false;
+		const more = salesHidden( home?.premium?.billing ) ? 'Open or delete your project below.' : 'Open or delete your project below, or go Build Pro.';
+		said.textContent = err.status === 403 ? `${ err.message } ${ more }` : `Couldn't make the project: ${ err.message }`;
+		create.disabled = false;
+
+	}
+
+} );
+
 function note( text ) {
 
 	const li = document.createElement( 'li' );
@@ -210,18 +248,20 @@ async function showProjects() {
 	const most = home.plan?.layouts;
 	$( 'project-count' ).textContent = most ? `${ layouts.length } of ${ most }` : String( layouts.length );
 	empty.hidden = layouts.length > 0;
-	empty.textContent = 'No projects yet. Search for your site above and choose Start a project here.';
+	empty.textContent = 'No projects yet. Search for your site above and choose Start a project here, or start one on a blank site.';
 	list.replaceChildren( ...layouts.map( project => {
 
 		const item = document.createElement( 'li' );
 		const link = document.createElement( 'a' );
 		link.className = 'project';
-		link.href = editorAt( { lat: project.lat, lon: project.lon, name: project.site, project: project.id } );
+		link.href = editorAt( { lat: project.lat, lon: project.lon, name: project.site, project: project.id, blank: project.blank } );
 		const name = document.createElement( 'strong' );
 		name.textContent = project.name;
 		const site = document.createElement( 'span' );
 		site.className = 'site';
-		site.textContent = project.site;
+		// A blank site has no place: what its ground does instead.
+		site.textContent = project.blank ? `${ BLANK_NAME }, no map · ${ describeSlope( project.blank ) }` : project.site;
+		if ( project.blank ) link.classList.add( 'blank' );
 		const meta = document.createElement( 'span' );
 		meta.className = 'meta';
 		meta.textContent = `Saved ${ ago( project.updatedAt ) }${ project.shared ? ' · shared by link' : '' }`;
@@ -953,6 +993,7 @@ async function load() {
 	showAccount();
 	showPlan();
 	showNotices();
+	showBlankChoice();
 	await showProjects();
 	// All shown (for the tests).
 	document.body.dataset.loaded = 'yes';
@@ -1023,6 +1064,6 @@ $( 'new-project' ).addEventListener( 'click', () => {
 	const query = $( 'find-query' );
 	query.scrollIntoView( { behavior: 'smooth', block: 'center' } );
 	query.focus();
-	toast( 'Search for the site, then choose Start a project here' );
+	toast( 'Search for the site, then choose Start a project here. Or start one on a blank site' );
 
 } );

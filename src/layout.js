@@ -5,7 +5,8 @@ import { toast } from './placement.js';
 // Library items you place are saved in this browser and come back next time. Export and Import
 // move a layout between browsers, or into the repository as a file.
 //
-// A layout is { version: 2, site, lat, lon, items: [ model configs ], extras: { name: data } }.
+// A layout is { version: 2, site, lat, lon, blank?, items: [ model configs ], extras: { name: data } }
+// (blank: World Drive Build's blank site's { slope, toward }, blank-site.js).
 // Extras are other modules' saved state that isn't a placed item, e.g. ground dug by an
 // excavator: registerExtra( name, { save, load, clear } ) and call changed() when it changes.
 // Layouts saved before version 2 are just the items array.
@@ -56,7 +57,8 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 	};
 
-	const data = () => ( { version: 2, site: SITE.name, lat: SITE.lat, lon: SITE.lon, items: current(), extras: extrasData() } );
+	// A blank site (World Drive Build's, blank-site.js) says so, and how its ground slopes.
+	const data = () => ( { version: 2, site: SITE.name, lat: SITE.lat, lon: SITE.lon, ...SITE.blank ? { blank: { ...SITE.blank } } : {}, items: current(), extras: extrasData() } );
 
 	// Off while viewing someone else's shared layout, so it doesn't replace yours.
 	let localSaving = true;
@@ -126,6 +128,8 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	models.addEventListener( 'remove', save );
 	// Hidden by hand: part of the plan (layers.js).
 	models.addEventListener( 'hide', save );
+	// Locked in the editor (sidebar.js): part of the plan too.
+	models.addEventListener( 'lock', save );
 	window.addEventListener( 'pagehide', flush );
 	document.addEventListener( 'visibilitychange', () => {
 
@@ -394,8 +398,8 @@ function resolve( config, library ) {
 	if ( ! item ) return config;
 	const same = item.procedural ? config.procedural === item.id : config.url === `library/${ item.file }`;
 	if ( same ) return config;
-	const { east, north, up, heading } = config;
-	return itemConfig( item, { east, north, up: up ?? null, heading } );
+	const { east, north, up, heading, locked } = config;
+	return { ...itemConfig( item, { east, north, up: up ?? null, heading } ), ...( locked ? { locked } : {} ) };
 
 }
 

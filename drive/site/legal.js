@@ -260,7 +260,7 @@ export function buildSalesOn( env = process.env ) {
 
 }
 // The plans' limits, as worker/drive/build.js's and mcp.js's defaults have them.
-export const BUILD_LIMITS = { freeItems: 33, freeViews: 15, freeProjects: 1, proViews: 300, proProjects: 200, mcpHourly: 300 };
+export const BUILD_LIMITS = { freeItems: 35, freeViews: 15, freeProjects: 1, proViews: 300, proProjects: 200, mcpHourly: 300 };
 // The one cookie Build sets (worker/sessions.js's sessionCookies, for worker/drive/accounts.js) and
 // every key the editor keeps in the browser's localStorage, with what each is for.
 // test-drive-seo.mjs checks the keys against the code, so a new one has to be listed here (and so

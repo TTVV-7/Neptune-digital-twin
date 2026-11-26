@@ -16,7 +16,7 @@ and the Neptune twin.
   settings: no prices, no Go Build Pro, Subscribe with Stripe or monthly/yearly choice, no "Build
   Pro opens soon", no renewal lines, and `POST /build/api/billing/checkout` answers 404 ("Build Pro
   isn't available to buy right now"). The plans and their limits are exactly as below: free
-  accounts keep the 33 items, 15 3D map views a month and 1 project, and Build Pro comes from the
+  accounts keep the 35 items, 15 3D map views a month and 1 project, and Build Pro comes from the
   owner's comps, `BUILD_EMAILS` or `ADMIN_EMAILS`. The server says so in every plan payload
   (`/build/api/config`, `me`, `home`): `premium.billing` is `{ enabled: false, hidden: true,
   monthly: null, annual: null, portal }`, with no `premium.price`, and `plan.priceLabel` is null.
@@ -57,8 +57,8 @@ and the Neptune twin.
   Plan & billing, Usage, Branding, Connected apps, Share links, Your data and Delete account
   (`#profile` ... `#delete`). Linked from the dashboard's top bar and the editor's account area
   (Build only). See "The account page" below.
-- **`/build/app/`, the editor**: the construction app, at `?at=lat,lon&place=Name`, opening
-  `?project=<id>` from the dashboard; **Projects** (top) goes back to the dashboard and **Site**
+- **`/build/app/`, the editor**: the construction app, at `?at=lat,lon&place=Name` (or `?blank` for
+  a blank site with no map, below), opening `?project=<id>` from the dashboard; **Projects** (top) goes back to the dashboard and **Site**
   moves the project.
 
 ## What people get
@@ -66,14 +66,15 @@ and the Neptune twin.
 | | Free | Build Pro | Owner |
 |---|---|---|---|
 | Who | anyone signed in with Google | a subscription bought through Stripe Checkout (US$5/month or US$50/year; only while `BUILD_SALES` is `on`), given by the owner (comps), or listed in `BUILD_EMAILS` | `ADMIN_EMAILS` (World Drive's owner) |
-| Library | 33 everyday items (`FREE_ITEMS` in `src/product.js`) | everything, sets included | everything |
+| Library | 35 everyday items (`FREE_ITEMS` in `src/product.js`) | everything, sets included | everything |
 | 3D map views a month | 15 (`BUILD_FREE_MONTHLY`) | 300 (`BUILD_PRO_MONTHLY`) | unlimited, not counted |
 | Saved projects | 1 | 200 (`BUILD_LAYOUT_LIMIT`) | 200 |
 | Share links | no | yes (their viewers get the map on the owner's views) | yes |
 
 - **A 3D map view** is a page load that's handed the Maps key: one billed Google 3D tiles session
   (about US$0.006). Signed out, or past the month's views, the page opens on flat ground and says
-  why; everything else works.
+  why; everything else works. Claude's `view_site` (a satellite picture of the site, below) counts
+  one too, out of the same allowance. A blank site (no map, below) never takes one.
 - **Free views for everyone together** are capped at `BUILD_FREE_DAILY` a day (200: at most about
   US$1.20 a day), then free accounts get flat ground till midnight UTC.
 - **The site** is wherever the project is: the **Site** button (top) searches an address (World
@@ -83,6 +84,65 @@ and the Neptune twin.
   placed items, saved projects and shared links open for everyone, as with the Pro equipment pack.
 - Left out of Build: the Neptune project's own models (`public/models`, `MODELS` in config.js), the
   race pieces, and the key prompt.
+
+## Blank sites
+
+A project with no Google 3D map at all, for a site with no address yet, a yard plan, a training
+layout, or when the map would only get in the way (`src/blank-site.js`, `src/blank-ground.js`).
+
+- **Making one:** on the dashboard, below the address search, **No address? Start on a blank site**:
+  signed in, a name and **Start a blank project** (saved to the account, then opened, as **Start a
+  project here** does at a place); signed out, **Open a blank site** just opens one to look round. In
+  the editor, the **Site** button's search has **Blank site (no map)** under it, which moves the open
+  project onto a blank site. Claude makes one with `create_project`'s `blank: true` (below).
+- **The editor's address:** `?blank` (flat), or `?blank=<slope>,<toward>` for ground falling
+  `<slope>` % (0 to 10) toward the compass heading `<toward>` (degrees clockwise from north), e.g.
+  `/build/app/?blank=2,90&project=<id>` falls 2 % to the east. A link with only `?project=<id>` to a
+  blank project asks for it first (`openBlankProject` in `src/product.js`) and opens it at its own
+  address, before the page asks for its config, so no map view is taken on the way.
+- **No map, no map views:** the editor asks for its config with `blank=1` (`GET config?blank=1`,
+  `worker/drive/build.js`), which never hands out the Maps key or counts a 3D map view
+  (`mapsReason: 'blank'`); a share link to a blank project is the same whether or not it says so (the
+  server reads the project). Nothing is asked of Google (no tiles, no attribution), and there's no red
+  "tiles failed" banner or "sign in for the map" note: there's no map to be missing.
+- **The ground:** plain light earth, as on a site plan, with a grid in metres: faint lines every
+  metre, stronger ones every ten, and the two through the site point (east and north) stronger again.
+  Lines too close together on screen fade out rather than shimmer, and the far edge melts into the
+  sky (fog). It's the editor's stand-in ground (`takeOverStandIn` in `src/terrain.js`), so pits, piles
+  and flatten areas cut into it as they do with no key; the grid is drawn on their untouched ground
+  too (`SITE_GRID_GLSL`), with no seam. A north arrow (top right) turns as the view does, with what
+  the ground does under it ("Flat", "Falls 2 % to the east"). The status (top left) says "blank site:
+  no map" instead of a lat and lon.
+- **The slope:** the **Site** button on a blank site has **Ground: Slope [ ] % falling to the [ ]**
+  and **Apply**, which opens the page again with the new slope (as moving the site does) and saves it
+  to the project. The ground is one even plane through the site point: everything placed snaps to it,
+  and flatten areas grade against it.
+- **The Show panel:** no **Google 3D map** row; **Before** is the blank ground without anything
+  flattened, dug, piled or placed (the Controls panel and the B toast say so too).
+- **Everything else** works as on a site on the map: placing, sets, rows, flatten areas (by their
+  points too), excavations, stockpiles, markups, locking, undo, saving, export and import, share
+  links (read only) and Claude's tools. **A blank project is a project:** it counts toward the free
+  plan's one project (and Build Pro's 200) like any other.
+- **Moving it to a real address:** search in the **Site** button as anywhere else: the project moves
+  there and is a project on the map from then on (its 3D map view counted then, as for any site).
+- **Stored** in the layout itself, no new column: `{ ..., site: 'Blank site', lat: 0, lon: 0,
+  blank: { slope, toward } }` (`layout.js`'s data). `lat` and `lon` are a fixed point the editor's
+  east and north are reckoned from, never shown as a place. The server reads `blank` out of the data
+  (`json_extract`) for the project lists (`blank` on each summary: `{ slope, toward }` or `null`).
+  Projects without it are on the map, as they always were.
+- **Claude (MCP):** `create_project` with `blank: true` (and `slope`, `toward` if wanted; no `place`,
+  `lat` or `lon`) makes one; `list_projects` and `get_project` give its `blank: { slope, toward,
+  ground }` (and no lat and lon); its editor and share links open it blank. `view_site` on a blank
+  site draws the grid (with fainter lines between) and what's placed on plain ground, made in the
+  Worker (`site-view.js`'s `blankView`) with no request to Google, no map view counted and no
+  Google attribution.
+- **Tests:** `npm run test:build-ui` (the dashboard's blank choice signed out and in; the editor with
+  no request to Google, no key and no view counted, the blank ground, its north arrow and the SITE
+  pill; placing, a flatten area by its points, a stockpile and a dimension saved to the project; the
+  slope from the Site button; opened by its id alone; the free plan's one project; moved to an
+  address), `npm run test:build-mcp` (`create_project` blank, `list_projects` and `get_project`,
+  `view_site` with nothing asked of the tiles stand-in and no view counted, the share link) and
+  `npm run test:build-worker` (`config?blank=1` and a blank project's share link: no key, no view).
 
 ## Flatten areas: grading
 
@@ -100,6 +160,7 @@ flattening, the terrain and the surface so they agree):
 | crowned (ridge down the middle) | a ridge along its length or width falling to both sides, set so half is above the middle height | fall (%), ridge runs along its length or width |
 | swale (valley down the middle) | the same upside down | fall (%), swale runs |
 | terraces (level benches) | 2 to 8 level benches stepping down the ground's fitted slope (along whichever side it falls more), joined by short batters | benches |
+| by points (your heights at its corners) | your own slopes: the area is cut into triangles between its points (ear clipping, `src/polygon.js` `triangulate`) and each is a plane through the heights set at its corners, as a surveyor's TIN. A point with no height takes the plane fitted through those that have one (with two, the slope from one to the other; with one, level at it; with none, level at the area's height). Picked for a rectangle, it is shaped by its four corners (see below). | heights at its points (m from the area's height, blank for none) |
 
 - **Batters.** Graded (anything but level), the area's edge meets the ground on batters at its
   **edge batters** ratio (1.5, 2 or 3 horizontal to 1 vertical, 2 : 1 to start): an embankment
@@ -171,7 +232,7 @@ flattening, the terrain and the surface so they agree):
   **cut (bank)** and **fill (compacted)** in m³ against the bare ground, batters included; the
   resize label says it in a few words.
 - **Claude (MCP):** `add_flatten_area` takes `grade` (`level`, `follow`, `plane`, `slope`,
-  `ridge`, `valley`, `terraces`; `follow` if left out), `fall`, `toward`, `ridge_along`, `steps`,
+  `ridge`, `valley`, `terraces`, `points`; `follow` if left out), `fall`, `toward`, `ridge_along`, `steps`,
   `smoothing` (follow), `max_grade` (follow and plane), `batter`, `raise` (m, −30 to 30) and
   `finished_height` (m as the editor's "up", instead of raise); numbers are clamped to what the
   editor offers, unknown words refused.
@@ -193,6 +254,63 @@ flattening, the terrain and the surface so they agree):
   floor and one keeping what's overhead shifted 1 m whole. And ground read from the coarsest tiles
   (1,500 m up) while a follow area reads its smoothed ground: it never goes up, and settles when
   the readings are right again.
+
+## Flatten areas: any shape, by its points
+
+An area is a rectangle (width by length) or, shaped by its points, any simple polygon: a
+triangle, an L, a wedge between two roads. Its P panel's **shape** turns a rectangle into **by
+points (any shape)** (its four corners, to start) and back (**rectangle**: the box round its points,
+and graded as new areas are if it was graded by its points). Picking the **by points** ground for a
+rectangle does the same.
+
+- **Handles** (`src/handles.js`, the pattern rows' lines use: `resize.points` / `withPoints`, with
+  `resize.closed` joining the last point to the first): each corner is a dot to drag; each edge,
+  the last one included, has a plus halfway along, which a click or a drag turns into a new point;
+  a click on a dot picks it out (filled in) and **Delete** or **Backspace** takes it out (a
+  double-click does too), never leaving fewer than three. A drag that would make two edges cross
+  (or two corners meet) isn't taken: the point stays where it last was without crossing, and the
+  label says "Edges can't cross"; a point whose taking out would cross edges stays, likewise.
+  **Alt-drag** a dot up or down the screen to set its height (0.05 m steps, 0.01 m with Shift),
+  which picks the **by points** ground. The middle (where it turns and its arrow is) is kept at the
+  middle of the box round its points, so it still turns about its middle; moving (drag its body),
+  turning, the raise arrow, PageUp / PageDown and copy and paste work as for a rectangle. Each
+  change is one undo step (`sidebar.js` `onPress` / `onEnd`; a click on a plus is one too, as it
+  now is for rows).
+- **Heights** (P panel, **heights at its points (m)**): one text field per point, blank for none
+  (the placeholder shows the height it takes from the others). Metres from the area's own height:
+  the ground's height it snaps to (the plane fitted through the ground under it, as for every
+  graded area) plus any raise, so the slopes move with it, and the raise arrow and an exact finished
+  height shift them whole. Typing a height picks the **by points** ground; each is one undo step.
+  ±50 m.
+- **Saved** as `points`: `[ [ east, north ], [ east, north, height ], ... ]`, metres from its middle
+  as if it faced north (as rows' points), to the centimetre, 3 to 50 of them; `width` and `length`
+  are the box round them. A rectangle saves no `points`, so areas saved before load, look and save
+  exactly as they did, with their corner and edge handles.
+- **Everything follows the outline** (`grade.js` `areaOutline`): the shape Google's mesh is pressed
+  onto (the polygon's triangles, cut into about 1.5 m cells when graded, `polygon.js`
+  `gridTriangles`), the red volume, the surface (its top on the same cells, its sides along each
+  edge), the fence (along each edge 0.3 m in, `polygon.js` `insetPolygon`, entrances one to an
+  edge, the longest first), and the terrain (`terrain.js` `insideZone` / `clampZone` /
+  `zoneEdges`): inside the polygon is the graded ground; outside, every node's batter runs out from
+  the nearest point of the outline, so round a convex corner the batters wrap round it and round an
+  inside corner (an L's) those from the two edges meet along the line halfway between them, the
+  notch beyond the batters left as ground. A level one's floor, ring, faces and cut-away edge
+  follow the polygon too. Every other grade works on a shaped area too, over the box round it
+  (one slope falls across the box, a crown runs down its middle), taken at the nearest point of the
+  outline outside it.
+- **Claude (MCP):** `add_flatten_area` takes `points` (3 to 50 `{ east, north, up? }`, in order
+  round it, metres east and north of the site point) instead of `east`, `north`, `width` and
+  `length`; refused if edges cross, two corners meet, or it's over 2000 m across. With any `up` it's
+  graded `points` unless another `grade` is given (`up`: m from the area's height). `get_project`
+  lists such an area's `points` where they are on the site, with their `up`.
+- **Tests:** `npm run test:flatten-points-ui` (a rectangle saved before still saves and resizes as
+  it did; a triangle and an L graded through their points' heights: the ground at each point and
+  across, walked on, batters round the outline and none in the L's notch, the earth reckoned, the
+  fence round it, saved and loaded; the handles: a point dragged and undone, a drag across an edge
+  not taken, a plus clicked, a point picked and deleted and undone, three points kept, Alt-drag
+  setting a height; the P panel's shape and heights; copy and paste), `npm run test:grade-surface`
+  (the TIN and the polygon helpers in Node) and `test:build-mcp` (points given, refused, listed and
+  loaded in the editor). TEST_SCREENSHOTS=<folder> saves a triangle and an L.
 
 ## Flatten areas: walking on them, and keeping what's overhead
 
@@ -326,11 +444,12 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   (not what's hidden by hand or by the Show panel, nor what loads for everyone: models from
   `config.js` and items saved for everyone, which Shift+click can still add). **Esc** selects nothing.
 - **Seen as selected:** each one outlined in amber, one ring round them all with the turn knob,
-  and the toolbar over them saying **N items** with Rotate left/right, Copy, Duplicate, Edit, Hide
-  and Delete. The **edit bar** along the bottom (while the library is open, or several are
+  and the toolbar over them saying **N items** with Rotate left/right, Copy, Duplicate, Edit, Lock,
+  Hide and Delete. The **edit bar** along the bottom (while the library is open, or several are
   selected; `src/edit-bar.js`) says how many are selected, with Select, Copy, Cut, Paste, Duplicate,
-  Undo and Redo for touch. It keeps between the library and the Show and Controls panels, or goes
-  to the top (under the status) where there's no room, and across the top on a phone.
+  Lock (see [Locking things](#locking-things)), Undo and Redo for touch. It keeps between the
+  library and the Show and Controls panels, or goes to the top (under the status, beside the P
+  panel when that's open) where there's no room, and across the top on a phone.
 - **Together:** dragging any of them moves them all, keeping where they are from each other, each
   settling on the ground where it lands (a flatten area with what stands on it moves with it, and
   they settle on the new ground). The knob, **R** / **Shift+R** and the toolbar turn them all about
@@ -341,7 +460,8 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   and turned whole; nothing breaks one apart (a row saved for everyone never could be).
 - **Copy, Cut, Paste, Duplicate:** **Ctrl/Cmd+C** copies what's selected (one or many), **X** cuts
   it, **V** pastes at the point on the ground under the pointer (from the edit bar, the middle of
-  the view), laid out as copied and facing as they did, each snapped to the ground there; pasting
+  the view; with the library closed, walking round, it opens the library and pastes in the middle
+  of the view), laid out as copied and facing as they did, each snapped to the ground there; pasting
   again where the last went puts the next 2 m east and 2 m south of it, so they don't stack.
   **Ctrl/Cmd+D** duplicates in place, 2 m east and south. Pasted and duplicated things are new
   items, saved with the layout like anything placed (never shared or from `config.js`), and come
@@ -386,6 +506,48 @@ The editor selects more than one thing at a time (`src/sidebar.js`), and copies 
   cleared when another layout opens; undoing a move keeping a later P-panel width; undo not
   selecting a hidden item; Ctrl+V/Z doing nothing with the library closed; cutting Pro items on a
   free account leaving them; 80 selected not measured every frame, outlines following a turn).
+
+## Locking things
+
+Anything placed (library items, rows, the pieces of a set, flatten and laydown areas, excavations,
+stockpiles, markups) can be locked, so it isn't moved or changed by accident (`src/sidebar.js`).
+This is a different thing from a Pro item's padlock in the library, which is about picking new
+ones on a free account (`sidebar.isLocked`); the editor's lock is `entry.locked`.
+
+- **Locking:** **Ctrl/Cmd+L** locks what's selected, or unlocks it once every one of it is locked;
+  so do **Lock** on the selection toolbar and on the edit bar (pressed, red and saying **Unlock**
+  while it's all locked), the **Locked** tick box at the top of an item's P panel folder, and
+  **Lock or unlock them** in the P panel's **N items**. Each is one step to undo and redo ("lock
+  Shipping container (20 ft)", "unlock 3 items"), and a toast says what was done.
+- **A locked thing** can still be clicked, Shift+clicked, boxed and Ctrl/Cmd+A'd, to see its
+  settings, copy it or unlock it. Selected, it's outlined red instead of blue, it has no handles
+  (turning, resizing, a pit's depth, a flatten area's raise arrow, a row's dots), and its toolbar has
+  only **Edit**, **Unlock** and **Hide**. Dragging it, **R**, **Delete**, the P panel's Remove,
+  **Ctrl/Cmd+X**, **PageUp/PageDown** (a flatten area) and changing a markup's words leave it as it
+  is, with a toast ("Locked: unlock it to move it (Ctrl+L)"). It can't be driven (driving would move
+  it): no Drive, and **V** passes it by. Its P panel fields and buttons are greyed out and can't be
+  used or tabbed into (`inert`), all but **Locked** and **Copy config**; that goes for its
+  settings (surface, colour, words) as well as its size and position. Hiding still works.
+- **Several selected:** the locked ones are outlined red among the amber. Dragging, turning (keys,
+  knob, toolbar) and deleting change the rest and leave the locked ones where they are, saying how
+  many ("1 locked item stays where it is"; on the Undo toast, "Deleted 3 items (2 locked items
+  weren't deleted)"); with all of them locked there are no handles and the toolbar is **Copy**,
+  **Duplicate**, **Edit**, **Unlock** and **Hide**. Cut cuts the rest, as with Pro items. Changes
+  to them all in the P panel's **N items** pass the locked ones by.
+- **Copies aren't locked:** copying, pasting and duplicating a locked thing gives ordinary ones.
+- **Show panel:** **Locked items (N)** with **Unlock all** (one step to undo) while anything is.
+- **Saved** as `locked: true` on the item (`models.toConfig`), with the layout, the project, an
+  export and a share link (which is read-only anyway); layouts and clipboards without it load
+  unlocked, as before. A library item that's made differently now (`resolveItem`) keeps it.
+- **Claude (MCP):** `get_project` says `locked: true` on locked items; `move_item` and
+  `remove_items` refuse them ("Item 3 (Site office trailer) is locked in the editor; unlock it there
+  first. Nothing was changed."), the whole call, so nothing else in it is removed either.
+- **Tests:** `npm run test:lock-ui` (Ctrl+L, undo and redo; the red outline, no handles and the
+  toolbar's buttons; dragging, R, Delete, Ctrl+X, PageUp and driving refused with their toasts; the
+  P panel read-only and its Locked tick box; several with one locked moving, turning and deleting
+  the rest; the edit bar's Lock and Unlock; copies unlocked; the Show panel's Unlock all; saved,
+  reloaded, and an old config unlocked) and `npm run test:build-mcp` (`locked` in `get_project`,
+  `move_item` and `remove_items` refused, then allowed once unlocked).
 
 ## Markups: dimensions, arrows and notes
 
@@ -505,9 +667,60 @@ selected, box-selected, moved, turned, copied and pasted, hidden, deleted and un
   `migrations/0018_build_mcp.sql`). Its tools find a site, make and read projects, search the
   library and sets (`build-catalog.json`, made by `npm run make-build-catalog` whenever the library
   changes), place items, sets and rows, add flatten, laydown and stockpile areas and markups
-  (`add_markup`: dimensions, arrows and notes), move and remove things and share a project; each answer has the editor link. `MCP_HOURLY` (default 300) caps an
-  account's tool calls an hour. The dashboard's **Build with Claude** box shows the address and
-  disconnects every connected app.
+  (`add_markup`: dimensions, arrows and notes), move and remove things (not those locked in the
+  editor) and share a project; each answer has the editor link. `MCP_HOURLY` (default 300) caps an account's tool calls an hour. The
+  dashboard's **Build with Claude** box shows the address and disconnects every connected app.
+- **Claude looks at the site (`view_site`, `worker/drive/site-view.js`):** so Claude doesn't lay a
+  site out blind, `view_site` answers with a picture (an MCP `image` block, a 768 × 768 JPEG) and
+  words. The picture is Google's satellite imagery from straight above, north up, `size` metres
+  across (150 by default, 20 to 2000) round the project's site point or a given `east`/`north`,
+  with a grid every 1 to 1000 m (at most eight lines across) labelled along the top in metres east
+  (`E+20`) and down the left in metres north (`N+20`) of the site point, the site point as a red
+  cross, an arrow to north, and everything placed drawn on as its footprint (from its size in the
+  library and its heading, as `get_project` has them) numbered with its `get_project` index:
+  equipment yellow with a tick from its middle to its front, flatten areas cyan, laydown areas in
+  their own colour with their label, stockpiles orange (a cone as wide as its volume makes it),
+  markups in their colour (a dimension with its length, an arrow with its words, a note as a spot),
+  a tower crane from its counter-jib to its jib's end. The words give the scale (m a pixel), the
+  edges in metres east and north, the grid's step, what the colours are, the map views used, and
+  Google's attribution. The server's instructions and the tool's description tell Claude to look
+  before laying out and again after.
+  - **Imagery:** the Map Tiles API's 2D tiles (`mapType` satellite, PNG): the same API, and the
+    same key, as the editor's 3D map, so nothing new has to be turned on (checked against the real
+    API: a session, the viewport's attribution, and z19 tiles over Vancouver, with the Maps key
+    and no referrer). A session (`POST /v1/createSession`) is kept while it lasts (about two
+    weeks); the viewport (`GET /tile/v1/viewport`) gives the copyright line and the most the
+    imagery zooms there; the tiles (`GET /v1/2dtiles/z/x/y`) at the zoom nearest the picture's
+    scale (a view is 9 to 36 of them, never more than 49) are laid together and resampled into the
+    picture. Where Google has no tile at that zoom it tries the zooms below. Google's Static Maps
+    API would draw a picture in one request, but it's another API to turn on for the key and it
+    can't draw a labelled metre grid, so it isn't used.
+  - **No canvas in a Worker,** and no packages: the tiles are decoded (inflated with the runtime's
+    `DecompressionStream`), and the picture is drawn (lines with smoothed edges, translucent fills,
+    DejaVu Sans Mono Bold at 12 px as a bitmap for the labels, each with a dark halo) and encoded as
+    a baseline JPEG in plain JavaScript in `site-view.js`. A JPEG (quality 88, colour not
+    subsampled so the labels stay sharp) is about 250 KB for a city block, five times smaller than
+    the same picture as a PNG. Making one takes about a third of a second of CPU (a paid Worker's
+    limit is 30 s).
+  - **Google's terms:** "Google" and the imagery's copyright are drawn along the foot of the
+    picture and repeated in the words. Tiles are kept in Cloudflare's cache a day (Google's own
+    `Cache-Control: max-age=86400`), so a second look at a site fetches nothing from Google;
+    `MAP_TILES_CACHE` `off` keeps none. Google's terms ask for its logo with 2D tiles: the picture
+    has the word "Google" in white, not the logo image; if that's not enough, the logo
+    (`google-maps-logo.svg`, already in the editor) would have to be drawn into the picture.
+  - **What it costs and counts:** each look is one tool call (`MCP_HOURLY`) and one of the plan's
+    map views this month (`BUILD_PRO_MONTHLY`, as the editor's 3D map; the owner's aren't
+    counted), asked before Google is and counted only once the picture is made. Past them Claude
+    is told the views are used up and carries on without it. Google bills 2D tiles per thousand
+    (see Google's Map Tiles API usage and billing page): at most 49 tiles a look, and none for a
+    cached one. The admin page's map views (and their cost estimate) count these looks with the
+    editor's 3D ones.
+  - **The key:** `GOOGLE_TILES_KEY` (a secret, optional) is a key for this alone, else the Maps key
+    the editor is handed. The Worker sends the tile requests with `Referer:
+    https://worlddrive.app/build/app/`, so a Maps key restricted to worlddrive.app's pages works;
+    a key restricted to the Map Tiles API (an API restriction, not a referrer one) as
+    `GOOGLE_TILES_KEY` is the tidier choice. With no key at all, `view_site` says there are no
+    pictures; when Google turns the key away (403) it says the Map Tiles API has to be on for it.
 - **Legal pages:** `/build/terms/`, `/build/privacy/` (with **Cookies and storage**, `#cookies`),
   `/build/refunds/`, `/build/acceptable-use/` and `/build/credits/` (every model in
   `public/library/CREDITS.md`), made by `drive/site/legal.js`'s `buildLegalPages` with the game's
@@ -534,7 +747,9 @@ selected, box-selected, moved, turned, copied and pasted, hidden, deleted and un
   `npm run test:build-ui` (the built page in a browser against the Worker),
   `npm run test:logo-background` (the logo's background removal on images made in the test, the
   dashboard's editor saving a PNG with alpha, and an excavator wearing it) and `npm run test:logo-ui`,
-  `npm run test:build-mcp` (connecting as Claude does, every tool, and the result in the editor),
+  `npm run test:build-mcp` (connecting as Claude does, every tool, and the result in the editor;
+  `view_site` against a stand-in for Google's Map Tiles API, its picture decoded and checked pixel
+  by pixel, with `TEST_SCREENSHOTS=<dir>` keeping it as `view-site.jpg`),
   `npm run test:build-admin` (the admin numbers from seeded rows, and the Build tab) and
   `npm run test:build-legal` (the legal pages, the cookie and storage list against the code, and no
   tracking in anything built for Build).
@@ -693,4 +908,7 @@ In Claude: *Settings → Connectors → Add custom connector*, name it "World Dr
 `https://worlddrive.app/mcp`. Claude opens a worlddrive.app page: sign in with Google and press
 **Allow** (a free account is told it needs Build Pro). Then ask it, e.g. "lay out a staging area for
 a 3-storey build at 453 W 12th Ave, Vancouver: site office, two 40 ft containers, fencing along the
-lane, a gravel pad for trucks", and open the editor link it gives you.
+lane, a gravel pad for trucks", and open the editor link it gives you. It looks at the site from
+above first (`view_site`, a satellite picture with a metre grid) to see where the lane, the
+buildings and the open ground are, and again afterwards to check what it placed; each look is one
+of the month's map views.
