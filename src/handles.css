@@ -100,6 +100,15 @@
 	border-color: #fff;
 }
 
+/* The point picked out with a click (a flatten area's), which Delete takes out: larger, filled. */
+.handles .point.selected::after {
+	width: 16px;
+	height: 16px;
+	background: var( --accent );
+	border-color: #fff;
+	box-shadow: 0 0 0 2px var( --accent );
+}
+
 /* Halfway along a stretch of the line: a plus to add a point there, quieter than the points. */
 .handles .insert {
 	width: 24px;

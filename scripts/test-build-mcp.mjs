@@ -353,6 +353,16 @@ test( 'the tools lay out a site', async () => {
 	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 260, north: 60, width: 20, length: 20, grade: 'level', raise: - 99 } ) ).text, /level, lowered 30 m from the ground's height/ );
 	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 260, north: 100, width: 20, length: 20, grade: 'level', finished_height: 42.5, keep_overhead: 'auto' } ) ).text, /level, finished at 42\.5 m \(as the editor's up\), keeping what passes/ );
 	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 260, north: 140, width: 20, length: 20, raise: 'up a bit' } ) ).error );
+	// Any shape, by its points: a triangle with its own slopes (graded through them), and an L
+	// turned 30° with none (graded as asked). Edges that cross, too few or too many points, or one
+	// over 2000 m across are refused.
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 300, north: 0, up: 1 }, { east: 330, north: 0, up: - 0.5 }, { east: 310, north: 24 } ] } ) ).text, /Flattened a 3-point area of 360 m² \(30 × 24 m across\), surfaced with gravel, graded through the heights at its points/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, heading: 30, grade: 'level', points: [ { east: 340, north: 0 }, { east: 360, north: 0 }, { east: 360, north: 8 }, { east: 348, north: 8 }, { east: 348, north: 20 }, { east: 340, north: 20 } ] } ) ).text, /a 6-point area of 256 m²/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 0, north: 0 }, { east: 10, north: 10 }, { east: 10, north: 0 }, { east: 0, north: 10 } ] } ) ).text, /the edges cross/ );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 0, north: 0 }, { east: 10, north: 0 } ] } ) ).error );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, points: Array.from( { length: 51 }, ( _, i ) => ( { east: 10 * Math.cos( i / 51 * 6.28 ), north: 10 * Math.sin( i / 51 * 6.28 ) } ) ) } ) ).error );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 0, north: 0 }, { east: 2500, north: 0 }, { east: 0, north: 10 } ] } ) ).error );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 0, north: 0 }, { east: 10, north: 0 }, { east: 0, north: 10, up: 'high' } ] } ) ).error );
 	assert.match( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 15, length: 10, label: 'Rebar' } ) ).text, /Rebar/ );
 	assert.match( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, material: 'road-base', volume: 80 } ) ).text, /road-base, 80 m³/ );
 	// Bigger than the editor makes them is refused, not reported and then drawn smaller.
@@ -363,7 +373,7 @@ test( 'the tools lay out a site', async () => {
 	const got = await tool( 'get_project', { project_id: project } );
 	const items = got.value.items;
 	const lane = 10; // the lane closure set: arrow board, two flaggers, seven cones
-	assert.equal( items.length, 3 + lane + 10 + 12 );
+	assert.equal( items.length, 3 + lane + 10 + 14 );
 	const panels = items.filter( i => i.item === 'fence-panel' );
 	assert.deepEqual( panels.slice( 0, 2 ).map( i => [ i.east, i.north, i.heading ] ), [ [ 10, 1.53, 270 ], [ 10, 4.58, 270 ] ] );
 	assert.deepEqual( items[ 0 ], { index: 0, item: 'office-trailer-10x40', name: items[ 0 ].name, east: 0, north: 20, heading: 180, size: items[ 0 ].size } );
@@ -379,6 +389,16 @@ test( 'the tools lay out a site', async () => {
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.finished === 42.5 && ! ( 'raise' in i.params ) && i.params.keep === 'auto' ) );
 	// The usual smoothing isn't saved, as the editor saves it.
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && ! ( 'smoothing' in i.params ) ) );
+	// The shaped areas: their points as saved (from their middle, as if they faced north) and where
+	// they are on the site, as they were given.
+	const triangle = items.find( i => i.item === 'flatten-zone' && i.params.points?.length === 3 );
+	assert.deepEqual( [ triangle.east, triangle.north, triangle.params.width, triangle.params.length, triangle.params.grade ], [ 315, 12, 30, 24, 'points' ] );
+	assert.deepEqual( triangle.params.points, [ [ - 15, - 12, 1 ], [ 15, - 12, - 0.5 ], [ - 5, 12 ] ] );
+	assert.deepEqual( triangle.points, [ { east: 300, north: 0, up: 1 }, { east: 330, north: 0, up: - 0.5 }, { east: 310, north: 24 } ] );
+	const ell = items.find( i => i.item === 'flatten-zone' && i.params.points?.length === 6 );
+	assert.equal( ell.heading, 30 );
+	assert.equal( ell.params.grade, undefined, 'level, as saved' );
+	ell.points.forEach( ( p, k ) => assert.ok( Math.hypot( p.east - [ 340, 360, 360, 348, 348, 340 ][ k ], p.north - [ 0, 0, 8, 8, 20, 20 ][ k ] ) < 0.03, JSON.stringify( ell.points ) ) );
 	// Indexes come with the version they're from: without it, or once the project has been saved
 	// since (here by the editor, as when someone moves something), they're refused, not acted on.
 	assert.ok( ( await tool( 'move_item', { project_id: project, index: 1, east: 4 } ) ).error );
@@ -492,6 +512,12 @@ test( 'the project opens in the editor with what was placed', async () => {
 	// The raised and the exact-height areas as Claude made them.
 	const heights = await page.evaluate( () => window.twin.models.entries.filter( e => e.kind === 'flatten-zone' ).map( e => [ e.params.raise, e.params.finished ] ) );
 	assert.ok( heights.some( ( [ r, f ] ) => r === 1.25 && f === null ) && heights.some( ( [ r, f ] ) => r === - 30 ) && heights.some( ( [ , f ] ) => f === 42.5 ), JSON.stringify( heights ) );
+	// The shaped ones as Claude made them: the triangle graded through its points' heights.
+	const shaped = await page.evaluate( () => window.twin.models.entries.filter( e => e.kind === 'flatten-zone' && e.params.points ).map( e => ( { points: e.params.points, grade: e.params.grade, saved: window.twin.models.toConfig( e ).params.points } ) ) );
+	assert.equal( shaped.length, 2 );
+	const tri = shaped.find( a => a.points.length === 3 );
+	assert.equal( tri.grade, 'points' );
+	assert.deepEqual( tri.saved, [ [ - 15, - 12, 1 ], [ 15, - 12, - 0.5 ], [ - 5, 12 ] ] );
 	assert.deepEqual( errors, [] );
 
 } );

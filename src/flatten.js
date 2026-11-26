@@ -1,5 +1,7 @@
 import {
 	BoxGeometry,
+	BufferAttribute,
+	BufferGeometry,
 	CanvasTexture,
 	DoubleSide,
 	EdgesGeometry,
@@ -25,7 +27,8 @@ import { TileFlatteningPlugin } from '3d-tiles-renderer/plugins';
 import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 import { registerKind } from './kinds.js';
 import { fencePanel } from './fence-panel.js';
-import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, SMOOTHING, STEPS, TOWARD, describeGrade, fitKey, gradeOffset, gradeRange, isGraded, normalizeGrade, pressedOnly, sameFit, saveGrade } from './grade.js';
+import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, SMOOTHING, STEPS, TOWARD, areaOutline, describeGrade, fitKey, gradeOffset, gradeRange, isGraded, normalizeGrade, pointHeights, pressedOnly, sameFit, saveGrade } from './grade.js';
+import { MAX_POINTS, MIN_POINTS, gridTriangles, insetPolygon, isSimple, perimeter, polygonArea, polygonBounds, triangulate, winding } from './polygon.js';
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
@@ -48,6 +51,18 @@ import { BATTERS, FALL, GRADES, MAX_GRADE, MAX_GRADED_SIDE, RIDGE_ALONG, SMOOTHI
 // (models.js, 'plane'), and one that follows the ground to the ground smoothed (models.js
 // readSurface, grade.js fitSurface); what was fitted is kept in its params as `fit` while it's open
 // (never saved).
+//
+// An area is a rectangle (width by length, its corner and edge handles resizing it) or, shaped by
+// its points ('shape: by points' in the P panel, or 'by points' picked for its ground), any simple
+// polygon: params.points, its corners [ east, north ] metres from its middle as if it faced north,
+// each with a handle to drag it, a plus halfway along each edge to add one there, and a click and
+// Delete to take one out (handles.js). A drag that would make two edges cross isn't taken. Each point
+// can have a height (its third number, m from the area's height, set in the P panel or by dragging
+// its handle up and down with Alt): with the 'by points' grade the area's ground is the triangles
+// between its points, each a plane through its corners' heights (grade.js). The pad, the fence, the
+// shape Google's mesh is pressed onto and terrain.js's batters all follow the outline; width and
+// length are then the box round it. Areas saved as rectangles have no points, and are saved as
+// they were.
 //
 // Other modules press Google's mesh onto their own surfaces with setShape() (earthworks uses it
 // for pits), and originalHeight() reads the ground as Google made it, ignoring all of this.
@@ -126,6 +141,8 @@ export const SURFACES = {
 	asphalt: { name: 'Asphalt', label: 'asphalt', tile: 4, colour: '#4e5052', grain: [ '#5c5e60', '#424446', '#666769', '#393a3c' ], speck: 0.35, size: [ 0.6, 1.6 ] },
 	concrete: { name: 'Concrete', label: 'concrete', tile: 6, colour: '#b4b1aa', grain: [ '#bdbab3', '#aaa7a0', '#c4c1ba' ], speck: 0.12, size: [ 0.6, 1.4 ], joints: true },
 };
+// An area's shape, in the P panel: label → id.
+const SHAPES = { rectangle: 'rect', 'by points (any shape)': 'points' };
 // The P panel's choices: label → id.
 const SURFACE_OPTIONS = { ...Object.fromEntries( Object.entries( SURFACES ).map( ( [ id, { label } ] ) => [ label, id ] ) ), 'none (just flatten)': 'none' };
 // A little above the flattened ground, so the surface covers it; the depth bias does the rest.
@@ -265,12 +282,12 @@ export function drawSurface( { colour, grain, speck, size, joints, shade, angula
 // its four sides going down SURFACE_SIDES. On a graded area (`offset`, its height at (x, z) in the
 // area's frame) the plane is a grid lying on the graded shape, and the sides are a thin edge along
 // it: the batters terrain.js draws round it take the place of deep sides.
-function buildSurface( width, length, id, offset = null, sides = SURFACE_SIDES ) {
+function buildSurface( width, length, id, offset = null, sides = SURFACE_SIDES, outline = null ) {
 
 	const { tile } = SURFACES[ id ];
 	const materials = surfaceMaterial( id );
 	const group = new Group();
-	const geometry = offset ? gradedPlane( width, length, offset ) : new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 );
+	const geometry = outline ? outlineSheet( outline, offset, gradeCell( width, length ) ) : offset ? gradedPlane( width, length, offset ) : new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 );
 	const uv = geometry.attributes.uv;
 	for ( let i = 0; i < uv.count; i ++ ) uv.setXY( i, uv.getX( i ) * width / tile, uv.getY( i ) * length / tile );
 	const top = new Mesh( geometry, materials.top );
@@ -280,7 +297,16 @@ function buildSurface( width, length, id, offset = null, sides = SURFACE_SIDES )
 	top.renderOrder = SURFACE_ORDER;
 	group.add( top );
 	const depth = offset ? GRADED_SIDES : sides;
-	for ( const [ along, across, x, z, turn ] of [ [ width, length, 0, length / 2, 0 ], [ width, length, 0, - length / 2, Math.PI ], [ length, width, width / 2, 0, Math.PI / 2 ], [ length, width, - width / 2, 0, - Math.PI / 2 ] ] ) {
+	if ( outline ) {
+
+		// Its sides along each edge of its outline, the texture running along them.
+		const mesh = new Mesh( outlineSides( outline, depth, offset, tile ), materials.sides );
+		mesh.position.y = SURFACE_LIFT;
+		group.add( mesh );
+
+	}
+
+	for ( const [ along, across, x, z, turn ] of outline ? [] : [ [ width, length, 0, length / 2, 0 ], [ width, length, 0, - length / 2, Math.PI ], [ length, width, width / 2, 0, Math.PI / 2 ], [ length, width, - width / 2, 0, - Math.PI / 2 ] ] ) {
 
 		const side = offset ? gradedSide( along, depth, x, z, turn, offset ) : new PlaneGeometry( along, depth );
 		const sideUv = side.attributes.uv;
@@ -338,6 +364,129 @@ function gradedSide( along, depth, x, z, turn, offset ) {
 
 	}
 
+	return geometry;
+
+}
+
+// How finely a graded area shaped by its points is cut (m): as gradeCells cuts a rectangle.
+function gradeCell( width, length ) {
+
+	return Math.max( width / gradeCells( width ), length / gradeCells( length ) );
+
+}
+
+// A sheet over an outline ([ x, z ] corners in the area's frame), facing up: its triangles, or on a
+// graded area those cut into `cell` m squares (polygon.js gridTriangles), each vertex at
+// offset( x, z ). Its uvs run 0 to 1 over the box round it, as a rectangle's plane's do.
+function outlineSheet( outline, offset = null, cell = 1.5 ) {
+
+	const triangles = offset ? gridTriangles( outline, cell ) : triangulate( outline ).map( t => t.map( i => outline[ i ] ) );
+	const { minX, maxX, minY, maxY } = polygonBounds( outline );
+	const w = maxX - minX || 1, l = maxY - minY || 1;
+	const positions = [], uvs = [], indices = [];
+	const seen = new Map();
+	const vertex = ( [ x, z ] ) => {
+
+		const key = `${ Math.round( x * 1000 ) },${ Math.round( z * 1000 ) }`;
+		let i = seen.get( key );
+		if ( i === undefined ) {
+
+			i = positions.length / 3;
+			seen.set( key, i );
+			positions.push( x, offset ? offset( x, z ) : 0, z );
+			uvs.push( ( x - minX ) / w, 1 - ( z - minY ) / l );
+
+		}
+
+		return i;
+
+	};
+
+	for ( const [ a, b, c ] of triangles ) {
+
+		// Facing up: (b - a) × (c - a) has y > 0.
+		const up = ( b[ 1 ] - a[ 1 ] ) * ( c[ 0 ] - a[ 0 ] ) - ( b[ 0 ] - a[ 0 ] ) * ( c[ 1 ] - a[ 1 ] ) > 0;
+		const [ ia, ib, ic ] = [ vertex( a ), vertex( b ), vertex( c ) ];
+		if ( ia === ib || ib === ic || ia === ic ) continue;
+		indices.push( ...( up ? [ ia, ib, ic ] : [ ia, ic, ib ] ) );
+
+	}
+
+	const geometry = new BufferGeometry();
+	geometry.setAttribute( 'position', new BufferAttribute( new Float32Array( positions ), 3 ) );
+	geometry.setAttribute( 'uv', new BufferAttribute( new Float32Array( uvs ), 2 ) );
+	geometry.setIndex( indices );
+	geometry.computeVertexNormals();
+	return geometry;
+
+}
+
+// Strips `depth` deep hanging from each edge of an outline, facing out: straight down from it, or
+// on a graded area from its shape along the edge (offset), cut about every 1.5 m to follow it. Its
+// uvs in metres over `tile`, along the edge and down.
+function outlineSides( outline, depth, offset = null, tile = 1 ) {
+
+	const turn = winding( outline );
+	const positions = [], uvs = [], indices = [];
+	const n = outline.length;
+	for ( let i = 0; i < n; i ++ ) {
+
+		const [ ax, az ] = outline[ i ], [ bx, bz ] = outline[ ( i + 1 ) % n ];
+		const run = Math.hypot( bx - ax, bz - az );
+		const steps = offset ? Math.max( 1, Math.ceil( run / 1.5 ) ) : 1;
+		const start = positions.length / 3;
+		for ( let k = 0; k <= steps; k ++ ) {
+
+			const x = ax + ( bx - ax ) * k / steps, z = az + ( bz - az ) * k / steps;
+			const y = offset ? offset( x, z ) : 0;
+			positions.push( x, y, z, x, y - depth, z );
+			uvs.push( run * k / steps / tile, 0, run * k / steps / tile, - depth / tile );
+
+		}
+
+		// Out from an edge (dx, dz) is (dz, -dx) round an outline going anticlockwise in (x, z)
+		// (winding 1), and the other way otherwise: each quad's corners in the order that faces it out.
+		for ( let k = 0; k < steps; k ++ ) {
+
+			const top0 = start + 2 * k, bottom0 = top0 + 1, top1 = top0 + 2, bottom1 = top0 + 3;
+			if ( turn > 0 ) indices.push( top0, top1, bottom0, top1, bottom1, bottom0 );
+			else indices.push( top0, bottom0, top1, top1, bottom0, bottom1 );
+
+		}
+
+	}
+
+	const geometry = new BufferGeometry();
+	geometry.setAttribute( 'position', new BufferAttribute( new Float32Array( positions ), 3 ) );
+	geometry.setAttribute( 'uv', new BufferAttribute( new Float32Array( uvs ), 2 ) );
+	geometry.setIndex( indices );
+	geometry.computeVertexNormals();
+	return geometry;
+
+}
+
+// An outline stood up from y = bottom to y = top: its sides and both ends, for a bare area's red
+// volume and the lines round it.
+function outlinePrism( outline, bottom, top ) {
+
+	const sides = outlineSides( outline, top - bottom );
+	sides.translate( 0, top, 0 );
+	const caps = [ outlineSheet( outline ), outlineSheet( outline ) ];
+	caps[ 0 ].translate( 0, top, 0 );
+	caps[ 1 ].translate( 0, bottom, 0 );
+	const positions = [], indices = [];
+	for ( const part of [ sides, ...caps ] ) {
+
+		const offset = positions.length / 3;
+		positions.push( ...part.attributes.position.array );
+		indices.push( ...part.index.array.map( i => i + offset ) );
+
+	}
+
+	const geometry = new BufferGeometry();
+	geometry.setAttribute( 'position', new BufferAttribute( new Float32Array( positions ), 3 ) );
+	geometry.setIndex( indices );
+	geometry.computeVertexNormals();
 	return geometry;
 
 }
@@ -504,9 +653,38 @@ function gatesBySide( gates ) {
 
 }
 
+// An outline's edges, FENCE_INSET inside it, as buildFence's sides: { from, to, out }.
+function outlineSidesOf( outline ) {
+
+	const line = insetPolygon( outline, FENCE_INSET );
+	const turn = winding( outline );
+	return line.map( ( from, i ) => {
+
+		const to = line[ ( i + 1 ) % line.length ];
+		const dx = to[ 0 ] - from[ 0 ], dz = to[ 1 ] - from[ 1 ];
+		const run = Math.hypot( dx, dz ) || 1;
+		// Out from it (see outlineSides).
+		return { from, to, out: [ dz / run * turn, - dx / run * turn ] };
+
+	} );
+
+}
+
+// How many entrances go on each of an outline's edges: one to an edge, the longest first, and round again.
+function gatesByEdge( sides, gates ) {
+
+	const count = sides.map( () => 0 );
+	const order = sides.map( ( side, i ) => [ Math.hypot( side.to[ 0 ] - side.from[ 0 ], side.to[ 1 ] - side.from[ 1 ] ), i ] ).sort( ( a, b ) => b[ 0 ] - a[ 0 ] );
+	for ( let i = 0; i < gates; i ++ ) count[ order[ i % order.length ][ 1 ] ] ++;
+	return count;
+
+}
+
 // On a graded area `offset` gives the ground's height at (x, z) in the area's frame: each panel
-// stands on it, tilted to the ground under its two ends, and each gate leaf at its hinge.
-export function buildFence( width, length, style, gates = 0, offset = null ) {
+// stands on it, tilted to the ground under its two ends, and each gate leaf at its hinge. An area
+// shaped by its points (`outline`, its [ x, z ] corners) is fenced along each of its edges, FENCE_INSET
+// inside, its entrances one to an edge, the longest first, and round again.
+export function buildFence( width, length, style, gates = 0, offset = null, outline = null ) {
 
 	const group = new Group();
 	group.name = 'Temporary fence';
@@ -514,13 +692,14 @@ export function buildFence( width, length, style, gates = 0, offset = null ) {
 	const w = Math.max( 0.5, width / 2 - FENCE_INSET );
 	const l = Math.max( 0.5, length / 2 - FENCE_INSET );
 	// Each side from one corner to the next, going round, with the way out from it: the front is -z.
-	const sides = [
+	const sides = outline ? outlineSidesOf( outline ) : [
 		{ from: [ - w, - l ], to: [ w, - l ], out: [ 0, - 1 ] },
 		{ from: [ w, l ], to: [ - w, l ], out: [ 0, 1 ] },
 		{ from: [ w, - l ], to: [ w, l ], out: [ 1, 0 ] },
 		{ from: [ - w, l ], to: [ - w, - l ], out: [ - 1, 0 ] },
 	];
-	const perSide = gatesBySide( Math.min( MAX_GATES, Math.max( 0, Math.round( gates ) ) ) );
+	const count = Math.min( MAX_GATES, Math.max( 0, Math.round( gates ) ) );
+	const perSide = outline ? gatesByEdge( sides, count ) : gatesBySide( count );
 	const placements = [];
 	const leaves = [];
 	const yAxis = new Vector3( 0, 1, 0 );
@@ -548,6 +727,8 @@ export function buildFence( width, length, style, gates = 0, offset = null ) {
 
 		const [ ax, az ] = side.from, [ bx, bz ] = side.to;
 		const run = Math.hypot( bx - ax, bz - az );
+		// (A very short edge of an outline, inset to nothing: no fence.)
+		if ( run < 0.3 ) return;
 		const dx = ( bx - ax ) / run, dz = ( bz - az ) / run;
 		// A panel's outside (-z, where the screen hangs and the silt fence runs) faces out.
 		const yaw = Math.atan2( - side.out[ 0 ], - side.out[ 1 ] );
@@ -617,8 +798,9 @@ export function buildFence( width, length, style, gates = 0, offset = null ) {
 // The zone as drawn in build mode: a see-through volume over the area, with a floor you can
 // click to select it, up to its height limit if it has one (with a blue ceiling: what's above is
 // left alone). None of it blocks walking or driving. A graded area's floor and ceiling lie on its
-// shape (grade.js), and its volume reaches from the lowest point of it.
-export function buildZone( width, length, height = 0, surface = 'none', fence = 'none', gates = 0, grading = null, sides = SURFACE_SIDES ) {
+// shape (grade.js), and its volume reaches from the lowest point of it. One shaped by its points
+// (`outline`, its [ x, z ] corners) is that shape all through: its volume, floor, pad and fence.
+export function buildZone( width, length, height = 0, surface = 'none', fence = 'none', gates = 0, grading = null, sides = SURFACE_SIDES, outline = null ) {
 
 	const group = new Group();
 	group.name = SURFACES[ surface ] ? `${ SURFACES[ surface ].name } pad` : 'Flattened area';
@@ -628,14 +810,14 @@ export function buildZone( width, length, height = 0, surface = 'none', fence = 
 	const range = offset ? gradeRange( grading.params, grading.slope ) : { min: 0, max: 0 };
 
 	const top = ( height > 0 ? height : VOLUME_HEIGHT ) + range.max - range.min;
-	const volume = new Mesh( new BoxGeometry( width, top, length ), fillMaterial );
+	const volume = new Mesh( outline ? outlinePrism( outline, - top / 2, top / 2 ) : new BoxGeometry( width, top, length ), fillMaterial );
 	volume.position.y = range.min + top / 2;
 	volume.raycast = () => {};
 	const edges = new LineSegments( new EdgesGeometry( volume.geometry ), edgeMaterial );
 	edges.position.copy( volume.position );
 	edges.raycast = () => {};
 
-	const sheet = () => offset ? gradedPlane( width, length, offset ) : new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 );
+	const sheet = () => outline ? outlineSheet( outline, offset, gradeCell( width, length ) ) : offset ? gradedPlane( width, length, offset ) : new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 );
 	const floor = new Mesh( sheet(), floorMaterial );
 	floor.position.y = 0.05;
 	floor.renderOrder = 1;
@@ -644,9 +826,9 @@ export function buildZone( width, length, height = 0, surface = 'none', fence = 
 	// The red box is only for laying a bare area out: shown in build mode (see models.js). A
 	// surfaced one is just its gravel, asphalt or concrete (clicked on to select it), no box.
 	for ( const mesh of [ volume, edges, floor ] ) mesh.userData.buildOnly = true;
-	if ( SURFACES[ surface ] ) group.add( buildSurface( width, length, surface, offset, sides ) );
+	if ( SURFACES[ surface ] ) group.add( buildSurface( width, length, surface, offset, sides, outline ) );
 	else group.add( volume, edges, floor );
-	if ( fence !== 'none' ) group.add( buildFence( width, length, fence, gates, offset ) );
+	if ( fence !== 'none' ) group.add( buildFence( width, length, fence, gates, offset, outline ) );
 	if ( height > 0 ) {
 
 		const ceiling = new Mesh( sheet(), ceilingMaterial );
@@ -680,28 +862,19 @@ registerKind( ZONE_ID, {
 	layer: 'Flatten areas',
 	// A level pad raised over the ground shows its sides down to it (as deep as it's raised, or
 	// FINISHED's worth for an exact height, which may be anywhere; they're in the ground below it).
-	build: params => buildZone( params.width, params.length, limitOf( params ), params.surface, params.fence, params.gates, { params, slope: params.fit }, SURFACE_SIDES + ( params.finished !== null ? MAX_SIDES : Math.max( 0, params.raise ) ) ),
+	build: params => buildZone( params.width, params.length, limitOf( params ), params.surface, params.fence, params.gates, { params, slope: params.fit }, SURFACE_SIDES + ( params.finished !== null ? MAX_SIDES : Math.max( 0, params.raise ) ), areaOutline( params ) ),
 	// Areas saved before surfaces existed have none, and are saved again without one.
 	// And without a fence, which areas saved without one leave out of what's saved. And level,
-	// as areas saved before grading were, with nothing about grading saved.
-	normalize: p => ( {
-		width: clampSize( p.width ), length: clampSize( p.length ), height: clampHeight( p.height ), surface: SURFACES[ p.surface ] ? p.surface : 'none',
-		// Areas saved before there was a choice kept what's above their height limit, if they had one.
-		keep: Object.values( KEEPS ).includes( p.keep ) ? p.keep : clampHeight( p.height ) > 0 ? 'height' : 'off',
-		fence: Object.values( FENCES ).includes( p.fence ) ? p.fence : 'none', gates: Math.min( MAX_GATES, Math.max( 0, Math.round( Number( p.gates ) || 0 ) ) ),
-		...normalizeGrade( p ),
-		// Raised or lowered from the ground's height it snaps to, or an exact finished height (as
-		// 'up'); areas saved before neither (raise 0).
-		raise: clampRaise( p.raise ),
-		finished: Number.isFinite( p.finished ) && p.finished !== null ? Math.min( FINISHED.max, Math.max( FINISHED.min, Math.round( p.finished * 100 ) / 100 ) ) : null,
-		fit: fitOf( p.fit ),
-	} ),
+	// as areas saved before grading were, with nothing about grading saved. And rectangles, as
+	// areas saved before they could be shaped by their points were, with no points saved.
+	normalize: p => normalizeArea( p ),
 	// A height limit is saved as it always was (the height, with nothing else); auto as keep.
-	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter, fit, keep, height, raise, finished, ...rest } ) => ( {
+	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter, fit, keep, height, raise, finished, points, ...rest } ) => ( {
 		...rest, height: keep === 'height' ? height : 0, ...( keep === 'auto' ? { keep } : {} ),
 		...( finished !== null ? { finished } : raise ? { raise } : {} ),
 		...( surface === 'none' ? {} : { surface } ), ...( fence === 'none' ? {} : { fence, gates } ),
 		...saveGrade( { grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter } ),
+		...( points ? { points } : {} ),
 	} ),
 	// Down to the lowest ground around it as Google made it, so flattening doesn't drag it lower, and
 	// whatever stands in it is cleared. A surfaced one (a pad of gravel, asphalt or concrete) at the
@@ -723,8 +896,11 @@ registerKind( ZONE_ID, {
 		{ key: 'surface', label: 'surface', options: SURFACE_OPTIONS, size: true, editor: true },
 		{ key: 'fence', label: 'fence', options: FENCES, size: true, editor: true },
 		{ key: 'gates', label: 'entrances (24 ft)', min: 0, max: MAX_GATES, step: 1, size: true, when: p => p.fence !== 'none' },
-		{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
-		{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
+		// A rectangle, or shaped by its points (a handle on each corner, handles.js). Back to a
+		// rectangle, it's the box round them (and no longer graded by their heights).
+		{ key: 'shape', label: 'shape', options: SHAPES, size: true, undoable: true, get: p => p.points ? 'points' : 'rect', patch: ( v, p ) => v === 'points' ? { points: rectPoints( p ) } : { points: null, ...( p.grade === 'points' ? { grade: 'follow' } : {} ) } },
+		{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true, when: p => ! p.points },
+		{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true, when: p => ! p.points },
 		{ key: 'keep', label: 'keep what\'s overhead', options: KEEPS, size: true, editor: true },
 		// 0 flattens everything above the floor, as areas always did (and saved ones still do).
 		{ key: 'height', label: 'flatten up to (m above the floor)', min: 0, max: MAX_HEIGHT, step: 0.5, size: true, when: p => p.keep === 'height' },
@@ -736,6 +912,19 @@ registerKind( ZONE_ID, {
 		{ key: 'ridgeAlong', label: p => p.grade === 'valley' ? 'swale runs' : 'ridge runs', options: RIDGE_ALONG, size: true, when: p => p.grade === 'ridge' || p.grade === 'valley' },
 		{ key: 'steps', label: 'benches', min: STEPS.min, max: STEPS.max, step: 1, size: true, when: p => p.grade === 'terraces' },
 		{ key: 'batter', label: 'edge batters (h : v)', options: BATTERS, size: true, when: graded },
+		// Each point's height (m from the area's height), blank for none: what the 'by points' grade
+		// goes through. Setting one picks that grade.
+		...Array.from( { length: MAX_POINTS }, ( _, i ) => ( {
+			key: `point${ i + 1 }`,
+			type: 'text',
+			group: 'heights at its points (m)',
+			label: p => `point ${ i + 1 }${ p.grade === 'points' ? '' : ' (by points)' }`,
+			when: p => p.points?.length > i,
+			get: p => Number.isFinite( p.points?.[ i ]?.[ 2 ] ) ? p.points[ i ][ 2 ].toFixed( 2 ) : '',
+			placeholder: p => p.points?.length > i ? `${ pointHeights( p )[ i ].toFixed( 2 ) } (none set)` : '',
+			patch: ( v, p ) => withHeight( p, i, v ),
+			undoable: true,
+		} ) ),
 		// Raising and lowering it (raise.js keeps each change for undo): from the ground's height, or
 		// an exact finished height, as 'up' (m above the site's origin), which stays where it is
 		// wherever the area goes.
@@ -756,12 +945,22 @@ registerKind( ZONE_ID, {
 	],
 	// A box is cheap to rebuild, and the flattening itself catches up a few times a second.
 	resize: {
-		shape: 'rect',
+		// A rectangle's corners and edges resize it; one shaped by its points has a handle on each
+		// point, a plus on each edge (the last to the first too: closed), and an edge may not cross another.
+		shape: p => p.points ? 'points' : 'rect',
+		closed: true,
+		points: p => p.points ?? [],
+		// Dragged up or down with Alt, a point's height is set, which picks the 'by points' grade.
+		withPoints: ( p, points, { height = false } = {} ) => points.length > MAX_POINTS ? p : { ...p, points, ...( height && p.grade !== 'points' ? { grade: 'points' } : {} ) },
+		valid: p => ! p.points || isSimple( p.points ),
+		// Each point's handle on the finished ground there.
+		heights: entry => ( entry.params.points ?? [] ).map( ( [ e, n ] ) => graded( entry.params ) ? gradeOffset( entry.params, entry.params.fit, e, - n ) : 0 ),
+		pointHeight: ( p, i ) => pointHeights( p )[ i ] ?? 0,
 		live: true,
 		// The arrow in the middle raises and lowers it (handles.js), with what that comes to.
 		raise: true,
 		raiseLabel: ( p, entry ) => raiseLabel( p, entry ),
-		label: ( p, heading = 0 ) => `${ p.width.toFixed( 1 ) } × ${ p.length.toFixed( 1 ) } m · ${ Math.round( p.width * p.length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ p.surface ] ? ` · ${ SURFACES[ p.surface ].name.toLowerCase() }` : '' }${ graded( p ) ? ` · ${ describeGrade( p, p.fit, heading ) }` : '' }${ p.fence !== 'none' ? ' · fenced' : '' }${ limitOf( p ) > 0 ? ` · up to ${ p.height.toFixed( 1 ) } m` : p.keep === 'auto' ? ' · keeps what\'s overhead' : '' }`,
+		label: ( p, heading = 0 ) => `${ p.points ? `${ p.points.length } points · ${ perimeter( p.points ).toFixed( 1 ) } m round` : `${ p.width.toFixed( 1 ) } × ${ p.length.toFixed( 1 ) } m` } · ${ Math.round( p.points ? polygonArea( p.points ) : p.width * p.length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ p.surface ] ? ` · ${ SURFACES[ p.surface ].name.toLowerCase() }` : '' }${ graded( p ) ? ` · ${ describeGrade( p, p.fit, heading ) }` : '' }${ p.fence !== 'none' ? ' · fenced' : '' }${ limitOf( p ) > 0 ? ` · up to ${ p.height.toFixed( 1 ) } m` : p.keep === 'auto' ? ' · keeps what\'s overhead' : '' }`,
 	},
 } );
 
@@ -776,7 +975,8 @@ export function defaultGrade() {
 
 export function rememberGrade( grade ) {
 
-	if ( Object.values( GRADES ).includes( grade ) ) nextGrade = grade;
+	// Not 'by points', which would shape every rectangle drawn after by its corners.
+	if ( Object.values( GRADES ).includes( grade ) && grade !== 'points' ) nextGrade = grade;
 
 }
 
@@ -847,6 +1047,80 @@ function clampSize( v ) {
 
 }
 
+// Every param filled in and clamped (see the kind's normalize).
+function normalizeArea( p ) {
+
+	const grading = normalizeGrade( p );
+	// 'By points' picked for a rectangle: shaped by its four corners, to set their heights.
+	const points = pointsOf( p.points ) ?? ( grading.grade === 'points' ? rectPoints( p ) : null );
+	// The box round them, about its middle: they're kept centred on it (handles.js, the MCP server),
+	// and one that isn't is covered all the same.
+	const reach = k => 2 * Math.max( ...points.map( point => Math.abs( point[ k ] ) ) );
+	return {
+		width: clampSize( points ? reach( 0 ) : p.width ), length: clampSize( points ? reach( 1 ) : p.length ), height: clampHeight( p.height ), surface: SURFACES[ p.surface ] ? p.surface : 'none',
+		// Areas saved before there was a choice kept what's above their height limit, if they had one.
+		keep: Object.values( KEEPS ).includes( p.keep ) ? p.keep : clampHeight( p.height ) > 0 ? 'height' : 'off',
+		fence: Object.values( FENCES ).includes( p.fence ) ? p.fence : 'none', gates: Math.min( MAX_GATES, Math.max( 0, Math.round( Number( p.gates ) || 0 ) ) ),
+		...grading,
+		// Raised or lowered from the ground's height it snaps to, or an exact finished height (as
+		// 'up'); areas saved before neither (raise 0).
+		raise: clampRaise( p.raise ),
+		finished: Number.isFinite( p.finished ) && p.finished !== null ? Math.min( FINISHED.max, Math.max( FINISHED.min, Math.round( p.finished * 100 ) / 100 ) ) : null,
+		fit: fitOf( p.fit ),
+		points,
+	};
+
+}
+
+// How high (or low) a point can be set from the area's height (m).
+export const POINT_HEIGHT = 50;
+const cm = v => Math.round( v * 100 ) / 100;
+
+// An area's points as given ([ east, north ] or [ east, north, height ], m), to the centimetre, or
+// null if they aren't MIN_POINTS to MAX_POINTS pairs of numbers. (Whether they make a simple
+// polygon, with no edges crossing and some area inside, is for whatever made them to check:
+// handles.js through resize.valid, worker/drive/mcp.js. Loaded, they're drawn as they are rather
+// than quietly made a rectangle.)
+function pointsOf( list ) {
+
+	if ( ! Array.isArray( list ) || list.length < MIN_POINTS || list.length > MAX_POINTS ) return null;
+	const out = [];
+	for ( const point of list ) {
+
+		if ( ! Array.isArray( point ) || point.length < 2 ) return null;
+		const [ east, north, height ] = point;
+		if ( typeof east !== 'number' || typeof north !== 'number' || ! Number.isFinite( east ) || ! Number.isFinite( north ) ) return null;
+		const at = [ cm( Math.min( 1000, Math.max( - 1000, east ) ) ), cm( Math.min( 1000, Math.max( - 1000, north ) ) ) ];
+		if ( typeof height === 'number' && Number.isFinite( height ) ) at.push( cm( Math.min( POINT_HEIGHT, Math.max( - POINT_HEIGHT, height ) ) ) );
+		out.push( at );
+
+	}
+
+	return out;
+
+}
+
+// A rectangle's corners as points: front left, front right, back right, back left.
+function rectPoints( p ) {
+
+	const hw = clampSize( p.width ) / 2, hl = clampSize( p.length ) / 2;
+	return [ [ - hw, - hl ], [ hw, - hl ], [ hw, hl ], [ - hw, hl ] ].map( ( [ e, n ] ) => [ cm( e ), cm( n ) ] );
+
+}
+
+// The params with point i's height set from what was typed ('' takes it away); a height set picks
+// the 'by points' grade, which is what uses it.
+function withHeight( p, i, text ) {
+
+	const value = String( text ?? '' ).trim().replace( ',', '.' ).replace( /^\+/, '' ).replace( /^−/, '-' );
+	const number = value === '' ? null : Number( value );
+	if ( number !== null && ! Number.isFinite( number ) ) return {};
+	const points = p.points.map( ( point, k ) => k !== i ? point : number === null ? point.slice( 0, 2 ) : [ point[ 0 ], point[ 1 ], cm( Math.min( POINT_HEIGHT, Math.max( - POINT_HEIGHT, number ) ) ) ] );
+	return number === null || p.grade === 'points' ? { points } : { points, grade: 'points' };
+
+}
+
+
 // The height an area flattens up to (m above its floor), 0 for all of it: auto works it out per
 // place (keepAbove).
 export function limitOf( p ) {
@@ -864,19 +1138,33 @@ function clampHeight( v ) {
 // What a graded area's shape depends on, to tell when it must be made again.
 function shapeKey( p ) {
 
-	return JSON.stringify( [ p.width, p.length, saveGrade( p ), FITTED.includes( p.grade ) ? fitKey( p.fit ) : null ] );
+	return JSON.stringify( [ p.width, p.length, saveGrade( p ), FITTED.includes( p.grade ) ? fitKey( p.fit ) : null, p.points ?? null ] );
 
 }
 
 // The shape Google's mesh is pressed onto under a graded area: a grid over the unit square (the
 // area's matrix scales it to its width and length, as the level square), each vertex at the graded
-// height in metres. With a bounds tree, as the plugin raycasts it once per tile vertex.
+// height in metres. With a bounds tree, as the plugin raycasts it once per tile vertex. For an area
+// shaped by its points, its outline (level, or cut into a grid on its graded shape), likewise
+// scaled down to the unit square.
 function gradedShape( params ) {
 
 	const { width, length } = params;
-	const geometry = new PlaneGeometry( 1, 1, gradeCells( width ), gradeCells( length ) ).rotateX( - Math.PI / 2 );
-	const position = geometry.attributes.position;
-	for ( let i = 0; i < position.count; i ++ ) position.setY( i, gradeOffset( params, params.fit, position.getX( i ) * width, position.getZ( i ) * length ) );
+	const outline = areaOutline( params );
+	let geometry;
+	if ( outline ) {
+
+		geometry = outlineSheet( outline, graded( params ) ? ( x, z ) => gradeOffset( params, params.fit, x, z ) : null, gradeCell( width, length ) );
+		geometry.scale( 1 / width, 1, 1 / length );
+
+	} else {
+
+		geometry = new PlaneGeometry( 1, 1, gradeCells( width ), gradeCells( length ) ).rotateX( - Math.PI / 2 );
+		const position = geometry.attributes.position;
+		for ( let i = 0; i < position.count; i ++ ) position.setY( i, gradeOffset( params, params.fit, position.getX( i ) * width, position.getZ( i ) * length ) );
+
+	}
+
 	geometry.computeBoundingBox();
 	geometry.computeBoundingSphere();
 	geometry.boundsTree = new MeshBVH( geometry );
@@ -1095,7 +1383,7 @@ export function setUpFlattening( { tiles, models, camera = null } ) {
 		if ( ! models.entries.includes( entry ) ) return;
 		// A level area's floor is one square; a graded one's is a grid on its shape (grade.js), made
 		// again when the shape changes.
-		const form = graded( entry.params ) ? shapeKey( entry.params ) : 'level';
+		const form = graded( entry.params ) || entry.params.points ? shapeKey( entry.params ) : 'level';
 		let shape = shapes.get( entry );
 		if ( shape && shape.userData.form !== form ) {
 
@@ -1278,7 +1566,7 @@ export function setUpFlattening( { tiles, models, camera = null } ) {
 
 	};
 
-	const scanKey = ( { state, params } ) => JSON.stringify( [ state.east, state.north, state.up, state.heading, params.width, params.length, graded( params ) ? shapeKey( params ) : 'level' ] );
+	const scanKey = ( { state, params } ) => JSON.stringify( [ state.east, state.north, state.up, state.heading, params.width, params.length, graded( params ) || params.points ? shapeKey( params ) : 'level' ] );
 	const columnRay = new Raycaster();
 	columnRay.firstHitOnly = true;
 	const _from = new Vector3();

@@ -26,6 +26,15 @@
 //   valley    the same upside down: a swale down the middle
 //   terraces  `steps` level benches stepping down the fitted slope (along whichever side it falls
 //             more), with a short batter between benches
+//   points    your own slopes: the heights set at an area's points (params.points, [ east, north,
+//             height ]), the area cut into triangles between its points (polygon.js triangulate)
+//             and each a plane through the heights at its corners, as a surveyor's TIN is. A point
+//             with no height takes the height of the plane fitted through those that have one (a
+//             slope between two, level at one, level at the area's height with none)
+//
+// An area is a rectangle (params.width by params.length) or, with params.points, any simple polygon:
+// its corners [ east, north ] metres from its middle as if it faced north (handles.js's points), so
+// [ x, z ] = [ east, -north ] here. width and length are then the box round them.
 // Round the edge, the ground meets the graded area along batters at `batter` horizontal to 1
 // vertical: an embankment falling away where the area is above the ground, a cut slope climbing
 // where it's below (terrain.js).
@@ -44,6 +53,7 @@ export const GRADES = {
 	'crowned (ridge down the middle)': 'ridge',
 	'swale (valley down the middle)': 'valley',
 	'terraces (level benches)': 'terraces',
+	'by points (your heights at its corners)': 'points',
 };
 export const GRADE_IDS = Object.values( GRADES );
 export const TOWARD = { front: 'front', back: 'back', left: 'left', right: 'right' };
@@ -78,6 +88,8 @@ export const MAX_REACH = 30;
 export const MAX_GRADED_SIDE = 300;
 // Benches of a terrace are joined by a batter at most this share of a bench wide.
 const TERRACE_RUN = 0.6;
+
+import { clampToPolygon, insidePolygon, triangulate } from './polygon.js';
 
 const clamp = ( v, min, max ) => Math.min( max, Math.max( min, v ) );
 const num = ( v, fallback ) => Number.isFinite( Number( v ) ) && v !== null && v !== '' ? Number( v ) : fallback;
@@ -125,6 +137,7 @@ export function saveGrade( { grade, fall, toward, ridgeAlong, steps, maxGrade, s
 	if ( grade === 'slope' ) Object.assign( out, { fall, toward } );
 	if ( grade === 'ridge' || grade === 'valley' ) Object.assign( out, { fall, ridgeAlong } );
 	if ( grade === 'terraces' ) out.steps = steps;
+	// (Its heights are its points'.)
 	return out;
 
 }
@@ -151,8 +164,15 @@ export function followSlope( params, slope ) {
 export function gradeOffset( params, slope, x, z ) {
 
 	const hw = params.width / 2, hl = params.length / 2;
-	x = clamp( x, - hw, hw );
-	z = clamp( z, - hl, hl );
+	const outline = areaOutline( params );
+	if ( outline ) [ x, z ] = clampToPolygon( outline, x, z );
+	else {
+
+		x = clamp( x, - hw, hw );
+		z = clamp( z, - hl, hl );
+
+	}
+
 	const f = ( params.fall ?? FALL.default ) / 100;
 	switch ( params.grade ) {
 
@@ -188,9 +208,114 @@ export function gradeOffset( params, slope, x, z ) {
 		}
 
 		case 'terraces': return terrace( params, slope, x, z );
+		case 'points': return pointsSurface( params ).at( x, z );
 		default: return 0;
 
 	}
+
+}
+
+// An area's outline in its frame ([ x, z ] corners, z = -north), or null for a rectangle. Kept with
+// the points it's made from, as it's asked for at every point of the ground.
+const outlines = new WeakMap();
+export function areaOutline( params ) {
+
+	const points = params?.points;
+	if ( ! Array.isArray( points ) || points.length < 3 ) return null;
+	let outline = outlines.get( points );
+	if ( ! outline ) {
+
+		outline = points.map( ( [ east, north ] ) => [ east, - north ] );
+		outlines.set( points, outline );
+
+	}
+
+	return outline;
+
+}
+
+// The height at each of an area's points as its 'points' grade has it (m from the area's height):
+// the height set there, or for one with none, the plane fitted through those set (see the top).
+export function pointHeights( params ) {
+
+	const points = params?.points;
+	if ( ! Array.isArray( points ) ) return [];
+	const set = points.filter( p => Number.isFinite( p[ 2 ] ) ).map( ( [ e, n, h ] ) => [ e, - n, h ] );
+	let fill = () => 0;
+	if ( set.length === 1 ) fill = () => set[ 0 ][ 2 ];
+	else if ( set.length === 2 ) {
+
+		// A slope from one to the other, level across.
+		const [ [ x0, z0, h0 ], [ x1, z1, h1 ] ] = set;
+		const square = ( x1 - x0 ) ** 2 + ( z1 - z0 ) ** 2;
+		fill = ( x, z ) => square > 1e-9 ? h0 + ( h1 - h0 ) * ( ( x - x0 ) * ( x1 - x0 ) + ( z - z0 ) * ( z1 - z0 ) ) / square : ( h0 + h1 ) / 2;
+
+	} else if ( set.length >= 3 ) {
+
+		const plane = planeThrough( set );
+		fill = ( x, z ) => plane.c + plane.gx * x + plane.gz * z;
+
+	}
+
+	return points.map( ( [ e, n, h ] ) => Number.isFinite( h ) ? h : Math.round( fill( e, - n ) * 100 ) / 100 );
+
+}
+
+// The 'points' grade's surface: the outline's triangles, each a plane through its corners' heights.
+// { at( x, z ) }, kept with the points it's made from.
+const surfaces = new WeakMap();
+function pointsSurface( params ) {
+
+	const points = params.points;
+	if ( ! Array.isArray( points ) || points.length < 3 ) return { at: () => 0 };
+	let made = surfaces.get( points );
+	if ( made ) return made;
+	const outline = areaOutline( params );
+	const heights = pointHeights( params );
+	const triangles = triangulate( outline ).map( ( [ a, b, c ] ) => {
+
+		const [ ax, az ] = outline[ a ], [ bx, bz ] = outline[ b ], [ cx, cz ] = outline[ c ];
+		const d = ( bz - cz ) * ( ax - cx ) + ( cx - bx ) * ( az - cz );
+		return { ax, az, bx, bz, cx, cz, d, ha: heights[ a ], hb: heights[ b ], hc: heights[ c ], minX: Math.min( ax, bx, cx ), maxX: Math.max( ax, bx, cx ), minZ: Math.min( az, bz, cz ), maxZ: Math.max( az, bz, cz ) };
+
+	} ).filter( t => Math.abs( t.d ) > 1e-12 );
+	made = {
+		at( x, z ) {
+
+			// The triangle (x, z) is in, or nearest to being in (on an edge, or just off it).
+			let best = null, score = - Infinity;
+			for ( const t of triangles ) {
+
+				if ( x < t.minX - 1e-3 || x > t.maxX + 1e-3 || z < t.minZ - 1e-3 || z > t.maxZ + 1e-3 ) continue;
+				const u = ( ( t.bz - t.cz ) * ( x - t.cx ) + ( t.cx - t.bx ) * ( z - t.cz ) ) / t.d;
+				const v = ( ( t.cz - t.az ) * ( x - t.cx ) + ( t.ax - t.cx ) * ( z - t.cz ) ) / t.d;
+				const w = 1 - u - v;
+				const least = Math.min( u, v, w );
+				if ( least > score ) {
+
+					score = least;
+					best = [ t, u, v, w ];
+
+				}
+
+				if ( least >= 0 ) break;
+
+			}
+
+			if ( ! best ) return 0;
+			const [ t ] = best;
+			// Weights kept on the triangle, so a point just off it takes its edge's height.
+			let [ , u, v, w ] = best;
+			u = Math.max( 0, u );
+			v = Math.max( 0, v );
+			w = Math.max( 0, w );
+			const sum = u + v + w || 1;
+			return ( t.ha * u + t.hb * v + t.hc * w ) / sum;
+
+		},
+	};
+	surfaces.set( points, made );
+	return made;
 
 }
 
@@ -748,9 +873,22 @@ export function gradeRange( params, slope ) {
 
 	let min = Infinity, max = - Infinity;
 	const hw = params.width / 2, hl = params.length / 2;
+	// An area shaped by its points: over the box round it, only what's inside, and at its corners
+	// (where its own slopes are highest and lowest).
+	const outline = areaOutline( params );
 	for ( let j = 0; j <= 8; j ++ ) for ( let i = 0; i <= 8; i ++ ) {
 
-		const y = gradeOffset( params, slope, ( i / 8 - 0.5 ) * 2 * hw, ( j / 8 - 0.5 ) * 2 * hl );
+		const x = ( i / 8 - 0.5 ) * 2 * hw, z = ( j / 8 - 0.5 ) * 2 * hl;
+		if ( outline && ! insidePolygon( outline, x, z ) ) continue;
+		const y = gradeOffset( params, slope, x, z );
+		min = Math.min( min, y );
+		max = Math.max( max, y );
+
+	}
+
+	for ( const [ x, z ] of outline ?? [] ) {
+
+		const y = gradeOffset( params, slope, x, z );
 		min = Math.min( min, y );
 		max = Math.max( max, y );
 
@@ -761,7 +899,7 @@ export function gradeRange( params, slope ) {
 	if ( d ) for ( let k = 0; k < d.h.length; k ++ ) {
 
 		const x = d.x0 + ( k % d.nx ) * d.dx, z = d.z0 + Math.floor( k / d.nx ) * d.dz;
-		if ( Math.abs( x ) > hw || Math.abs( z ) > hl ) continue;
+		if ( Math.abs( x ) > hw || Math.abs( z ) > hl || ( outline && ! insidePolygon( outline, x, z ) ) ) continue;
 		min = Math.min( min, d.h[ k ] );
 		max = Math.max( max, d.h[ k ] );
 
@@ -820,6 +958,16 @@ export function describeGrade( params, slope = null, heading = 0 ) {
 		case 'ridge': return `crowned ${ pct( params.fall ) } each way`;
 		case 'valley': return `swale ${ pct( params.fall ) } each way`;
 		case 'terraces': return `${ params.steps } terraces`;
+		case 'points': {
+
+			const heights = pointHeights( params );
+			if ( ! heights.length ) return 'by points';
+			const lo = Math.min( ...heights ), hi = Math.max( ...heights );
+			const m = v => `${ v > 0 ? '+' : v < 0 ? '−' : '±' }${ Math.abs( v ).toFixed( 2 ) } m`;
+			return hi - lo < 0.005 ? `by points, all at ${ m( lo ) }` : `by points, ${ m( lo ) } to ${ m( hi ) }`;
+
+		}
+
 		default: return 'level';
 
 	}

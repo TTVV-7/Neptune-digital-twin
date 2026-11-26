@@ -23,6 +23,7 @@ import {
 import { MeshBVH } from 'three-mesh-bvh';
 import { ZONE_ID, liftNow } from './flatten.js';
 import { MAX_GROUND_ERROR, MAX_REACH, gradeOffset, gradeRange, groundOffset, isGraded, pressedOnly } from './grade.js';
+import { clampToPolygon, insidePolygon, nearestOnPolygon, polygonDistance, winding } from './polygon.js';
 import { blocks } from './walk.js';
 
 // The ground you can dig into and pile onto: a heightfield in the scene frame, made only where
@@ -372,6 +373,49 @@ function zoneWorld( zone, u, v ) {
 	const de = u * r.cos + v * r.sin;
 	const dn = - u * r.sin + v * r.cos;
 	return [ - ( r.east + de ), r.north + dn ];
+
+}
+
+// A flatten area is its rectangle (zone.frame) or, shaped by its points, the polygon they make
+// (zone.poly: its corners [ u, v ] in its frame, as flatten.js's points [ east, north ]). How far
+// inside it (x, z) is: positive inside, negative outside, as insideRect.
+function insideZone( zone, x, z ) {
+
+	if ( ! zone.poly ) return insideRect( zone.frame, x, z );
+	const [ u, v ] = zoneLocal( zone, x, z );
+	return polygonDistance( zone.poly, u, v );
+
+}
+
+// Whether (u, v) in an area's frame is inside it (on its edge counts).
+function inZone( zone, u, v ) {
+
+	if ( ! zone.poly ) return Math.abs( u ) <= zone.frame.hw + 1e-6 && Math.abs( v ) <= zone.frame.hl + 1e-6;
+	return insidePolygon( zone.poly, u, v ) || nearestOnPolygon( zone.poly, u, v )[ 2 ] <= 1e-6;
+
+}
+
+// (u, v), or the nearest point of the area's edge if it's outside.
+function clampZone( zone, u, v ) {
+
+	if ( ! zone.poly ) return [ MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl ) ];
+	return clampToPolygon( zone.poly, u, v );
+
+}
+
+// An area's edges going round it: [ { u0, v0, u1, v1, nu, nv } ], (nu, nv) the way out from each.
+function zoneEdges( zone ) {
+
+	const { hw, hl } = zone.frame;
+	const corners = zone.poly ?? [ [ - hw, - hl ], [ hw, - hl ], [ hw, hl ], [ - hw, hl ] ];
+	const turn = zone.poly ? winding( zone.poly ) : 1;
+	return corners.map( ( [ u0, v0 ], i ) => {
+
+		const [ u1, v1 ] = corners[ ( i + 1 ) % corners.length ];
+		const run = Math.hypot( u1 - u0, v1 - v0 ) || 1;
+		return { u0, v0, u1, v1, nu: ( v1 - v0 ) / run * turn, nv: - ( u1 - u0 ) / run * turn };
+
+	} );
 
 }
 
@@ -1113,7 +1157,7 @@ export class Terrain extends EventDispatcher {
 			if ( ! range ) continue;
 			this.forRange( chunk, range, ( k, x, z ) => {
 
-				const inside = insideRect( zone.frame, x, z );
+				const inside = insideZone( zone, x, z );
 				if ( inside < 0 ) {
 
 					// The ring of nodes just outside, drawn and masked with it (shownNodes): under what
@@ -1123,8 +1167,7 @@ export class Terrain extends EventDispatcher {
 					// kept above a height keeps it everywhere, so its ring is the ground, as for one
 					// keeping nothing: lipHeights draws it.)
 					if ( inside < - 1.5 * CELL || ! zone.chunks || zone.params.keep !== 'auto' ) return;
-					const [ u, v ] = zoneLocal( zone, x, z );
-					const cu = MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), cv = MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl );
+					const [ cu, cv ] = clampZone( zone, ...zoneLocal( zone, x, z ) );
 					const edge = zone.height( cu, cv );
 					const top = edge + this.keepAbove( zone, x, z, cu, cv, true );
 					if ( ! Number.isFinite( top ) ) return;
@@ -1213,11 +1256,10 @@ export class Terrain extends EventDispatcher {
 
 			const range = nodeRange( chunk, zone.rectBounds );
 			if ( ! range ) continue;
-			const { hw, hl } = zone.frame;
 			this.forRange( chunk, range, ( k, x, z ) => {
 
 				const [ u, v ] = zoneLocal( zone, x, z );
-				if ( Math.abs( u ) > hw + 1e-6 || Math.abs( v ) > hl + 1e-6 ) return;
+				if ( ! inZone( zone, u, v ) ) return;
 				const y = zone.height( u, v );
 				if ( y < inside[ k ] ) {
 
@@ -1235,13 +1277,14 @@ export class Terrain extends EventDispatcher {
 
 			const range = nodeRange( chunk, zone.bounds );
 			if ( ! range ) continue;
-			const { hw, hl } = zone.frame;
 			const run = zone.params.batter;
 			this.forRange( chunk, range, ( k, x, z ) => {
 
 				if ( inside[ k ] !== Infinity ) return;
+				// Out from the nearest point of its edge (round a polygon's inside corner, the batters
+				// either side meet along the line halfway between them).
 				const [ u, v ] = zoneLocal( zone, x, z );
-				const cu = MathUtils.clamp( u, - hw, hw ), cv = MathUtils.clamp( v, - hl, hl );
+				const [ cu, cv ] = clampZone( zone, u, v );
 				const d = Math.hypot( u - cu, v - cv );
 				const g = bareAt( zone, k, u, v );
 				chunk.bare[ k ] = Math.min( chunk.bare[ k ], g );
@@ -1880,6 +1923,8 @@ export class Terrain extends EventDispatcher {
 		} else {
 
 			const zone = { entry, frame, floor: state.up, graded, params, bounds };
+			// Shaped by its points: the polygon they make (see insideZone).
+			if ( Array.isArray( params.points ) && params.points.length >= 3 ) zone.poly = params.points.map( ( [ e, n ] ) => [ e, n ] );
 			// Its floor: level, or for one too large to grade its shape, pressed onto as the
 			// flattening presses Google's mesh.
 			zone.height = () => state.up;
@@ -1950,18 +1995,16 @@ export class Terrain extends EventDispatcher {
 	// yet) and how the ground slopes away, with some to spare, but no more than MAX_REACH.
 	batterReach( zone, slope ) {
 
-		const { hw, hl } = zone.frame;
 		const run = zone.params.batter;
 		const gx = slope?.gx ?? 0, gz = slope?.gz ?? 0;
 		let reach = 1;
 		const N = 8;
-		for ( const [ nu, nv ] of [ [ 1, 0 ], [ - 1, 0 ], [ 0, 1 ], [ 0, - 1 ] ] ) {
+		for ( const { u0, v0, u1, v1, nu, nv } of zoneEdges( zone ) ) {
 
 			for ( let i = 0; i <= N; i ++ ) {
 
-				const t = i / N * 2 - 1;
-				const u = nu ? nu * hw : t * hw;
-				const v = nv ? nv * hl : t * hl;
+				const u = u0 + ( u1 - u0 ) * i / N;
+				const v = v0 + ( v1 - v0 ) * i / N;
 				const [ x, z ] = zoneWorld( zone, u, v );
 				const plane = zone.plane( u, v );
 				const sampled = this.sample( x, z );
@@ -2001,10 +2044,10 @@ export class Terrain extends EventDispatcher {
 			let lowest = Infinity;
 			const points = [];
 			for ( let j = 0; j <= 8; j ++ ) for ( let i = 0; i <= 8; i ++ ) points.push( zoneWorld( frame, ( i / 4 - 1 ) * frame.hw, ( j / 4 - 1 ) * frame.hl ) );
-			for ( const su of [ - 1, 1 ] ) for ( const sv of [ - 1, 1 ] ) points.push( zoneWorld( zone, su * zone.frame.hw, sv * zone.frame.hl ) );
+			for ( const { u0, v0 } of zoneEdges( zone ) ) points.push( zoneWorld( zone, u0, v0 ) );
 			for ( const [ x, z ] of points ) {
 
-				if ( insideRect( zone.frame, x, z ) < - 1e-6 || insideRect( frame, x, z ) < - 1e-6 ) continue;
+				if ( insideZone( zone, x, z ) < - 1e-6 || insideRect( frame, x, z ) < - 1e-6 ) continue;
 				const [ u, v ] = zoneLocal( zone, x, z );
 				lowest = Math.min( lowest, zone.height( u, v ) );
 
@@ -2058,15 +2101,14 @@ export class Terrain extends EventDispatcher {
 
 			if ( ! zone.graded ) continue;
 			const [ u, v ] = zoneLocal( zone, x, z );
-			const { hw, hl } = zone.frame;
-			if ( Math.abs( u ) <= hw + 1e-6 && Math.abs( v ) <= hl + 1e-6 ) {
+			if ( inZone( zone, u, v ) ) {
 
 				inside = Math.min( inside, zone.height( u, v ) );
 				continue;
 
 			}
 
-			const cu = MathUtils.clamp( u, - hw, hw ), cv = MathUtils.clamp( v, - hl, hl );
+			const [ cu, cv ] = clampZone( zone, u, v );
 			const d = Math.hypot( u - cu, v - cv );
 			if ( d > zone.reach ) continue;
 			const edge = zone.height( cu, cv );
@@ -2107,8 +2149,7 @@ export class Terrain extends EventDispatcher {
 		const zone = this.zones.get( entry );
 		if ( ! zone?.graded ) return null;
 		const [ u, v ] = zoneLocal( zone, x, z );
-		const { hw, hl } = zone.frame;
-		return Math.abs( u ) <= hw && Math.abs( v ) <= hl ? zone.height( u, v ) : null;
+		return inZone( zone, u, v ) ? zone.height( u, v ) : null;
 
 	}
 
@@ -2352,12 +2393,11 @@ export class Terrain extends EventDispatcher {
 			this.forRange( chunk, range, ( k, x, z ) => {
 
 				if ( changed[ k ] || ! shown[ k ] ) return;
-				const inside = insideRect( zone.frame, x, z );
+				const inside = insideZone( zone, x, z );
 				if ( inside >= 0 || inside < - 1.5 * CELL ) return;
 				// The ground round it, leaving out what's held (the floors, built up or dug).
 				lowest ??= this.edgeGround( chunk );
-				const [ u, v ] = zoneLocal( zone, x, z );
-				const edge = zone.height( MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl ) );
+				const edge = zone.height( ...clampZone( zone, ...zoneLocal( zone, x, z ) ) );
 				drawn[ k ] = Math.min( drawn[ k ], Math.max( lowest[ k ], edge ) );
 
 			} );
@@ -2412,7 +2452,7 @@ export class Terrain extends EventDispatcher {
 
 			this.forRange( chunk, nodeRange( chunk, reach( zone ) ), ( k, x, z ) => {
 
-				const d = insideRect( zone.frame, x, z );
+				const d = insideZone( zone, x, z );
 				if ( d > inside[ k ] ) {
 
 					inside[ k ] = d;
@@ -2444,7 +2484,8 @@ export class Terrain extends EventDispatcher {
 			if ( ! ( inside[ k ] >= 0 && inside[ k ] < CELL * Math.SQRT2 && ! zone.graded && clip[ k ] < CLIP_OPEN ) ) continue;
 			const { hw, hl } = zone.frame;
 			let [ u, v ] = zoneLocal( zone, chunk.x( k ), chunk.z( k ) );
-			if ( hw - Math.abs( u ) < hl - Math.abs( v ) ) u = Math.sign( u ) * hw;
+			if ( zone.poly ) [ u, v ] = nearestOnPolygon( zone.poly, u, v );
+			else if ( hw - Math.abs( u ) < hl - Math.abs( v ) ) u = Math.sign( u ) * hw;
 			else v = Math.sign( v ) * hl;
 			const [ x, z ] = zoneWorld( zone, u, v );
 			moves[ k * 2 ] = x;
@@ -2469,20 +2510,20 @@ export class Terrain extends EventDispatcher {
 	// humps (or at all, beside a row of rail cars with no ground seen between them).
 	faceSamples( zone ) {
 
-		const { hw, hl } = zone.frame;
-		const corners = [ [ - hw, - hl ], [ hw, - hl ], [ hw, hl ], [ - hw, hl ] ];
+		const edges = zoneEdges( zone );
 		const samples = [];
-		for ( let c = 0; c < 4; c ++ ) {
+		for ( let c = 0; c < edges.length; c ++ ) {
 
-			const [ u0, v0 ] = corners[ c ], [ u1, v1 ] = corners[ ( c + 1 ) % 4 ];
+			const { u0, v0, u1, v1, nu, nv } = edges[ c ];
+			// The side before, for the corner.
+			const before = edges[ ( c + edges.length - 1 ) % edges.length ];
 			const steps = Math.max( 1, Math.ceil( Math.hypot( u1 - u0, v1 - v0 ) / FACE_STEP ) );
-			// Outwards from this side (and from both, at a corner).
-			const nu = Math.sign( v1 - v0 ), nv = - Math.sign( u1 - u0 );
 			for ( let i = 0; i < steps; i ++ ) {
 
 				const u = u0 + ( u1 - u0 ) * i / steps, v = v0 + ( v1 - v0 ) * i / steps;
 				const [ x, z ] = zoneWorld( zone, u, v );
-				const out = i === 0 ? [ u + Math.sign( u ) * CELL, v + Math.sign( v ) * CELL ] : [ u + nu * CELL, v + nv * CELL ];
+				// Outwards from this side (and from both, at a corner).
+				const out = i === 0 ? [ u + ( nu + before.nu ) * CELL, v + ( nv + before.nv ) * CELL ] : [ u + nu * CELL, v + nv * CELL ];
 				const [ ox, oz ] = zoneWorld( zone, ...out );
 				const a = Math.round( ox / CELL ), b = Math.round( oz / CELL );
 				const chunk = this.owner( a, b );
@@ -2528,9 +2569,18 @@ export class Terrain extends EventDispatcher {
 		for ( const zone of zones ) {
 
 			const samples = this.faceSamples( zone );
+			const edges = zone.poly ? zoneEdges( zone ) : null;
 			const inset = ( { x, z } ) => {
 
 				const [ u, v ] = zoneLocal( zone, x, z );
+				if ( edges ) {
+
+					// In from the edge it's on.
+					const { nu, nv } = edges[ nearestOnPolygon( zone.poly, u, v )[ 3 ] ];
+					return zoneWorld( zone, u - nu * FACE_INSET, v - nv * FACE_INSET );
+
+				}
+
 				const { hw, hl } = zone.frame;
 				return zoneWorld( zone, MathUtils.clamp( u, FACE_INSET - hw, hw - FACE_INSET ), MathUtils.clamp( v, FACE_INSET - hl, hl - FACE_INSET ) );
 
@@ -2602,7 +2652,7 @@ export class Terrain extends EventDispatcher {
 					}
 
 					if ( changed[ k ] || ! corner[ k ] || ( pass === 'ring' ) !== !! shown[ k ] ) return;
-					if ( ! zone.graded && insideRect( zone.frame, x, z ) >= 0 ) return;
+					if ( ! zone.graded && insideZone( zone, x, z ) >= 0 ) return;
 					// The highest of what's changed within two nodes, as drawn.
 					const li = k % NODES, lj = Math.floor( k / NODES );
 					let near = - Infinity;
@@ -2624,8 +2674,7 @@ export class Terrain extends EventDispatcher {
 						ground = lowest[ k ];
 						if ( ! zone.graded ) {
 
-							const [ u, v ] = zoneLocal( zone, x, z );
-							ground = Math.max( ground, zone.height( MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl ) ) );
+							ground = Math.max( ground, zone.height( ...clampZone( zone, ...zoneLocal( zone, x, z ) ) ) );
 
 						}
 
