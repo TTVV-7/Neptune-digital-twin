@@ -27,7 +27,8 @@ export const COASTER_DESIGNS = [
 	{ id: 'globe', name: 'Globe' },
 	{ id: 'badge', name: 'Badge' },
 	{ id: 'mark', name: 'Mark' },
-	// The mark itself, die-cut to the globe and the road round it (wd_coaster_logo, 110 mm).
+	// The mark itself, die-cut to the globe and the road round it, the globe raised 1.2 mm
+	// (wd_coaster_logo, 110 mm).
 	{ id: 'logo', name: 'Logo: the globe and road' },
 ];
 
