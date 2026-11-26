@@ -31,13 +31,15 @@ export const TRACKS = {
 	'drive-anywhere': 'Drive Anywhere',
 	'countdown-groove': 'Countdown Groove',
 	'gliding-above-the-clouds': 'Gliding Above the Clouds',
+	'windows-down': 'Windows Down',
+	'after-midnight-traffic': 'After Midnight Traffic',
 };
 // Each scene's tracks, in the order they're played: the globe's (with the theme song, Drive
 // Anywhere), each world's while driving, and two that take over from a world's while they last: a
 // challenge's run (from its countdown to its finish) and the plane.
 export const PLAYLISTS = {
 	globe: [ 'warm-analog-pads', 'drive-anywhere' ],
-	earth: [ 'arcade-momentum', 'golden-hour-drive', 'buant-groove' ],
+	earth: [ 'arcade-momentum', 'golden-hour-drive', 'buant-groove', 'windows-down', 'after-midnight-traffic' ],
 	moon: [ 'moonlit-driver', 'weightless-pulse' ],
 	mars: [ 'canyon-echoes' ],
 	vesta: [ 'crystalline-waves' ],
@@ -45,6 +47,8 @@ export const PLAYLISTS = {
 	challenge: [ 'countdown-groove' ],
 	plane: [ 'gliding-above-the-clouds' ],
 };
+// The playlists that always start from their first track (the rest, the worlds', start on a random one).
+const FROM_FIRST = new Set( [ 'globe', 'challenge', 'plane' ] );
 // How long (ms) after a challenge run or a flight ends the world's music comes back: a quick hop
 // out of the plane and in again doesn't swap the music twice.
 const AFTER = 4000;
@@ -235,7 +239,10 @@ export function createMusic( { enabled = true } = {} ) {
 	function next() {
 
 		const list = PLAYLISTS[ scene ];
-		const at = turns[ scene ] ?? 0;
+		// A world's playlist starts on a random track, once a visit, then goes on in turn: from its
+		// first track every time, the last ones (the newest) were heard only after minutes of driving.
+		// The globe's, a challenge's and the plane's still start from their first.
+		const at = turns[ scene ] ?? ( FROM_FIRST.has( scene ) ? 0 : Math.floor( Math.random() * list.length ) );
 		turns[ scene ] = ( at + 1 ) % list.length;
 		const id = list[ at ];
 		if ( playing?.id === id ) playing.element.currentTime = 0;
