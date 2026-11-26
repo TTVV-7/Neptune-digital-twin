@@ -100,6 +100,7 @@ flattening, the terrain and the surface so they agree):
 | crowned (ridge down the middle) | a ridge along its length or width falling to both sides, set so half is above the middle height | fall (%), ridge runs along its length or width |
 | swale (valley down the middle) | the same upside down | fall (%), swale runs |
 | terraces (level benches) | 2 to 8 level benches stepping down the ground's fitted slope (along whichever side it falls more), joined by short batters | benches |
+| by points (your heights at its corners) | your own slopes: the area is cut into triangles between its points (ear clipping, `src/polygon.js` `triangulate`) and each is a plane through the heights set at its corners, as a surveyor's TIN. A point with no height takes the plane fitted through those that have one (with two, the slope from one to the other; with one, level at it; with none, level at the area's height). Picked for a rectangle, it is shaped by its four corners (see below). | heights at its points (m from the area's height, blank for none) |
 
 - **Batters.** Graded (anything but level), the area's edge meets the ground on batters at its
   **edge batters** ratio (1.5, 2 or 3 horizontal to 1 vertical, 2 : 1 to start): an embankment
@@ -171,7 +172,7 @@ flattening, the terrain and the surface so they agree):
   **cut (bank)** and **fill (compacted)** in m³ against the bare ground, batters included; the
   resize label says it in a few words.
 - **Claude (MCP):** `add_flatten_area` takes `grade` (`level`, `follow`, `plane`, `slope`,
-  `ridge`, `valley`, `terraces`; `follow` if left out), `fall`, `toward`, `ridge_along`, `steps`,
+  `ridge`, `valley`, `terraces`, `points`; `follow` if left out), `fall`, `toward`, `ridge_along`, `steps`,
   `smoothing` (follow), `max_grade` (follow and plane), `batter`, `raise` (m, −30 to 30) and
   `finished_height` (m as the editor's "up", instead of raise); numbers are clamped to what the
   editor offers, unknown words refused.
@@ -193,6 +194,63 @@ flattening, the terrain and the surface so they agree):
   floor and one keeping what's overhead shifted 1 m whole. And ground read from the coarsest tiles
   (1,500 m up) while a follow area reads its smoothed ground: it never goes up, and settles when
   the readings are right again.
+
+## Flatten areas: any shape, by its points
+
+An area is a rectangle (width by length) or, shaped by its points, any simple polygon: a
+triangle, an L, a wedge between two roads. Its P panel's **shape** turns a rectangle into **by
+points (any shape)** (its four corners, to start) and back (**rectangle**: the box round its points,
+and graded as new areas are if it was graded by its points). Picking the **by points** ground for a
+rectangle does the same.
+
+- **Handles** (`src/handles.js`, the pattern rows' lines use: `resize.points` / `withPoints`, with
+  `resize.closed` joining the last point to the first): each corner is a dot to drag; each edge,
+  the last one included, has a plus halfway along, which a click or a drag turns into a new point;
+  a click on a dot picks it out (filled in) and **Delete** or **Backspace** takes it out (a
+  double-click does too), never leaving fewer than three. A drag that would make two edges cross
+  (or two corners meet) isn't taken: the point stays where it last was without crossing, and the
+  label says "Edges can't cross"; a point whose taking out would cross edges stays, likewise.
+  **Alt-drag** a dot up or down the screen to set its height (0.05 m steps, 0.01 m with Shift),
+  which picks the **by points** ground. The middle (where it turns and its arrow is) is kept at the
+  middle of the box round its points, so it still turns about its middle; moving (drag its body),
+  turning, the raise arrow, PageUp / PageDown and copy and paste work as for a rectangle. Each
+  change is one undo step (`sidebar.js` `onPress` / `onEnd`; a click on a plus is one too, as it
+  now is for rows).
+- **Heights** (P panel, **heights at its points (m)**): one text field per point, blank for none
+  (the placeholder shows the height it takes from the others). Metres from the area's own height:
+  the ground's height it snaps to (the plane fitted through the ground under it, as for every
+  graded area) plus any raise, so the slopes move with it, and the raise arrow and an exact finished
+  height shift them whole. Typing a height picks the **by points** ground; each is one undo step.
+  ±50 m.
+- **Saved** as `points`: `[ [ east, north ], [ east, north, height ], ... ]`, metres from its middle
+  as if it faced north (as rows' points), to the centimetre, 3 to 50 of them; `width` and `length`
+  are the box round them. A rectangle saves no `points`, so areas saved before load, look and save
+  exactly as they did, with their corner and edge handles.
+- **Everything follows the outline** (`grade.js` `areaOutline`): the shape Google's mesh is pressed
+  onto (the polygon's triangles, cut into about 1.5 m cells when graded, `polygon.js`
+  `gridTriangles`), the red volume, the surface (its top on the same cells, its sides along each
+  edge), the fence (along each edge 0.3 m in, `polygon.js` `insetPolygon`, entrances one to an
+  edge, the longest first), and the terrain (`terrain.js` `insideZone` / `clampZone` /
+  `zoneEdges`): inside the polygon is the graded ground; outside, every node's batter runs out from
+  the nearest point of the outline, so round a convex corner the batters wrap round it and round an
+  inside corner (an L's) those from the two edges meet along the line halfway between them, the
+  notch beyond the batters left as ground. A level one's floor, ring, faces and cut-away edge
+  follow the polygon too. Every other grade works on a shaped area too, over the box round it
+  (one slope falls across the box, a crown runs down its middle), taken at the nearest point of the
+  outline outside it.
+- **Claude (MCP):** `add_flatten_area` takes `points` (3 to 50 `{ east, north, up? }`, in order
+  round it, metres east and north of the site point) instead of `east`, `north`, `width` and
+  `length`; refused if edges cross, two corners meet, or it's over 2000 m across. With any `up` it's
+  graded `points` unless another `grade` is given (`up`: m from the area's height). `get_project`
+  lists such an area's `points` where they are on the site, with their `up`.
+- **Tests:** `npm run test:flatten-points-ui` (a rectangle saved before still saves and resizes as
+  it did; a triangle and an L graded through their points' heights: the ground at each point and
+  across, walked on, batters round the outline and none in the L's notch, the earth reckoned, the
+  fence round it, saved and loaded; the handles: a point dragged and undone, a drag across an edge
+  not taken, a plus clicked, a point picked and deleted and undone, three points kept, Alt-drag
+  setting a height; the P panel's shape and heights; copy and paste), `npm run test:grade-surface`
+  (the TIN and the polygon helpers in Node) and `test:build-mcp` (points given, refused, listed and
+  loaded in the editor). TEST_SCREENSHOTS=<folder> saves a triangle and an L.
 
 ## Flatten areas: walking on them, and keeping what's overhead
 
