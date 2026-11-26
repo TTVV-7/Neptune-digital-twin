@@ -247,6 +247,28 @@ html, body {
 
 }
 
+/* − and + beside a number in the placement panel (a flatten area's raise / lower). */
+.lil-gui .lil-controller.nudged .lil-widget {
+	gap: 3px;
+}
+
+.lil-gui .lil-controller.nudged button.nudge {
+	flex: 0 0 auto;
+	width: 22px;
+	height: var( --widget-height );
+	padding: 0;
+	border: none;
+	border-radius: var( --widget-border-radius );
+	background: var( --widget-color );
+	color: var( --text-color );
+	font: inherit;
+	cursor: pointer;
+}
+
+.lil-gui .lil-controller.nudged button.nudge:hover {
+	background: var( --hover-color );
+}
+
 /* Readout notes in the placement panel (a pit's shoring, a warning): wrapped text across the
    panel rather than a field that would cut them short, under their name as a small heading, so a
    few in a row can be told apart. */

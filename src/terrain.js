@@ -20,8 +20,8 @@ import {
 	Vector3,
 } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import { ZONE_ID } from './flatten.js';
-import { MAX_REACH, gradeOffset, gradeRange, groundOffset, isGraded, pressedOnly } from './grade.js';
+import { ZONE_ID, liftNow } from './flatten.js';
+import { MAX_GROUND_ERROR, MAX_REACH, gradeOffset, gradeRange, groundOffset, isGraded, pressedOnly } from './grade.js';
 import { blocks } from './walk.js';
 
 // The ground you can dig into and pile onto: a heightfield in the scene frame, made only where
@@ -82,6 +82,15 @@ const APRON = 2;
 const LIP_REACH = 6;
 // And never more than this above the pit's rim (m): a building beside it is wider than LIP_REACH.
 const LIP_RISE = 1;
+// The drawn cells' outer corners round a flatten area (the nodes just past the ring drawn with it)
+// more than this (m) above the bare ground there are what stands on it (a tree's crown, a roof):
+// drawn at the ground, not as a face of earth up to it (see edgeLips).
+const LIP_TALL = 2;
+// Round a level flatten area the ground is taken to rise no faster than EDGE_SLOPE from the ground
+// seen within EDGE_REACH nodes (6 m) of it: a tree's crown wider than LIP_REACH beside its edge (a
+// conifer's is) is no spike of earth rising off its cut face (see edgeGround).
+const EDGE_REACH = 12;
+const EDGE_SLOPE = 0.3;
 // Inside the drawn earthworks, Google's mesh is hidden from this far below their surface upwards
 // (hideUnderEarthworks): what's lower is behind the surface anyway, and Google's ground at about
 // the same height would show through in patches. Raycasts ignore what is above it (covers).
@@ -284,6 +293,11 @@ class Chunk {
 		// The floor a level flatten area (or one too large to grade, MAX_GRADED_SIDE) presses the
 		// ground down to, which graded ones don't build up over (composeGrading); Infinity elsewhere.
 		this.levelled = new Float32Array( COUNT );
+		// The bare ground round graded flatten areas, as their batters meet it (composeGrading):
+		// what the ring of nodes drawn round them is drawn no higher than (edgeLips); Infinity elsewhere.
+		this.bare = new Float32Array( COUNT ).fill( Infinity );
+		// Nodes drawn round an area that are what stands beside it, a tree's crown or a roof (edgeLips).
+		this.standing = new Uint8Array( COUNT );
 		// How high Google's mesh is hidden over the drawn earthworks (updateMask): up to a flatten
 		// area's 'flatten up to' height over its ground, so what stands above that (an overpass, a
 		// power line) is kept, as the flattening keeps it; Infinity elsewhere.
@@ -417,7 +431,15 @@ export class Terrain extends EventDispatcher {
 
 		} else {
 
-			this.sample = ( x, z ) => flattening.originalHeight( x, z, tiles ? undefined : ground, this.sampled );
+			this.sample = ( x, z ) => {
+
+				const y = flattening.originalHeight( x, z, tiles ? undefined : ground, this.sampled );
+				if ( y === null || this.sampled.error <= MAX_GROUND_ERROR ) return y;
+				// The globe's first levels (MAX_GROUND_ERROR): no ground yet.
+				this.sampled.error = Infinity;
+				return null;
+
+			};
 
 		}
 
@@ -1030,6 +1052,7 @@ export class Terrain extends EventDispatcher {
 		base.set( h0 );
 		graded.fill( 0 );
 		levelled.fill( Infinity );
+		chunk.bare.fill( Infinity );
 		ceiling.fill( - Infinity );
 		chunk.zoneContrib.clear();
 		const zones = this.untouched ? [] : [ ...this.zones.values() ];
@@ -1170,9 +1193,10 @@ export class Terrain extends EventDispatcher {
 				const [ u, v ] = zoneLocal( zone, x, z );
 				const cu = MathUtils.clamp( u, - hw, hw ), cv = MathUtils.clamp( v, - hl, hl );
 				const d = Math.hypot( u - cu, v - cv );
+				const g = bareAt( zone, k, u, v );
+				chunk.bare[ k ] = Math.min( chunk.bare[ k ], g );
 				if ( d > zone.reach ) return;
 				const edge = zone.height( cu, cv );
-				const g = bareAt( zone, k, u, v );
 				if ( edge > g ) {
 
 					const y = edge - d / run;
@@ -1836,7 +1860,10 @@ export class Terrain extends EventDispatcher {
 				// The ground fitted under it (models.js 'plane' snapping: the plane, or the ground
 				// smoothed for an area that follows it), carried on beyond it.
 				const ground = entry.groundSlope ?? fit;
-				zone.plane = ( u, v ) => state.up + groundOffset( ground, u, - v );
+				// From the ground's height it snapped to, not its own: raised or lowered (flatten.js
+				// liftNow), it's the ground its batters meet and its earth is reckoned against.
+				const groundUp = state.up - liftNow( entry );
+				zone.plane = ( u, v ) => groundUp + groundOffset( ground, u, - v );
 				zone.floor = state.up + gradeRange( params, fit ).min;
 				zone.rectBounds = zone.bounds;
 				zone.reach = this.batterReach( zone, entry.groundSlope ?? fit );
@@ -2149,7 +2176,12 @@ export class Terrain extends EventDispatcher {
 		chunk.shown = this.shownNodes( chunk, changed );
 		const shown = this.standIn ? null : chunk.shown;
 		chunk.drawn = shown ? this.lipHeights( chunk, changed, shown ) : null;
-		if ( chunk.drawn ) for ( let k = 0; k < COUNT; k ++ ) position.array[ k * 3 + 1 ] = chunk.drawn[ k ];
+		if ( chunk.drawn ) for ( let k = 0; k < COUNT; k ++ ) {
+
+			position.array[ k * 3 + 1 ] = chunk.drawn[ k ];
+
+		}
+
 		this.maskDirty = true;
 		const index = geometry.index.array;
 		let n = 0;
@@ -2213,6 +2245,7 @@ export class Terrain extends EventDispatcher {
 
 		const drawn = chunk.surface.slice();
 		this.zoneLips( chunk, changed, shown, drawn );
+		this.edgeLips( chunk, changed, shown, drawn );
 		const rims = [];
 		for ( const design of this.designs.values() ) {
 
@@ -2257,13 +2290,111 @@ export class Terrain extends EventDispatcher {
 				if ( changed[ k ] || ! shown[ k ] ) return;
 				const inside = insideRect( zone.frame, x, z );
 				if ( inside >= 0 || inside < - 1.5 * CELL ) return;
-				// The lowest ground round it, leaving out what's held (the floors, built up or dug).
-				lowest ??= crop( filterGrid( this.padded( chunk, LIP_REACH, ( c, n ) => c.graded[ n ] ? Infinity : c.base[ n ], Infinity ), NODES + 2 * LIP_REACH, LIP_REACH, Math.min ), LIP_REACH );
+				// The ground round it, leaving out what's held (the floors, built up or dug).
+				lowest ??= this.edgeGround( chunk );
 				const [ u, v ] = zoneLocal( zone, x, z );
 				const edge = zone.height( MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl ) );
 				drawn[ k ] = Math.min( drawn[ k ], Math.max( lowest[ k ], edge ) );
 
 			} );
+
+		}
+
+	}
+
+	// The ground round a level flatten area at each node, leaving out what's held (the floors, built
+	// up or dug): the lowest within LIP_REACH, and no higher than the ground within EDGE_REACH rising
+	// at EDGE_SLOPE from there. A crown or a roof wider than LIP_REACH beside the area is read as the
+	// ground all the way across, so on its own the lowest within LIP_REACH is the crown's top.
+	edgeGround( chunk ) {
+
+		const held = ( c, n ) => c.graded[ n ] ? Infinity : c.base[ n ];
+		const lowest = crop( filterGrid( this.padded( chunk, LIP_REACH, held, Infinity ), NODES + 2 * LIP_REACH, LIP_REACH, Math.min ), LIP_REACH );
+		const rising = crop( slopeLimit( this.padded( chunk, EDGE_REACH, held, Infinity ), NODES + 2 * EDGE_REACH, EDGE_REACH, EDGE_SLOPE * CELL ), EDGE_REACH );
+		for ( let k = 0; k < COUNT; k ++ ) lowest[ k ] = Math.min( lowest[ k ], rising[ k ] );
+		return lowest;
+
+	}
+
+	// Round every flatten area holding its ground in chunks, graded or level, the nodes drawn round
+	// what it changed that it didn't change: the ring drawn with it (shown) and the drawn cells' outer
+	// corners just past that. They are at the ground as read from above off Google's mesh, so beside a
+	// stand of trees or a house they were a tree's crown or a roof, and the cells reaching up to them
+	// stood round the area as tall brown faces of earth (as high as the trees on a pad cut into a
+	// treed hillside). Round a graded area the ring is drawn no higher than the bare ground its
+	// batters meet there (chunk.bare, composeGrading) or the highest of what it changed within two
+	// nodes. The outer corners stay where they are (Google's mesh is a shell draped over the trees:
+	// there's nothing under a crown to see, so a cut crown would leave a hole to the sky), and those
+	// more than LIP_TALL above that ground (or the lowest within LIP_REACH, and a level area's edge)
+	// are marked standing (chunk.standing) and drawn down at that ground too, and Google's mesh is
+	// not hidden over them (updateMask) nor taken for the earthworks (covers): the tree or roof
+	// shows there as Google has it. Google's mesh beyond, where nothing's drawn, is left as it is.
+	edgeLips( chunk, changed, shown, drawn ) {
+
+		chunk.standing.fill( 0 );
+		const zones = this.untouched ? [] : [ ...this.zones.values() ].filter( zone => zone.chunks && nodeRange( chunk, zone.bounds ) );
+		if ( zones.length === 0 ) return;
+		const corner = dilate( shown );
+		const standing = chunk.standing;
+		let lowest = null;
+		const before = drawn.slice();
+		for ( const pass of [ 'batters', 'ring', 'corners' ] ) {
+
+			for ( const zone of zones ) {
+
+				const range = nodeRange( chunk, zone.graded ? zone.bounds : rectBounds( zone.frame, 3 * CELL ) );
+				if ( ! range ) continue;
+				this.forRange( chunk, range, ( k, x, z ) => {
+
+					if ( pass === 'batters' ) {
+
+						// A cut batter under a tree's crown (or a roof's eaves): left under it. Not a
+						// fill embankment: that buries what stood there, which is hidden under it.
+						if ( chunk.graded[ k ] === 2 && before[ k ] <= chunk.bare[ k ] + DISTURBED && chunk.h0[ k ] > chunk.bare[ k ] + LIP_TALL ) standing[ k ] = 1;
+						return;
+
+					}
+
+					if ( changed[ k ] || ! corner[ k ] || ( pass === 'ring' ) !== !! shown[ k ] ) return;
+					if ( ! zone.graded && insideRect( zone.frame, x, z ) >= 0 ) return;
+					// The highest of what's changed within two nodes, as drawn.
+					const li = k % NODES, lj = Math.floor( k / NODES );
+					let near = - Infinity;
+					for ( let b = Math.max( 0, lj - 2 ); b <= Math.min( CELLS, lj + 2 ); b ++ ) {
+
+						for ( let a = Math.max( 0, li - 2 ); a <= Math.min( CELLS, li + 2 ); a ++ ) {
+
+							const n = b * NODES + a;
+							if ( changed[ n ] ) near = Math.max( near, before[ n ] );
+
+						}
+
+					}
+
+					let ground = chunk.bare[ k ];
+					if ( ! Number.isFinite( ground ) ) {
+
+						lowest ??= this.edgeGround( chunk );
+						ground = lowest[ k ];
+						if ( ! zone.graded ) {
+
+							const [ u, v ] = zoneLocal( zone, x, z );
+							ground = Math.max( ground, zone.height( MathUtils.clamp( u, - zone.frame.hw, zone.frame.hw ), MathUtils.clamp( v, - zone.frame.hl, zone.frame.hl ) ) );
+
+						}
+
+					}
+
+					if ( ! Number.isFinite( ground ) && near === - Infinity ) return;
+					const cap = Math.max( ground, near );
+					// (Round a level area by what was read there: zoneLips has drawn its ring down already.)
+					if ( ( zone.graded ? before[ k ] : Math.max( before[ k ], chunk.surface[ k ] ) ) > cap + LIP_TALL ) standing[ k ] = 1;
+					if ( pass === 'ring' && zone.graded && Number.isFinite( chunk.bare[ k ] ) ) drawn[ k ] = Math.min( drawn[ k ], cap );
+					else if ( standing[ k ] ) drawn[ k ] = Math.min( drawn[ k ], cap );
+
+				} );
+
+			}
 
 		}
 
@@ -2359,7 +2490,7 @@ export class Terrain extends EventDispatcher {
 				if ( a >= w || b >= h ) continue;
 				const t = ( b * w + a ) * 4;
 				data[ t ] = ( chunk.drawn ?? chunk.surface )[ k ];
-				if ( chunk.shown[ k ] ) data[ t + 1 ] = 1;
+				if ( chunk.shown[ k ] && ! chunk.standing[ k ] ) data[ t + 1 ] = 1;
 				// Finite, as it's mixed between nodes in the shader.
 				data[ t + 2 ] = Math.min( chunk.ceiling[ k ], NO_CEILING );
 
@@ -2381,7 +2512,8 @@ export class Terrain extends EventDispatcher {
 		const i = Math.round( point.x / CELL );
 		const j = Math.round( point.z / CELL );
 		const chunk = this.owner( i, j );
-		if ( ! chunk?.shown?.[ ( j - chunk.j0 ) * NODES + i - chunk.i0 ] ) return false;
+		const n = ( j - chunk?.j0 ) * NODES + i - chunk?.i0;
+		if ( ! chunk?.shown?.[ n ] || chunk.standing[ n ] ) return false;
 		// Past the mask's MAX_MASK nodes (earthworks over a kilometre apart) Google's mesh isn't
 		// hidden, so it isn't passed through either: what's seen is what's clicked and stood on.
 		const { twinCutOn, twinCutOrigin: { value: origin }, twinCutSize: { value: size } } = this.mask;
@@ -2675,6 +2807,40 @@ function filterGrid( values, side, reach, pick ) {
 
 			let m = rows[ b * side + a ];
 			for ( let y = Math.max( 0, b - reach ); y <= Math.min( side - 1, b + reach ); y ++ ) m = pick( m, rows[ y * side + a ] );
+			out[ b * side + a ] = m;
+
+		}
+
+	}
+
+	return out;
+
+}
+
+// For each node of a square grid `side` wide, the lowest of values within `reach` nodes, each
+// raised by `rise` for every node it is away along each axis (separably: rows, then columns).
+function slopeLimit( values, side, reach, rise ) {
+
+	const rows = new Float32Array( values.length );
+	const out = new Float32Array( values.length );
+	for ( let b = 0; b < side; b ++ ) {
+
+		for ( let a = 0; a < side; a ++ ) {
+
+			let m = Infinity;
+			for ( let x = Math.max( 0, a - reach ); x <= Math.min( side - 1, a + reach ); x ++ ) m = Math.min( m, values[ b * side + x ] + rise * Math.abs( x - a ) );
+			rows[ b * side + a ] = m;
+
+		}
+
+	}
+
+	for ( let b = 0; b < side; b ++ ) {
+
+		for ( let a = 0; a < side; a ++ ) {
+
+			let m = Infinity;
+			for ( let y = Math.max( 0, b - reach ); y <= Math.min( side - 1, b + reach ); y ++ ) m = Math.min( m, rows[ y * side + a ] + rise * Math.abs( y - b ) );
 			out[ b * side + a ] = m;
 
 		}

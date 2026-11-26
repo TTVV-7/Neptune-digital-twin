@@ -30,6 +30,12 @@
 // vertical: an embankment falling away where the area is above the ground, a cut slope climbing
 // where it's below (terrain.js).
 
+// Ground read from Google's tiles coarser than this (their geometric error, m) isn't the ground: the
+// globe's first levels, which stand in before finer tiles load (and while the camera moves, as tiles
+// refine and fade), lie hundreds of metres to more than a kilometre off it (about 1,500 m above it in
+// North Vancouver). Snapping (models.js) and the earthworks' ground (terrain.js) leave it out.
+export const MAX_GROUND_ERROR = 300;
+
 export const GRADES = {
 	'level (dead flat)': 'level',
 	'follow the ground (smoothed)': 'follow',

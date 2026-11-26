@@ -90,6 +90,11 @@ const MIN_DECK = 12;
 const UNDER_MARGIN = 0.3;
 const PILLAR_KEEP = 0.01;
 const PRESS_REACH = 2;
+// Raising and lowering an area (raise, finished; see raiseOf): how far either way from the ground's
+// height it snaps to (m), and the steps the handle, the keys and the P panel's buttons take.
+export const RAISE = { min: - 30, max: 30, step: 0.05, nudge: 0.25 };
+// Exact finished heights an area can be set to (m, as 'up': above the site's origin).
+const FINISHED = { min: - 500, max: 9000 };
 // The volume drawn for an area with no height limit.
 const VOLUME_HEIGHT = 8;
 const MAX_HEIGHT = 200;
@@ -260,7 +265,7 @@ export function drawSurface( { colour, grain, speck, size, joints, shade, angula
 // its four sides going down SURFACE_SIDES. On a graded area (`offset`, its height at (x, z) in the
 // area's frame) the plane is a grid lying on the graded shape, and the sides are a thin edge along
 // it: the batters terrain.js draws round it take the place of deep sides.
-function buildSurface( width, length, id, offset = null ) {
+function buildSurface( width, length, id, offset = null, sides = SURFACE_SIDES ) {
 
 	const { tile } = SURFACES[ id ];
 	const materials = surfaceMaterial( id );
@@ -274,7 +279,7 @@ function buildSurface( width, length, id, offset = null ) {
 	// After Google's tiles and before what's placed (see SURFACE_BIAS).
 	top.renderOrder = SURFACE_ORDER;
 	group.add( top );
-	const depth = offset ? GRADED_SIDES : SURFACE_SIDES;
+	const depth = offset ? GRADED_SIDES : sides;
 	for ( const [ along, across, x, z, turn ] of [ [ width, length, 0, length / 2, 0 ], [ width, length, 0, - length / 2, Math.PI ], [ length, width, width / 2, 0, Math.PI / 2 ], [ length, width, - width / 2, 0, - Math.PI / 2 ] ] ) {
 
 		const side = offset ? gradedSide( along, depth, x, z, turn, offset ) : new PlaneGeometry( along, depth );
@@ -613,7 +618,7 @@ export function buildFence( width, length, style, gates = 0, offset = null ) {
 // click to select it, up to its height limit if it has one (with a blue ceiling: what's above is
 // left alone). None of it blocks walking or driving. A graded area's floor and ceiling lie on its
 // shape (grade.js), and its volume reaches from the lowest point of it.
-export function buildZone( width, length, height = 0, surface = 'none', fence = 'none', gates = 0, grading = null ) {
+export function buildZone( width, length, height = 0, surface = 'none', fence = 'none', gates = 0, grading = null, sides = SURFACE_SIDES ) {
 
 	const group = new Group();
 	group.name = SURFACES[ surface ] ? `${ SURFACES[ surface ].name } pad` : 'Flattened area';
@@ -639,7 +644,7 @@ export function buildZone( width, length, height = 0, surface = 'none', fence = 
 	// The red box is only for laying a bare area out: shown in build mode (see models.js). A
 	// surfaced one is just its gravel, asphalt or concrete (clicked on to select it), no box.
 	for ( const mesh of [ volume, edges, floor ] ) mesh.userData.buildOnly = true;
-	if ( SURFACES[ surface ] ) group.add( buildSurface( width, length, surface, offset ) );
+	if ( SURFACES[ surface ] ) group.add( buildSurface( width, length, surface, offset, sides ) );
 	else group.add( volume, edges, floor );
 	if ( fence !== 'none' ) group.add( buildFence( width, length, fence, gates, offset ) );
 	if ( height > 0 ) {
@@ -673,7 +678,9 @@ const graded = p => isGraded( p );
 registerKind( ZONE_ID, {
 	label: 'Flattened area',
 	layer: 'Flatten areas',
-	build: params => buildZone( params.width, params.length, limitOf( params ), params.surface, params.fence, params.gates, { params, slope: params.fit } ),
+	// A level pad raised over the ground shows its sides down to it (as deep as it's raised, or
+	// FINISHED's worth for an exact height, which may be anywhere; they're in the ground below it).
+	build: params => buildZone( params.width, params.length, limitOf( params ), params.surface, params.fence, params.gates, { params, slope: params.fit }, SURFACE_SIDES + ( params.finished !== null ? MAX_SIDES : Math.max( 0, params.raise ) ) ),
 	// Areas saved before surfaces existed have none, and are saved again without one.
 	// And without a fence, which areas saved without one leave out of what's saved. And level,
 	// as areas saved before grading were, with nothing about grading saved.
@@ -683,11 +690,16 @@ registerKind( ZONE_ID, {
 		keep: Object.values( KEEPS ).includes( p.keep ) ? p.keep : clampHeight( p.height ) > 0 ? 'height' : 'off',
 		fence: Object.values( FENCES ).includes( p.fence ) ? p.fence : 'none', gates: Math.min( MAX_GATES, Math.max( 0, Math.round( Number( p.gates ) || 0 ) ) ),
 		...normalizeGrade( p ),
+		// Raised or lowered from the ground's height it snaps to, or an exact finished height (as
+		// 'up'); areas saved before neither (raise 0).
+		raise: clampRaise( p.raise ),
+		finished: Number.isFinite( p.finished ) && p.finished !== null ? Math.min( FINISHED.max, Math.max( FINISHED.min, Math.round( p.finished * 100 ) / 100 ) ) : null,
 		fit: fitOf( p.fit ),
 	} ),
 	// A height limit is saved as it always was (the height, with nothing else); auto as keep.
-	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter, fit, keep, height, ...rest } ) => ( {
+	save: ( { surface, fence, gates, grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter, fit, keep, height, raise, finished, ...rest } ) => ( {
 		...rest, height: keep === 'height' ? height : 0, ...( keep === 'auto' ? { keep } : {} ),
+		...( finished !== null ? { finished } : raise ? { raise } : {} ),
 		...( surface === 'none' ? {} : { surface } ), ...( fence === 'none' ? {} : { fence, gates } ),
 		...saveGrade( { grade, fall, toward, ridgeAlong, steps, maxGrade, smoothing, batter } ),
 	} ),
@@ -699,6 +711,8 @@ registerKind( ZONE_ID, {
 	// the middle of the ground smoothed (snapSmoothing: models.js reads it on a finer grid).
 	snap: p => graded( p ) ? 'plane-original' : SURFACES[ p.surface ] ? 'median-original' : 'lowest-original',
 	snapSmoothing: p => p.grade === 'follow' ? p.smoothing : 0,
+	// Raised or lowered from the ground it snaps to, or at an exact height (models.js snap()).
+	snapLift: ( p, ground ) => liftOf( p, ground ),
 	snapRect: ( { width, length } ) => ( { width, length } ),
 	solid: false,
 	buildOnly: true,
@@ -722,6 +736,15 @@ registerKind( ZONE_ID, {
 		{ key: 'ridgeAlong', label: p => p.grade === 'valley' ? 'swale runs' : 'ridge runs', options: RIDGE_ALONG, size: true, when: p => p.grade === 'ridge' || p.grade === 'valley' },
 		{ key: 'steps', label: 'benches', min: STEPS.min, max: STEPS.max, step: 1, size: true, when: p => p.grade === 'terraces' },
 		{ key: 'batter', label: 'edge batters (h : v)', options: BATTERS, size: true, when: graded },
+		// Raising and lowering it (raise.js keeps each change for undo): from the ground's height, or
+		// an exact finished height, as 'up' (m above the site's origin), which stays where it is
+		// wherever the area goes.
+		{ key: 'raise', label: 'raise / lower (m)', step: 0.01, nudge: RAISE.nudge, undoable: true, when: p => p.finished === null },
+		{ key: 'exact', label: 'exact finished height', type: 'boolean', undoable: true, get: p => p.finished !== null, patch: ( on, p, entry ) => on ? { finished: entry.state.up } : { finished: null, raise: clampRaise( entry.state.up - ( entry.groundUp ?? entry.state.up ) ) } },
+		{ key: 'finished', label: 'finished height (m, as up)', step: 0.01, nudge: RAISE.nudge, undoable: true, when: p => p.finished !== null, get: p => p.finished ?? 0, patch: v => ( { finished: v } ) },
+	],
+	actions: [
+		{ label: 'Back to the ground\'s height', undoable: true, when: p => p.raise !== 0 || p.finished !== null, run: entry => ( { raise: 0, finished: null } ) },
 	],
 	// How it's graded, and the earth it moves (terrain.js works it out with the batters, as
 	// gradeVolume on the entry). Too large for that, it's only pressed down onto its shape.
@@ -729,11 +752,15 @@ registerKind( ZONE_ID, {
 		{ label: 'grade', get: entry => graded( entry.params ) ? describeGrade( entry.params, entry.params.fit ?? entry.groundSlope, entry.state.heading ) + ( pressedOnly( entry.params ) ? ` (over ${ MAX_GRADED_SIDE } m: pressed down only, no batters or earth reckoned)` : '' ) : '' },
 		{ label: 'cut (bank)', get: entry => graded( entry.params ) && entry.gradeVolume ? `${ Math.round( entry.gradeVolume.cut ).toLocaleString( 'en-CA' ) } m³` : '' },
 		{ label: 'fill (compacted)', get: entry => graded( entry.params ) && entry.gradeVolume ? `${ Math.round( entry.gradeVolume.fill ).toLocaleString( 'en-CA' ) } m³` : '' },
+		{ label: 'raised / lowered', get: entry => describeRaise( entry ) },
 	],
 	// A box is cheap to rebuild, and the flattening itself catches up a few times a second.
 	resize: {
 		shape: 'rect',
 		live: true,
+		// The arrow in the middle raises and lowers it (handles.js), with what that comes to.
+		raise: true,
+		raiseLabel: ( p, entry ) => raiseLabel( p, entry ),
 		label: ( p, heading = 0 ) => `${ p.width.toFixed( 1 ) } × ${ p.length.toFixed( 1 ) } m · ${ Math.round( p.width * p.length ).toLocaleString( 'en-CA' ) } m²${ SURFACES[ p.surface ] ? ` · ${ SURFACES[ p.surface ].name.toLowerCase() }` : '' }${ graded( p ) ? ` · ${ describeGrade( p, p.fit, heading ) }` : '' }${ p.fence !== 'none' ? ' · fenced' : '' }${ limitOf( p ) > 0 ? ` · up to ${ p.height.toFixed( 1 ) } m` : p.keep === 'auto' ? ' · keeps what\'s overhead' : '' }`,
 	},
 } );
@@ -764,6 +791,53 @@ export function defaultSurface() {
 export function rememberSurface( surface ) {
 
 	if ( SURFACES[ surface ] || surface === 'none' ) nextSurface = surface;
+
+}
+
+function clampRaise( v ) {
+
+	return Math.min( RAISE.max, Math.max( RAISE.min, Math.round( ( Number( v ) || 0 ) * 100 ) / 100 ) );
+
+}
+
+// How deep a level pad's sides go below it at most (m), set to an exact height.
+const MAX_SIDES = 30;
+
+// How far above the ground's height (as it snaps to it, `ground`) an area is: its raise, or for
+// an exact finished height, what that is above it.
+export function liftOf( p, ground ) {
+
+	return p.finished !== null && p.finished !== undefined ? p.finished - ground : p.raise ?? 0;
+
+}
+
+// How far an area is now above the ground's height it snapped to (m): 0 before it has snapped.
+export function liftNow( entry ) {
+
+	return Number.isFinite( entry.groundUp ) ? entry.state.up - entry.groundUp : entry.params.finished !== null ? 0 : entry.params.raise;
+
+}
+
+const signed = v => `${ v > 0 ? '+' : v < 0 ? '−' : '±' }${ Math.abs( v ).toFixed( 2 ) } m`;
+
+// The P panel's line: '+0.75 m from the ground's height', or the exact height and that.
+export function describeRaise( entry ) {
+
+	const p = entry.params;
+	const lift = liftNow( entry );
+	if ( p.finished !== null ) return `finished at ${ p.finished.toFixed( 2 ) } m (${ signed( lift ) } from the ground's height)`;
+	return p.raise ? `${ signed( p.raise ) } from the ground's height` : '';
+
+}
+
+// The label beside the arrow while it's dragged: "+0.75 m (cut 120 m³ / fill 340 m³)", the earth
+// moved as terrain.js works it out (a graded area; a level one has no batters).
+export function raiseLabel( p, entry ) {
+
+	const lift = p.finished !== null ? p.finished - ( entry?.groundUp ?? p.finished ) : p.raise;
+	const head = p.finished !== null ? `finished ${ p.finished.toFixed( 2 ) } m (${ signed( lift ) })` : signed( p.raise );
+	const volume = graded( p ) && entry?.gradeVolume;
+	return volume ? `${ head } (cut ${ Math.round( volume.cut ).toLocaleString( 'en-CA' ) } m³ / fill ${ Math.round( volume.fill ).toLocaleString( 'en-CA' ) } m³)` : head;
 
 }
 
@@ -1483,7 +1557,17 @@ export function setUpFlattening( { tiles, models, camera = null } ) {
 			if ( ! ground ) return null;
 			raycaster.set( new Vector3( x, 5000, z ), DOWN );
 			raycaster.far = 10000;
-			const hit = raycaster.intersectObject( ground, true ).find( h => h.object.isMesh );
+			// The finest tile along the line: while tiles refine (and fade, TilesFadePlugin), a coarse
+			// parent is still there with its children, and the coarsest of Google's (the globe's first
+			// levels, a geometric error of kilometres) lies some 1,500 m above the ground round here.
+			let hit = null;
+			for ( const h of raycaster.intersectObject( ground, true ) ) {
+
+				if ( ! h.object.isMesh ) continue;
+				if ( ! hit || ( h.object.userData.tile?.geometricError ?? 0 ) < ( hit.object.userData.tile?.geometricError ?? 0 ) ) hit = h;
+
+			}
+
 			if ( ! hit ) return null;
 			if ( detail ) detail.error = hit.object.userData.tile?.geometricError ?? 0;
 			const original = hit.face && findOriginal( hit.object.geometry );

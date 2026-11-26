@@ -13,6 +13,9 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	const gui = new GUI( { title: 'Model placement  (P)' } );
 	let removeEntry = entry => models.remove( entry );
+	// How a change to an `undoable` field or action is made: set by the sidebar to keep it for undo
+	// and redo (raise.js); straight to the params until then.
+	let changeParams = ( entry, patch ) => models.setParams( entry, patch );
 	gui.hide();
 
 	const empty = gui.add( { hint: 'Drop a .glb file on the page' }, 'hint' ).name( 'No models yet' ).disable();
@@ -140,7 +143,9 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			// Leaving a field without changing it isn't an edit (and would rebuild the kind).
 			if ( value === valueOf( field ) ) return;
 			// A field may change other params with it (patch: a pit's method sets its support too).
-			models.setParams( entry, field.patch ? field.patch( value, entry.params, entry ) : { [ field.key ]: value } );
+			const patch = field.patch ? field.patch( value, entry.params, entry ) : { [ field.key ]: value };
+			if ( field.undoable ) changeParams( entry, patch, labelOf( field, entry ) );
+			else models.setParams( entry, patch );
 			Object.assign( params, entry.params );
 			for ( const [ f, v ] of views ) v.value = valueOf( f );
 			folder.controllersRecursive().forEach( c => c.updateDisplay() );
@@ -189,7 +194,10 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			if ( field.placeholder !== undefined && controller.$input ) controller.$input.placeholder = placeholderOf( field, entry );
 			// Text and colours apply when finished, numbers and choices as they change. A colour is
 			// finished when its picker closes, as well as when it loses focus.
-			if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field ) );
+			// A number with nudge: − and + buttons beside it, a nudge down or up (a flatten area's raise).
+			if ( field.nudge ) addNudges( controller, field, object, property, () => set( field ) );
+			// Undoable numbers are one change when finished (a step each), not one per keystroke or drag.
+			if ( field.type === 'text' || field.type === 'color' || ( field.undoable && ! field.options && field.type !== 'boolean' ) ) controller.onFinishChange( () => set( field ) );
 			else controller.onChange( () => set( field ) );
 			if ( field.type === 'color' ) controller.$input.addEventListener( 'change', () => set( field ) );
 			made.push( [ field, controller ] );
@@ -199,6 +207,8 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		// Fields that don't apply to these params (a cone's width) are hidden, and a sub-folder with
 		// none showing too. Labels and slider ends that follow the params (a side's compass point
 		// once the pit is turned, the last dig stage) are brought up to date.
+		// Actions shown only when they apply (when( params, entry )): [ action, controller ].
+		const actionViews = [];
 		const showFields = () => {
 
 			for ( const [ field, controller ] of made ) {
@@ -229,6 +239,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			}
 
 			for ( const sub of groups.values() ) sub.show( sub.controllers.some( c => ! c._hidden ) );
+			for ( const [ action, controller ] of actionViews ) controller.show( !! action.when( entry.params, entry ) );
 
 		};
 		showFields();
@@ -245,7 +256,19 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		refresh();
 		const addActions = () => {
 
-			for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
+			for ( const action of kind.actions ?? [] ) {
+
+				// An undoable action gives the params it sets, made as an undoable field's are.
+				const run = () => {
+
+					const patch = action.run( entry );
+					if ( action.undoable && patch ) changeParams( entry, patch, action.label );
+
+				};
+				const controller = folder.add( { run }, 'run' ).name( action.label );
+				if ( action.when ) actionViews.push( [ action, controller ] );
+
+			}
 
 		};
 		// A kind with many readouts (a pit's) puts its buttons first, where they're seen.
@@ -253,6 +276,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		for ( const readout of kind.readouts ?? [] ) folder.add( readouts, readout.label ).disable();
 		readoutViews.set( entry, refresh );
 		if ( ! kind.actionsFirst ) addActions();
+		showFields();
 		// Keep the copy and the views in step when params change elsewhere (e.g. a pour finishing).
 		paramViews.set( entry, { params, views: [ ...views ].map( ( [ field, view ] ) => [ view, () => valueOf( field ) ] ), fields: made } );
 
@@ -312,7 +336,11 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		if ( ! folder ) return;
 		if ( folder._title !== entry.state.name ) folder.title( entry.state.name );
 		const controllers = folder.controllersRecursive();
-		const editing = controllers.find( c => c.domElement.contains( document.activeElement ) );
+		// Only a field with a caret counts: a − or + button keeps focus after a click, inside its
+		// controller, and that controller must still follow PageUp, undo and the next nudge.
+		const active = document.activeElement;
+		const typing = active?.matches?.( 'input:not([type=checkbox]):not([type=button]), textarea, select' );
+		const editing = typing ? controllers.find( c => c.domElement.contains( active ) ) : undefined;
 		const copy = paramViews.get( entry );
 		if ( copy ) {
 
@@ -412,7 +440,41 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			removeEntry = fn;
 
 		},
+		// How undoable fields and actions change the params: ( entry, patch, label ) (raise.js).
+		set onChangeParams( fn ) {
+
+			changeParams = fn;
+
+		},
 	};
+
+}
+
+// A − and a + button after a number's input, taking `field.nudge` off it or adding it, then `done()`.
+function addNudges( controller, field, object, property, done ) {
+
+	const make = ( text, sign, title ) => {
+
+		const button = document.createElement( 'button' );
+		button.type = 'button';
+		button.className = 'nudge';
+		button.textContent = text;
+		button.title = title;
+		button.addEventListener( 'click', () => {
+
+			const value = Math.round( ( Number( object[ property ] ) + sign * field.nudge ) * 100 ) / 100;
+			const min = typeof field.min === 'number' ? field.min : - Infinity;
+			const max = typeof field.max === 'number' ? field.max : Infinity;
+			object[ property ] = Math.min( max, Math.max( min, value ) );
+			controller.updateDisplay();
+			done();
+
+		} );
+		return button;
+
+	};
+	controller.domElement.classList.add( 'nudged' );
+	controller.$widget.append( make( '−', - 1, `Lower it ${ field.nudge } m` ), make( '+', 1, `Raise it ${ field.nudge } m` ) );
 
 }
 

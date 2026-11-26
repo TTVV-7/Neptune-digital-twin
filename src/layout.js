@@ -61,7 +61,6 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	// Off while viewing someone else's shared layout, so it doesn't replace yours.
 	let localSaving = true;
 	const listeners = new Set();
-	const replaceListeners = new Set();
 	const write = () => {
 
 		if ( restoring ) return;
@@ -188,8 +187,12 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 	}
 
+	// Called once what's placed has been thrown away for another layout (replace) or nothing (clear).
+	const replacedListeners = new Set();
+
 	function clearAll() {
 
+		for ( const listener of replacedListeners ) listener();
 		unloaded = [];
 		pendingExtras = {};
 		for ( const entry of placed() ) models.remove( entry );
@@ -198,6 +201,14 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	}
 
 	return {
+
+		// fn() whenever replace() or clear() throws away what's placed (the undo steps for it go too).
+		onReplace( fn ) {
+
+			replacedListeners.add( fn );
+			return () => replacedListeners.delete( fn );
+
+		},
 
 		async restore() {
 
@@ -267,7 +278,6 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 			replaced = true;
 			restoring = true;
 			clearAll();
-			for ( const listener of replaceListeners ) listener();
 			const failed = await load( next.items, gen );
 			if ( gen !== generation ) return failed.length;
 			unloaded = failed;
@@ -278,15 +288,6 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 			stale = false;
 			save();
 			return failed.length;
-
-		},
-
-		// Called as another layout replaces what's placed (before it loads): the editor forgets
-		// its undo steps then.
-		onReplace( listener ) {
-
-			replaceListeners.add( listener );
-			return () => replaceListeners.delete( listener );
 
 		},
 

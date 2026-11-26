@@ -30,6 +30,7 @@ import { clipboardOf, clipboardText, libraryIdsOf, middleOf, parseClipboard, pas
 import { resolveItem } from './layout.js';
 import { toast } from './placement.js';
 import { BUILD_APP } from './product.js';
+import { canRaise, createRaising } from './raise.js';
 
 const ROTATE_STEP = 15;
 // The wheel turns what's being placed or moved by ROTATE_STEP per notch of a mouse wheel; a
@@ -139,7 +140,11 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let rowMaker = null; // item => starts a row of it (rows.js)
 	let wheel = 0; // trackpad scrolling not yet turned into a turn, in pixels
 
+	// Undo and redo (Ctrl/Cmd+Z, Shift+Z or Ctrl+Y; history.js): moves, turns, deletes, pastes, and
+	// raising and lowering flatten areas (raise.js) by the arrow, the keys or the P panel.
 	const history = createHistory( { models, onError } );
+	const raising = createRaising( { models, history } );
+	panel.onChangeParams = ( entry, patch, label ) => raising.change( entry, patch, label );
 	// Another layout opened in this one's place (a project, a shared one): its steps would put the
 	// old one's items into it, so they go, with what was selected and where the last paste went.
 	layout.onReplace?.( () => {
@@ -156,6 +161,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		camera,
 		canvas,
 		models,
+		onRaised: ( entry, before, after ) => raising.record( entry, before, after ),
 		onPress: target => {
 
 			const members = target.group ? target.members : [ target ];
@@ -1750,7 +1756,18 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	window.addEventListener( 'keydown', e => {
 
-		if ( isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || isDriving() ) return;
+		if ( isTyping( e ) || isDriving() ) return;
+		// A selected flatten area: PageUp / PageDown raise and lower it (raise.js), with Ctrl, Cmd or
+		// Alt too (a metre).
+		if ( ( e.code === 'PageUp' || e.code === 'PageDown' ) && canRaise( selected ) && ! placing && ! drawing && ! handles.busy ) {
+
+			e.preventDefault();
+			raising.nudge( selected, e.code === 'PageUp' ? 1 : - 1, e );
+			return;
+
+		}
+
+		if ( e.ctrlKey || e.metaKey || e.altKey ) return;
 		if ( e.code === 'KeyL' && ! e.repeat ) setOpen( ! open );
 		else if ( e.code === 'Escape' ) {
 
@@ -2313,6 +2330,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		},
 		history,
+		raising,
 		editBar,
 		addTool,
 		setGate,

@@ -293,6 +293,11 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 				[ [ mouse ? '~Double-click' : '~Double-tap' ], 'A dot: take that point out' ],
 			] : shape ? [ [ [ '~Drag' ], shape === 'rect' ? 'The square handles: resize' : 'The square handle: resize' ] ] : [],
 			...kind?.resize?.depth ? [ [ [ '~Drag' ], 'The arrow in the middle: depth' ] ] : [],
+			...kind?.resize?.raise ? [
+				[ [ '~Drag' ], 'The arrow in the middle: raise or lower' ],
+				[ [ 'PgUp', '/', 'PgDn' ], 'Raise / lower 0.25 m (Shift 0.05, Ctrl 1 m)' ],
+				[ [ 'Ctrl', '+', 'Z' ], 'Undo that (Shift for redo)' ],
+			] : [],
 			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
 			[ [ 'P' ], points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : settings ? 'Its settings and exact position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],

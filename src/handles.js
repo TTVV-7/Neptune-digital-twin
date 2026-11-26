@@ -23,6 +23,9 @@ const SIZE_STEP = 0.5;
 const FREE_STEP = 0.1;
 const DEPTH_STEP = 0.1;
 const DEPTH_FREE = 0.01;
+// A flatten area's raise snaps to RAISE_STEP metres, or to RAISE_FREE with Shift.
+const RAISE_STEP = 0.05;
+const RAISE_FREE = 0.01;
 // Dragging the depth arrow takes at least this many pixels per metre.
 const MIN_PER_METRE = 16;
 // Shift snaps the knob to this many degrees; otherwise it turns in whole degrees.
@@ -48,6 +51,7 @@ const ACCENT = 0x3d9be9;
 const DEG = MathUtils.DEG2RAD;
 
 const TURN_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 15"/><path d="M4 20v-5h5"/></svg>';
+const RAISE_ICON = '<svg viewBox="0 0 24 24" width="16" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5M4 12h16" stroke-width="1.6"/></svg>';
 const DEPTH_ICON = '<svg viewBox="0 0 24 24" width="16" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/></svg>';
 const INSERT_ICON = '<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2v8M2 6h8"/></svg>';
 
@@ -70,7 +74,9 @@ export function toScreen( point, camera, rect, target = {} ) {
 // onPress( entry ) and onEnd( entry ) are told when a handle is pressed and let go (or the drag is
 // cancelled), for undo (history.js). An entry with an apply() of its own (several items selected
 // together, turned about their middle: sidebar.js) is applied with that instead of models.apply.
-export function createHandles( { scene, camera, canvas, models, onPress = () => {}, onEnd = () => {} } ) {
+// onRaised( entry, before, after ): a flatten area's raise arrow was let go, having changed its
+// params from `before` to `after` (a step of its own, raise.js, rather than onPress/onEnd's).
+export function createHandles( { scene, camera, canvas, models, onPress = () => {}, onEnd = () => {}, onRaised = () => {} } ) {
 
 	const applyTo = entry => entry.apply ? entry.apply() : models.apply( entry );
 
@@ -90,6 +96,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 		...[ [ 1, 0 ], [ - 1, 0 ], [ 0, 1 ], [ 0, - 1 ] ].map( ( [ sx, sy ] ) => ( { type: 'edge', sx, sy, className: 'grip edge' } ) ),
 		{ type: 'radius', sx: 1, sy: 0, className: 'grip', title: 'Drag to make it bigger or smaller. Shift for any size' },
 		{ type: 'depth', className: 'depth', html: DEPTH_ICON, title: 'Drag down to dig deeper, up for shallower. Shift for any depth' },
+		{ type: 'raise', className: 'depth raise', html: RAISE_ICON, title: 'Drag up to raise it, down to lower it (0.05 m steps; Shift for finer). PageUp / PageDown too' },
 	];
 	for ( const handle of handles ) makeHandle( handle );
 
@@ -188,13 +195,13 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 			applied: 0,
 			press: { x: e.clientX, y: e.clientY },
 		};
-		onPress( target );
-		if ( handle.type === 'depth' ) measureDepthDrag( drag );
+		if ( handle.type !== 'raise' ) onPress( target );
+		if ( handle.type === 'depth' || handle.type === 'raise' ) measureDepthDrag( drag );
 		// A point is moved on a level plane through where it is, rather than the item's base.
 		if ( handle.type === 'point' || handle.type === 'insert' ) drag.base = handle.world.y;
 		root.classList.add( 'dragging' );
 		handle.element.classList.add( 'active' );
-		showLabel( e, handle.type === 'turn' ? `${ Math.round( state.heading ) }°` : drag.kind.resize.label( params, state.heading ) );
+		showLabel( e, handle.type === 'turn' ? `${ Math.round( state.heading ) }°` : handle.type === 'raise' ? drag.kind.resize.raiseLabel( params, target ) : drag.kind.resize.label( params, state.heading ) );
 
 	}
 
@@ -209,6 +216,21 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 			const along = ( e.clientX - drag.press.x ) * axis.x + ( e.clientY - drag.press.y ) * axis.y;
 			const depth = snap( start.params.depth + along / perMetre, e.shiftKey ? DEPTH_FREE : DEPTH_STEP );
 			setDraft( e, { east: start.east, north: start.north, heading: start.heading, params: kindParams( kind, { ...start.params, depth: Math.max( DEPTH_FREE, depth ) } ) } );
+			return;
+
+		}
+
+		if ( handle.type === 'raise' ) {
+
+			// As the depth arrow, the other way: up the screen raises it. Its raise, or its exact
+			// finished height.
+			const { axis, perMetre } = drag;
+			const down = ( e.clientX - drag.press.x ) * axis.x + ( e.clientY - drag.press.y ) * axis.y;
+			const step = e.shiftKey ? RAISE_FREE : RAISE_STEP;
+			const key = start.params.finished !== null && start.params.finished !== undefined ? 'finished' : 'raise';
+			const value = snap( start.params[ key ] - down / perMetre, step );
+			drag.pointer = { clientX: e.clientX, clientY: e.clientY };
+			setDraft( e, { east: start.east, north: start.north, heading: start.heading, params: kindParams( kind, { ...start.params, [ key ]: value } ) } );
 			return;
 
 		}
@@ -296,7 +318,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 		drag.draft = draft;
 		// The heading too, for what's said by the compass (a graded area's downhill side).
-		showLabel( e, drag.kind.resize.label( draft.params, draft.heading ?? drag.entry.state.heading ) );
+		showLabel( e, drag.handle.type === 'raise' ? drag.kind.resize.raiseLabel( draft.params, drag.entry ) : drag.kind.resize.label( draft.params, draft.heading ?? drag.entry.state.heading ) );
 		// Quick kinds follow the handle; the rest show the outline until it's let go.
 		if ( drag.kind.resize.live && performance.now() - drag.applied >= LIVE_INTERVAL ) {
 
@@ -310,6 +332,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 	function release( e ) {
 
 		if ( ! drag || e.pointerId !== drag.pointerId ) return;
+		const drag0 = drag;
 		const { entry, draft, handle, moved } = drag;
 		if ( ( handle.type === 'point' || handle.type === 'insert' ) && ! moved ) {
 
@@ -320,7 +343,14 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 		end();
 		if ( draft ) place( entry, draft );
-		onEnd( entry );
+		if ( handle.type !== 'raise' ) onEnd( entry );
+		else if ( draft ) {
+
+			const pick = p => ( { raise: p.raise, finished: p.finished } );
+			const [ before, after ] = [ pick( drag0.start.params ), pick( draft.params ) ];
+			if ( JSON.stringify( before ) !== JSON.stringify( after ) ) onRaised( entry, before, after );
+
+		}
 
 	}
 
@@ -502,6 +532,17 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 		}
 
+		// A flatten area's raise arrow: in its middle, on its finished ground.
+		const raiseHandle = handles.find( h => h.type === 'raise' );
+		if ( kind?.resize?.raise ) {
+
+			raiseHandle.active = true;
+			raiseHandle.world.copy( centre ).y = entry.state.up;
+			// While it's dragged, what it comes to (the earth moved) follows as it's worked out.
+			if ( drag?.handle === raiseHandle && drag.pointer && drag.draft ) showLabel( drag.pointer, kind.resize.raiseLabel( drag.draft.params, entry ) );
+
+		}
+
 		const depthHandle = handles.find( h => h.type === 'depth' );
 		if ( kind?.resize?.depth ) {
 
@@ -512,7 +553,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 		placePoints( entry, kind, shape === 'points' ? kind.resize.points( params ) : [], { east, north }, rect );
 		for ( const handle of handles ) if ( handle.active ) toScreen( handle.world, camera, rect, handle.screen );
-		if ( shape === 'rect' ) makeRoom( depthHandle );
+		if ( shape === 'rect' ) makeRoom( depthHandle, raiseHandle );
 
 		for ( const handle of [ ...handles, ...points, ...inserts ] ) {
 
@@ -627,7 +668,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 
 	// Hide handles that would crowd each other on screen: a far-off or narrow area keeps its
 	// corners, and a small one just the knob. The one being dragged always shows.
-	function makeRoom( depthHandle ) {
+	function makeRoom( depthHandle, raiseHandle ) {
 
 		const corner = ( sx, sy ) => handles.find( h => h.type === 'corner' && h.sx === sx && h.sy === sy ).screen;
 		const gap = ( a, b ) => Math.hypot( a.x - b.x, a.y - b.y );
@@ -642,6 +683,7 @@ export function createHandles( { scene, camera, canvas, models, onPress = () => 
 		}
 
 		if ( depthHandle.active && drag?.handle !== depthHandle ) depthHandle.active = Math.min( across, along ) >= DEPTH_ROOM;
+		if ( raiseHandle.active && drag?.handle !== raiseHandle ) raiseHandle.active = Math.min( across, along ) >= DEPTH_ROOM;
 
 	}
 
