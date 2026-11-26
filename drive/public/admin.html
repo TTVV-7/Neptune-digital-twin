@@ -301,7 +301,7 @@
 			<label>Period <select name="period" id="ch-period"></select></label>
 			<div class="row"><label class="day">Or another day <input type="date" name="date" id="ch-date"></label><label class="narrow">Its <select name="dateKind" id="ch-date-kind"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label></div>
 			<label>World <select name="world" id="ch-world"><option value="earth">Earth</option><option value="moon">Moon</option><option value="mars">Mars</option><option value="vesta">Vesta</option><option value="ceres">Ceres</option></select></label>
-			<label>Kind <select name="kind" id="ch-kind"><option value="sprint">Checkpoint sprint</option><option value="collect">Collect them all</option><option value="landmark">Drive to a landmark</option></select></label>
+			<label>Kind <select name="kind" id="ch-kind"><option value="sprint">Checkpoint sprint</option><option value="collect">Collect them all</option><option value="landmark">Drive to a landmark</option><option value="hoops">Hoop run (the Moon)</option></select></label>
 			<label class="full">Place <select name="place" id="ch-place"></select></label>
 			<div class="full row" id="ch-custom" hidden>
 				<label>Name <input name="name" maxlength="60" placeholder="Lombard Street"></label>
@@ -2390,7 +2390,7 @@
 
 	const DAY = 86400000;
 	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
-	const KINDS = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark' };
+	const KINDS = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark', hoops: 'Hoop run' };
 	const PERIODS = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 	// Each world's name as the tables show it, and in a sentence ("the Moon", but "Mars"), as the
 	// page above has them; one the Worker names that isn't here (a newer Worker's) by its id.
