@@ -90,8 +90,8 @@ import { CELL, PLACES_PER_POST, cellMiddle, cellOf, checkCell, checkPlaces, metr
 import { VISITOR_PREFIX, nameCell, readTowns, topCells, topPlaces, townsFor } from '../worker/drive/dropins.js';
 import { createStats } from '../src/drive-app/stats.js';
 import {
-	BOOSTED, FASTEST, GRACE, KINDS, LEG_SLACK, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
-	bearingTo, checkPasses, destination, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, PERIODS, PERIOD_KINDS, randomFrom, rankText, formatTime,
+	BOOSTED, COURSE, COURSE_FASTEST, FASTEST, GRACE, HOOP_MISS, HOOP_NEAR, HOOP_STYLES, HOOP_WORLDS, KINDS, LEG_SLACK, TRICK_UP, describe as describeChallenge, fastestFor, hoopStyle, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
+	bearingTo, checkPasses, destination, kindFor, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, PERIODS, PERIOD_KINDS, randomFrom, rankText, formatTime,
 } from '../src/drive-app/challenge-rules.js';
 import { GROUNDS, REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, legFaultsOn, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick, routeFaults, steepOn } from '../worker/drive/challenges.js';
 import { setHeights } from '../src/drive-app/moon-height.js';
@@ -5800,6 +5800,206 @@ function fairGhost( { world, route }, ms, passes, { inside = 0.95, alter = null 
 
 }
 
+describe( 'World Drive challenges: hoop runs (the Moon\'s, since 2026-11-26)', () => {
+
+	const place = name => MOON_PLACES.find( p => p.name === name );
+	const random = ( fill = 7 ) => randomFrom( new Uint8Array( 32 ).fill( fill ) );
+	// Passes for a hoop run flown at `speed` m/s along each leg (the crow's way), each hoop hit, and
+	// with those in `missed` missed (its penalty on the clock as it's missed): { ms, passes }.
+	const flown = ( challenge, speed, missed = [] ) => {
+
+		const { world, route } = challenge;
+		let from = [ route.start.lat, route.start.lon ];
+		let fromRadius = START_SLACK;
+		let at = 0;
+		const passes = route.points.map( ( point, index ) => {
+
+			if ( missed.includes( index ) ) {
+
+				at += HOOP_MISS;
+				return [ index, at, 1 ];
+
+			}
+
+			at += Math.ceil( legMinimum( world, from, fromRadius, point, route.radius, speed ) );
+			from = point;
+			fromRadius = route.radius;
+			return [ index, at ];
+
+		} );
+		return { ms: at, passes };
+
+	};
+
+	test( 'the Moon\'s challenges are all hoop runs, every other world\'s as before; an owner\'s hoop run only on the Moon', () => {
+
+		assert.deepEqual( HOOP_WORLDS, [ 'moon' ] );
+		assert.ok( KINDS.includes( 'hoops' ) );
+		for ( const period of PERIODS ) for ( const u of [ 0, 0.3, 0.6, 0.99 ] ) {
+
+			assert.equal( kindFor( period, u, 'moon' ), 'hoops' );
+			for ( const world of [ 'earth', 'mars', 'vesta', 'ceres' ] ) assert.notEqual( kindFor( period, u, world ), 'hoops' );
+
+		}
+
+		assert.throws( () => makeRoute( { kind: 'hoops', size: 'week', world: 'earth', place: { name: 'Arc', lat: 48.87, lon: 2.29 } }, random() ) );
+
+	} );
+
+	test( 'each place\'s style from what it is, and a course laid out in it: hoops over the ground, trick hoops high, orbs off the line, the same from the same numbers', () => {
+
+		assert.equal( hoopStyle( place( 'Copernicus crater' ) ), 'crater' );
+		assert.equal( hoopStyle( place( 'Tranquility Base' ) ), 'landing' );
+		assert.equal( hoopStyle( place( 'Hadley Rille' ) ), 'valley' );
+		assert.equal( hoopStyle( place( 'Mons Huygens' ) ), 'mountain' );
+		assert.equal( hoopStyle( place( 'Mare Imbrium' ) ), 'sea' );
+		assert.equal( hoopStyle( place( 'South Pole-Aitken basin' ) ), 'basin' );
+		assert.equal( hoopStyle( { name: 'Dropped pin' } ), 'crater' );
+		// Every featured Moon place has a style, and every style comes up among them.
+		assert.deepEqual( [ ...new Set( MOON_PLACES.map( hoopStyle ) ) ].sort(), Object.keys( HOOP_STYLES ).sort() );
+		for ( const size of PERIODS ) for ( const name of [ 'Copernicus crater', 'Tranquility Base', 'Hadley Rille', 'Mons Huygens', 'Mare Imbrium', 'South pole' ] ) {
+
+			const shape = SHAPES.moon[ size ].hoops;
+			const route = makeRoute( { kind: 'hoops', size, world: 'moon', place: place( name ) }, random() );
+			const style = HOOP_STYLES[ route.style ];
+			assert.equal( route.style, hoopStyle( place( name ) ) );
+			assert.equal( route.points.length, shape.hoops );
+			assert.equal( route.radius, shape.radius );
+			assert.equal( route.orbs.length, shape.orbs );
+			assert.equal( route.tricks.length, shape.tricks );
+			assert.deepEqual( [ route.start.lat, route.start.lon ], [ place( name ).lat, place( name ).lon ] );
+			for ( const [ i, [ , , up ] ] of route.points.entries() ) {
+
+				assert.ok( Number.isInteger( up ) && up >= 1 && up <= Math.max( style.up[ 1 ], TRICK_UP ), `${ name } hoop ${ i } ${ up } m up` );
+				if ( route.tricks.includes( i ) ) assert.ok( up >= TRICK_UP );
+
+			}
+
+			// Never the first hoop or the finish a trick hoop; all different.
+			assert.ok( route.tricks.every( i => i > 0 && i < shape.hoops - 1 ) && new Set( route.tricks ).size === route.tricks.length );
+			// Each leg about its spacing (the style's share of the shape's).
+			let [ lat, lon ] = [ route.start.lat, route.start.lon ];
+			for ( const [ toLat, toLon ] of route.points ) {
+
+				const leg = metresOn( 'moon', lat, lon, toLat, toLon );
+				assert.ok( leg >= shape.spacing[ 0 ] * style.spacing - 1 && leg <= shape.spacing[ 1 ] * style.spacing + 1, `${ name } leg ${ leg }` );
+				[ lat, lon ] = [ toLat, toLon ];
+
+			}
+
+			assert.deepEqual( makeRoute( { kind: 'hoops', size, world: 'moon', place: place( name ) }, random() ), route );
+
+		}
+
+		// A landing site's loops back round near its start.
+		const loop = makeRoute( { kind: 'hoops', size: 'week', world: 'moon', place: place( 'Tranquility Base' ) }, random() );
+		const [ endLat, endLon ] = loop.points.at( - 1 );
+		assert.ok( metresOn( 'moon', loop.start.lat, loop.start.lon, endLat, endLon ) < 2500 );
+		const challenge = { world: 'moon', kind: 'hoops', route: loop };
+		assert.match( describeChallenge( challenge ), /^18 hoops · \d+\.\d km · 4 boost orbs · 2 trick hoops$/ );
+
+	} );
+
+	test( 'a hoop run\'s time: checked against the course\'s top speed, a missed hoop taking HOOP_MISS and constraining nothing, the finish never missed', () => {
+
+		assert.equal( COURSE_FASTEST, COURSE.boost / 3.6 );
+		assert.ok( COURSE_FASTEST > FASTEST );
+		assert.equal( fastestFor( 'hoops' ), COURSE_FASTEST );
+		assert.equal( fastestFor( 'sprint' ), FASTEST );
+		const route = makeRoute( { kind: 'hoops', size: 'week', world: 'moon', place: place( 'Copernicus crater' ) }, random() );
+		const challenge = { world: 'moon', kind: 'hoops', route };
+		// At the cruise, and at the boost's top flat out: taken; quicker than that, not.
+		for ( const speed of [ COURSE.cruise / 3.6, COURSE_FASTEST ] ) {
+
+			const { ms, passes } = flown( challenge, speed );
+			assert.ok( checkPasses( challenge, ms, passes ), `${ speed } m/s` );
+
+		}
+
+		const quick = flown( challenge, COURSE_FASTEST * 1.3 );
+		assert.equal( checkPasses( challenge, quick.ms, quick.passes ), false );
+		// The same passes as a sprint (the ground's FASTEST): too quick.
+		const cruise = flown( challenge, COURSE.cruise / 3.6 );
+		assert.equal( checkPasses( { ...challenge, kind: 'sprint' }, cruise.ms, cruise.passes ), false );
+		// Missed hoops: with their penalty, taken; the next leg's from the last hoop hit (flown at the top
+		// speed straight past one, quicker than the crow's way to it and on).
+		const missed = flown( challenge, COURSE_FASTEST, [ 3, 4, 9 ] );
+		assert.ok( checkPasses( challenge, missed.ms, missed.passes ) );
+		assert.equal( leastTime( challenge, missed.passes ) >= 3 * HOOP_MISS, true );
+		// A miss without its penalty, a miss marked other than 1, a miss of the finish, or a sprint's
+		// "miss": not.
+		const cheap = structuredClone( missed );
+		cheap.passes[ 3 ][ 1 ] = cheap.passes[ 2 ][ 1 ] + HOOP_MISS - 500;
+		assert.equal( checkPasses( challenge, cheap.ms, cheap.passes ), false );
+		const marked = structuredClone( missed );
+		marked.passes[ 3 ][ 2 ] = 2;
+		assert.equal( checkPasses( challenge, marked.ms, marked.passes ), false );
+		const finish = flown( challenge, COURSE_FASTEST, [ route.points.length - 1 ] );
+		assert.equal( checkPasses( challenge, finish.ms, finish.passes ), false );
+		const sprint = makeRoute( { kind: 'sprint', size: 'week', world: 'moon', place: place( 'Copernicus crater' ) }, random() );
+		const run = fairRun( { world: 'moon', kind: 'sprint', route: sprint } );
+		run.passes[ 2 ] = [ 2, run.passes[ 2 ][ 1 ], 1 ];
+		assert.equal( checkPasses( { world: 'moon', kind: 'sprint', route: sprint }, run.ms, run.passes ), false );
+
+	} );
+
+	test( 'a hoop run\'s time posted: taken with a Moon visit, its ghost checked at the course\'s speed (missed hoops not looked for in it), its least time counting each miss', async () => {
+
+		const d1 = sqliteD1();
+		const { db } = d1;
+		const starts = Date.UTC( 2026, 10, 16 );
+		const now = starts + DAY;
+		const route = makeRoute( { kind: 'hoops', size: 'week', world: 'moon', place: place( 'Copernicus crater' ) }, random() );
+		const { lastInsertRowid: id } = db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( 'week:2026-11-16', 'moon', 'hoops', 'Copernicus crater', '', JSON.stringify( route ), 'rotation', starts, starts + 7 * DAY, starts );
+		const challenge = { world: 'moon', kind: 'hoops', route };
+		const had = globalThis.caches;
+		globalThis.caches = { default: { delete: async () => true, match: async () => undefined, put: async () => {} } };
+		try {
+
+			const post = async ( name, runId, { ms, passes }, ghost = undefined ) => {
+
+				const { id: player, secret } = sqlitePlayer( d1, name );
+				const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'moon' );
+				return postOver( d1, { id: player, secret, visit, challenge: Number( id ), run: runId, ms, passes, vehicle: 'go-kart', ...( ghost === undefined ? {} : { ghost } ) }, now );
+
+			};
+			// Flown at 200 m/s, quicker than any car goes: taken.
+			const run = flown( challenge, 200 );
+			const taken = await post( 'Ann', 'a'.repeat( 16 ), run );
+			assert.equal( taken.status, 200 );
+			// With two hoops missed (the ghost flying past them well off their rings): taken too.
+			const missed = flown( challenge, 200, [ 5, 6 ] );
+			const off = fairGhost( challenge, missed.ms, missed.passes.filter( pass => ! pass[ 2 ] ) );
+			assert.equal( ( await post( 'Bea', 'b'.repeat( 16 ), missed, off ) ).status, 200 );
+			// A ghost flying faster than the course goes: turned away.
+			const fast = flown( challenge, COURSE_FASTEST );
+			const cheat = fairGhost( challenge, fast.ms, fast.passes, { alter: ghost => {
+
+				ghost.east[ 5 ] += 100000;
+
+			} } );
+			await assert.rejects( post( 'Cat', 'c'.repeat( 16 ), fast, cheat ), err => err.status === 400 );
+			// Every hoop but the finish "missed", the ghost flying straight to the finish (as near its start
+			// on a loop): its passes are possible, but it never came near the hoops it says it missed.
+			const skipping = flown( challenge, 150, route.points.slice( 0, - 1 ).map( ( _, i ) => i ) );
+			assert.ok( checkPasses( challenge, skipping.ms, skipping.passes ) );
+			const straight = fairGhost( challenge, skipping.ms, skipping.passes.filter( pass => ! pass[ 2 ] ) );
+			await assert.rejects( post( 'Dan', 'd'.repeat( 16 ), skipping, straight ), err => err.status === 400 && err.extra.fault === 'pass' );
+			assert.deepEqual( db.prepare( 'SELECT player_id FROM challenge_times ORDER BY ms' ).all().map( r => r.player_id ), [ 'AnnPlayer0000000', 'BeaPlayer0000000' ] );
+			assert.ok( HOOP_NEAR > SHAPES.moon.month.hoops.spacing[ 1 ] * Math.max( ...Object.values( HOOP_STYLES ).map( style => style.spacing ) ) );
+
+		} finally {
+
+			await Promise.all( d1.pending );
+			globalThis.caches = had;
+
+		}
+
+	} );
+
+} );
+
 describe( 'World Drive challenges: the rules', () => {
 
 	test( 'the fastest the game goes is worked out from its own numbers: the fastest ride, boosted', () => {
@@ -6029,8 +6229,9 @@ describe( 'World Drive challenges: the rules', () => {
 			const ids = picks.map( p => p.place.id );
 			for ( let i = 1; i < ids.length; i ++ ) assert.notEqual( ids[ i ], ids[ i - 1 ], `${ world } twice in a row` );
 			assert.ok( new Set( ids.slice( 0, 30 ) ).size >= ( world === 'earth' ? 14 : 20 ), `${ new Set( ids ).size } places` );
-			// Every kind comes up.
-			assert.deepEqual( [ ...new Set( picks.map( p => p.kind ) ) ].sort(), [ ...KINDS ].sort() );
+			// Every kind comes up: on a world of hoop runs (the Moon's, since 2026-11-26) only those, and
+			// elsewhere every other kind.
+			assert.deepEqual( [ ...new Set( picks.map( p => p.kind ) ) ].sort(), HOOP_WORLDS.includes( world ) ? [ 'hoops' ] : KINDS.filter( kind => kind !== 'hoops' ).sort() );
 
 		}
 
@@ -7900,7 +8101,7 @@ describe( 'World Drive challenges', () => {
 			const period = parsePeriod( c.key );
 			assert.equal( c.startsAt, period.starts );
 			assert.equal( c.endsAt, period.ends );
-			assert.equal( c.route.points.length, { sprint: SHAPES[ c.world ][ c.period ].sprint.gates, collect: SHAPES[ c.world ][ c.period ].collect.items, landmark: 1 }[ c.kind ] );
+			assert.equal( c.route.points.length, { sprint: SHAPES[ c.world ][ c.period ].sprint.gates, collect: SHAPES[ c.world ][ c.period ].collect.items, landmark: 1, hoops: SHAPES[ c.world ][ c.period ].hoops?.hoops }[ c.kind ] );
 			assert.deepEqual( [ c.total, c.top, c.me ], [ 0, [], null ] );
 			// As this process, another instance with the same secret, works it out: the place, the kind and
 			// the route, the Moon's and Mars's checked on their heights too (each from its own file).
@@ -7910,7 +8111,9 @@ describe( 'World Drive challenges', () => {
 			assert.equal( pick.kind, c.kind );
 			const made = await challengeFor( env, period, c.world, pick, CHALLENGE_DAY );
 			assert.deepEqual( JSON.parse( made.route ), c.route );
-			if ( c.world === 'moon' ) assert.equal( movableFaults( c.route ), 0, c.place );
+			// (A hoop run's hoops are flown over, and one on a slope is lifted clear of it by the page:
+			// on the roughest ground, a rim or a pole, the fewest steep of the tries may be one or two.)
+			if ( c.world === 'moon' ) assert.ok( movableFaults( c.route ) <= ( c.kind === 'hoops' ? 2 : 0 ), c.place );
 			if ( c.world === 'mars' ) assert.equal( movableFaults( c.route, 'mars' ), 0, c.place );
 
 		}

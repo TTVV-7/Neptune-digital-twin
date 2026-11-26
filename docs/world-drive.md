@@ -69,7 +69,9 @@ address, and the construction app is unchanged by it.
    world from ([picking a world](#picking-a-world-the-orrery)).
 6. **Challenges** (under **Worlds** on the panel, and in the pause menu): a daily, a weekly
    and a monthly one on each world, a checkpoint sprint, a hunt for stars or a drive to a landmark
-   against the clock, each with its own board ([Challenges](#challenges)).
+   against the clock, each with its own board ([Challenges](#challenges)). The Moon's are **hoop
+   runs**, flown in the plane through hoops over its real ground, with a boost tank, carve boosts and
+   trick boosts ([Hoop runs](#hoop-runs-the-moons-since-2026-11-26)).
 7. **Discoveries and the data lens** (on the Moon, Mars, Vesta and Ceres): glowing beacons at real
    named places, the landing sites and the great craters, volcanoes and peaks, to drive or fly to and
    collect, each with a card of true facts and its height in the very data the ground is built from,
@@ -243,8 +245,9 @@ that speed is out of their sight in seconds anyway.
 
 **What it scores and what it doesn't.** Its own tricks score (below); everything else is kept apart:
 
-- **No challenges.** T does nothing during a challenge's countdown or run ("No plane during a
-  challenge run"), so no board's time is ever flown. Times are still checked against the fastest
+- **No challenges, but hoop runs.** T does nothing during a challenge's countdown or run ("No plane
+  during a challenge run"), so no driven board's time is ever flown. A hoop run (the Moon's) is flown
+  instead, in course mode ([Hoop runs](#hoop-runs-the-moons-since-2026-11-26)). Times are still checked against the fastest
   anything drives along the ground (`FASTEST` in `challenge-rules.js`), which the plane isn't.
 - **No car stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
   out. As a plane there's no hop, drift or booster. Its run carries on once it's down: what its tricks
@@ -6304,6 +6307,60 @@ day's pick, and the Worker turns one away (400). The **Daily winner** achievemen
 (`retired: true`, `shownTo`): those who have it keep it and see it, nobody else sees it or counts it
 in "n / total", and **Weekly winner** (first on a weekly board) is new beside it. The rest of this
 section was written with three a world and says "daily" where it describes how they worked.
+
+### Hoop runs (the Moon's, since 2026-11-26)
+
+Few people drove the Moon's challenges, and most visits leave after about a minute, so the Moon's
+weekly and monthly challenges (and its daily ones, if `CHALLENGE_PERIODS` brings them back) are
+**hoop runs**: the ride turns into a plane and flies a line of hoops against the clock, with the same
+boards, ghosts, Retry and links as the rest. Every other world keeps its sprints, star hunts and
+landmark drives. (`HOOP_WORLDS` in `challenge-rules.js`; `kindFor` gives the Moon nothing else.
+Design: `docs/superpowers/specs/2026-11-26-moon-hoop-runs-design.md`.)
+
+**The course is the place's own.** `hoopStyle` reads what kind of place the rotation picked from its
+name and region, and `layHoops` lays it out in that style (`HOOP_STYLES`):
+
+| Place | Examples | Turns | Hoops over the ground |
+| --- | --- | --- | --- |
+| crater | Copernicus, Tycho, a dropped pin | weaving left and right, 20-55° | 12-60 m |
+| mountain | Mons Huygens, Selenean summit | spiralling one way, 25-40° | 20-90 m |
+| valley | Hadley Rille, Vallis Schröteri | gently either way, 5-25° | 8-30 m |
+| sea | Mare Imbrium, Oceanus Procellarum | a hard slalom, 35-70° | 6-25 m |
+| landing site | Tranquility Base, Lunokhod 1 | one way, coming back round to the lander | 10-45 m |
+| basin or pole | South Pole-Aitken, Shackleton | long, either way, every fifth hoop a dive to 6 m | 15-140 m |
+
+12, 18 or 26 hoops (a day's, a week's, a month's), 450-900 m apart, each 16 m round; 3, 4 or 6
+boost orbs off the line beside legs spread along it; 1, 2 or 3 **trick hoops** (pink, at least 70 m
+up so there's room to loop). A route's points are `[ lat, lon, up ]`, `up` the hoop's middle in
+metres over the ground there: the Worker and the page have the same Moon heights, so the absolute
+height is never stored. The page lifts a hoop on a slope till its ring clears the ground beside it by
+2 m (`clearHoop`), and the Worker's check keeps the try with the fewest hoops on steep ground.
+
+**Course mode** (`src/plane.js`'s `COURSE_MODE`, on only during a hoop run): every ride flies the
+same. It cruises at 450 km/h by itself and never hovers. **W boosts** to 900 km/h, burning a 5-bar
+tank (3 at the start) a bar a second; **S** brakes, to 220 km/h at slowest. A dive gains speed and a
+climb costs it. Holding a hard turn charges a **carve** (yellow, teal, pink at 0.7, 1.5 and 2.5 s,
+turning tighter as it charges); letting go fires a burst of 15, 25 or 40 % over the cruise. Rolls and
+loops paid within 3 s of a hoop are a **trick boost**, +1 bar (+2 after a trick hoop). Orbs add a bar
+and come back 6 s later. A wall knocks it down to its least. It's held over the start for the
+countdown, flies no higher than 600 m over the ground, and T can't bail out of it. On a touch screen
+GAS is the boost.
+
+**Missing a hoop** (crossing its plane outside the ring, within 400 m of it, or flying through the
+hoop after it) puts 3 s on the clock at once (`HOOP_MISS`) and is posted as `[ index, ms, 1 ]`. Only
+one hoop can be skipped that way: flying through a hoop further on counts for nothing, so a loop's
+finish by its start can't be flown to straight away. The finish can't be missed: it's flown through,
+or the run isn't done. The HUD adds a dot for each hoop, the
+tank and the carve's charge; the finish card says how many were missed.
+
+**Checking a time.** A hoop run is checked against the course mode's top speed, 250 m/s
+(`COURSE_FASTEST`, `fastestFor`), rather than the ground's 119 m/s. A missed hoop doesn't say where the
+plane was, so the next leg is measured from the last hoop hit with all the time since; each miss must
+come at least `HOOP_MISS` after the pass before it. The ghost is checked at the same speed, and at a
+missed hoop it must have been within 1.5 km of it (`HOOP_NEAR`, more than any leg) rather than
+through it: every hoop "missed" on the way to the finish, the ghost flying straight there, is turned
+away. `scripts/test-drive-plane.mjs` fails if `COURSE_KMH` in `plane.js` and
+`COURSE` in `challenge-rules.js` part ways.
 
 ### What players see
 

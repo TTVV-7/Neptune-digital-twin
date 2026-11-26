@@ -603,12 +603,13 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// ride drives on as on the ground). Its effects (bursts, fewer on a phone and calmer for those
 		// asking for less motion) as screen-fx.js sets them.
 		fly: false, booster: true, drift: true, crash: 'launch', water, effects: { detail: 1, calm: false },
-		// T: plane mode (plane.js): not during a challenge's run, and its distance not counted for
+		// T: plane mode (plane.js): not during a challenge's run (but a hoop run's), and its distance not counted for
 		// levels (driven). Its rolls and loops score through payTricks as a jump's tricks do (bounded:
 		// plane-tricks.js), and its run carries on once it's down, so runScore isn't touched here:
 		// landed() works out each pass's points from the run's score as for any jump.
 		plane: true,
-		canPlane: () => challenges?.run && [ 'countdown', 'racing' ].includes( challenges.run.phase ) ? 'No plane during a challenge run' : null,
+		// (A hoop run, the Moon's, is flown: challenges.js makes the ride a plane for it.)
+		canPlane: () => challenges?.run && [ 'countdown', 'racing' ].includes( challenges.run.phase ) && challenges.run.challenge.kind !== 'hoops' ? 'No plane during a challenge run' : null,
 	} );
 	// Speed lines, overdrive's flashing edges and the camera's jolts and shakes, with their switch in
 	// the pause menu (screen-fx.js).

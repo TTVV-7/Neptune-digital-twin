@@ -25,7 +25,7 @@ import { after, before, describe, test } from 'node:test';
 import { MOON_SPOTS } from '../src/drive-app/moon-places.js';
 import { SPOTS } from '../src/drive-app/places.js';
 import { cellOf } from '../src/drive-app/dropin-cells.js';
-import { checkPasses, destination, formatTime } from '../src/drive-app/challenge-rules.js';
+import { HOOP_MISS, checkPasses, destination, formatTime } from '../src/drive-app/challenge-rules.js';
 import { GHOST_BYTES, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, sampleTime } from '../src/drive-app/ghost-rules.js';
 import { startVite } from './worker-harness.mjs';
 import { HOP, OPENER, openWorlds, pickWorld, radio, worldShown } from './worlds-ui.mjs';
@@ -596,6 +596,105 @@ describe( 'World Drive challenges on the Moon', () => {
 			assert.deepEqual( [ page.posted[ 0 ].challenge, page.posted[ 0 ].visit, page.posted[ 0 ].id, page.posted[ 0 ].ms ], [ 22, MOON_VISIT, PLAYER.id, ms ] );
 			assert.ok( checkPasses( CHALLENGES[ 1 ], page.posted[ 0 ].ms, page.posted[ 0 ].passes ) );
 			await shot( page, 'challenges-moon-3-finish' );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a hoop run on the Moon: the ride a plane held over the start till GO, then away in course mode; a hoop flown through, one flown over (missed: its penalty on the clock), an orb taken, the finish; the time posted with the miss', async () => {
+
+		const at = ( north, up ) => {
+
+			const [ lat, lon ] = destination( 'moon', TRANQUILITY.lat, TRANQUILITY.lon, 0, north );
+			return [ Math.round( lat * 1e6 ) / 1e6, Math.round( lon * 1e6 ) / 1e6, up ];
+
+		};
+		const [ orbLat, orbLon ] = at( 450, 40 );
+		const HOOPS = { id: 23, period: 'week', key: 'week:2026-11-16', world: 'moon', kind: 'hoops', place: 'Tranquility Base', region: TRANQUILITY.region, route: { start: { lat: TRANQUILITY.lat, lon: TRANQUILITY.lon, heading: 0 }, points: [ at( 300, 30 ), at( 700, 40 ), at( 1100, 30 ) ], radius: 16, orbs: [ [ orbLat, orbLon, 40 ] ], tricks: [ 1 ], style: 'landing' }, startsAt: - 3600e3, endsAt: 3600e3, total: 0, top: [], me: null };
+		const page = await newPage();
+		try {
+
+			page.posted = [];
+			await page.addInitScript( player => localStorage.setItem( 'world-drive.player', JSON.stringify( player ) ), PLAYER );
+			const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
+			await page.route( 'https://challenges.cloudflare.com/turnstile/**', route => route.fulfill( { contentType: 'text/javascript', body: `window.turnstile = { render( el, options ) { setTimeout( () => options.callback( '${ TOKEN }' ), 50 ); return 'w1'; }, remove() {}, reset() {} };` } ) );
+			await page.route( `${ BASE }/api/config`, route => json( route, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true } ) );
+			await page.route( `${ BASE }/api/visit`, route => json( route, { error: 'Today\'s free drives are used up', reason: 'daily', retryAfter: 3600, visit: MOON_VISIT }, 429 ) );
+			await page.route( `${ BASE }/api/challenges?*`, route => json( route, { now: Date.now(), challenges: [ { ...HOOPS, startsAt: Date.now() - 3600e3, endsAt: Date.now() + 3600e3 } ] } ) );
+			await page.route( `${ BASE }/api/challenges/time`, route => {
+
+				const body = JSON.parse( route.request().postData() );
+				page.posted.push( body );
+				json( route, { ms: body.ms, rank: 1, total: 1, isNewBest: true, top: [ { rank: 1, name: PLAYER.name, ms: body.ms, vehicle: 'go-kart', date: '2026-11-16', level: 1, title: 'rookie' } ] } );
+
+			} );
+			await page.goto( BASE );
+			await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
+			await page.locator( '#globe-ui .challenges-open' ).click();
+			const dialog = page.locator( '#challenges' );
+			const card = dialog.locator( '.ch-card[data-id="23"]' );
+			await card.waitFor();
+			assert.match( await card.textContent(), /Hoop run · 3 hoops · 1\.1 km · 1 boost orbs · 1 trick hoop/ );
+			await shot( page, 'hoops-1-list' );
+			await card.locator( '.ch-start' ).click();
+			await page.waitForFunction( () => window.drive.mode === 'driving' && window.drive.challenges.run?.challenge.id === 23, null, { timeout: 120000 } );
+			// A plane in course mode, held over the start; the hoops at their heights over the Moon's ground.
+			await page.waitForFunction( () => window.drive.driver.aircraft?.on && window.drive.driver.aircraft.course?.held, null, { timeout: 60000 } );
+			const hoops = await page.evaluate( () => window.drive.challenges.run.gates.map( g => ( { up: g.y - g.ground, ray: window.drive.ground.heightAt( g.x, g.z ), ground: g.ground, north: g.z, trick: g.trick } ) ) );
+			assert.deepEqual( hoops.map( h => Math.round( h.up ) ), [ 30, 40, 30 ] );
+			assert.deepEqual( hoops.map( h => h.trick ), [ false, true, false ] );
+			for ( const h of hoops ) assert.ok( h.ray !== null && Math.abs( h.ground - h.ray ) < 1, JSON.stringify( h ) );
+			assert.ok( await page.evaluate( () => ! document.querySelector( '.ch-hud .ch-course' ).hidden && document.querySelectorAll( '.ch-hud .ch-dots i' ).length === 3 ) );
+			await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 180000 } );
+			assert.ok( await page.evaluate( () => window.drive.driver.aircraft.course && ! window.drive.driver.aircraft.course.held && window.drive.driver.speed > 100 ) );
+			await shot( page, 'hoops-2-racing' );
+			// T does nothing: no bailing out.
+			await page.keyboard.press( 'KeyT' );
+			assert.equal( await page.evaluate( () => window.drive.driver.aircraft.phase ), 'flying' );
+			// Flown at each hoop as a pilot would: through the first's middle, 60 m over the second (missed),
+			// through the orb on the way, and through the finish.
+			const flown = await page.evaluate( () => new Promise( resolve => {
+
+				let tank = null;
+				const step = () => {
+
+					const { run } = window.drive.challenges;
+					const d = window.drive.driver;
+					if ( ! run || run.phase === 'done' ) return resolve( { ms: run?.ms ?? null, tank } );
+					const g = run.gates.find( gate => ! gate.passed );
+					const orb = run.orbs[ 0 ];
+					const aim = g.index === 1 && orb.back <= 0 ? orb : g;
+					const heading = Math.atan2( - aim.x - d.east, aim.z - d.north ) * 180 / Math.PI;
+					const y = aim === orb ? orb.y : g.index === 1 ? g.y + 60 : g.y;
+					Object.assign( d, { heading, course: heading, y: y - d.height / 2 } );
+					if ( orb.back > 0 && tank === null ) tank = d.aircraft.course.tank;
+					requestAnimationFrame( step );
+
+				};
+
+				step();
+
+			} ) );
+			await page.locator( '.ch-finish' ).waitFor();
+			await page.waitForFunction( () => /^#\d/.test( document.querySelector( '.ch-f-note' ).textContent ), null, { timeout: 30000 } );
+			// The orb filled the tank (it starts at 3 bars).
+			assert.ok( flown.tank > 3, JSON.stringify( flown ) );
+			assert.equal( await page.locator( '.ch-f-missed' ).textContent(), '1 hoop missed (+3.0 s)' );
+			assert.equal( page.posted.length, 1 );
+			const [ post ] = page.posted;
+			assert.equal( post.ms, flown.ms );
+			assert.deepEqual( post.passes.map( pass => [ pass[ 0 ], pass[ 2 ] ?? 0 ] ), [ [ 0, 0 ], [ 1, 1 ], [ 2, 0 ] ] );
+			assert.ok( post.passes[ 1 ][ 1 ] - post.passes[ 0 ][ 1 ] >= HOOP_MISS - 1 );
+			assert.ok( checkPasses( HOOPS, post.ms, post.passes ) );
+			assert.ok( ghostFault( HOOPS, post.ms, post.passes, post.ghost ) === '', ghostFault( HOOPS, post.ms, post.passes, post.ghost ) );
+			// Off course mode once it's done.
+			assert.equal( await page.evaluate( () => window.drive.driver.aircraft.course ), null );
+			await shot( page, 'hoops-3-finish' );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {

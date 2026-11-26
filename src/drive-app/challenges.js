@@ -5,7 +5,7 @@ import {
 } from 'three';
 import { send } from './api.js';
 import { createRaceGhost, createRecorder } from './challenge-ghost.js';
-import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_NAMES, TALL, ZONE_UP, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
+import { GRACE, HOOP_MISS, KIND_NAMES, destination, LINK_PATH, PERIOD_NAMES, TALL, ZONE_UP, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
 import { ghostFault } from './ghost-rules.js';
 import { LEVEL_MAX, levelLine } from './levels.js';
 import { EARTH, WORLDS, onWorld, OnWorld, WORLD_IDS } from './worlds.js';
@@ -75,6 +75,19 @@ const COURSE_MOVE = 12;
 const WAVE = 90;
 const WAVE_TIME = 1.1;
 const COURSE_MOST = 64;
+// A hoop run (the Moon's: docs/world-drive.md, "Hoop runs"): hoops drawn their route's radius round
+// (the ring's tube HOOP_TUBE of it), standing at their height over the ground, a trick hoop pink;
+// orbs ORB across, taken within ORB_REACH m (a bar of boost each) and back ORB_BACK s later. A hoop's
+// plane crossed outside its ring within MISS_REACH m of it misses it (as flying through a later one
+// misses those before it); further off, it's not near it at all. The plane is held START_UP m over
+// the start's ground till GO (or as high as the first hoop, if that's higher).
+const HOOP_TUBE = 0.045;
+const ORB = 3.2;
+const ORB_REACH = 14;
+const ORB_BACK = 6;
+const MISS_REACH = 400;
+const START_UP = 30;
+const HOOP_CLEAR = 2;
 // The marker on the screen over the next gate (or star): this far (m) over its top, kept EDGE px in
 // from the screen's sides when the gate's off the screen or behind.
 const MARKER_UP = 4;
@@ -99,6 +112,9 @@ const NEXT = new Color( 0xffd23f );
 const LATER = new Color( 0x3ec1ff ).multiplyScalar( 0.75 );
 const GOAL = new Color( 0x5dff8a );
 const STAR = new Color( 0xffc531 );
+const TRICK = new Color( 0xff4fa8 );
+const ORB_COLOUR = new Color( 0x3ec1ff );
+const MISSED = new Color( 0xff6b5e ).multiplyScalar( 0.6 );
 // A post that didn't get through is tried again after RETRY ms, TRIES times in all (a 429 asking
 // for longer than WAIT_MOST s isn't waited for: it's the day's times used up). One that still
 // hasn't (no connection, the Worker failing) is kept here and posted again when the browser says
@@ -129,7 +145,7 @@ const GHOST_SHOWN = 'world-drive.ghost';
 const GHOST_ICON = '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 2.5c-3.6 0-6 2.7-6 6.3v8.7l2-1.6 2 1.6 2-1.6 2 1.6 2-1.6 2 1.6V8.8c0-3.6-2.4-6.3-6-6.3z" fill="currentColor"/><circle cx="7.6" cy="8.6" r="1.3" fill="#0b1220"/><circle cx="12.4" cy="8.6" r="1.3" fill="#0b1220"/></svg>';
 const SHARE_ICON = '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 2.5v10M6.2 6.2 10 2.5l3.8 3.7M4 10.5v6h12v-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 // How a challenge's kind is said in a share's words, and its period.
-const SHARE_KINDS = { sprint: 'sprint', collect: 'star hunt', landmark: 'drive' };
+const SHARE_KINDS = { sprint: 'sprint', collect: 'star hunt', landmark: 'drive', hoops: 'hoop run' };
 const SHARE_PERIODS = { day: 'today\'s', week: 'this week\'s', month: 'this month\'s' };
 const LINK_PERIODS = { day: 'daily', week: 'weekly', month: 'monthly' };
 const FLAG = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg>';
@@ -166,6 +182,8 @@ export function setUpChallenges( app ) {
 	const hudParts = {
 		clock: hud.querySelector( '.ch-clock' ), gates: hud.querySelector( '.ch-gates' ), dist: hud.querySelector( '.ch-dist' ), arrow: hud.querySelector( '.ch-arrow' ),
 		split: hud.querySelector( '.ch-split' ), ghost: hud.querySelector( '.ch-ghost-toggle' ),
+		course: hud.querySelector( '.ch-course' ), dots: hud.querySelector( '.ch-dots' ), tank: hud.querySelector( '.ch-tank' ),
+		bars: [ ...hud.querySelectorAll( '.ch-tank i' ) ], carve: hud.querySelector( '.ch-carve' ),
 	};
 	const written = {};
 	const count = Object.assign( document.createElement( 'div' ), { className: 'ch-count', hidden: true } );
@@ -725,6 +743,7 @@ export function setUpChallenges( app ) {
 		const d = app.driver;
 		const reading = app.keys?.() ?? false;
 		run = { challenge, gates: placeGates( challenge ), start: { east: d.east, north: d.north, heading: d.heading, up: d.y }, phase: 'countdown', left: reading ? READING : COUNTDOWN, clock: 0, after: 0, passes: [], id: runId() };
+		if ( challenge.kind === 'hoops' ) takeOff( run );
 		meshes.show( run );
 		showHud();
 		probeIn = 0;
@@ -893,17 +912,46 @@ export function setUpChallenges( app ) {
 		const moonly = !! heights;
 		const base = app.place()?.height ?? 0;
 		const ordered = challenge.kind !== 'collect';
-		const gates = challenge.route.points.map( ( [ lat, lon ], index ) => {
+		const hoops = challenge.kind === 'hoops';
+		const tricks = new Set( challenge.route.tricks ?? [] );
+		const gates = challenge.route.points.map( ( [ lat, lon, up = 0 ], index ) => {
 
-			const height = moonly ? heights.heightAt( lat, lon ) ?? base : base;
+			// (A hoop's middle `up` m over its ground: `height` is the hoop's own, its beam from the ground.)
+			const under = moonly ? heights.heightAt( lat, lon ) ?? base : base;
+			const height = under + ( hoops ? up : 0 );
+			const ground = moonly ? sceneOf( globe, lat, lon, under ).y : null;
 			const local = sceneOf( globe, lat, lon, height ).clone();
-			const ground = moonly ? local.y : null;
-			return { index, lat, lon, height, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0, probed: moonly };
+			return { index, lat, lon, height, under, x: local.x, y: local.y, z: local.z, ground, top: ground, guess: local.y, passed: false, missed: false, facing: 0, probed: moonly, hoop: hoops, trick: tricks.has( index ) };
 
 		} );
 		const d = app.driver;
 		face( gates, ordered, { x: - d.east, z: d.north } );
+		if ( hoops && moonly ) for ( const gate of gates ) clearHoop( challenge, gate, heights );
 		return gates;
+
+	}
+
+	// A hoop on a slope lifted till its ring clears the ground beside it (HOOP_CLEAR m under its
+	// bottom at its sides as well as its middle): its middle is `up` m over the ground under it, which
+	// on a crater's wall leaves the uphill side of the ring in the ground. (Its place across the ground
+	// is the route's, so what the Worker checks is as it was.)
+	function clearHoop( challenge, gate, heights ) {
+
+		const { world, route } = challenge;
+		// (The way it faces as a bearing: the scene's x is west.)
+		const bearing = - gate.facing * MathUtils.RAD2DEG;
+		let high = - Infinity;
+		for ( const turn of [ - 90, 90 ] ) {
+
+			const [ lat, lon ] = destination( world, gate.lat, gate.lon, bearing + turn, route.radius );
+			high = Math.max( high, heights.heightAt( lat, lon ) ?? - Infinity );
+
+		}
+
+		const lift = high + HOOP_CLEAR + route.radius - gate.height;
+		if ( ! ( lift > 0 ) ) return;
+		gate.height += lift;
+		gate.y = sceneOf( app.globe, gate.lat, gate.lon, gate.height ).y;
 
 	}
 
@@ -944,8 +992,9 @@ export function setUpChallenges( app ) {
 
 			for ( const gate of run.gates ) {
 
+				const ground = sceneOf( app.globe, gate.lat, gate.lon, gate.under ?? gate.height ).y;
 				const local = sceneOf( app.globe, gate.lat, gate.lon, gate.height );
-				Object.assign( gate, { x: local.x, z: local.z, ground: local.y, top: local.y, guess: local.y } );
+				Object.assign( gate, { x: local.x, y: local.y, z: local.z, ground, top: ground, guess: ground } );
 
 			}
 
@@ -1041,6 +1090,7 @@ export function setUpChallenges( app ) {
 				showCount( 'GO!', true );
 				app.stats.add( 'challenge', 'start' );
 				app.go?.();
+				if ( run.challenge.kind === 'hoops' ) d.aircraft?.courseGo();
 				// Its recording from here, the car as it is at GO.
 				const pivot = app.pivot?.();
 				if ( pivot ) recorder.start( pivot );
@@ -1053,7 +1103,12 @@ export function setUpChallenges( app ) {
 			// (Recorded before the passes: the last of them finishes it, this frame.)
 			const pivot = app.pivot?.();
 			if ( pivot ) recorder.frame( run.clock * 1000, pivot );
-			passGates( d );
+			if ( run.challenge.kind === 'hoops' ) {
+
+				takeOrbs( d, dt );
+				passHoops( d );
+
+			} else passGates( d );
 
 		} else if ( run.phase === 'done' && driving && ! finish.hidden ) {
 
@@ -1138,9 +1193,137 @@ export function setUpChallenges( app ) {
 
 	}
 
+	// --- a hoop run ---
+
+	// A hoop run's start (its first go, and each Retry): the ride a plane in course mode, held over the
+	// start till GO (src/plane.js), and its orbs all there.
+	function takeOff( shown ) {
+
+		const d = app.driver;
+		const { route, world } = shown.challenge;
+		const heights = app.bodies?.[ world ];
+		shown.orbs = ( route.orbs ?? [] ).map( ( [ lat, lon, up ] ) => {
+
+			const local = sceneOf( app.globe, lat, lon, ( heights?.heightAt( lat, lon ) ?? 0 ) + up );
+			return { x: local.x, y: local.y, z: local.z, back: 0 };
+
+		} );
+		shown.lastAt = null;
+		const plane = d.aircraft;
+		if ( ! plane ) return;
+		if ( ! plane.on ) d.togglePlane();
+		plane.setCourse( Math.max( START_UP, route.points[ 0 ]?.[ 2 ] ?? 0 ) );
+
+	}
+
+	// Orbs flown through: a bar of boost each, back ORB_BACK s later.
+	function takeOrbs( d, dt ) {
+
+		const at = { x: - d.east, y: d.y + ( d.height ?? 1.5 ) / 2, z: d.north };
+		let changed = false;
+		for ( const orb of run.orbs ?? [] ) {
+
+			if ( orb.back > 0 ) {
+
+				orb.back -= dt;
+				changed ||= orb.back <= 0;
+				continue;
+
+			}
+
+			if ( Math.hypot( at.x - orb.x, at.y - orb.y, at.z - orb.z ) > ORB_REACH ) continue;
+			orb.back = ORB_BACK;
+			changed = true;
+			d.aircraft?.courseFill( 1 );
+			d.hud.flash( '+1 boost' );
+
+		}
+
+		if ( changed ) meshes.place( run );
+
+	}
+
+	// The plane's hoops this frame: the next hoop's plane (as it stands, across the way to it) crossed
+	// from where it was the frame before, through its ring (within the route's radius of its middle)
+	// or outside it (within MISS_REACH: missed); or the hoop after it flown through, which misses it
+	// (one at most: a hoop further on, a loop's finish by its start, doesn't skip the course). The
+	// finish can't be missed: it's flown through, or it's not done.
+	function passHoops( d ) {
+
+		const at = { x: - d.east, y: d.y + ( d.height ?? 1.5 ) / 2, z: d.north };
+		const was = run.lastAt ?? at;
+		run.lastAt = at;
+		const radius = run.challenge.route.radius;
+		const next = run.gates.findIndex( gate => ! gate.passed );
+		if ( next < 0 ) return;
+		const last = run.gates.length - 1;
+		for ( let j = next; j <= Math.min( last, next + 1 ); j ++ ) {
+
+			const gate = run.gates[ j ];
+			const nx = Math.sin( gate.facing );
+			const nz = Math.cos( gate.facing );
+			const s0 = ( was.x - gate.x ) * nx + ( was.z - gate.z ) * nz;
+			const s1 = ( at.x - gate.x ) * nx + ( at.z - gate.z ) * nz;
+			if ( s0 === s1 || ( s0 < 0 ) === ( s1 < 0 ) ) continue;
+			// Where it crossed, between the two.
+			const u = s0 / ( s0 - s1 );
+			const side = ( was.x + ( at.x - was.x ) * u - gate.x ) * nz - ( was.z + ( at.z - was.z ) * u - gate.z ) * nx;
+			const up = was.y + ( at.y - was.y ) * u - gate.y;
+			const off = Math.hypot( side, up );
+			const through = off <= radius;
+			if ( ! through && ( j !== next || off > MISS_REACH ) ) continue;
+			if ( ! through && j === last ) {
+
+				d.hud.flash( 'Missed the finish! Turn back through it' );
+				return;
+
+			}
+
+			for ( let k = next; k < j; k ++ ) missHoop( d, run.gates[ k ] );
+			if ( through ) hitHoop( d, gate );
+			else missHoop( d, gate );
+			meshes.colour( run );
+			if ( run.passes.length === run.gates.length ) finished();
+			return;
+
+		}
+
+	}
+
+	function hitHoop( d, gate ) {
+
+		gate.passed = true;
+		run.passes.push( [ gate.index, Math.round( run.clock * 1000 ) ] );
+		d.aircraft?.courseHoop( gate.trick );
+		const done = run.passes.length;
+		const total = run.gates.length;
+		if ( done < total ) d.hud.flash( gate.trick ? 'Trick hoop! Roll or loop for +2 boost' : `Hoop ${ done } / ${ total }` );
+		const split = splitAt( gate.index, done );
+		if ( split !== null ) {
+
+			run.splits = [ ...run.splits ?? [], split ];
+			showSplit( split );
+
+		}
+
+	}
+
+	// A hoop missed: HOOP_MISS on the clock at once (challenge-rules.js), posted as [ index, ms, 1 ].
+	function missHoop( d, gate ) {
+
+		gate.passed = true;
+		gate.missed = true;
+		run.clock += HOOP_MISS / 1000;
+		run.passes.push( [ gate.index, Math.round( run.clock * 1000 ), 1 ] );
+		d.hud.flash( `Missed a hoop! +${ ( HOOP_MISS / 1000 ).toFixed( 1 ) } s` );
+
+	}
+
 	function finished() {
 
 		run.phase = 'done';
+		// (A hoop run's plane flies on as a plane, out of its course: slowing to a hover under the card.)
+		app.driver.aircraft?.setCourse( null );
 		// Slowing to a stop in STOPPING s from here (frame), nothing pushing it on.
 		run.stopping = Math.abs( app.driver.speed ) / STOPPING;
 		cutThrust( app.driver );
@@ -1181,6 +1364,7 @@ export function setUpChallenges( app ) {
 	// start, which the ghost was got ready for).
 	function end( keepGhost = false ) {
 
+		if ( run?.challenge.kind === 'hoops' ) app.driver.aircraft?.setCourse( null );
 		run = null;
 		naming = null;
 		meshes.hide();
@@ -1201,6 +1385,7 @@ export function setUpChallenges( app ) {
 		if ( run?.phase === 'done' ) return end();
 		if ( ! run || ( run.phase !== 'countdown' && run.phase !== 'racing' ) ) return;
 		run.phase = 'stopped';
+		if ( run.challenge.kind === 'hoops' ) app.driver.aircraft?.setCourse( null );
 		meshes.hide();
 		showingHud( false );
 		count.hidden = true;
@@ -1249,8 +1434,9 @@ export function setUpChallenges( app ) {
 
 		const { start, gates } = run;
 		if ( ! app.placeCar( start ) ) return;
-		for ( const gate of gates ) gate.passed = false;
+		for ( const gate of gates ) gate.passed = gate.missed = false;
 		run = { challenge, gates, start, phase: 'countdown', left: COUNTDOWN, clock: 0, after: 0, passes: [], id: runId() };
+		if ( challenge.kind === 'hoops' ) takeOff( run );
 		probing = null;
 		meshes.show( run );
 		showHud();
@@ -1269,6 +1455,10 @@ export function setUpChallenges( app ) {
 		showingHud( true );
 		hud.dataset.kind = run.challenge.kind;
 		hudParts.split.hidden = true;
+		// A hoop run's: a dot for each hoop, the carve's charge and the boost tank.
+		const hooped = run.challenge.kind === 'hoops';
+		hudParts.course.hidden = ! hooped;
+		if ( hooped ) hudParts.dots.replaceChildren( ...run.gates.map( gate => el( 'i', gate.trick ? 'trick' : '' ) ) );
 		showGhostToggle();
 		updateHud( app.driver );
 
@@ -1308,7 +1498,9 @@ export function setUpChallenges( app ) {
 		if ( hud.hidden ) return;
 		const done = run.phase === 'done';
 		write( 'clock', formatTime( done ? run.ms : run.clock * 1000 ) );
-		write( 'gates', run.challenge.kind === 'landmark' ? run.challenge.route.goal : `${ run.passes.length } / ${ run.gates.length }${ run.challenge.kind === 'collect' ? ' ★' : '' }` );
+		write( 'gates', run.challenge.kind === 'landmark' ? run.challenge.route.goal : `${ run.passes.length } / ${ run.gates.length }${ run.challenge.kind === 'collect' ? ' ★' : run.challenge.kind === 'hoops' ? ' hoops' : '' }` );
+		// (Once it's done, as it was over the line: its course mode's off by then.)
+		if ( run.challenge.kind === 'hoops' && ! done ) updateCourse( d );
 		const target = done ? null : nextGate( d );
 		write( 'aim', target ? '' : 'none', () => hudParts.arrow.hidden = hudParts.dist.hidden = marker.root.hidden = ! target );
 		if ( ! target ) return;
@@ -1324,6 +1516,42 @@ export function setUpChallenges( app ) {
 
 	}
 
+	// A hoop run's part of the HUD: each hoop's dot (hit, missed or to come), the boost tank (a bar
+	// each, the last part-full) and the carve's charge (its level's colour, filling to the next).
+	function updateCourse( d ) {
+
+		write( 'dots', run.gates.map( gate => gate.missed ? 'm' : gate.passed ? 'h' : '-' ).join( '' ), () => {
+
+			run.gates.forEach( ( gate, i ) => {
+
+				const dot = hudParts.dots.children[ i ];
+				dot?.classList.toggle( 'hit', gate.passed && ! gate.missed );
+				dot?.classList.toggle( 'missed', gate.missed );
+
+			} );
+
+		} );
+		const course = d.aircraft?.course;
+		const tank = course ? Math.round( course.tank * 20 ) / 20 : 0;
+		write( 'tank', tank, () => {
+
+			hudParts.bars.forEach( ( bar, i ) => bar.style.setProperty( '--fill', String( MathUtils.clamp( tank - i, 0, 1 ) ) ) );
+			hudParts.tank.setAttribute( 'aria-valuenow', tank.toFixed( 1 ) );
+			hudParts.tank.classList.toggle( 'empty', tank <= 0 );
+
+		} );
+		const level = course?.level ?? 0;
+		const charging = course && course.carve > 0 ? 'on' : '';
+		write( 'carve', `${ level }${ charging }`, () => {
+
+			hudParts.carve.dataset.level = String( level );
+			hudParts.carve.classList.toggle( 'on', !! charging );
+			hudParts.carve.textContent = level ? [ 'I', 'II', 'III' ][ level - 1 ] : '';
+
+		} );
+
+	}
+
 	// The marker over the next gate (or star) on the screen, with how far it is: where it is in the
 	// view, or held at the screen's edge on its side when it's off the screen (or behind you, turned
 	// round to the side it's on), pointing to it there. Coloured as the gate is.
@@ -1331,7 +1559,7 @@ export function setUpChallenges( app ) {
 
 		const ringed = run.challenge.kind !== 'collect';
 		const ring = Math.min( RING, run.challenge.route.radius * 0.5 );
-		const y = ( target.ground ?? target.guess ) + ( ringed ? ring * 2 + 0.6 : ITEM_UP + ITEM ) + MARKER_UP;
+		const y = target.hoop ? target.y + run.challenge.route.radius + MARKER_UP : ( target.ground ?? target.guess ) + ( ringed ? ring * 2 + 0.6 : ITEM_UP + ITEM ) + MARKER_UP;
 		const camera = app.camera;
 		camera.getWorldPosition( _s );
 		camera.getWorldDirection( _v );
@@ -1408,6 +1636,12 @@ export function setUpChallenges( app ) {
 		const { challenge, ms } = result;
 		finish.querySelector( '.ch-f-title' ).textContent = `${ PERIOD_NAMES[ challenge.period ] }: ${ challenge.place }`;
 		finish.querySelector( '.ch-f-time' ).textContent = formatTime( ms );
+		// A hoop run's misses, and what they cost.
+		const misses = result.passes.filter( pass => pass[ 2 ] === 1 ).length;
+		const missed = finish.querySelector( '.ch-f-missed' );
+		missed.hidden = challenge.kind !== 'hoops';
+		missed.textContent = misses ? `${ misses } hoop${ misses === 1 ? '' : 's' } missed (+${ ( misses * HOOP_MISS / 1000 ).toFixed( 1 ) } s)` : 'Every hoop!';
+		missed.classList.toggle( 'clean', ! misses );
 		finish.querySelector( '.ch-f-rows' ).replaceChildren();
 		finish.querySelector( '.ch-f-form' ).hidden = true;
 		finish.querySelector( '.ch-f-share' ).replaceChildren();
@@ -1650,6 +1884,7 @@ export function setUpChallenges( app ) {
 			<p class="ch-f-title" id="ch-f-title"></p>
 			<p class="ch-f-time"></p>
 			<p class="ch-f-badge" hidden>New best!</p>
+			<p class="ch-f-missed" hidden></p>
 			<p class="ch-f-vs" hidden></p>
 			<p class="ch-f-note" role="status"></p>
 			<div class="ch-f-share"></div>
@@ -1771,11 +2006,14 @@ export function setUpChallenges( app ) {
 		const beams = new InstancedMesh( beamGeometry, new MeshBasicMaterial( { transparent: true, opacity: 0.6, alphaMap: alpha, depthWrite: false, side: DoubleSide, forceSinglePass: true, toneMapped: false } ), most );
 		const rings = new InstancedMesh( new TorusGeometry( 1, RING_TUBE, 6, 36 ), new MeshBasicMaterial( { toneMapped: false } ), most );
 		const items = new InstancedMesh( new OctahedronGeometry( 1 ), new MeshBasicMaterial( { toneMapped: false } ), most );
+		// A hoop run's: its hoops (a thicker ring, its route's radius round) and its orbs.
+		const hoops = new InstancedMesh( new TorusGeometry( 1, HOOP_TUBE, 8, 64 ), new MeshBasicMaterial( { toneMapped: false } ), most );
+		const orbs = new InstancedMesh( new OctahedronGeometry( 1, 2 ), new MeshBasicMaterial( { color: ORB_COLOUR, transparent: true, opacity: 0.85, toneMapped: false } ), most );
 		// The course's chevrons: a V pointing along +z, standing on the ground leaned forward.
 		const vee = new Shape( [ [ 0, 0.6 ], [ 1, - 0.4 ], [ 1, - 0.9 ], [ 0, 0.1 ], [ - 1, - 0.9 ], [ - 1, - 0.4 ] ].map( ( [ x, y ] ) => new Vector2( x, y ) ) );
 		const chevrons = new InstancedMesh( new ShapeGeometry( vee ).translate( 0, 0.9, 0 ).rotateX( Math.PI / 2 - CHEVRON_LEAN ), new MeshBasicMaterial( { transparent: true, opacity: 0.9, depthWrite: false, side: DoubleSide, toneMapped: false } ), COURSE_MOST );
 		chevrons.setColorAt( 0, NEXT );
-		for ( const mesh of [ beams, rings, items, chevrons ] ) {
+		for ( const mesh of [ beams, rings, items, chevrons, hoops, orbs ] ) {
 
 			mesh.frustumCulled = false;
 			mesh.count = 0;
@@ -1800,28 +2038,31 @@ export function setUpChallenges( app ) {
 		let laidFor = null;
 		const added = () => !! beams.parent;
 		return {
-			beams, rings, items, chevrons,
+			beams, rings, items, chevrons, hoops, orbs,
 			show( shown ) {
 
-				const ringed = shown.challenge.kind !== 'collect';
-				if ( ! added() ) app.scene.add( beams, rings, items, chevrons );
+				const hooped = shown.challenge.kind === 'hoops';
+				const ringed = shown.challenge.kind !== 'collect' && ! hooped;
+				if ( ! added() ) app.scene.add( beams, rings, items, chevrons, hoops, orbs );
 				chevrons.count = 0;
 				laid = [];
 				laidFor = null;
-				beams.count = rings.count = items.count = 0;
+				beams.count = rings.count = items.count = hoops.count = orbs.count = 0;
 				beams.count = shown.gates.length;
-				( ringed ? rings : items ).count = shown.gates.length;
+				( hooped ? hoops : ringed ? rings : items ).count = shown.gates.length;
+				orbs.count = hooped ? Math.min( most, shown.orbs?.length ?? 0 ) : 0;
 				rings.visible = ringed;
-				items.visible = ! ringed;
+				items.visible = ! ringed && ! hooped;
+				hoops.visible = orbs.visible = hooped;
 				this.place( shown );
 				this.colour( shown );
 				// (Its bounds made again for this route's gates when it's next drawn.)
-				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = null;
+				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = hoops.boundingSphere = orbs.boundingSphere = null;
 
 			},
 			hide() {
 
-				if ( added() ) app.scene.remove( beams, rings, items, chevrons );
+				if ( added() ) app.scene.remove( beams, rings, items, chevrons, hoops, orbs );
 
 			},
 			// The scene's been moved (recentred): each where its gate now is, the course laid again
@@ -1831,7 +2072,7 @@ export function setUpChallenges( app ) {
 
 				laidFor = null;
 				this.place( shown );
-				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = chevrons.boundingSphere = null;
+				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = chevrons.boundingSphere = hoops.boundingSphere = orbs.boundingSphere = null;
 
 			},
 			// Where each is: at its ground (or its guess), a passed one shrunk to nothing. With
@@ -1840,6 +2081,7 @@ export function setUpChallenges( app ) {
 
 				const moonly = shown.challenge.world !== EARTH;
 				const radius = shown.challenge.route.radius;
+				const hooped = shown.challenge.kind === 'hoops';
 				const ringed = shown.challenge.kind !== 'collect';
 				const ring = Math.min( RING, radius * 0.5 );
 				const next = ringed ? shown.gates.find( gate => ! gate.passed ) : null;
@@ -1851,12 +2093,23 @@ export function setUpChallenges( app ) {
 					if ( ! ringed ) items.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ITEM_UP, gate.z ), _q.setFromAxisAngle( _up, spin + i ), _s.set( ITEM * gone, ITEM * 1.4 * gone, ITEM * gone ) ) );
 					if ( itemsOnly ) return;
 					const wide = ( moonly ? 1.6 : 1 ) * BEAM * ( ringed ? 1 : 0.7 ) * ( gate === next ? NEXT_WIDE : 1 );
-					beams.setMatrixAt( i, _m.compose( _v.set( gate.x, y, gate.z ), _q.identity(), _s.set( wide * gone, ( moonly ? 2 : 1 ) * BEAM_HIGH * gone, wide * gone ) ) );
+					// (A hoop's from its top up, so its middle's clear to fly through.)
+					beams.setMatrixAt( i, _m.compose( _v.set( gate.x, hooped ? gate.y + radius : y, gate.z ), _q.identity(), _s.set( wide * gone, ( moonly ? 2 : 1 ) * BEAM_HIGH * gone, wide * gone ) ) );
 					// Standing up, facing along the way to it; the next one breathing.
 					const size = ring * gone * ( gate === next ? breathe : 1 );
-					if ( ringed ) rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( size ) ) );
+					// A hoop at its own height, its route's radius round (a passed one gone, a missed one
+					// left, dim, where it was missed).
+					if ( hooped ) hoops.setMatrixAt( i, _m.compose( _v.set( gate.x, gate.y, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( radius * ( gate.passed && ! gate.missed ? 0 : 1 ) * ( gate === next ? breathe : 1 ) ) ) );
+					else if ( ringed ) rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( size ) ) );
 
 				} );
+				if ( hooped ) {
+
+					( shown.orbs ?? [] ).slice( 0, most ).forEach( ( orb, i ) => orbs.setMatrixAt( i, _m.compose( _v.set( orb.x, orb.y, orb.z ), _q.setFromAxisAngle( _up, spin + i ), _s.setScalar( orb.back > 0 ? 0 : ORB ) ) ) );
+					orbs.instanceMatrix.needsUpdate = true;
+					hoops.instanceMatrix.needsUpdate = true;
+
+				}
 				items.instanceMatrix.needsUpdate = true;
 				if ( itemsOnly ) return;
 				beams.instanceMatrix.needsUpdate = true;
@@ -1870,12 +2123,12 @@ export function setUpChallenges( app ) {
 				const next = ordered ? shown.gates.find( gate => ! gate.passed ) : null;
 				shown.gates.forEach( ( gate, i ) => {
 
-					const colour = ! ordered ? STAR : gate === next ? NEXT : i === shown.gates.length - 1 ? GOAL : LATER;
+					const colour = ! ordered ? STAR : gate.missed ? MISSED : i === shown.gates.length - 1 ? GOAL : gate.trick ? TRICK : gate === next ? NEXT : LATER;
 					beams.setColorAt( i, colour );
-					( ordered ? rings : items ).setColorAt( i, colour );
+					( gate.hoop ? hoops : ordered ? rings : items ).setColorAt( i, colour );
 
 				} );
-				for ( const mesh of [ beams, rings, items ] ) if ( mesh.instanceColor ) mesh.instanceColor.needsUpdate = true;
+				for ( const mesh of [ beams, rings, items, hoops ] ) if ( mesh.instanceColor ) mesh.instanceColor.needsUpdate = true;
 				this.place( shown );
 
 			},
@@ -1887,6 +2140,13 @@ export function setUpChallenges( app ) {
 
 					spin = ( spin + dt * SPIN ) % ( Math.PI * 2 );
 					this.place( shown, true );
+
+				} else if ( shown.challenge.kind === 'hoops' ) {
+
+					// Its orbs turn and its next hoop breathes: placed again (32 at most each).
+					spin = ( spin + dt * SPIN ) % ( Math.PI * 2 );
+					pulse = ( pulse + dt * PULSE_RATE ) % ( Math.PI * 2 );
+					if ( shown.phase !== 'stopped' ) this.place( shown );
 
 				} else if ( shown.phase !== 'done' ) {
 
@@ -2044,7 +2304,7 @@ function makeHud( parent ) {
 	const root = document.createElement( 'div' );
 	root.className = 'ch-hud';
 	root.hidden = true;
-	root.innerHTML = `<span class="ch-arrow" aria-hidden="true"><svg viewBox="0 0 20 20" width="22" height="22"><path d="M10 2 17 16 10 12.5 3 16z" fill="currentColor"/></svg></span><span class="ch-dist"></span><span class="ch-clock">0:00.00</span><span class="ch-gates"></span><span class="ch-split" role="status" hidden></span><button type="button" class="ch-ghost-toggle" aria-pressed="true" hidden>${ GHOST_ICON }<span>Ghost</span></button>`;
+	root.innerHTML = `<span class="ch-arrow" aria-hidden="true"><svg viewBox="0 0 20 20" width="22" height="22"><path d="M10 2 17 16 10 12.5 3 16z" fill="currentColor"/></svg></span><span class="ch-dist"></span><span class="ch-clock">0:00.00</span><span class="ch-gates"></span><span class="ch-split" role="status" hidden></span><button type="button" class="ch-ghost-toggle" aria-pressed="true" hidden>${ GHOST_ICON }<span>Ghost</span></button><div class="ch-course" hidden><span class="ch-dots" aria-hidden="true"></span><span class="ch-carve" aria-hidden="true"></span><span class="ch-tank" role="meter" aria-label="Boost" aria-valuemin="0" aria-valuemax="5"><b>Boost</b><i></i><i></i><i></i><i></i><i></i></span></div>`;
 	root.setAttribute( 'aria-label', 'Challenge' );
 	parent.append( root );
 	return root;

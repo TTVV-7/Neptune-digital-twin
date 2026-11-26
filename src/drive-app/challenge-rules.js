@@ -25,9 +25,13 @@ export const WORLDS = WORLD_IDS;
 // before go on working, and CHALLENGE_PERIODS "day,week,month" would bring them back.
 export const PERIODS = [ 'day', 'week', 'month' ];
 export const PERIOD_KINDS = [ 'week', 'month' ];
-export const KINDS = [ 'sprint', 'collect', 'landmark' ];
+export const KINDS = [ 'sprint', 'collect', 'landmark', 'hoops' ];
 export const PERIOD_NAMES = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
-export const KIND_NAMES = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark' };
+export const KIND_NAMES = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark', hoops: 'Hoop run' };
+// The worlds whose challenges are all hoop runs (since 2026-11-26: few drove the Moon's, and its
+// open, airless ground suits the plane): flown in the plane's course mode (src/plane.js) through
+// hoops standing over the ground, rather than driven (docs/world-drive.md, "Hoop runs").
+export const HOOP_WORLDS = [ 'moon' ];
 
 // The fastest anything in the game goes along the ground (m/s), which no leg of a route can be
 // driven faster than: the fastest ride's top speed, the hypercar's 215 km/h (src/drive-app/cars.js),
@@ -42,6 +46,28 @@ export const KIND_NAMES = { sprint: 'Checkpoint sprint', collect: 'Collect them 
 export const TOP_SPEED = 215;
 export const BOOSTED = 2;
 export const FASTEST = TOP_SPEED * BOOSTED / 3.6;
+// A hoop run is flown in the plane's course mode (src/plane.js's COURSE, which reads these): it
+// cruises at `cruise` km/h by itself, boosts to `boost` at most (nothing in course mode goes faster:
+// a dive, a carve's burst and a boost all stop there) and brakes to `least`. So a hoop run's legs and
+// its ghost are checked against COURSE_FASTEST (250 m/s) instead of the ground's FASTEST.
+export const COURSE = { cruise: 450, boost: 900, least: 220 };
+export const COURSE_FASTEST = COURSE.boost / 3.6;
+// A hoop missed (flown past, or through a later one) puts this much (ms) on a hoop run's clock at
+// once, and is posted as [ index, ms, 1 ]: so cutting straight to a later hoop doesn't pay.
+export const HOOP_MISS = 3000;
+// A missed hoop was still flown by: the run's ghost is within this (m) of it across the ground at the
+// miss's time (ghost-rules.js), so a run can't skip a course by missing every hoop on the way to a
+// finish near its start (a landing site's loop). More than any hoop run's legs (900 m at most, a
+// basin's 1.25 times that), as a hoop skipped is missed where the next is flown through.
+export const HOOP_NEAR = 1500;
+
+// The fastest (m/s) a challenge of `kind` can be gone round: the plane's course mode for a hoop run,
+// the ground's for the rest.
+export function fastestFor( kind ) {
+
+	return kind === 'hoops' ? COURSE_FASTEST : FASTEST;
+
+}
 // A run's time is the game's own clock: the steps the frames drove the car by, each at most 0.1 s
 // (main.js), so a pass is seen up to a step after the car got there. Each leg may be that much
 // quicker than FASTEST allows (ms).
@@ -104,6 +130,47 @@ export const SHAPES = {
 		month: { sprint: { gates: 14, spacing: [ 400, 600 ], turn: 65, radius: 40 }, collect: { items: 15, within: 900, apart: 150, radius: 22 }, landmark: { distance: [ 6000, 8500 ], spread: 180, radius: 60 } },
 	},
 };
+// A hoop run (the Moon's): `hoops` hoops `spacing` m apart (times its style's share, below), each
+// `radius` m round, with `orbs` boost orbs off the line and `tricks` trick hoops. About 60 to 90 s for
+// a good pilot a week's, two minutes or so a month's.
+//   hoops: { hoops, spacing: [ m, m ], radius, orbs, tricks }
+SHAPES.moon.day.hoops = { hoops: 12, spacing: [ 450, 700 ], radius: 16, orbs: 3, tricks: 1 };
+SHAPES.moon.week.hoops = { hoops: 18, spacing: [ 500, 800 ], radius: 16, orbs: 4, tricks: 2 };
+SHAPES.moon.month.hoops = { hoops: 26, spacing: [ 600, 900 ], radius: 16, orbs: 6, tricks: 3 };
+// How a hoop run is laid out at each kind of place (hoopStyle), so the course is the place's own:
+//   turn: [ °, ° ] how sharp each turn is; pattern: 'weave' (left and right in turn), 'spiral' (one
+//   way all round), 'wander' (either way), 'loop' (one way, coming back round to the start);
+//   up: [ m, m ] how high each hoop's middle is over the ground under it; spacing: a share of the
+//   shape's; dives: every DIVE_EVERY'th hoop down low (DIVE_UP m).
+export const HOOP_STYLES = {
+	crater: { turn: [ 20, 55 ], pattern: 'weave', up: [ 12, 60 ], spacing: 1 },
+	mountain: { turn: [ 25, 40 ], pattern: 'spiral', up: [ 20, 90 ], spacing: 0.9 },
+	valley: { turn: [ 5, 25 ], pattern: 'wander', up: [ 8, 30 ], spacing: 1.1 },
+	sea: { turn: [ 35, 70 ], pattern: 'weave', up: [ 6, 25 ], spacing: 0.8 },
+	landing: { turn: [ 0, 0 ], pattern: 'loop', up: [ 10, 45 ], spacing: 0.85 },
+	basin: { turn: [ 10, 40 ], pattern: 'wander', up: [ 15, 140 ], spacing: 1.25, dives: true },
+};
+// A trick hoop is at least this high (m) over the ground, so a loop can be started under it
+// (plane-tricks.js's loopGate at the cruise); a dive's hoop this low; orbs this far (m) off the line.
+export const TRICK_UP = 70;
+export const DIVE_UP = 6;
+const DIVE_EVERY = 5;
+const ORB_OFF = [ 60, 140 ];
+
+// The kind of place `place` ({ id?, name, region? }) is, for its hoop run's style: by the words in
+// its id, name and region (world-places.js's places, or a drop-in place's name). A crater by default.
+export function hoopStyle( place ) {
+
+	const text = `${ place.id ?? '' } ${ place.name ?? '' } ${ place.region ?? '' }`.toLowerCase();
+	if ( /rille|vallis|valley/.test( text ) ) return 'valley';
+	if ( /apollo|lunokhod|chang'?e|chandrayaan|shiv shakti|tranquility base|ranger|surveyor|luna \d/.test( text ) ) return 'landing';
+	if ( /\bmons\b|montes|summit|highlands|mountain|peak/.test( text ) ) return 'mountain';
+	if ( /pole|basin|aitken|orientale|lowest/.test( text ) ) return 'basin';
+	if ( /\bmare\b|oceanus|sea of|ocean of/.test( text ) ) return 'sea';
+	return 'crater';
+
+}
+
 SHAPES.mars = SHAPES.moon;
 SHAPES.vesta = {
 	day: { ...SHAPES.moon.day, sprint: { ...SHAPES.moon.day.sprint, turn: 35 } },
@@ -229,8 +296,9 @@ export function randomFrom( bytes ) {
 }
 
 // One of KIND_ODDS[ period kind ]'s kinds, for a random number `u`.
-export function kindFor( periodKind, u ) {
+export function kindFor( periodKind, u, world = null ) {
 
+	if ( HOOP_WORLDS.includes( world ) ) return 'hoops';
 	let sum = 0;
 	for ( const [ kind, odds ] of KIND_ODDS[ periodKind ] ) {
 
@@ -306,6 +374,7 @@ function layOut( kind, world, place, shape, random ) {
 
 	const known = Number.isFinite( place.heading );
 	const at = ( lat, lon ) => [ round( lat ), round( lon ) ];
+	if ( kind === 'hoops' ) return layHoops( world, place, shape, random );
 	if ( kind === 'sprint' ) {
 
 		// Along the place's road first, then turning a little at each gate.
@@ -348,6 +417,72 @@ function layOut( kind, world, place, shape, random ) {
 	// way).
 	const back = known ? place.heading + 180 + ( random() * 2 - 1 ) * shape.spread : random() * 360;
 	return landmarkFrom( world, place, shape, back, between( shape.distance, random ) );
+
+}
+
+// A hoop run at `place` (`shape` SHAPES' hoops): laid out in its style (hoopStyle, HOOP_STYLES) from
+// the place, each hoop `up` m over the ground under it ([ lat, lon, up ], the page finding the ground
+// on the heights it has), the last the finish. Trick hoops (route.tricks, their indices: never the
+// first or the finish) stand high enough to loop under; orbs (route.orbs, [ lat, lon, up ]) beside
+// legs spread along it, off the line to one side or the other.
+function layHoops( world, place, shape, random ) {
+
+	const style = hoopStyle( place );
+	const { turn, pattern, up, spacing, dives } = HOOP_STYLES[ style ];
+	const count = shape.hoops;
+	let bearing = Number.isFinite( place.heading ) ? place.heading : random() * 360;
+	const side = random() < 0.5 ? - 1 : 1;
+	const loop = 360 / count;
+	let [ lat, lon ] = [ place.lat, place.lon ];
+	const spots = [];
+	for ( let i = 0; i < count; i ++ ) {
+
+		if ( i ) {
+
+			const sharp = turn[ 0 ] + ( turn[ 1 ] - turn[ 0 ] ) * random();
+			if ( pattern === 'weave' ) bearing += sharp * ( i % 2 ? side : - side );
+			else if ( pattern === 'spiral' ) bearing += sharp * side;
+			else if ( pattern === 'loop' ) bearing += ( loop + ( random() * 2 - 1 ) * loop * 0.15 ) * side;
+			else bearing += sharp * ( random() < 0.5 ? - 1 : 1 );
+
+		} else if ( pattern === 'loop' ) bearing += loop / 2 * side;
+
+		[ lat, lon ] = destination( world, lat, lon, bearing, between( shape.spacing, random ) * spacing );
+		let height = up[ 0 ] + ( up[ 1 ] - up[ 0 ] ) * random() ** 1.5;
+		if ( dives && i % DIVE_EVERY === DIVE_EVERY - 1 ) height = DIVE_UP;
+		spots.push( [ lat, lon, height ] );
+
+	}
+
+	// Trick hoops: spread along it, between the first and the finish.
+	const tricks = [];
+	for ( let k = 0; k < Math.min( shape.tricks, count - 2 ); k ++ ) {
+
+		let index = 1 + Math.floor( ( k + 0.3 + random() * 0.4 ) * ( count - 2 ) / shape.tricks );
+		while ( tricks.includes( index ) ) index = index % ( count - 2 ) + 1;
+		tricks.push( index );
+		spots[ index ][ 2 ] = Math.max( spots[ index ][ 2 ], TRICK_UP );
+
+	}
+
+	tricks.sort( ( a, b ) => a - b );
+	// Orbs: beside legs spread along the run (from the start or a hoop to the next), off its line.
+	const orbs = [];
+	for ( let k = 0; k < shape.orbs; k ++ ) {
+
+		const leg = Math.min( count - 1, Math.floor( ( k + 0.5 ) * count / shape.orbs ) );
+		const [ aLat, aLon, aUp ] = leg ? spots[ leg - 1 ] : [ place.lat, place.lon, spots[ 0 ][ 2 ] ];
+		const [ bLat, bLon, bUp ] = spots[ leg ];
+		const along = bearingTo( world, aLat, aLon, bLat, bLon );
+		const half = metresOn( world, aLat, aLon, bLat, bLon ) * ( 0.35 + random() * 0.3 );
+		const [ mLat, mLon ] = destination( world, aLat, aLon, along, half );
+		const [ oLat, oLon ] = destination( world, mLat, mLon, along + ( random() < 0.5 ? - 90 : 90 ), between( ORB_OFF, random ) );
+		orbs.push( [ round( oLat ), round( oLon ), Math.round( ( aUp + bUp ) / 2 ) ] );
+
+	}
+
+	const points = spots.map( ( [ pLat, pLon, height ] ) => [ round( pLat ), round( pLon ), Math.round( height ) ] );
+	return { start: start( place.lat, place.lon, bearingTo( world, place.lat, place.lon, points[ 0 ][ 0 ], points[ 0 ][ 1 ] ) ), points, radius: shape.radius, orbs, tricks, style };
 
 }
 
@@ -429,23 +564,33 @@ const LEG_SCALE = Object.fromEntries( WORLD_IDS.map( id => {
 
 // The least time (ms) a leg can take: from within `fromRadius` of `from` ([ lat, lon ]) to within
 // `toRadius` of `to`, along the ground at FASTEST (on the deepest ground the world has: LEG_SCALE).
-export function legMinimum( world, from, fromRadius, to, toRadius ) {
+export function legMinimum( world, from, fromRadius, to, toRadius, fastest = FASTEST ) {
 
-	return Math.max( 0, metresOn( world, from[ 0 ], from[ 1 ], to[ 0 ], to[ 1 ] ) * ( LEG_SCALE[ world ] ?? 1 ) - fromRadius - toRadius ) / FASTEST * 1000;
+	return Math.max( 0, metresOn( world, from[ 0 ], from[ 1 ], to[ 0 ], to[ 1 ] ) * ( LEG_SCALE[ world ] ?? 1 ) - fromRadius - toRadius ) / fastest * 1000;
 
 }
 
 // The least time (ms) a run with `passes` (checkPasses' kind, in the order passed) could take on
 // `challenge`'s route ({ world, route }): each leg's legMinimum, added up. A time near it was driven
 // as straight as the crow flies at the game's top speed, boosted all the way.
-export function leastTime( { world, route }, passes ) {
+export function leastTime( { world, kind, route }, passes ) {
 
 	let from = [ route.start.lat, route.start.lon ];
 	let fromRadius = START_SLACK;
 	let least = 0;
-	for ( const [ index ] of passes ) {
+	const fastest = fastestFor( kind );
+	for ( const [ index, , missed ] of passes ) {
 
-		least += legMinimum( world, from, fromRadius, route.points[ index ], route.radius );
+		// (A hoop missed: wherever the plane was, so the next leg's from the last one hit; its penalty
+		// is time it didn't fly.)
+		if ( missed ) {
+
+			least += HOOP_MISS;
+			continue;
+
+		}
+
+		least += legMinimum( world, from, fromRadius, route.points[ index ], route.radius, fastest );
 		from = route.points[ index ];
 		fromRadius = route.radius;
 
@@ -464,23 +609,38 @@ export function checkPasses( { world, kind, route }, ms, passes ) {
 
 	const count = route.points.length;
 	if ( ! Number.isSafeInteger( ms ) || ms <= 0 || ms > MAX_RUN || ! Array.isArray( passes ) || passes.length !== count ) return false;
+	const hoops = kind === 'hoops';
+	const fastest = fastestFor( kind );
 	const seen = new Set();
 	let from = [ route.start.lat, route.start.lon ];
 	let fromRadius = START_SLACK;
+	let fromAt = 0;
 	let last = 0;
 	for ( let i = 0; i < count; i ++ ) {
 
 		const pass = passes[ i ];
-		if ( ! Array.isArray( pass ) || pass.length !== 2 ) return false;
+		// A hoop run's missed hoop is [ index, ms, 1 ] (never its finish), its time at least HOOP_MISS
+		// after the pass before (the penalty went on the clock as it was missed).
+		const missed = hoops && Array.isArray( pass ) && pass.length === 3 && pass[ 2 ] === 1;
+		if ( ! Array.isArray( pass ) || ( pass.length !== 2 && ! missed ) || ( missed && i === count - 1 ) ) return false;
 		const [ index, at ] = pass;
 		if ( ! Number.isInteger( index ) || index < 0 || index >= count || seen.has( index ) || ( kind !== 'collect' && index !== i ) ) return false;
 		if ( ! Number.isSafeInteger( at ) || at < last || at > ms ) return false;
-		const point = route.points[ index ];
-		if ( at - last < legMinimum( world, from, fromRadius, point, route.radius ) - LEG_SLACK ) return false;
 		seen.add( index );
+		if ( missed ) {
+
+			// (Wherever the plane was: the next leg is from the last hoop hit, with all the time since.)
+			if ( at - last < HOOP_MISS - 1 ) return false;
+			last = at;
+			continue;
+
+		}
+
+		const point = route.points[ index ];
+		if ( at - fromAt < legMinimum( world, from, fromRadius, point, route.radius, fastest ) - LEG_SLACK ) return false;
 		from = point;
 		fromRadius = route.radius;
-		last = at;
+		fromAt = last = at;
 
 	}
 
@@ -529,6 +689,13 @@ export function describe( { world, kind, route } ) {
 
 	const km = metres => metres >= 1000 ? `${ ( metres / 1000 ).toFixed( 1 ) } km` : `${ Math.round( metres / 10 ) * 10 } m`;
 	if ( kind === 'sprint' ) return `${ route.points.length } gates · ${ km( routeLength( world, route ) ) }`;
+	if ( kind === 'hoops' ) {
+
+		const orbs = route.orbs?.length ?? 0;
+		const tricks = route.tricks?.length ?? 0;
+		return [ `${ route.points.length } hoops`, km( routeLength( world, route ) ), ...orbs ? [ `${ orbs } boost orbs` ] : [], ...tricks ? [ `${ tricks } trick hoop${ tricks === 1 ? '' : 's' }` ] : [] ].join( ' · ' );
+
+	}
 	if ( kind === 'collect' ) {
 
 		const reach = Math.max( ...route.points.map( ( [ lat, lon ] ) => metresOn( world, route.start.lat, route.start.lon, lat, lon ) ) );

@@ -1,7 +1,7 @@
 import { HttpError, base64url, isObject, json, jsonText, readJson } from '../http.js';
 import { cellMiddle, cellOf, checkCell, metresOn } from '../../src/drive-app/dropin-cells.js';
 import {
-	GRACE, KINDS, KIND_NAMES, LINK_PATH, PERIODS, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, formatTime, kindFor, leastTime, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf,
+	GRACE, HOOP_WORLDS, KINDS, KIND_NAMES, LINK_PATH, PERIODS, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, formatTime, kindFor, leastTime, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf,
 	periodsAt, randomFrom, rankText,
 } from '../../src/drive-app/challenge-rules.js';
 import { GHOST_TEXT, ghostFault } from '../../src/drive-app/ghost-rules.js';
@@ -490,7 +490,7 @@ export function linkWords( { challenge, vs }, now ) {
 	// ("on the Moon", "on Mars": worlds.js's words for each.)
 	const on = world !== EARTH && isWorld( world ) ? ` ${ onWorld( world ) }` : '';
 	const where = `${ place }${ on }`;
-	const what = { sprint: 'sprint', collect: 'star hunt', landmark: `drive to ${ route.goal ?? place }` }[ kind ];
+	const what = { sprint: 'sprint', collect: 'star hunt', landmark: `drive to ${ route.goal ?? place }`, hoops: 'hoop run' }[ kind ];
 	const which = { day: 'today\'s', week: 'this week\'s', month: 'this month\'s' }[ period ];
 	const named = { day: 'daily', week: 'weekly', month: 'monthly' }[ period ];
 	const full = `${ KIND_NAMES[ kind ].toLowerCase() } at ${ place }${ region ? ` (${ region })` : '' }${ on }`;
@@ -1236,7 +1236,7 @@ async function rotate( env, period, world, approved, places, fixed ) {
 
 	}
 
-	const kind = kindFor( period.kind, randomFrom( await seed( env, `kind:${ period.key }:${ world }` ) )() );
+	const kind = kindFor( period.kind, randomFrom( await seed( env, `kind:${ period.key }:${ world }` ) )(), world );
 	return { place: order[ at ], kind, source: 'rotation' };
 
 }
@@ -1306,6 +1306,8 @@ async function checkPick( context, db, body ) {
 
 	const { world, kind, place } = body;
 	if ( ! KINDS.includes( kind ) || ! isObject( place ) ) throw bad();
+	// (A hoop run only where the plane's course is laid out: HOOP_WORLDS, whose SHAPES have one.)
+	if ( kind === 'hoops' && ! HOOP_WORLDS.includes( world ) ) throw bad();
 	if ( typeof place.featured === 'string' ) {
 
 		const found = FEATURED[ world ].find( p => p.id === place.featured );
@@ -1729,7 +1731,8 @@ export function routeFaults( world, route, kind, enough = Infinity ) {
 	const points = [ [ route.start.lat, route.start.lon ], ...route.points ];
 	const own = kind === 'landmark' ? 1 : 0;
 	let faults = points.filter( ( point, i ) => i !== own && steepOn( world, ...point ) ).length * POINT_FAULTS;
-	if ( kind === 'collect' ) return faults;
+	// (Collectibles are taken in any order; a hoop run's plane flies over what's between its hoops.)
+	if ( kind === 'collect' || kind === 'hoops' ) return faults;
 	for ( let i = 1; i < points.length && faults < enough; i ++ ) faults += legFaultsOn( world, ...points[ i - 1 ], ...points[ i ], enough - faults );
 	return faults;
 

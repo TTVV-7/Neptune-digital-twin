@@ -1,4 +1,4 @@
-import { FASTEST, START_SLACK, TALL, ZONE_UP } from './challenge-rules.js';
+import { HOOP_NEAR, START_SLACK, TALL, ZONE_UP, fastestFor } from './challenge-rules.js';
 import { RADIUS } from './dropin-cells.js';
 import { inFrame, levelFrame, levelled, pointOn } from './level.js';
 import { EARTH, isWorld } from './worlds.js';
@@ -321,12 +321,13 @@ function wrap( steps ) {
 //     the time between them (and SAMPLE_SLACK), other than the game's own jumps (R's few metres on,
 //     or back onto the path it drove), and no more of those than a run of its length is let have.
 //   'pass': a point not within its radius (and PASS_SLACK, and on a world with a level spheroid
-//     what its zone's lean adds) at its pass time, nor at a sample either side of it.
+//     what its zone's lean adds) at its pass time, nor at a sample either side of it; a hoop run's
+//     missed hoop, not within HOOP_NEAR of it.
 // Passes and the time are checkPasses' already (the Worker asks that first). In centimetres and
 // their squares, a sample at a time, with nothing made on the way (but, on a world with a level
 // spheroid, a few short arrays for the start and each pass): it's the Worker's to do for every time
 // posted, within the Free plan's 10 ms of CPU.
-export function ghostFault( { world, route }, ms, passes, text ) {
+export function ghostFault( { world, kind, route }, ms, passes, text ) {
 
 	if ( ! isWorld( world ) ) return 'world';
 	const ghost = readGhost( text );
@@ -343,6 +344,8 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 	const [ dx0, dy0 ] = [ east[ 0 ] - startEast * 100, north[ 0 ] - startNorth * 100 ];
 	if ( dx0 * dx0 + dy0 * dy0 > ( START_SLACK * 100 ) ** 2 ) return 'start';
 	let jumps = 0;
+	// (A hoop run's against the plane's course mode: fastestFor.)
+	const fastest = fastestFor( kind );
 	const allowed = Math.min( JUMPS_MOST, JUMPS + Math.floor( ms / JUMP_EVERY ) );
 	for ( let i = 1; i < count; i ++ ) {
 
@@ -350,7 +353,7 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 		const dy = north[ i ] - north[ i - 1 ];
 		const dz = up[ i ] - up[ i - 1 ];
 		// (Centimetres, as the samples are.)
-		const most = ( FASTEST * ( sampleTime( i, count, every, ms ) - sampleTime( i - 1, count, every, ms ) ) / 1000 + SAMPLE_SLACK ) * 100;
+		const most = ( fastest * ( sampleTime( i, count, every, ms ) - sampleTime( i - 1, count, every, ms ) ) / 1000 + SAMPLE_SLACK ) * 100;
 		const across = dx * dx + dy * dy;
 		if ( across <= most * most && dz * dz <= most * most ) continue;
 		if ( ++ jumps > allowed ) return 'speed';
@@ -359,8 +362,10 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 
 	}
 
-	for ( const [ index, at ] of passes ) {
+	for ( const [ index, at, missed ] of passes ) {
 
+		// (A hoop missed wasn't flown through, but it was flown by: within HOOP_NEAR of it.)
+		const reach = missed ? HOOP_NEAR : route.radius;
 		const [ lat, lon ] = route.points[ index ];
 		const i = Math.min( Math.floor( at / every ), count - 2 );
 		const t0 = sampleTime( i, count, every, ms );
@@ -375,7 +380,7 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 		const near = ( x, y, z ) => {
 
 			const [ e, n ] = frame ? beside( world, frame, lat, lon, z / 100 ) : localOf( world, route.start, lat, lon, z / 100 );
-			return Math.hypot( x / 100 - e, y / 100 - n ) <= route.radius + slack;
+			return Math.hypot( x / 100 - e, y / 100 - n ) <= reach + slack;
 
 		};
 		const lerp = values => values[ i ] + ( values[ i + 1 ] - values[ i ] ) * u;

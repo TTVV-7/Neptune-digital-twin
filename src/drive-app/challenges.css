@@ -993,3 +993,119 @@ button.ch-race {
 	padding: 9px 18px;
 	font-size: 14px;
 }
+
+/* A hoop run's part of the HUD (challenges.js's updateCourse): a dot for each hoop (green hit, red
+   missed, a trick hoop's ringed pink), the carve's charge as the car's drift colours it, and the
+   boost tank's five bars, each filled by --fill. Under the timer, the width of the HUD. */
+#drive-ui .ch-hud .ch-course {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	grid-template-areas: 'dots dots' 'tank carve';
+	align-items: center;
+	gap: 6px 8px;
+	margin-top: 4px;
+}
+
+#drive-ui .ch-hud .ch-course[hidden] {
+	display: none;
+}
+
+#drive-ui .ch-hud .ch-dots {
+	grid-area: dots;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 3px;
+	max-width: 190px;
+}
+
+#drive-ui .ch-hud .ch-dots i {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: rgba( 255, 255, 255, 0.22 );
+}
+
+#drive-ui .ch-hud .ch-dots i.trick {
+	box-shadow: 0 0 0 1.5px #ff4fa8;
+}
+
+#drive-ui .ch-hud .ch-dots i.hit {
+	background: #5dff8a;
+}
+
+#drive-ui .ch-hud .ch-dots i.missed {
+	background: #ff6b6b;
+}
+
+#drive-ui .ch-hud .ch-tank {
+	grid-area: tank;
+	display: grid;
+	grid-template-columns: auto repeat( 5, 1fr );
+	align-items: center;
+	gap: 3px;
+	min-width: 130px;
+}
+
+#drive-ui .ch-hud .ch-tank b {
+	margin-right: 3px;
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+#drive-ui .ch-hud .ch-tank i {
+	--fill: 0;
+	height: 9px;
+	border-radius: 3px;
+	transform: skewX( -18deg );
+	background: linear-gradient( 90deg, var( --accent ) calc( var( --fill ) * 100% ), rgba( 255, 255, 255, 0.16 ) calc( var( --fill ) * 100% ) );
+}
+
+#drive-ui .ch-hud .ch-tank.empty b {
+	color: #ff6b6b;
+}
+
+#drive-ui .ch-hud .ch-carve {
+	grid-area: carve;
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	border: 3px solid rgba( 255, 255, 255, 0.16 );
+	border-radius: 50%;
+	font: 900 italic 10px/1 var( --font );
+	color: var( --ink );
+}
+
+#drive-ui .ch-hud .ch-carve.on {
+	border-color: rgba( 255, 255, 255, 0.5 );
+}
+
+#drive-ui .ch-hud .ch-carve[data-level="1"] {
+	border-color: #ffd23f;
+	color: #ffd23f;
+}
+
+#drive-ui .ch-hud .ch-carve[data-level="2"] {
+	border-color: #2ee6c8;
+	color: #2ee6c8;
+}
+
+#drive-ui .ch-hud .ch-carve[data-level="3"] {
+	border-color: #ff4fa8;
+	color: #ff4fa8;
+}
+
+.ch-finish .ch-f-missed {
+	margin: 4px 0 0;
+	font-size: 14px;
+	font-weight: 800;
+	color: #ff6b6b;
+}
+
+.ch-finish .ch-f-missed.clean {
+	color: #5dff8a;
+}

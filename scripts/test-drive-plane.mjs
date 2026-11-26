@@ -15,7 +15,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Driver } from '../src/drive.js';
-import { DROP, PARACHUTE, PlaneMode, chuteHeight, chuteSink, dropTerminal, planeTopSpeed } from '../src/plane.js';
+import { COURSE_KMH, COURSE_MODE, DROP, PARACHUTE, PlaneMode, chuteHeight, chuteSink, dropTerminal, planeTopSpeed } from '../src/plane.js';
+import { COURSE, COURSE_FASTEST } from '../src/drive-app/challenge-rules.js';
 import { HEIGHTS, LOOP, PLANE_POINTS, PLANE_TRICKS, TURN_TOL, loopGate, loopOffset, noseAngle, planeTricksOf } from '../src/plane-tricks.js';
 import { TRICK } from '../worker/drive/scores.js';
 
@@ -514,6 +515,168 @@ describe( 'plane tricks: flown', () => {
 		fly( r, [ 'KeyQ', 'KeyZ' ], 1.2 );
 		assert.equal( r.d.air, null );
 		assert.equal( r.paid.length, 0 );
+
+	} );
+
+} );
+
+describe( 'course mode (a hoop run)', () => {
+
+	// A plane on a hoop run over the Moon's flat ground, held `up` m over it, then (if `go`) away.
+	const course = ( { up = 30, go = true, ground = () => 0 } = {} ) => {
+
+		const r = flying( rig( { gravity: G.moon, y: up, ground } ) );
+		r.plane.setCourse( up );
+		run( r, DT );
+		if ( go ) r.plane.courseGo();
+		return r;
+
+	};
+	const hold = ( r, codes, seconds, options ) => {
+
+		for ( const code of codes ) r.d.keys.add( code );
+		const t = run( r, seconds, options );
+		for ( const code of codes ) r.d.keys.delete( code );
+		return t;
+
+	};
+
+	test( 'its speeds are challenge-rules.js\'s COURSE, whose boost a hoop run\'s time is checked against', () => {
+
+		assert.deepEqual( COURSE_KMH, COURSE );
+		assert.ok( Math.abs( COURSE_MODE.boost - COURSE_FASTEST ) < 1e-9 );
+
+	} );
+
+	test( 'held at its start till GO, whatever the keys: no speed, climbing to its height; then away at the cruise', () => {
+
+		const r = flying( rig( { gravity: G.moon, y: 2 } ) );
+		r.plane.setCourse( 40 );
+		hold( r, [ 'KeyW', 'KeyD' ], 4 );
+		assert.equal( r.d.speed, 0 );
+		assert.equal( r.d.heading, 0 );
+		assert.ok( Math.abs( over( r ) - 40 ) < 2, `${ over( r ) } m up` );
+		r.plane.courseGo();
+		run( r, 3 );
+		assert.ok( Math.abs( r.d.speed - COURSE_MODE.cruise ) < 0.5 );
+		assert.ok( r.d.north > 300 );
+
+	} );
+
+	test( 'every ride flies the same: the car\'s own top speed counts for nothing', () => {
+
+		const slow = course();
+		const fast = course();
+		fast.d.spec = { topSpeed: 215 };
+		slow.d.spec = { topSpeed: 40 };
+		for ( const r of [ slow, fast ] ) hold( r, [ 'KeyW' ], 2 );
+		assert.equal( slow.d.speed, fast.d.speed );
+		assert.equal( slow.d.north, fast.d.north );
+
+	} );
+
+	test( 'W boosts to the top and no faster, burning a bar a second till it\'s empty; S brakes to its least, never a hover', () => {
+
+		const r = course();
+		let top = 0;
+		hold( r, [ 'KeyW' ], 10, { each: () => {
+
+			top = Math.max( top, r.d.speed );
+
+		} } );
+		assert.ok( Math.abs( top - COURSE_MODE.boost ) < 1e-6, `${ top }` );
+		assert.equal( r.plane.course.tank, 0 );
+		assert.ok( r.flashes.some( text => /Boost empty/.test( text ) ) );
+		// Empty, it eases back to the cruise.
+		run( r, 15 );
+		assert.ok( Math.abs( r.d.speed - COURSE_MODE.cruise ) < 2, `${ r.d.speed }` );
+		hold( r, [ 'KeyS' ], 5 );
+		assert.ok( Math.abs( r.d.speed - COURSE_MODE.least ) < 1e-6 );
+		// The tank refilled (an orb's): boost again, never past what it holds.
+		r.plane.courseFill( 1 );
+		r.plane.courseFill( 10 );
+		assert.equal( r.plane.course.tank, COURSE_MODE.tank );
+
+	} );
+
+	test( 'a dive is speed and a climb costs it; never past the boost\'s top, never under its least', () => {
+
+		const dive = course( { up: 550 } );
+		let top = 0;
+		hold( dive, [ 'ShiftLeft' ], 6, { each: () => {
+
+			top = Math.max( top, dive.d.speed );
+
+		} } );
+		assert.ok( top > COURSE_MODE.cruise + 20, `${ top }` );
+		assert.ok( top <= COURSE_MODE.boost );
+		const climb = course( { up: 20 } );
+		let low = Infinity;
+		hold( climb, [ 'Space' ], 6, { each: () => {
+
+			low = Math.min( low, climb.d.speed );
+
+		} } );
+		assert.ok( low < COURSE_MODE.cruise - 20, `${ low }` );
+		assert.ok( low >= COURSE_MODE.least );
+		// Never over its ceiling.
+		assert.ok( over( climb ) <= COURSE_MODE.ceiling + 1 );
+
+	} );
+
+	test( 'a carve: held hard into a turn it charges yellow, teal, pink, turning tighter; let go, a burst over the cruise', () => {
+
+		const r = course();
+		const before = r.d.heading;
+		hold( r, [ 'KeyD' ], 2.7 );
+		assert.equal( r.plane.course.level, 3 );
+		assert.deepEqual( r.flashes.filter( text => /^Carve!|^CARVE/.test( text ) ), [ 'Carve!', 'Carve!!', 'CARVE!!!' ] );
+		// Tighter than a plain turn's top rate would take it.
+		assert.ok( Math.abs( r.d.heading - before ) > COURSE_MODE.turn[ 1 ] * 2.7 );
+		run( r, 0.6 );
+		assert.ok( r.flashes.includes( 'Carve boost III!' ) );
+		assert.ok( r.d.speed > COURSE_MODE.cruise * 1.25, `${ r.d.speed }` );
+		run( r, 15 );
+		assert.ok( Math.abs( r.d.speed - COURSE_MODE.cruise ) < 2 );
+		// A turn too short to charge: no burst.
+		const short = course();
+		hold( short, [ 'KeyA' ], 0.4 );
+		run( short, 1 );
+		assert.ok( ! short.flashes.some( text => /Carve/.test( text ) ) );
+
+	} );
+
+	test( 'tricks soon after a hoop fill the tank (a trick hoop\'s twice as much); long after, nothing', () => {
+
+		const r = course( { up: 120 } );
+		r.plane.course.tank = 0;
+		r.plane.courseHoop( false );
+		hold( r, [ 'KeyQ' ], 1.2 );
+		run( r, 4, { until: () => ! r.d.air } );
+		assert.equal( r.plane.course.tank, COURSE_MODE.trick );
+		assert.ok( r.flashes.includes( `Trick boost! +${ COURSE_MODE.trick } boost` ) );
+		r.plane.courseHoop( true );
+		hold( r, [ 'KeyE' ], 1.2 );
+		run( r, 4, { until: () => ! r.d.air } );
+		assert.equal( r.plane.course.tank, COURSE_MODE.trick + COURSE_MODE.trickHoop );
+		// Long after a hoop.
+		r.plane.courseHoop( false );
+		run( r, COURSE_MODE.trickWindow + 1 );
+		hold( r, [ 'KeyQ' ], 1.2 );
+		run( r, 4, { until: () => ! r.d.air } );
+		assert.equal( r.plane.course.tank, COURSE_MODE.trick + COURSE_MODE.trickHoop );
+
+	} );
+
+	test( 'no bailing out during a hoop run; off again, T works as ever', () => {
+
+		const r = course();
+		r.plane.toggle();
+		assert.equal( r.plane.phase, 'flying' );
+		assert.ok( r.flashes.includes( 'No bailing out during a hoop run' ) );
+		r.plane.setCourse( null );
+		r.plane.toggle();
+		assert.equal( r.plane.phase, 'dropping' );
 
 	} );
 
