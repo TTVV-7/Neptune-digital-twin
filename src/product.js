@@ -22,6 +22,7 @@ const EXAMPLE = { name: 'North Vancouver waterfront (example)', lat: 49.3054, lo
 export const FREE_ITEMS = new Set( [
 	'jersey-barrier', 'water-barrier', 'fence-panel', 'lock-block',
 	'traffic-cone', 'traffic-drum', 'barricade-type-3-road-closed', 'delineator-post',
+	'stop-sign-post', 'stop-sign-portable',
 	'office-trailer-8x20', 'office-trailer-10x40', 'container-20', 'porta-potty',
 	'rolloff-20', 'frontload-6yd',
 	'pickup-truck', 'dump-truck-tandem', 'cargo-van',

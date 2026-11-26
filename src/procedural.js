@@ -20,6 +20,7 @@ import { CRANE_ITEMS } from './crane-models.js';
 import { TRUCK_ITEMS } from './truck-models.js';
 import { KART_ITEM } from './kart.js';
 import { fencePanel } from './fence-panel.js';
+import { EXTRA_ITEMS } from './site-extras.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -94,6 +95,8 @@ export const PROCEDURAL_ITEMS = [
 	...TRUCK_ITEMS,
 	// A go-kart with a driver (kart.js), drivable like the other vehicles.
 	KART_ITEM,
+	// Rail track, an indirect-fired heater with its ducts and stop signs (site-extras.js).
+	...EXTRA_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
