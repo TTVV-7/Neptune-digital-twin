@@ -100,7 +100,7 @@ test( 'signed out, the Pro equipment is locked and explains itself', async () =>
 	assert.equal( await page.locator( '#library .card.locked .pro:visible' ).count(), PACK.length );
 	// Everything else is as it was.
 	assert.equal( await page.locator( '#library .card:not(.locked) .pro:visible' ).count(), 0 );
-	await page.locator( '#library .card', { hasText: 'Crawler crane' } ).scrollIntoViewIfNeeded();
+	await page.locator( '#library .card[data-item="crane-crawler"]' ).scrollIntoViewIfNeeded();
 	await shot( page.locator( '#library' ), 'locked-library' );
 
 	await page.locator( '#library .card[data-item="scissor-lift-32ft"]' ).click();
@@ -215,8 +215,11 @@ test( 'back from Stripe on ?premium=thanks, the pack is unlocked and the address
 	assert.equal( ( await lockedIds( bob ) ).length, PACK.length );
 
 	assert.equal( await pay( { customer_details: { email: 'bob@example.com' } } ), 200 );
+	// Watched from before the page opens: the toast is up for 3 s, and opening can take longer than
+	// that after it shows (openApp waits for the project's models to load).
+	const welcomed = bob.locator( '.toast', { hasText: 'Premium unlocked' } ).waitFor( { timeout: 120000 } );
 	await openApp( bob, `${ BASE }/?premium=thanks&prompt` );
-	await bob.locator( '.toast', { hasText: 'Premium unlocked' } ).waitFor();
+	await welcomed;
 	assert.equal( new URL( bob.url() ).searchParams.has( 'premium' ), false );
 	await bob.keyboard.press( 'KeyL' );
 	assert.deepEqual( await lockedIds( bob ), [] );
