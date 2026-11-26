@@ -756,6 +756,14 @@ export function setUpMarkups( { camera, canvas, models, sidebar, layout, getGrou
 	function editText( entry, { creating = false } = {} ) {
 
 		if ( ! entry || entry.params.type === 'dimension' ) return;
+		// Locked in the editor (sidebar.js): its words stay as they are.
+		if ( entry.locked && ! creating ) {
+
+			toast( 'Locked: unlock it to change its words' );
+			return;
+
+		}
+
 		closeEditor( true );
 		const before = { text: entry.params.text, colour: entry.params.colour };
 		editing = { entry, before, creating };

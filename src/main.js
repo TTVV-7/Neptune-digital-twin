@@ -270,7 +270,7 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 		driving = setUpDriving( { driver, models, library, camera, getSidebar: () => sidebar, getPlayer, onError: message => showBanner( message, 8000 ) } );
 		// The Show panel: layers, items hidden by hand and Before / After. Before the saved layout is
 		// restored, so what's hidden in it stays hidden as it loads.
-		layers = createLayers( { models, layout, library, flattening, isDriving: () => driver.active, legend } );
+		layers = createLayers( { models, layout, library, flattening, isDriving: () => driver.active, legend, setLocked: ( entries, on ) => sidebar.setLocked( entries, on ) } );
 		// Build Pro's company logo on the equipment (logo.js), from the editor's own API (api/ beside it).
 		if ( BUILD_APP ) setUpLogo( { models, layers, apiBase: 'api/' } );
 

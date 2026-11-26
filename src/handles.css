@@ -245,6 +245,12 @@
 	color: #ff9a8f;
 }
 
+/* Unlock, on a locked item (the Lock button pressed): red, as its outline is. */
+.selection-toolbar .row .lock[aria-pressed='true'] {
+	background: rgba( 229, 72, 77, 0.3 );
+	color: #ffb3ae;
+}
+
 .selection-toolbar svg {
 	width: 18px;
 	height: 18px;
@@ -350,8 +356,8 @@ body.box-select canvas {
 	cursor: crosshair;
 }
 
-/* The edit bar (edit-bar.js): Select, how many are selected, Copy, Cut, Paste, Duplicate, Undo and
-   Redo, along the bottom in the middle of the map beside the library. */
+/* The edit bar (edit-bar.js): Select, how many are selected, Copy, Cut, Paste, Duplicate, Lock,
+   Undo and Redo, along the bottom in the middle of the map beside the library. */
 .edit-bar {
 	position: fixed;
 	bottom: 12px;
@@ -406,6 +412,11 @@ body.box-select canvas {
 .edit-bar button[aria-pressed='true'] {
 	background: rgba( 255, 176, 46, 0.3 );
 	color: #ffd38a;
+}
+
+.edit-bar button.lock[aria-pressed='true'] {
+	background: rgba( 229, 72, 77, 0.3 );
+	color: #ffb3ae;
 }
 
 .edit-bar svg {

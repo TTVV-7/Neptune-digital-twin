@@ -1,7 +1,7 @@
 // Undo and redo for what's done to placed things in the editor (sidebar.js): moving and turning
-// one or many, deleting, cutting, pasting and duplicating. Each is one step, however many items it
-// touched: Ctrl/Cmd+Z undoes it, Ctrl/Cmd+Shift+Z or Ctrl+Y does it again, and the Undo toasts
-// (toolbar.js) undo theirs.
+// one or many, deleting, cutting, pasting, duplicating, and locking and unlocking. Each is one
+// step, however many items it touched: Ctrl/Cmd+Z undoes it, Ctrl/Cmd+Shift+Z or Ctrl+Y does it
+// again, and the Undo toasts (toolbar.js) undo theirs.
 //
 // A step is { label, undo(), redo(), merge? }; undo and redo may be async (loading items back). An
 // item deleted and put back is a new entry (models.js), so steps hold entries through refs: the
