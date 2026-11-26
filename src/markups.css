@@ -1,0 +1,138 @@
+/* Markups (markups.js): their labels over the scene, under the panels and overlays, and the box
+   their words are typed in. */
+.markup-labels {
+	position: fixed;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.markup-label {
+	position: absolute;
+	left: 0;
+	top: 0;
+	color: var( --text );
+	font-size: 13px;
+	line-height: 1.3;
+	white-space: nowrap;
+	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.45 );
+}
+
+/* A dimension's length: a small tag over the middle of its line. */
+.markup-label.dimension {
+	padding: 1px 7px 2px;
+	border: 1.5px solid var( --colour );
+	border-radius: 10px;
+	background: rgba( 16, 22, 28, 0.9 );
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.markup-label.dimension.height::before {
+	content: '\2195\00a0';
+	color: var( --colour );
+}
+
+/* An arrow's words, at its tail. */
+.markup-label.arrow {
+	max-width: 240px;
+	padding: 3px 9px 4px 7px;
+	border-left: 4px solid var( --colour );
+	border-radius: 4px;
+	background: var( --panel );
+	white-space: pre-wrap;
+}
+
+/* A note: a callout in its colour, its pointer down to its spot. */
+.markup-label.note {
+	max-width: 240px;
+	padding: 5px 10px 6px;
+	border-radius: 5px;
+	background: var( --colour );
+	color: #fff;
+	font-weight: 600;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	text-shadow: 0 1px 1px rgba( 0, 0, 0, 0.35 );
+}
+
+.markup-label.note[data-colour='amber'],
+.markup-label.note[data-colour='white'] {
+	color: #10161c;
+	text-shadow: none;
+}
+
+.markup-label.note::after {
+	content: '';
+	position: absolute;
+	top: 100%;
+	left: calc( 50% - 7px );
+	border: 7px solid transparent;
+	border-top-color: var( --colour );
+}
+
+/* Drawing a markup: pick points. */
+body.markup-drawing #app canvas {
+	cursor: crosshair;
+}
+
+.markup-editor {
+	position: fixed;
+	left: 0;
+	top: 0;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 260px;
+	padding: 8px;
+	border-radius: 8px;
+	background: #141c23;
+	box-shadow: 0 4px 16px rgba( 0, 0, 0, 0.5 );
+	color: var( --text );
+}
+
+.markup-editor textarea {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 52px;
+	padding: 6px 8px;
+	border: 1px solid #3a4a58;
+	border-radius: 5px;
+	background: #0d1318;
+	color: var( --text );
+	font-family: inherit;
+	font-size: 14px;
+	line-height: 1.35;
+	resize: vertical;
+}
+
+.markup-editor textarea:focus {
+	outline: 2px solid var( --accent );
+	outline-offset: -1px;
+}
+
+.markup-editor .swatches {
+	display: flex;
+	gap: 6px;
+}
+
+.markup-editor .swatches button {
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 2px solid transparent;
+	border-radius: 50%;
+	background: var( --colour );
+	cursor: pointer;
+}
+
+.markup-editor .swatches button[aria-pressed='true'] {
+	border-color: var( --text );
+	box-shadow: 0 0 0 2px rgba( 0, 0, 0, 0.6 );
+}
+
+.markup-editor .hint {
+	font-size: 11px;
+	color: var( --muted );
+}

@@ -219,7 +219,10 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// A tool card. spec:
 	//   name, hint (shown under the name), title (tooltip), icon (SVG markup, 64 x 64 viewBox)
 	//   mode: 'rect' to drag out a rectangle lined up with the way you're looking (a click without
-	//         a drag makes one defaultSize = [ width, length ] in metres), or 'point' to click a spot
+	//         a drag makes one defaultSize = [ width, length ] in metres), 'point' to click a spot,
+	//         or 'custom' for a tool that takes the presses itself (markups.js): onStart() when it's
+	//         picked, onPress( e ) and onMove( e ) with the scene's pointer events, onCancel() when
+	//         it ends (Esc, another tool, or cancelDrawing() once it has done its work)
 	//   color: outline colour while dragging
 	//   onDone( shape ): called with { east, north, height, heading, width, length, dragged } (just
 	//         east/north/height/heading for 'point'); may return a placed entry (or a promise of
@@ -1435,6 +1438,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		entry.pivot.updateWorldMatrix( true, false );
 		const line = kind?.resize?.shape === 'points' ? kind.resize.points( entry.params ) : null;
 		const points = [];
+		// A single point (a note, markups.js): just that.
+		if ( line?.length === 1 ) points.push( new Vector3( line[ 0 ][ 0 ], 0, - line[ 0 ][ 1 ] ) );
 		if ( line ) {
 
 			for ( let i = 0; i < line.length - 1; i ++ ) {
@@ -1536,6 +1541,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		if ( drawing?.start ) updateDrawing();
 		if ( drawing?.tool.mode === 'line' ) moveLine( e );
+		if ( drawing?.tool.mode === 'custom' ) drawing.tool.onMove?.( e );
 		if ( placing ) followPointer();
 		// A press on an item selects it; it only moves once the pointer has gone further than a
 		// click's slip, since from afar one pixel of jitter covers metres of ground.
@@ -1583,6 +1589,15 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( drawing?.tool.mode === 'line' ) {
 
 			pressLine( e );
+			suppressClick = true;
+			return;
+
+		}
+
+		// A tool that takes the clicks itself (a markup, markups.js).
+		if ( drawing?.tool.mode === 'custom' ) {
+
+			drawing.tool.onPress?.( e );
 			suppressClick = true;
 			return;
 
@@ -1804,13 +1819,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	}, true );
 
 	// Ctrl/Cmd with A, C, X, V, D, Z and Y: select all, copy, cut, paste, duplicate, undo and redo.
-	// Not while typing (a field's own copy and paste, undo...), nor while text on the page is
-	// selected (copying that), nor driving. Paste only while building (the library open), and undo
-	// and redo only then or with something selected: pressed out of habit while just looking round,
-	// they'd change the plan, and it saves itself.
+	// Not while typing (a field's own copy and paste...), nor while text on the page is selected
+	// (copying that), nor driving. Paste only while building (the library open). Undo and redo work
+	// whenever editing, and also from a field of the item's panel: what's typed there is applied as
+	// it's typed, so the field lets go (keeping it, as one step) and that step is undone. A toast says
+	// what was undone, as it may be off screen.
 	window.addEventListener( 'keydown', e => {
 
-		if ( ! ( e.ctrlKey || e.metaKey ) || e.altKey || isTyping( e ) || isDriving() || dialogOpen() ) return;
+		const undoKey = e.code === 'KeyZ' || e.code === 'KeyY';
+		const panelField = undoKey && e.target instanceof HTMLElement && e.target.closest( '.lil-gui' ) && ! ( e.target instanceof HTMLTextAreaElement ) && ! e.target.isContentEditable;
+		if ( ! ( e.ctrlKey || e.metaKey ) || e.altKey || ( isTyping( e ) && ! panelField ) || isDriving() || dialogOpen() ) return;
 		const textSelected = !! window.getSelection?.()?.toString();
 		const busy = handles.busy || !! dragging || !! boxing;
 		switch ( e.code ) {
@@ -1843,20 +1861,40 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 				duplicateSelection();
 				break;
 			case 'KeyZ':
-				if ( busy || ( ! open && selection.length === 0 ) ) return;
+				if ( busy ) return;
 				e.preventDefault();
-				if ( e.shiftKey ) history.redo();
-				else history.undo();
+				if ( panelField ) e.target.blur();
+				if ( e.shiftKey ) redoStep();
+				else undoStep();
 				break;
 			case 'KeyY':
-				if ( busy || e.metaKey || ( ! open && selection.length === 0 ) ) return;
+				if ( busy || e.metaKey ) return;
 				e.preventDefault();
-				history.redo();
+				if ( panelField ) e.target.blur();
+				redoStep();
 				break;
 
 		}
 
 	}, true );
+
+	function undoStep() {
+
+		const label = history.undoLabel;
+		if ( ! history.canUndo ) return toast( 'Nothing to undo' );
+		history.undo();
+		toast( label ? `Undone: ${ label }` : 'Undone' );
+
+	}
+
+	function redoStep() {
+
+		const label = history.redoLabel;
+		if ( ! history.canRedo ) return toast( 'Nothing to redo' );
+		history.redo();
+		toast( label ? `Redone: ${ label }` : 'Redone' );
+
+	}
 
 	// A modal dialog (a Pro dialog, a project's) has the keys.
 	function dialogOpen() {
@@ -1924,6 +1962,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		drawing = { tool, start: null, heading: getPlayer().heading, outline };
 		root.classList.add( 'placing' );
 		tool.card.classList.add( 'active' );
+		tool.onStart?.();
 
 	}
 
@@ -2342,6 +2381,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		undoPoint,
 		cancelPlacing,
 		cancelDrawing,
+		// The tool in use, if any (a markup's: markups.js).
+		getTool: () => drawing?.tool ?? null,
 		// The line being drawn, if any: { name, points } (how many).
 		getLine: () => drawing?.tool.mode === 'line' ? { name: drawing.tool.name, points: drawing.points.length } : null,
 		cardFor: id => cards.find( c => c.item.id === id )?.card ?? null,

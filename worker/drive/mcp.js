@@ -9,7 +9,8 @@ import CATALOG from './build-catalog.json' with { type: 'json' };
 // connected to someone's World Drive account through OAuth (oauth.js) lays out their construction
 // sites: finds a site by address, makes a project there, looks up the library (build-catalog.json,
 // npm run make-build-catalog: every item with its real size, and the sets) and places equipment,
-// sets, rows, flatten areas, laydown areas and stockpiles, moves and removes them, and shares the
+// sets, rows, flatten areas, laydown areas, stockpiles and markups (dimensions, arrows and notes),
+// moves and removes them, and shares the
 // project. Projects are World Drive Build's own (build_layouts, build.js), so what Claude lays out
 // opens in the editor (/build/app/), and the other way round. Build Pro and the owner only.
 //
@@ -45,6 +46,13 @@ const TOUCHING = [ 'Barriers & fencing', 'Temporary covers' ];
 const PILE_VOLUME = 20000;
 const PILE_SIZE = 200;
 const LAYDOWN_SIZE = 1000;
+// Markups (src/markups.js): their colours, how many points each takes, and the most words.
+const MARKUP_KINDS = [ 'dimension', 'arrow', 'note' ];
+const MARKUP_COLOURS = [ 'red', 'amber', 'blue', 'green', 'white' ];
+const MARKUP_DEFAULT_COLOUR = { dimension: 'white', arrow: 'red', note: 'blue' };
+const MARKUP_POINTS = { dimension: 2, arrow: 2, note: 1 };
+const MARKUP_TEXT = 500;
+const MARKUP_OFFSET = 1000;
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Expose-Headers': 'WWW-Authenticate' };
 
@@ -187,6 +195,11 @@ const TOOLS = [
 		name: 'add_stockpile', title: 'Add a stockpile', description: 'A pile of material: a cone of a volume, or a ridge filling width x length.',
 		inputSchema: { type: 'object', properties: { ...project, ...point, material: { type: 'string', enum: MATERIALS, default: 'gravel' }, shape: { type: 'string', enum: [ 'cone', 'ridge' ], default: 'cone' }, volume: { type: 'number', minimum: 0.5, maximum: PILE_VOLUME, description: 'm³, for a cone', default: 50 }, width: { type: 'number', minimum: 1, maximum: PILE_SIZE, description: 'm, for a ridge' }, length: { type: 'number', minimum: 1, maximum: PILE_SIZE, description: 'm, for a ridge' }, ...heading }, required: [ 'project_id', 'east', 'north' ] },
 		run: addStockpile,
+	},
+	{
+		name: 'add_markup', title: 'Add a markup', description: 'Mark up the site as on a drawing: a dimension (a measured line between two points, labelled with its length on plan in metres, or with height: true the difference in height between them), an arrow (a leader: from the point called out, where the arrowhead is, to where its words sit) or a note (a callout pinned to a spot: red for a hazard, amber for caution, blue for information). Points are metres east and north of the site point, and up (m above the site point, as the editor\'s "up") if given for every point; without up the markup sits on the ground. Returns the markup as stored (get_project lists it; remove_items takes it away).',
+		inputSchema: { type: 'object', properties: { ...project, kind: { type: 'string', enum: MARKUP_KINDS }, points: { type: 'array', minItems: 1, maxItems: 2, items: { type: 'object', properties: { east: { type: 'number' }, north: { type: 'number' }, up: { type: 'number', description: 'm above the site point (optional; all or none)' } }, required: [ 'east', 'north' ] }, description: 'dimension: [ A, B ]; arrow: [ the point called out, where the words go ]; note: [ the spot ]' }, text: { type: 'string', maxLength: MARKUP_TEXT, description: 'the arrow\'s or note\'s words (a note needs some)' }, colour: { type: 'string', enum: MARKUP_COLOURS, description: 'red (hazard), amber (caution), blue (info), green, white. Default: white for a dimension, red for an arrow, blue for a note' }, height: { type: 'boolean', default: false, description: 'a dimension measuring the difference in height between its points (both need up)' }, offset: { type: 'number', minimum: - MARKUP_OFFSET, maximum: MARKUP_OFFSET, default: 0, description: 'm a dimension\'s line is drawn to the left of A -> B (negative: to the right), with extension lines back to the points' } }, required: [ 'project_id', 'kind', 'points' ] },
+		run: addMarkup,
 	},
 	{
 		name: 'move_item', title: 'Move an item', description: 'Move or turn something already placed (its index from get_project).',
@@ -369,6 +382,9 @@ function describe( item, index ) {
 	const known = ITEMS.get( item.library );
 	const out = { index, item: item.library ?? item.kind ?? null, name: item.name ?? known?.name ?? item.kind, east: item.east, north: item.north, heading: item.heading ?? 0 };
 	if ( item.kind && item.params ) out.params = item.params;
+	// A dimension's length (or height) as its label in the editor says it.
+	const [ a, b ] = item.kind === 'markup' && item.params?.type === 'dimension' && Array.isArray( item.params.points ) ? item.params.points : [];
+	if ( a && b ) out.measures = `${ ( item.params.vertical ? Math.abs( ( b[ 2 ] ?? 0 ) - ( a[ 2 ] ?? 0 ) ) : Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] ) ).toFixed( 1 ) } m`;
 	if ( known?.dimensions ) out.size = known.dimensions;
 	const by = placedBy( item.kind, item.params );
 	if ( by ) out.placed = by;
@@ -751,6 +767,75 @@ async function addStockpile( context, args ) {
 
 		layout.items.push( config );
 		return `Piled ${ material }${ shape === 'cone' ? `, ${ params.volume } m³` : `, a ridge ${ params.width } × ${ params.length } m` }.`;
+
+	} );
+
+}
+
+// A markup (src/markups.js): its origin in the middle of its points on plan, at the first one's
+// height (or null: on the ground), its points from there as [ east, north, up ].
+function markupOf( args ) {
+
+	const kind = args.kind;
+	if ( ! MARKUP_KINDS.includes( kind ) ) throw new ToolError( `kind must be one of ${ MARKUP_KINDS.join( ', ' ) }` );
+	const count = MARKUP_POINTS[ kind ];
+	if ( ! Array.isArray( args.points ) || args.points.length !== count ) throw new ToolError( `points: a ${ kind } takes ${ count === 1 ? 'one point' : `${ count } points` } ({ east, north, up? })` );
+	const points = args.points.map( ( p, i ) => {
+
+		const value = Array.isArray( p ) ? { east: p[ 0 ], north: p[ 1 ], up: p[ 2 ] } : p ?? {};
+		const at = where( { east: value.east, north: value.north } );
+		const up = value.up === undefined || value.up === null ? null : round( number( value.up, `points[${ i }].up`, { min: - 500, max: 9000 } ) );
+		return { ...at, up };
+
+	} );
+	const heights = points.filter( p => p.up !== null ).length;
+	if ( heights && heights !== points.length ) throw new ToolError( 'points: give up for every point or for none' );
+	const height = args.height === true;
+	if ( args.height !== undefined && typeof args.height !== 'boolean' ) throw new ToolError( 'height: true or false' );
+	if ( height && kind !== 'dimension' ) throw new ToolError( 'height: only for a dimension' );
+	if ( height && ! heights ) throw new ToolError( 'height: a height dimension needs up for both points' );
+	if ( args.text !== undefined && typeof args.text !== 'string' ) throw new ToolError( 'text: words' );
+	const text = String( args.text ?? '' ).trim();
+	if ( text.length > MARKUP_TEXT ) throw new ToolError( `text: at most ${ MARKUP_TEXT } characters` );
+	if ( kind === 'note' && ! text ) throw new ToolError( 'text: what the note says' );
+	if ( args.colour !== undefined && ! MARKUP_COLOURS.includes( args.colour ) ) throw new ToolError( `colour must be one of ${ MARKUP_COLOURS.join( ', ' ) }` );
+	const colour = args.colour ?? MARKUP_DEFAULT_COLOUR[ kind ];
+	const middle = k => round( ( Math.min( ...points.map( p => p[ k ] ) ) + Math.max( ...points.map( p => p[ k ] ) ) ) / 2 );
+	const east = middle( 'east' );
+	const north = middle( 'north' );
+	const up = heights ? points[ 0 ].up : null;
+	const params = { type: kind, points: points.map( p => [ round( p.east - east ), round( p.north - north ), heights ? round( p.up - up ) : 0 ] ), colour, text: kind === 'dimension' ? '' : text };
+	let measured = null;
+	if ( kind === 'dimension' ) {
+
+		const [ a, b ] = points;
+		measured = height ? Math.abs( b.up - a.up ) : Math.hypot( b.east - a.east, b.north - a.north );
+		if ( measured < 0.01 ) throw new ToolError( height ? 'points: a height dimension\'s points must be at different heights' : 'points: a dimension\'s points must be apart' );
+		params.offset = round( number( args.offset, 'offset', { min: - MARKUP_OFFSET, max: MARKUP_OFFSET, fallback: 0 } ) );
+		params.vertical = height;
+
+	}
+
+	if ( kind === 'arrow' ) {
+
+		const [ a, b ] = points;
+		if ( Math.hypot( b.east - a.east, b.north - a.north, heights ? b.up - a.up : 0 ) < 0.05 ) throw new ToolError( 'points: an arrow\'s points must be apart' );
+
+	}
+
+	const name = kind === 'dimension' ? ( height ? 'Height' : 'Dimension' ) : kind === 'arrow' ? 'Arrow' : 'Note';
+	return { config: { name, kind: 'markup', params, east, north, up, heading: 0, scale: 1 }, measured };
+
+}
+
+async function addMarkup( context, args ) {
+
+	const { config, measured } = markupOf( args );
+	return await change( context, args.project_id, layout => {
+
+		layout.items.push( config );
+		const what = measured !== null ? `${ config.params.vertical ? 'a height dimension' : 'a dimension' } of ${ measured.toFixed( 1 ) } m` : `${ config.params.type === 'arrow' ? 'an arrow' : 'a note' }${ config.params.text ? ` saying "${ config.params.text }"` : '' }`;
+		return `Added ${ what } (${ config.params.colour }), item ${ layout.items.length - 1 }: ${ JSON.stringify( config ) }`;
 
 	} );
 

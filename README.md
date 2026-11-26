@@ -133,7 +133,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | Showing | |
 | --- | --- |
 | B | Before / after: the site as Google captured it (nothing flattened, dug, piled or placed), or with your changes |
-| Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, tieback no-dig zones, labels, or a whole category such as Vehicles |
+| Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, tieback no-dig zones, the cut & fill sides round flatten areas, labels, or a whole category such as Vehicles |
 | Hide (toolbar) | Hide just the selected item; the Show panel lists it to show again |
 
 | Other | |
@@ -1251,6 +1251,8 @@ src/shoring-models.js  the shoring pieces, for pits and the library's Shoring ca
 src/shoring-ground.js  draws a shored pit's walls straight up behind the shoring
 src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
 src/rows.js         rows: many of one library item along a line drawn on the ground (Row on a card)
+src/markups.js      markups: dimensions, height dimensions, arrows and notes, pinned to items they're
+                    drawn on (docs/build.md)
 src/excavator.js    digging with an excavator; src/excavator-model.js builds the machines
 src/cloud.js        sign in with Google, layouts in your account, share links (needs the Worker)
 src/premium.js      the Pro equipment pack: locked cards and the buy dialog (needs the Worker)

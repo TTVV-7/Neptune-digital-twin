@@ -733,7 +733,7 @@ test( 'undo never selects something hidden, so Delete can\'t take it unseen', as
 
 } );
 
-test( 'with the library closed, Ctrl+V and Ctrl+Z leave the plan alone', async () => {
+test( 'with the library closed, Ctrl+V leaves the plan alone but Ctrl+Z and Ctrl+Y still undo and redo, saying what', async () => {
 
 	await clearAll();
 	await layOut();
@@ -741,26 +741,38 @@ test( 'with the library closed, Ctrl+V and Ctrl+Z leave the plan alone', async (
 	await page.keyboard.press( 'Control+C' );
 	// A step to undo: one turned (R).
 	await page.evaluate( () => window.twin.sidebar.select( window.twin.models.entries[ 3 ] ) );
+	const heading = () => page.evaluate( () => window.twin.models.entries[ 3 ].state.heading );
+	const start = await heading();
 	await page.keyboard.press( 'KeyR' );
+	const turned = await heading();
+	assert.notEqual( turned, start );
 	await page.evaluate( () => window.twin.sidebar.deselect() );
 	await page.evaluate( () => document.getElementById( 'library-toggle' ).click() );
 	assert.equal( await page.evaluate( () => window.twin.sidebar.isOpen() ), false );
-	const before = await placed();
+	const count = ( await placed() ).length;
 	const history = await page.evaluate( () => window.twin.sidebar.history.size );
 	const spot = await groundOnScreen( 0, 30 );
 	await page.mouse.move( spot.x, spot.y );
-	for ( const key of [ 'Control+V', 'Control+Z', 'Control+Y', 'Control+Shift+Z' ] ) await page.keyboard.press( key );
+	// Paste needs the library open: nothing is added.
+	await page.keyboard.press( 'Control+V' );
 	await settle( page, 800 );
-	assert.deepEqual( await placed(), before );
-	assert.deepEqual( await page.evaluate( () => window.twin.sidebar.history.size ), history );
-	assert.deepEqual( await selectedNames(), [] );
-	assert.equal( await page.locator( '.edit-bar' ).isVisible(), false );
-	await shot( 'paste-library-closed' );
-	await page.evaluate( () => document.getElementById( 'library-toggle' ).click() );
-	// Open again, they work.
+	assert.equal( ( await placed() ).length, count );
+	// Undo works with nothing selected and the library closed, and says what it undid.
 	await page.keyboard.press( 'Control+Z' );
 	await settle();
+	assert.equal( await heading(), start );
 	assert.equal( await page.evaluate( () => window.twin.sidebar.history.size.undo ), history.undo - 1 );
+	await page.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Undone/.test( t.textContent ) ) );
+	await page.keyboard.press( 'Control+Y' );
+	await settle();
+	assert.equal( await heading(), turned );
+	await page.keyboard.press( 'Control+Shift+Z' );
+	await settle();
+	assert.equal( await page.evaluate( () => window.twin.sidebar.history.size.redo ), 0 );
+	// Undo and redo select what they changed, so it's seen.
+	assert.equal( ( await selectedNames() ).length, 1 );
+	await shot( 'undo-library-closed' );
+	await page.evaluate( () => document.getElementById( 'library-toggle' ).click() );
 
 } );
 
