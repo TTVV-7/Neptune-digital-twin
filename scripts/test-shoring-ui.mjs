@@ -10,7 +10,7 @@
 // (started without a Maps key); TEST_SCREENSHOTS=<folder> saves pictures.
 
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -587,7 +587,9 @@ test( 'Shoring library pieces: listed with thumbnails, placed, turned, saved and
 		return cards;
 
 	} );
-	assert.deepEqual( listed.map( c => c.id ).sort(), [ ...PIECES ].sort() );
+	// The pieces built in code, and the library's own shoring models (rigs, hammers, piles) beside them.
+	const models = JSON.parse( readFileSync( join( import.meta.dirname, '..', 'public', 'library', 'library.json' ), 'utf8' ) ).filter( item => item.category === 'Shoring' ).map( item => item.id );
+	assert.deepEqual( listed.map( c => c.id ).sort(), [ ...PIECES, ...models ].sort() );
 	const dims = Object.fromEntries( listed.map( c => [ c.id, c.dims ] ) );
 	assert.match( dims[ 'trench-box-8x20' ], /^6\.1 × 1\.8 × 2\.[56] m$/ );
 	assert.match( dims[ 'trench-box-8x24' ], /^7\.3 × / );
@@ -611,17 +613,17 @@ test( 'Shoring library pieces: listed with thumbnails, placed, turned, saved and
 	assert.notEqual( turned, heading );
 
 	// The rest from code, side by side as in a laydown area.
-	await page.evaluate( async listed => {
+	await page.evaluate( async pieces => {
 
 		const { models } = window.twin;
-		for ( const [ i, { id, name } ] of listed.entries() ) {
+		for ( const [ i, { id, name } ] of pieces.entries() ) {
 
 			if ( id === 'trench-box-8x20' ) continue;
 			await models.load( { name, library: id, procedural: id, front: '-z', up: null, east: - 14 + i * 3.2, north: - 112, heading: 0 } );
 
 		}
 
-	}, listed );
+	}, listed.filter( c => PIECES.includes( c.id ) ) );
 	await look( { east: - 3, north: - 112, up: 0, distance: 24, from: 215, elevation: 40 } );
 	await library( false );
 	await shot( 'library-shoring-pieces' );
