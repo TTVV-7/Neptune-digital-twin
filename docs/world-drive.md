@@ -8256,7 +8256,9 @@ another: about 32 MB for the fourteen, each file asked for only when it's about 
 
 The last two take over from the world's while they last (main.js tells it each frame:
 `setActivity`), and the world's is back 4 s after (so hopping out of the plane and in again doesn't
-swap it twice). A playlist of one loops; otherwise a track's end starts the next. Changing scene
+swap it twice). A playlist of one loops; otherwise a track's end starts the next. A world's playlist
+starts on a random track (once a visit) and goes on in turn from there, so the last ones aren't heard
+only after minutes of driving; the globe's, a challenge's and the plane's start from their first. Changing scene
 fades one into the next (1.5 s); paused, it plays at 40 %; with the page out of sight (another tab,
 a locked phone) it stops until it's back.
 
