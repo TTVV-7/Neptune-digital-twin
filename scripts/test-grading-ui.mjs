@@ -1058,6 +1058,16 @@ test( 'raising and lowering an area: the arrow, the keys and the P panel, each u
 	await field.evaluate( c => c.querySelectorAll( 'button.nudge' )[ 1 ].click() );
 	near( ( await raised( i ) ).raise, 2.75, 1e-6, 'its + twice' );
 	near( await press( 'Control+z' ), 2.5, 1e-6, 'undo a +' );
+	// Ctrl+Z pressed inside the field just typed into: the field lets go, keeping what's typed, and
+	// that is undone (not just the field's own text).
+	await field.evaluate( c => c.querySelector( 'input' ).select() );
+	await page.keyboard.type( '4' );
+	await page.waitForTimeout( 100 );
+	near( await press( 'Control+z' ), 2.5, 1e-6, 'Ctrl+Z inside the field undoes it' );
+	assert.equal( await field.evaluate( c => document.activeElement === c.querySelector( 'input' ) ), false, 'the field let go' );
+	near( await field.evaluate( c => Number( c.querySelector( 'input' ).value ) ), 2.5, 1e-6, 'and shows it' );
+	near( await press( 'Control+y' ), 4, 1e-6, 'what was typed was kept as a step: redone' );
+	near( await press( 'Control+z' ), 2.5, 1e-6, 'and undone again' );
 	// Clicked for real, + keeps the focus, inside its field: the field still shows PageUp and undo
 	// done meanwhile, and the next + goes on from there, a step of its own.
 	const plus = await field.evaluateHandle( c => c.querySelectorAll( 'button.nudge' )[ 1 ] );

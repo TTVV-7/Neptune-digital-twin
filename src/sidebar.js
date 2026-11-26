@@ -1819,13 +1819,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	}, true );
 
 	// Ctrl/Cmd with A, C, X, V, D, Z and Y: select all, copy, cut, paste, duplicate, undo and redo.
-	// Not while typing (a field's own copy and paste, undo...), nor while text on the page is
-	// selected (copying that), nor driving. Paste only while building (the library open), and undo
-	// and redo only then or with something selected: pressed out of habit while just looking round,
-	// they'd change the plan, and it saves itself.
+	// Not while typing (a field's own copy and paste...), nor while text on the page is selected
+	// (copying that), nor driving. Paste only while building (the library open). Undo and redo work
+	// whenever editing, and also from a field of the item's panel: what's typed there is applied as
+	// it's typed, so the field lets go (keeping it, as one step) and that step is undone. A toast says
+	// what was undone, as it may be off screen.
 	window.addEventListener( 'keydown', e => {
 
-		if ( ! ( e.ctrlKey || e.metaKey ) || e.altKey || isTyping( e ) || isDriving() || dialogOpen() ) return;
+		const undoKey = e.code === 'KeyZ' || e.code === 'KeyY';
+		const panelField = undoKey && e.target instanceof HTMLElement && e.target.closest( '.lil-gui' ) && ! ( e.target instanceof HTMLTextAreaElement ) && ! e.target.isContentEditable;
+		if ( ! ( e.ctrlKey || e.metaKey ) || e.altKey || ( isTyping( e ) && ! panelField ) || isDriving() || dialogOpen() ) return;
 		const textSelected = !! window.getSelection?.()?.toString();
 		const busy = handles.busy || !! dragging || !! boxing;
 		switch ( e.code ) {
@@ -1858,20 +1861,40 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 				duplicateSelection();
 				break;
 			case 'KeyZ':
-				if ( busy || ( ! open && selection.length === 0 ) ) return;
+				if ( busy ) return;
 				e.preventDefault();
-				if ( e.shiftKey ) history.redo();
-				else history.undo();
+				if ( panelField ) e.target.blur();
+				if ( e.shiftKey ) redoStep();
+				else undoStep();
 				break;
 			case 'KeyY':
-				if ( busy || e.metaKey || ( ! open && selection.length === 0 ) ) return;
+				if ( busy || e.metaKey ) return;
 				e.preventDefault();
-				history.redo();
+				if ( panelField ) e.target.blur();
+				redoStep();
 				break;
 
 		}
 
 	}, true );
+
+	function undoStep() {
+
+		const label = history.undoLabel;
+		if ( ! history.canUndo ) return toast( 'Nothing to undo' );
+		history.undo();
+		toast( label ? `Undone: ${ label }` : 'Undone' );
+
+	}
+
+	function redoStep() {
+
+		const label = history.redoLabel;
+		if ( ! history.canRedo ) return toast( 'Nothing to redo' );
+		history.redo();
+		toast( label ? `Redone: ${ label }` : 'Redone' );
+
+	}
 
 	// A modal dialog (a Pro dialog, a project's) has the keys.
 	function dialogOpen() {
