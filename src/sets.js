@@ -243,6 +243,29 @@ export const SETS = [
 		],
 	},
 	{
+		id: 'set-batch-plant',
+		name: 'Batch plant setup (portable plant, 3 mixer trucks, wheel loader, aggregate piles, office)',
+		keywords: 'batch plant ready mix concrete mixer trucks loader aggregate stockpile sand',
+		members: [
+			// The plant's charging boot is 11.8 m right of its middle. One truck is under it, its
+			// hopper at the boot, the next two queued in front to drive through the bay.
+			{ item: 'batch-plant-portable', right: 0, forward: 0, turn: 0 },
+			{ item: 'concrete-mixer-truck', right: 11.8, forward: - 3.7, turn: 180 },
+			{ item: 'concrete-mixer-truck', right: 11.8, forward: 8, turn: 180 },
+			{ item: 'concrete-mixer-truck', right: 11.8, forward: 18, turn: 180 },
+			// The loader charges the bins from the front, from the stockpiles in front of it.
+			{ item: 'wheel-loader', right: - 14.5, forward: 7, turn: 180 },
+			{ item: 'sand-pile-small', right: - 23, forward: 14, turn: 0 },
+			{ item: 'sand-pile-small', right: - 18.5, forward: 15, turn: 0 },
+			{ item: 'sand-pile-small', right: - 14, forward: 14.5, turn: 0 },
+			{ item: 'office-trailer-8x32', right: - 1, forward: 13, turn: 0 },
+			{ item: 'pickup-truck', right: 3, forward: 18, turn: 180 },
+			{ item: 'worker-standing', right: 4.2, forward: 9, turn: 200 },
+			{ item: 'worker-walking', right: 9, forward: 2.5, turn: 90 },
+			{ item: 'worker-standing', right: 0.5, forward: 10.5, turn: 180 },
+		],
+	},
+	{
 		id: 'set-break-area',
 		name: 'Crew break area (picnic tables, toilets, bin, light)',
 		keywords: 'crew break lunch area picnic tables toilets porta potty bin welfare',

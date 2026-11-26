@@ -23,6 +23,7 @@ import { fencePanel } from './fence-panel.js';
 import { EXTRA_ITEMS } from './site-extras.js';
 import { FOUNDATION_ITEMS } from './foundation-rigs.js';
 import { MORE_PLANT_ITEMS } from './more-plant.js';
+import { BATCH_PLANT_ITEMS } from './batch-plant.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -103,6 +104,8 @@ export const PROCEDURAL_ITEMS = [
 	...FOUNDATION_ITEMS,
 	// Paving, pipeline and HDD plant, a mast climber, compactors, crane mats and road plates, rebar benches (more-plant.js).
 	...MORE_PLANT_ITEMS,
+	// A portable batch plant, its bin and silo, concrete tools, formwork and shoring frames (batch-plant.js).
+	...BATCH_PLANT_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
