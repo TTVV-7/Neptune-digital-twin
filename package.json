@@ -54,6 +54,7 @@
     "test:build-legal": "node --test scripts/test-build-legal.mjs",
     "test:build-account": "node --test scripts/test-build-account.mjs",
     "test:drive-worker": "node --test scripts/test-drive-worker.mjs",
+    "test:drive-shop": "node --test scripts/test-drive-shop.mjs",
     "test:drive-ui": "node --test scripts/test-drive-ui.mjs",
     "test:drive-pro-ui": "node --test scripts/test-drive-pro-ui.mjs",
     "test:drive-seo": "node --test scripts/test-drive-seo.mjs",

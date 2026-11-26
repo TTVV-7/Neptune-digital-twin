@@ -1,0 +1,363 @@
+/* The made-by-hand shop (shop.js): its button under the Garage and the Supporter Pass, and its
+   window, built like the pass's (pro.css) in the sky's blue rather than the pass's gold. */
+
+.shop-open {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	margin-top: 10px;
+	padding: 8px 12px;
+	border: 1px solid rgba( 62, 193, 255, 0.45 );
+	border-radius: 12px;
+	background: linear-gradient( 110deg, rgba( 62, 193, 255, 0.12 ), rgba( 255, 255, 255, 0.04 ) );
+	color: var( --ink );
+	text-align: left;
+}
+
+.shop-open:hover {
+	background: var( --chip-hover );
+}
+
+.shop-open img {
+	flex: 0 0 auto;
+	width: 54px;
+	height: 44px;
+	object-fit: contain;
+}
+
+.shop-open .words {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.shop-open b {
+	font-size: 14px;
+	font-weight: 800;
+}
+
+.shop-open .words span {
+	color: var( --muted );
+	font-size: 12px;
+}
+
+.shop-open .go {
+	color: var( --sky );
+	font-size: 13px;
+	font-weight: 800;
+	white-space: nowrap;
+}
+
+#pause .shop-open {
+	margin-top: 10px;
+}
+
+dialog#shop {
+	width: min( 520px, calc( 100% - 24px ) );
+	max-height: calc( 100% - 24px );
+	padding: 0;
+	border: 1px solid var( --line );
+	border-radius: 20px;
+	background: var( --panel-solid );
+	color: var( --ink );
+	box-shadow: 0 24px 80px rgba( 0, 0, 0, 0.6 );
+	overflow: hidden;
+}
+
+dialog#shop::backdrop {
+	background: rgba( 4, 8, 16, 0.62 );
+}
+
+#shop .sheet {
+	position: relative;
+	max-height: calc( 100dvh - 26px );
+	padding: 24px 24px 0;
+	overflow-y: auto;
+	text-align: center;
+	background: radial-gradient( ellipse at 50% -20%, rgba( 62, 193, 255, 0.22 ), transparent 60% );
+}
+
+#shop .close {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+}
+
+#shop .badge {
+	display: inline-block;
+	margin: 0;
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: var( --sky );
+	color: #04182a;
+	font-size: 12px;
+	font-weight: 900;
+}
+
+#shop h2 {
+	margin: 10px 0 8px;
+	font: 900 italic 30px/1 var( --font );
+	text-transform: uppercase;
+}
+
+#shop .lead {
+	margin: 0 0 6px;
+	color: var( --muted );
+}
+
+#shop .lead b {
+	color: var( --gold );
+}
+
+#shop h3 {
+	margin: 16px 0 6px;
+	color: var( --muted );
+	font-size: 12px;
+	letter-spacing: 0.1em;
+	text-align: left;
+	text-transform: uppercase;
+}
+
+#shop .items,
+#shop .bag {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	text-align: left;
+}
+
+#shop .items li {
+	display: grid;
+	grid-template-columns: 62px 1fr auto;
+	align-items: center;
+	gap: 6px 12px;
+	padding: 8px 10px;
+	border-radius: 12px;
+	background: var( --chip );
+}
+
+#shop .pic {
+	grid-row: span 2;
+	width: 62px;
+	height: 54px;
+	object-fit: contain;
+}
+
+#shop .what {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+#shop .what b {
+	font-size: 15px;
+}
+
+#shop .what span {
+	color: var( --muted );
+	font-size: 12.5px;
+}
+
+#shop .price {
+	color: var( --gold );
+	font-size: 15px;
+	font-weight: 900;
+	text-align: right;
+	white-space: nowrap;
+}
+
+#shop .choose {
+	display: flex;
+	flex-wrap: wrap;
+	grid-column: 2 / span 2;
+	align-items: center;
+	gap: 8px;
+}
+
+#shop .choose select {
+	flex: 1 1 140px;
+	min-width: 0;
+	height: 36px;
+	padding: 0 8px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: rgba( 255, 255, 255, 0.06 );
+	color: var( --ink );
+	font: inherit;
+	font-size: 13px;
+}
+
+#shop .choose select option {
+	background: var( --panel-solid );
+}
+
+#shop .choose label {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var( --muted );
+	font-size: 12.5px;
+}
+
+#shop .add {
+	min-width: 64px;
+	height: 36px;
+	margin-left: auto;
+	padding: 0 14px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: rgba( 255, 255, 255, 0.08 );
+	color: var( --ink );
+	font-size: 13px;
+	font-weight: 800;
+}
+
+#shop .add:hover {
+	background: var( --chip-hover );
+}
+
+#shop .add.done {
+	border-color: var( --gold );
+	background: var( --gold );
+	color: var( --gold-ink );
+}
+
+/* The bag and checking out, kept in sight at the foot of the window as it scrolls. */
+#shop .checkout {
+	position: sticky;
+	bottom: 0;
+	margin: 16px -24px 0;
+	padding: 14px 24px 18px;
+	border-top: 1px solid var( --line );
+	background: var( --panel-solid );
+	text-align: left;
+}
+
+#shop .bag {
+	max-height: 26dvh;
+	overflow-y: auto;
+}
+
+#shop .bag li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+}
+
+#shop .bag .name {
+	flex: 1;
+	min-width: 0;
+}
+
+#shop .bag .qty {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+#shop .bag .qty button,
+#shop .bag .remove {
+	width: 30px;
+	height: 30px;
+	border: 1px solid var( --line );
+	border-radius: 8px;
+	background: rgba( 255, 255, 255, 0.06 );
+	color: var( --ink );
+	font-weight: 800;
+}
+
+#shop .ship {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 10px 0 4px;
+	font-size: 14px;
+}
+
+#shop .ship .seg {
+	display: inline-flex;
+	gap: 4px;
+}
+
+#shop .ship .seg button {
+	height: 32px;
+	padding: 0 12px;
+	border: 1px solid var( --line );
+	border-radius: 8px;
+	background: transparent;
+	color: var( --ink );
+	font-size: 13px;
+	font-weight: 800;
+}
+
+#shop .ship .seg button[aria-pressed='true'] {
+	border-color: var( --ink );
+	background: var( --ink );
+	color: var( --panel-solid );
+}
+
+#shop .sums {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 2px 12px;
+	margin: 8px 0 10px;
+	color: var( --muted );
+	font-size: 14px;
+}
+
+#shop .sums .total {
+	color: var( --ink );
+	font-size: 16px;
+	font-weight: 900;
+}
+
+#shop .sums .total + .total {
+	color: var( --gold );
+	text-align: right;
+}
+
+#shop .buy {
+	width: 100%;
+	font-size: 18px;
+}
+
+#shop .buy[disabled] {
+	background: rgba( 255, 255, 255, 0.12 );
+	color: var( --muted );
+	box-shadow: none;
+	cursor: default;
+}
+
+#shop .say {
+	min-height: 1.2em;
+	margin: 8px 0 0;
+	color: var( --muted );
+	font-size: 12.5px;
+	text-align: center;
+}
+
+#shop .say.problem {
+	color: #ff9b8a;
+}
+
+#shop .empty {
+	margin: 0;
+	color: var( --muted );
+	font-size: 14px;
+}
+
+#shop .thanks {
+	padding: 8px 0 24px;
+}
+
+#shop .thanks p {
+	color: var( --muted );
+}

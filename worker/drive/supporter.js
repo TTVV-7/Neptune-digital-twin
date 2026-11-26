@@ -3,6 +3,7 @@ import { LINK_ID_PATTERN, cleanEmail, readEvent, stripeId } from '../stripe.js';
 import { database } from './players.js';
 import { googleClientId } from './settings.js';
 import { stripeApi, stripeSecret, stripeTestMode } from './stripe-api.js';
+import { orderReversed, recordOrder } from './shop.js';
 
 // The Supporter Pass (docs/world-drive.md), towards World Drive's running costs, three ways, each
 // through a Stripe Payment Link of its own: a subscription (monthly, kept while it runs), bought once
@@ -389,10 +390,13 @@ async function handleEvent( env, db, settings, event, now, buildOnly ) {
 
 		case 'checkout.session.completed':
 		case 'checkout.session.async_payment_succeeded':
+			// The made-by-hand shop's (shop.js): an order to make and post, never a pass.
+			if ( isObject( object.metadata ) && object.metadata.shop === 'order' ) return await recordOrder( env, object, event.livemode === true, now );
 			return await recordPurchase( env, db, settings, object, now, buildOnly );
 		// Stripe only sets refunded once the whole charge is; a partial refund keeps the pass.
 		case 'charge.refunded':
 			if ( object.refunded !== true ) return 'ignored';
+			await orderReversed( env, object.payment_intent, 'refunded' );
 			await takeBack( db, object.payment_intent, 'refunded', now );
 			await endBuild( env, db, chargeOf( object ), 'refunded', now );
 			return 'ok';
@@ -402,10 +406,12 @@ async function handleEvent( env, db, settings, event, now, buildOnly ) {
 			return await endBuild( env, db, disputeOf( object ), 'disputed', now ) ? 'ok' : 'ignored';
 		// A chargeback: the bank takes the money back as the dispute opens, and gives it back if it's won.
 		case 'charge.dispute.funds_withdrawn':
+			await orderReversed( env, object.payment_intent, 'disputed' );
 			await takeBack( db, object.payment_intent, 'disputed', now );
 			await endBuild( env, db, disputeOf( object ), 'disputed', now );
 			return 'ok';
 		case 'charge.dispute.funds_reinstated':
+			await orderReversed( env, object.payment_intent, 'reinstated' );
 			await giveBack( db, object.payment_intent );
 			await giveBuildBack( db, disputeOf( object ) );
 			return 'ok';

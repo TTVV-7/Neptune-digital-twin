@@ -87,6 +87,8 @@ export const METRICS = {
 	board: { key: oneOf( [ 'open', 'named' ] ), most: 20 },
 	pass: { key: oneOf( [ 'open', 'buy', 'buy_day', 'buy_month', 'ask_signin', 'pitch' ] ), most: 20 },
 	level_up: { key: ALL, most: 10 },
+	// The made-by-hand shop (shop.js): its window opened, and its Checkout followed to Stripe.
+	shop: { key: oneOf( [ 'open', 'checkout' ] ), most: 20 },
 	// Google's ad on the globe (ads.js), once a visit each: shown (an ad filled it), or blocked (its
 	// script, or its ad, didn't come: an ad blocker, mostly).
 	ad: { key: oneOf( [ 'shown', 'blocked' ] ), most: 2 },

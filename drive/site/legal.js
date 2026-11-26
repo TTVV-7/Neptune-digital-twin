@@ -33,7 +33,7 @@
 
 import { esc } from './build.js';
 
-export const UPDATED = '24 November 2026';
+export const UPDATED = '26 November 2026';
 export const CONTACT_VARS = { name: 'DRIVE_CONTACT_NAME', address: 'DRIVE_CONTACT_ADDRESS', phone: 'DRIVE_CONTACT_PHONE', email: 'DRIVE_CONTACT_EMAIL' };
 // What's shown unless the environment says otherwise: no address or phone in the repository.
 export const CONTACT_DEFAULTS = { name: 'Tom', address: '', phone: '', email: 'support@worlddrive.app' };
@@ -133,6 +133,7 @@ function privacy( contact ) {
 		<li><b>Signed in with Google:</b> your Google account's name and email address, and an ID Google gives for it.</li>
 		<li><b>With a username:</b> the username and a salted hash of your password (never the password itself), and an email only if you give one: to fill in Stripe's checkout for you (the receipt goes to whatever email you pay with), and so a forgotten password can be reset when you write from it. Nothing else is sent to it.</li>
 		<li><b>The Supporter Pass:</b> what you bought, when, the amount (and how much of it was tax), and Stripe's reference for it. World Drive never sees your card: payments are made with Stripe.</li>
+		<li><b>Shop orders</b> (no account needed): what you bought, your name, the address to post it to and your email, as you give them at Stripe's checkout, so the order can be made and posted to you, and when it was posted with its tracking number. Your name and address go on the envelope or the post's label (Canada Post, or a courier for parcels to the US).</li>
 		<li><b>Feature requests</b> you send from the account panel: what you wrote, when, and your nickname, read by World Drive's maker and deleted when you ask.</li>
 	</ul>
 	<h2>Why</h2>
@@ -146,7 +147,7 @@ function privacy( contact ) {
 	</ul>
 	<p>Nothing is sold or shared for anyone else's marketing. These services may keep data outside Canada (in the United States and elsewhere), where other laws apply.</p>
 	<h2>How long</h2>
-	<p>Your account and leaderboard entries until you ask for them to be deleted. Payment records for as long as tax law asks (in Canada, six years). Play statistics are totals only and kept as such.</p>
+	<p>Your account and leaderboard entries until you ask for them to be deleted. Payment records, shop orders included, for as long as tax law asks (in Canada, six years). Play statistics are totals only and kept as such.</p>
 	<h2>Your rights</h2>
 	<p>You can ask to see what's kept about you, have it corrected, or have your account, nickname and scores deleted: ${ emailLink( contact ) } from the account's email, or tell us the username, and you'll have an answer within 30 days. If you're not happy with the answer you can complain to the <a href="https://www.priv.gc.ca/">Office of the Privacy Commissioner of Canada</a> or, in the EU or the UK, to your own data protection authority.</p>
 	<h2>Children</h2>
@@ -211,6 +212,12 @@ function refunds( contact ) {
 		<li>A refunded pass ends when the refund is made. When a monthly payment is refunded, its subscription is cancelled too, so it won't renew.</li>
 	</ul>
 	<p>To ask, ${ emailLink( contact ) } from the email on the receipt, or say the account's username. Refunds are made through Stripe (you were sold the pass through Link, its payment service, so the email saying it's done may come from Link) and go back to the card you paid with, usually within 5 to 10 business days, including any tax you paid.</p>
+	<h2>Shop orders</h2>
+	<ul>
+		<li><b>Changed your mind before it's posted?</b> ${ emailLink( contact, 'Write' ) } and you'll get a full refund.</li>
+		<li><b>It arrived broken, or it's wrong:</b> send a photo and you'll get a new one or your money back, whichever you like.</li>
+		<li><b>It hasn't come:</b> letters in Canada aren't tracked. If it hasn't arrived 3 weeks after it was posted (4 weeks to the US), write and another will be sent, or your money given back.</li>
+	</ul>
 	<p>This is on top of any rights the law gives you where you live, such as the 14-day right to withdraw in the EU and the UK.</p>
 	<p class="small">Last updated ${ UPDATED }. See also the <a href="/terms/">terms of use</a>.</p>`;
 

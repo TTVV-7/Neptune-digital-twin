@@ -12,6 +12,7 @@ import { adminResetLink, linkGoogle, passwordSignIn, passwordsOn, removePassword
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
+import { adminShop, adminShopChange, getShop, postShopCheckout, shopOpen } from './shop.js';
 import { isAdmin } from './admin.js';
 import { buildApi, isBuildApi } from './build.js';
 import { adminComp, adminComps } from './billing.js';
@@ -115,6 +116,8 @@ export { DriveRoom } from './live.js';
 //   ADSENSE_CLIENT, ADSENSE_SLOT   Google AdSense on the globe (settings.js's adsense): the publisher
 //                         id (ca-pub-...) and, if wanted, a display unit's slot id; empty (or not
 //                         one), no ads and /ads.txt is a 404
+//   SHOP_SALES, SHOP_SHIP_*   the made-by-hand shop (shop.js): open with "on" and its four postage
+//                         prices set; SHOP_CHECKOUTS the rate limiter binding for its checkouts
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
 //                         scripts/test-drive-worker.mjs)
 
@@ -179,6 +182,11 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/challenges/ghost', handler: challengeGhost },
 	{ method: 'GET', path: '/api/admin/challenges', handler: adminChallenges },
 	{ method: 'POST', path: '/api/admin/challenges', handler: adminChange },
+	// The made-by-hand shop (shop.js): its postage, a checkout, and the owner's orders.
+	{ method: 'GET', path: '/api/shop', handler: getShop },
+	{ method: 'POST', path: '/api/shop/checkout', handler: postShopCheckout },
+	{ method: 'GET', path: '/api/admin/shop', handler: adminShop },
+	{ method: 'POST', path: '/api/admin/shop', handler: adminShopChange },
 	{ method: 'POST', path: '/api/stripe/webhook', handler: stripeWebhook, sameOrigin: false },
 ];
 
@@ -309,7 +317,8 @@ function adsTxt( request, env ) {
 // (without a key it shows a "back soon" screen instead of the globe), the sign-in button's client
 // id ('' when there's no signing in with Google, see accounts.js), whether there are usernames and
 // passwords (passwords, logins.js), adsense: { client, slot } only while Google's ads are on
-// (settings.js's adsense; nothing about ads otherwise), and whether driving with others is on on the
+// (settings.js's adsense; nothing about ads otherwise), shop: true only while the made-by-hand shop
+// is open (shop.js), and whether driving with others is on on the
 // Earth (live), with liveReason: BUDGET_SPENT when it's off for the rest of the day (its budget, see
 // live.js), and on the Moon (liveMoon: its rooms have a budget of their own, so it can be on there
 // with the Earth's spent; a page from before the Moon had drivers doesn't read it), with
@@ -327,6 +336,7 @@ async function getConfig( { env, limits, now } ) {
 	return json( {
 		turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! mapsKey( env ), googleClientId: googleClientId( env ), passwords: passwordsOn( env ), live: today.open, liveMoon: today.moon.open,
 		...( ads ? { adsense: ads } : {} ),
+		...( shopOpen( env ) ? { shop: true } : {} ),
 		...( today.reason === BUDGET_SPENT || today.reason === 'unknown' ? { liveReason: today.reason } : {} ),
 		...( today.moon.reason === BUDGET_SPENT || today.moon.reason === 'unknown' ? { liveMoonReason: today.moon.reason } : {} ),
 		liveWorlds: Object.fromEntries( LIVE_WORLD_IDS.map( world => {

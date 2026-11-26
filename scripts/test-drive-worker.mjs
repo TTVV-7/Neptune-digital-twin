@@ -4918,7 +4918,7 @@ describe( 'Play stats\' counts', () => {
 			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', ...OFF_EARTH ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
 			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: OFF_EARTH, play_world: WORLD_IDS, search: SEARCHES,
 			dropin_time: [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ], problem: PROBLEMS, board: [ 'open', 'named' ], pass: [ 'open', 'buy' ], level_up: [ 'all' ], ad: [ 'shown', 'blocked' ],
-			challenge: [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open', 'share', 'link', 'link_start' ],
+			challenge: [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open', 'share', 'link', 'link_start' ], shop: [ 'open', 'checkout' ],
 		};
 		assert.deepEqual( Object.keys( keysOf ).sort(), Object.keys( METRICS ).sort(), 'every metric' );
 		const names = Object.entries( keysOf ).flatMap( ( [ metric, keys ] ) => keys.map( key => {

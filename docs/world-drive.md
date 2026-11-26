@@ -8549,6 +8549,70 @@ with the page's own script moving a page along too should the rule ever be off. 
 `workers.dev` address: the Turnstile widget only works on worlddrive.app, and one address keeps the
 counts simple (and [search engines](#search-engines) see one site).
 
+## Shop
+
+The made-by-hand shop: coasters, keychains and stickers the owner makes in BC, Canada, sold from
+the game itself to Canada and the US. Shut until the owner opens it (`SHOP_SALES`, below).
+
+- **Where it is.** A **Made-by-hand shop** button under the Garage and Supporter Pass buttons, on
+  the globe's panel and in the pause menu (`src/drive-app/shop.js`, added after `garage.js`'s
+  `.ride-actions` rows, only when `/api/config` says `shop: true`). It opens a window built like the
+  pass's (`shop.css`): each item with its picture, price, design and Add; the bag; **Ship to**
+  Canada or the US; the postage, delivery time and total; and **Checkout**, which goes to Stripe's
+  page. The bag is kept in the browser (`localStorage`, `wd-shop-bag`) until the order is paid.
+  Stripe sends the buyer back to `/?shop=done` (a thank-you in the window) or `/?shop=cancelled`
+  (the window again, bag as it was). No account is needed to buy.
+- **What's for sale** is `src/drive-app/shop-catalog.js`, shared by the page and the Worker, prices
+  in Canadian cents: a coaster set of 4 ($5: mixed, or 4 of one of six designs; soft-grip TPU base
+  +$2), a single coaster ($3), the globe, NFC and wordmark keychains ($5, $7, $5), 10 stickers ($5),
+  and one sticker ($1, only with something else: a bag of single stickers alone is turned away). The
+  Worker takes only ids, designs and how many from the page, never a price. The pictures are
+  `drive/public/shop/`, from the print files' renders (3D-print-sandbox, `worlddrive/previews/`) and
+  the stickers' thermal-printed look.
+- **Postage** is the Worker's (`worker/drive/shop.js`), chosen by where it's going and what's in the
+  bag (`tierOf`): stickers and keychains alone go **small** (in Canada an untracked letter; to the US
+  the smallest tracked packet, as goods can't go to the US as letters), anything with a coaster as a
+  **parcel**. Checkout makes a Stripe Checkout Session with the catalog's prices, that one postage
+  price with its delivery estimate, and the address asked for in that country only. The order is in
+  the session's metadata (`shop: 'order'`, the bag packed small).
+- **Orders** come back through Stripe's webhook (shared with the pass, `supporter.js`), which keeps
+  each paid one in D1's `shop_orders` (`0024_shop_orders.sql`) with the name and address Stripe
+  collected, and marks it refunded or charged back when Stripe says so. A shop order is never a
+  Supporter Pass. The admin page's **Shop orders** tab lists the newest 100: what to make, where to
+  post it, and **Mark posted** with a tracking number. Only the owner's accounts see it.
+- **Play stats**: `shop:open` and `shop:checkout`, counts only.
+
+### The shop's settings
+
+| Setting | Where | What it is |
+| --- | --- | --- |
+| `SHOP_SALES` | `vars` | `on` opens the shop; anything else (unset) keeps it shut and the button hidden |
+| `SHOP_SHIP_CA_SMALL` | `vars` | Postage in Canadian cents for stickers and keychains to Canada (a letter) |
+| `SHOP_SHIP_CA_PARCEL` | `vars` | Postage for anything with coasters to Canada |
+| `SHOP_SHIP_US_SMALL` | `vars` | Stickers and keychains to the US (the smallest packet) |
+| `SHOP_SHIP_US_PARCEL` | `vars` | Anything with coasters to the US |
+| `SHOP_DAYS_CA_SMALL` ... | `vars` | Optional, `3-10`: business days to the door, shown at checkout (defaults: Canada 4–12 by letter, 4–10 by parcel; the US 7–15) |
+| `SHOP_CHECKOUTS` | rate limiter | Checkouts started, by address: 5 a minute |
+
+It also needs `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, as Build Pro does. With any of them
+missing or wrong the shop stays shut: nothing is sold whose postage isn't known or that the webhook
+can't record. A test-mode key sells in test mode (Stripe's test cards), and its orders show as
+test on the admin page.
+
+### The owner's steps
+
+1. **Weigh and price the postage.** Pack one sticker or keychain envelope and one coaster set,
+   weigh and measure them, and look up the postage: Canada Post for Canada, and Canada Post or a
+   service such as Chit Chats for the US. Put the four prices, in cents, in `wrangler.drive.jsonc`.
+2. **Stripe.** The webhook endpoint (the pass's) needs `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded`, `charge.refunded` and the dispute events, which it
+   has for the pass. The restricted key needs write access to Checkout Sessions (Build Pro's has it).
+3. **Open it.** Set `"SHOP_SALES": "on"`, commit and push (the deploy applies the migration).
+4. **Try it** with a test-mode key on a staging Worker first, or buy one thing yourself and refund
+   it in Stripe's Dashboard: the order shows on the admin page, then as refunded.
+5. **Each order:** the admin page's Shop orders tab. Make it, post it, Mark posted. A free logo
+   sticker goes in every order (the checkout says so).
+
 ## Legal pages
 
 Four plain pages beside the places' (made by `drive/site/build.js`, their words in

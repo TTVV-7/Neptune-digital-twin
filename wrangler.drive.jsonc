@@ -113,6 +113,15 @@
 		// BUILD_EMAILS or ADMIN_EMAILS. To sell again, uncomment this (with a comma after ADSENSE_SLOT's),
 		// and build with BUILD_SALES=on too, for the Terms and Refunds pages (drive/site/legal.js):
 		// "BUILD_SALES": "on"
+		//
+		// The made-by-hand shop (docs/world-drive.md, "Shop"; worker/drive/shop.js): coasters,
+		// keychains and stickers, sold from the game's Shop window through Stripe to Canada and the
+		// US. Shut until SHOP_SALES is "on" and all four postage prices are set, in Canadian cents
+		// (STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are needed too): stickers and keychains alone
+		// (a letter in Canada, the smallest packet to the US) and anything with coasters, e.g.
+		// "SHOP_SALES": "on", "SHOP_SHIP_CA_SMALL": "300", "SHOP_SHIP_CA_PARCEL": "1000",
+		// "SHOP_SHIP_US_SMALL": "800", "SHOP_SHIP_US_PARCEL": "900"
+		// (those numbers are examples: weigh a packed order and look up the real postage first).
 	},
 	// Secrets, set by the owner and never in a file (the dashboard, or
 	// npx wrangler secret put GOOGLE_MAPS_API_KEY -c wrangler.drive.jsonc): GOOGLE_MAPS_API_KEY (a
@@ -169,7 +178,10 @@
 		// reads about 30 rows for most players and about 410 at most for a big account
 		// (docs/world-drive.md, "What it costs"), and a page asks as its Achievements grid opens, so 6
 		// a minute (and ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY, 200, a day by DriveLimits).
-		{ "name": "ACHIEVEMENT_LOOKS", "namespace_id": "4808", "simple": { "limit": 6, "period": 60 } }
+		{ "name": "ACHIEVEMENT_LOOKS", "namespace_id": "4808", "simple": { "limit": 6, "period": 60 } },
+		// Shop checkouts started (worker/drive/shop.js), by address: each makes a Checkout Session at
+		// Stripe, so at most 5 a minute (a buyer starts one, or two after changing their mind).
+		{ "name": "SHOP_CHECKOUTS", "namespace_id": "4809", "simple": { "limit": 5, "period": 60 } }
 	],
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] },

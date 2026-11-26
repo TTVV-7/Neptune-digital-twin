@@ -178,6 +178,20 @@
 	body.tab-build main > :not(header):not(.tabs):not(#build) { display: none !important; }
 	body.tab-build #csv { display: none; }
 	body:not(.tab-build) #build { display: none; }
+	/* The Shop tab (#shop): the made-by-hand shop's orders, to make and post. */
+	body.tab-shop main > :not(header):not(.tabs):not(#shop) { display: none !important; }
+	body.tab-shop #csv, body.tab-shop .controls { display: none; }
+	body:not(.tab-shop) #shop { display: none; }
+	.orders { display: grid; gap: 10px; }
+	.order { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px 18px; align-items: start; }
+	.order.done { opacity: 0.6; }
+	.order h3 { margin: 0 0 4px; font-size: 15px; }
+	.order ul { margin: 0; padding-left: 18px; }
+	.order address { font-style: normal; white-space: pre-line; }
+	.order .act { display: flex; flex-direction: column; gap: 6px; min-width: 170px; }
+	.order .act input { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+	.order .state { font-weight: 700; }
+	@media (max-width: 760px) { .order { grid-template-columns: 1fr; } }
 	.build-find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 	.build-find input { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); min-width: 0; flex: 1 1 220px; }
 	.build-comp { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
@@ -249,7 +263,11 @@
 			<button type="button" id="csv" disabled>Download CSV</button>
 		</div>
 	</header>
-	<div class="seg tabs" id="tabs" role="group" aria-label="Which product"><button type="button" data-tab="game" aria-pressed="true">World Drive</button><button type="button" data-tab="build" aria-pressed="false">Build</button></div>
+	<div class="seg tabs" id="tabs" role="group" aria-label="Which product"><button type="button" data-tab="game" aria-pressed="true">World Drive</button><button type="button" data-tab="build" aria-pressed="false">Build</button><button type="button" data-tab="shop" aria-pressed="false">Shop orders</button></div>
+	<section id="shop" aria-label="Shop orders">
+		<div id="shop-out"><p class="muted">Loading...</p></div>
+		<p class="note">Orders paid through the game's Shop (the newest 100). To do: make it, post it to the address shown, then Mark posted (with the tracking number for a parcel or packet; a letter has none). Refunds are Stripe's Dashboard: a refunded order shows here as refunded, and isn't to be posted. Test orders (a test-mode key) are marked so.</p>
+	</section>
 	<section id="build" aria-label="World Drive Build">
 		<div id="build-out"><p class="muted">Loading...</p></div>
 		<div class="card" id="build-customer" style="margin-top:12px">
@@ -381,7 +399,7 @@
 	const NAMES = {
 		visit: 'Visits', visit_kind: 'Visits by where they went (the globe, Earth, a link to another world, or over a cap)', visit_hour: 'Visits by UTC hour', load: 'Loads by referring site', load_time: 'Load time (buckets)', load_ms: 'Load time (ms, all together)',
 		dropin: 'Drop-ins by place', ride: 'Drop-ins by ride', play: 'Play time by ride (s)', play_with_others: 'Play with others (s)', play_world: 'Play time by world (s)',
-		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the other worlds',
+		garage_open: 'Garage opened', garage_edit: 'Garage changes', shop: 'Shop opened / checkouts started', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the other worlds',
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups', ad: 'Ad on the globe (visits it showed in, and blocked in)',
 		challenge: 'Challenges (opened, started, finished, posted; the word while driving said, and its button pressed; a friend\'s link shared, opened, and a run started from it)',
 		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New accounts (Google or username)',
@@ -1150,12 +1168,16 @@
 
 	} );
 	if ( location.hash === '#build' ) showTab( 'build' );
+	if ( location.hash === '#shop' ) setTimeout( () => showTab( 'shop' ) );
 
 	function showTab( tab ) {
 
 		document.body.classList.toggle( 'tab-build', tab === 'build' );
+		document.body.classList.toggle( 'tab-shop', tab === 'shop' );
 		for ( const button of tabs.querySelectorAll( 'button' ) ) button.setAttribute( 'aria-pressed', String( button.dataset.tab === tab ) );
-		history.replaceState( null, '', tab === 'build' ? '#build' : location.pathname + location.search );
+		history.replaceState( null, '', tab === 'build' || tab === 'shop' ? `#${ tab }` : location.pathname + location.search );
+		// The Shop tab's orders are its own script's (below), asked for each time it's shown.
+		if ( tab === 'shop' ) document.dispatchEvent( new Event( 'shop-tab' ) );
 		if ( tab === 'build' && buildDays !== select.value ) loadBuild();
 
 	}
@@ -2958,6 +2980,97 @@
 		alert( 'That didn\'t go through. Try again.' );
 
 	} );
+
+} )();
+</script>
+<script>
+// The Shop tab: the made-by-hand shop's orders (GET /api/admin/shop, worker/drive/shop.js), each
+// with what to make, where to post it, and Mark posted (POST /api/admin/shop, with a tracking
+// number if it has one). Only the owner's accounts are answered; the addresses never leave here.
+( () => {
+
+	const out = document.getElementById( 'shop-out' );
+	const esc = value => String( value ?? '' ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } )[ c ] );
+	const cad = ( cents, currency = 'cad' ) => typeof cents === 'number' ? new Intl.NumberFormat( undefined, { style: 'currency', currency: currency.toUpperCase() } ).format( cents / 100 ) : '-';
+	const when = ms => ms ? new Date( ms ).toLocaleString( undefined, { dateStyle: 'medium', timeStyle: 'short' } ) : '';
+	const STATES = { paid: 'To make and post', shipped: 'Posted', refunded: 'Refunded: don\'t post', disputed: 'Charged back: don\'t post' };
+	document.addEventListener( 'shop-tab', load );
+	out.addEventListener( 'click', event => {
+
+		const button = event.target.closest( 'button[data-order]' );
+		if ( button ) mark( button.dataset.order, button.dataset.shipped === 'true' );
+
+	} );
+
+	async function load() {
+
+		out.innerHTML = '<p class="muted">Loading...</p>';
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/shop', { credentials: 'same-origin' } );
+
+		} catch {
+
+			out.innerHTML = '<div class="notice">Couldn\'t reach the server. Try again in a moment.</div>';
+			return;
+
+		}
+
+		const body = await res.json().catch( () => ( {} ) );
+		if ( ! res.ok ) {
+
+			out.innerHTML = `<div class="notice">${ esc( body.error ?? `The server answered ${ res.status }.` ) }</div>`;
+			return;
+
+		}
+
+		const orders = body.orders ?? [];
+		const waiting = orders.filter( order => order.status === 'paid' ).length;
+		out.innerHTML = orders.length ? `<p><b>${ waiting }</b> to make and post, of the ${ orders.length } shown.</p><div class="orders">${ orders.map( order ).join( '' ) }</div>`
+			: '<div class="notice">No orders yet. They show here as soon as Stripe says one is paid.</div>';
+
+	}
+
+	function order( o ) {
+
+		const a = o.address ?? {};
+		const address = [ o.name, a.line1, a.line2, [ a.city, a.state, a.postal_code ].filter( Boolean ).join( ' ' ), a.country ].filter( Boolean ).join( '\n' );
+		const open = o.status === 'paid';
+		return `<div class="card order${ open ? '' : ' done' }">
+			<div>
+				<h3>${ esc( when( o.at ) ) }${ o.test ? ' · <span class="muted">test</span>' : '' }</h3>
+				<ul>${ ( o.items ?? [] ).map( line => `<li>${ esc( line.qty ) } × ${ esc( line.name ) }</li>` ).join( '' ) }<li class="muted">+ a free logo sticker</li></ul>
+				<p class="muted small">${ esc( cad( o.subtotal, o.currency ) ) } + ${ esc( cad( o.shipping, o.currency ) ) } postage (${ o.tier === 'parcel' ? 'parcel or packet' : o.country === 'CA' ? 'letter' : 'small packet' }) = ${ esc( cad( o.total, o.currency ) ) }</p>
+			</div>
+			<div>
+				<address>${ esc( address ) }</address>
+				<p class="muted small">${ esc( o.email ) }</p>
+			</div>
+			<div class="act">
+				<span class="state">${ esc( STATES[ o.status ] ?? o.status ) }</span>
+				${ o.status === 'shipped' ? `<span class="muted small">${ esc( when( o.shippedAt ) ) }${ o.tracking ? `<br>${ esc( o.tracking ) }` : '' }</span><button type="button" data-order="${ esc( o.id ) }" data-shipped="false">Not posted yet</button>` : '' }
+				${ open ? `<input type="text" id="track-${ esc( o.id ) }" placeholder="Tracking number (if any)" aria-label="Tracking number" maxlength="60"><button type="button" data-order="${ esc( o.id ) }" data-shipped="true">Mark posted</button>` : '' }
+			</div>
+		</div>`;
+
+	}
+
+	async function mark( id, shipped ) {
+
+		const tracking = document.getElementById( `track-${ id }` )?.value ?? '';
+		const res = await fetch( '/api/admin/shop', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { id, shipped, tracking } ) } ).catch( () => null );
+		if ( ! res?.ok ) {
+
+			const body = await res?.json().catch( () => ( {} ) );
+			alert( body?.error ?? 'Couldn\'t save that. Try again.' );
+			return;
+
+		}
+
+		load();
+
+	}
 
 } )();
 </script>

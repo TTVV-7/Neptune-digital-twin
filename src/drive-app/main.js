@@ -428,8 +428,9 @@ const _before = new Matrix4();
 // picked, or it's closed: then the Moon; the Earth picked turns the page to its own globe, in place);
 // challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
 // promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js);
-// adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null.
-export async function start( { key, left = null, visit: token = null, earthVisit = null, opensOn = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, liveMoonReason = '', liveWorlds = null, earthClosed = null, orreryFirst = false, challengeLink = null, adsense = null } ) {
+// adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null. shop:
+// whether the made-by-hand shop is open (/api/config's shop; shop.js).
+export async function start( { key, left = null, visit: token = null, earthVisit = null, opensOn = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, liveMoonReason = '', liveWorlds = null, earthClosed = null, orreryFirst = false, challengeLink = null, adsense = null, shop = false } ) {
 
 	// (The globe's visit to begin with; the Earth's once the page has its Earth drive: setVisit.)
 	let visit = token ?? VISIT_TEST?.visit ?? null;
@@ -700,6 +701,10 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		// Its ▶ Boost as driving's: no flare for a visitor asking for less motion, fewer sparks on a phone.
 		effects: driver.effects,
 	} );
+
+	// The made-by-hand shop's button under the Garage's and the pass's, both places (shop.js), only
+	// while it's open; its code comes after the globe's, so none of it is in the way of it coming up.
+	if ( shop ) import( './shop.js' ).then( ( { setUpShop } ) => setUpShop( { opened: () => stats.add( 'shop', 'open' ), checkout: () => stats.add( 'shop', 'checkout' ) } ), err => console.warn( 'The shop didn\'t load', err?.message ) );
 
 	// The leaderboard, from the trophy on the globe and in the pause menu. "Only here" is the place
 	// being driven, or on the globe the one pinned.
