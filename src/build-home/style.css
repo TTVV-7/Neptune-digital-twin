@@ -330,6 +330,104 @@ h1 {
 	font-size: 11px;
 }
 
+/* Or a blank site, with no map (main.js's showBlankChoice): a card below the search, with a little
+   site plan of its own, a grid and a north arrow. */
+.blank-choice {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 6px 16px;
+	margin-top: 14px;
+	padding: 12px 14px;
+	border-radius: 12px;
+	background: rgba( 24, 33, 42, 0.85 );
+	border: 1px dashed #3b4d5e;
+}
+
+.blank-icon {
+	position: relative;
+	width: 52px;
+	height: 52px;
+	border-radius: 8px;
+	/* The editor's blank ground: light earth, faint lines every metre and stronger every ten. */
+	background:
+		linear-gradient( rgba( 79, 70, 54, 0.45 ) 1px, transparent 1px ) -1px -1px / 26px 26px,
+		linear-gradient( 90deg, rgba( 79, 70, 54, 0.45 ) 1px, transparent 1px ) -1px -1px / 26px 26px,
+		linear-gradient( rgba( 79, 70, 54, 0.16 ) 1px, transparent 1px ) 0 0 / 6.5px 6.5px,
+		linear-gradient( 90deg, rgba( 79, 70, 54, 0.16 ) 1px, transparent 1px ) 0 0 / 6.5px 6.5px,
+		#c2b79f;
+	box-shadow: inset 0 0 0 1px rgba( 0, 0, 0, 0.25 );
+}
+
+.blank-icon span {
+	position: absolute;
+	top: 5px;
+	right: 6px;
+	padding-top: 9px;
+	font: 700 10px/1 var( --mono );
+	color: #2a2419;
+	background: linear-gradient( #2a2419, #2a2419 ) 50% 0 / 2px 8px no-repeat;
+}
+
+.blank-text {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+}
+
+.blank-text span {
+	color: var( --muted );
+	font-size: 13px;
+}
+
+.blank-open {
+	color: var( --safety );
+	font-size: 14px;
+	font-weight: 600;
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.blank-open:hover, .blank-open:focus-visible {
+	text-decoration: underline;
+}
+
+/* Signed in: a name and Start, on a line of its own under the words. */
+.blank-choice .blank-start {
+	grid-column: 2 / -1;
+	margin: 4px 0 0;
+	padding: 0;
+	background: none;
+	border: 0;
+}
+
+.project.blank .site::before {
+	content: '';
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	margin-right: 6px;
+	vertical-align: -1px;
+	border-radius: 2px;
+	background:
+		linear-gradient( rgba( 79, 70, 54, 0.6 ) 1px, transparent 1px ) 0 0 / 5px 5px,
+		linear-gradient( 90deg, rgba( 79, 70, 54, 0.6 ) 1px, transparent 1px ) 0 0 / 5px 5px,
+		#c2b79f;
+}
+
+@media ( max-width: 560px ) {
+
+	.blank-choice {
+		grid-template-columns: auto 1fr;
+	}
+
+	.blank-open,
+	.blank-choice .blank-start {
+		grid-column: 1 / -1;
+	}
+
+}
+
 .example {
 	margin: 16px 0 0;
 	color: var( --muted );
@@ -881,7 +979,7 @@ h2 {
 	padding: 8px 16px;
 }
 
-.start-here {
+.start-here, .blank-start {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
@@ -899,7 +997,7 @@ h2 {
 	border-bottom-color: transparent;
 }
 
-.start-here input {
+.start-here input, .blank-start input {
 	flex: 1 1 180px;
 	min-width: 0;
 	padding: 8px 10px;
@@ -910,7 +1008,7 @@ h2 {
 	font: inherit;
 }
 
-.start-here button {
+.start-here button, .blank-start button {
 	padding: 8px 14px;
 	border: 0;
 	border-radius: 8px;
@@ -920,7 +1018,7 @@ h2 {
 	cursor: pointer;
 }
 
-.start-here button:disabled {
+.start-here button:disabled, .blank-start button:disabled {
 	opacity: 0.6;
 }
 

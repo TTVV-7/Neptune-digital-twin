@@ -6,6 +6,7 @@
 // (layers.js) stands on top of it, in the same column (stack()), and is placed with it.
 
 import { getKind, resizeShape } from './kinds.js';
+import { SITE } from './config.js';
 
 const STORAGE_KEY = 'neptune-twin.legend';
 // Narrower than this (px) counts as a phone: the panel starts folded away.
@@ -140,7 +141,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 	// Before / After (layers.js).
 	function beforeRow() {
 
-		return [ [ 'B' ], getLayers()?.before ? 'After: show your changes again' : 'Before: the site as Google captured it' ];
+		return [ [ 'B' ], getLayers()?.before ? 'After: show your changes again' : SITE.blank ? 'Before: the blank ground' : 'Before: the site as Google captured it' ];
 
 	}
 

@@ -45,6 +45,9 @@ let stripe;
 let browser;
 let page;
 const errors = [];
+// Requests the page made for Google's map (all blocked here): a blank site makes none.
+const GOOGLE_MAP = /^https:\/\/(tile|maps)\.googleapis\.com\//;
+const googleAsked = [];
 
 // The built page's files the test needs: the page, its code, the library's list and pictures, and
 // the few models placed.
@@ -77,7 +80,7 @@ function assetsOf() {
 	walk( join( DIST, 'app', 'assets' ) );
 	walk( join( DIST, 'app', 'library', 'thumbs' ) );
 	add( join( DIST, 'app', 'library', 'library.json' ) );
-	for ( const model of [ 'traffic-cone.glb', 'pickup-truck.glb' ] ) add( join( DIST, 'app', 'library', model ) );
+	for ( const model of [ 'traffic-cone.glb', 'pickup-truck.glb', 'mini-excavator-cad.glb', 'porta-potty.glb' ] ) add( join( DIST, 'app', 'library', model ) );
 	return files;
 
 }
@@ -151,6 +154,7 @@ before( async () => {
 	browser = await chromium.launch( { args: [ '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader' ] } );
 	page = await browser.newPage( { viewport: { width: 1280, height: 800 } } );
 	page.on( 'pageerror', e => errors.push( String( e ) ) );
+	page.on( 'request', r => GOOGLE_MAP.test( r.url() ) && googleAsked.push( r.url() ) );
 	await page.route( '**/*', route => {
 
 		const url = route.request().url();
@@ -686,6 +690,174 @@ test( 'starting a project from the dashboard, moving it, and renaming and deleti
 	page.once( 'dialog', d => d.accept() );
 	await page.click( '.project-actions button:has-text("Delete")' );
 	await page.locator( '.project' ).waitFor( { state: 'detached' } );
+
+} );
+
+// --- blank sites (src/blank-site.js) ------------------------------------------------------
+
+// The editor's answer from GET config as it opens, while go() opens it.
+async function openWatchingConfig( go ) {
+
+	const [ res ] = await Promise.all( [ page.waitForResponse( r => /\/build\/app\/api\/config(\?|$)/.test( r.url() ) ), go() ] );
+	return { url: res.url(), body: await res.json() };
+
+}
+
+// Where the screenshots look from: south-east of the site point, up and looking down at it.
+const overview = () => page.evaluate( () => window.twin.controls.setPose( window.twin.camera.position.clone().set( - 22, 17, - 20 ), 322, - 30 ) );
+
+test( 'a blank site signed out: plain ground with its grid and north arrow, no Google request and nothing about keys', async () => {
+
+	await page.context().clearCookies();
+	await dashboard();
+	assert.equal( await page.isVisible( '#blank-open' ), true );
+	assert.equal( await page.isVisible( '#blank-start' ), false );
+	googleAsked.length = 0;
+	const config = await openWatchingConfig( () => page.click( '#blank-open' ) );
+	await page.waitForFunction( () => window.twin?.sidebar && window.twin.layout, null, { timeout: 60000 } );
+	assert.match( config.url, /[?&]blank=1/ );
+	assert.equal( config.body.mapsKey, undefined );
+	assert.equal( config.body.mapsReason, 'blank' );
+	await page.waitForTimeout( 1500 );
+	const state = await page.evaluate( () => ( {
+		site: window.twin.SITE,
+		tiles: !! window.twin.tiles,
+		ground: window.twin.scene.children.some( o => o.name === 'blank-site-ground' ),
+		banner: document.getElementById( 'banner' ).hidden ? '' : document.getElementById( 'banner' ).textContent,
+		pill: document.querySelector( '.site-picker .site-current' ).textContent.replace( /\s+/g, ' ' ).trim(),
+		arrow: document.querySelector( '#north-arrow .ground' )?.textContent,
+		attribution: document.getElementById( 'attribution' ).hidden,
+	} ) );
+	assert.equal( state.site.name, 'Blank site' );
+	assert.deepEqual( state.site.blank, { slope: 0, toward: 0 } );
+	assert.equal( state.tiles, false );
+	assert.equal( state.ground, true );
+	assert.doesNotMatch( state.banner, /Google|key|3D map|Sign in/ );
+	assert.equal( state.pill, 'Site Blank site' );
+	assert.equal( state.arrow, 'Flat' );
+	assert.equal( state.attribution, true, 'no Google attribution: nothing of Google\'s is shown' );
+	assert.deepEqual( googleAsked, [] );
+
+} );
+
+test( 'a blank project from the dashboard: no 3D map view, placing and flattening on it, its slope, and the free plan\'s one project', async () => {
+
+	await page.goto( `${ server.base }/build/` );
+	await signInAs( { sub: 'ui-blank', email: 'blank@example.com', name: 'Bo Blank' } );
+	await dashboard();
+	assert.equal( await page.isVisible( '#blank-open' ), false );
+	assert.equal( await page.isVisible( '#blank-start' ), true );
+	await page.fill( '#blank-name', 'Yard layout' );
+	await shot( 'dashboard-blank-choice' );
+	googleAsked.length = 0;
+	const config = await openWatchingConfig( () => page.click( '#blank-start button' ) );
+	assert.match( page.url(), /\/build\/app\/\?blank=&project=[\w-]{16}$/ );
+	assert.equal( config.body.mapsKey, undefined, 'no Maps key handed out' );
+	assert.equal( config.body.mapsReason, 'blank' );
+	assert.equal( config.body.plan.views.used, 0 );
+	const id = new URL( page.url() ).searchParams.get( 'project' );
+	await page.locator( '#project-status[data-state="saved"]', { hasText: 'Yard layout · Saved' } ).waitFor( { timeout: 30000 } );
+	assert.equal( await page.evaluate( () => window.twin.tiles ), null );
+	// The Show panel has no Google 3D map row, and Before is the blank ground.
+	const show = await page.evaluate( () => ( {
+		text: document.getElementById( 'layers' ).textContent,
+		before: document.querySelector( '#layers [data-view="before"]' ).title,
+	} ) );
+	assert.doesNotMatch( show.text, /Google 3D map/ );
+	assert.match( show.before, /blank ground/ );
+
+	// Things placed on it, a flatten area by its points, a stockpile and a dimension: saved to the project.
+	await page.evaluate( async () => {
+
+		const { models } = window.twin;
+		const item = ( library, name, east, north, heading = 0 ) => models.load( { name, library, url: `library/${ library }.glb`, east, north, heading, up: null } );
+		await Promise.all( [
+			item( 'pickup-truck', 'Pickup truck', - 7, 3, 90 ),
+			item( 'mini-excavator-cad', 'Mini excavator', 6, 22, 210 ),
+			item( 'porta-potty', 'Porta potty', - 13, 8 ),
+			...[ - 4, - 1, 2, 5 ].map( e => item( 'traffic-cone', 'Traffic cone', e, - 6 ) ),
+			models.load( { kind: 'flatten-zone', east: 2, north: 20, heading: 0, up: null, params: { width: 24, length: 20, surface: 'gravel', grade: 'level', batter: 2, points: [ [ - 12, - 10 ], [ 12, - 10 ], [ 12, - 2 ], [ - 4, - 2 ], [ - 4, 10 ], [ - 12, 10 ] ] } } ),
+			models.load( { kind: 'stockpile', east: 16, north: 4, heading: 0, up: null, params: { material: 'gravel', shape: 'cone', volume: 40 } } ),
+			models.load( { kind: 'markup', name: 'Dimension', params: { type: 'dimension', points: [ [ - 10, 0, 0 ], [ 10, 0, 0 ] ], offset: 2 }, east: 0, north: - 10, up: null, heading: 0 } ),
+		] );
+
+	} );
+	await overview();
+	const stored = async () => page.evaluate( async id => ( await ( await fetch( `/build/api/layouts/${ id }` ) ).json() ), id );
+	for ( let i = 0; i < 60 && ( await stored() ).data.items.length < 10; i ++ ) await page.waitForTimeout( 500 );
+	const saved = await stored();
+	assert.equal( saved.data.items.length, 10 );
+	assert.deepEqual( saved.data.blank, { slope: 0, toward: 0 } );
+	assert.equal( saved.site, 'Blank site' );
+	assert.deepEqual( saved.blank, { slope: 0, toward: 0 } );
+	// Flat ground at the site point's height.
+	assert.ok( Math.abs( await page.evaluate( () => window.twin.terrain.standIn.height( - 30, 40 ) ) ) < 1e-6 );
+	await page.waitForTimeout( 2500 );
+	await shot( 'editor-blank-site' );
+	assert.deepEqual( googleAsked, [], 'nothing asked of Google' );
+
+	// Its slope, from the Site button: the page opens again with it, and the project keeps it.
+	await page.click( '.site-picker .site-current' );
+	assert.equal( await page.isVisible( '.site-picker .ground-slope' ), true );
+	await page.fill( '.site-picker .ground-slope', '4' );
+	await page.selectOption( '.site-picker .ground-toward', '90' );
+	await shot( 'editor-blank-ground-settings' );
+	await Promise.all( [ page.waitForNavigation(), page.click( '.site-picker .ground-apply' ) ] );
+	assert.match( page.url(), /blank=4%2C90/ );
+	await page.waitForFunction( () => window.twin?.terrain && window.twin.models.entries.filter( e => e.library ).length >= 7, null, { timeout: 60000 } );
+	for ( let i = 0; i < 60 && ! ( await stored() ).data.blank?.slope; i ++ ) await page.waitForTimeout( 500 );
+	assert.deepEqual( ( await stored() ).data.blank, { slope: 4, toward: 90 } );
+	assert.equal( ( await stored() ).data.items.length, 10 );
+	const sloped = await page.evaluate( () => ( {
+		east: window.twin.terrain.standIn.height( - 10, 0 ),
+		west: window.twin.terrain.standIn.height( 10, 0 ),
+		north: window.twin.terrain.standIn.height( 0, 10 ),
+		arrow: document.querySelector( '#north-arrow .ground' ).textContent,
+	} ) );
+	assert.ok( Math.abs( sloped.east + 0.4 ) < 1e-6, 'falls 4 % to the east' );
+	assert.ok( Math.abs( sloped.west - 0.4 ) < 1e-6 );
+	assert.ok( Math.abs( sloped.north ) < 1e-6 );
+	assert.equal( sloped.arrow, 'Falls 4 % to the east' );
+	await overview();
+	await page.waitForTimeout( 2500 );
+	await shot( 'editor-blank-site-sloped' );
+
+	// Opened with only its id, it opens as the blank site it is.
+	await page.goto( `${ server.base }/build/app/?project=${ id }` );
+	await page.waitForURL( /blank=4%2C90&project=/ );
+	await page.waitForFunction( () => window.twin?.SITE?.blank?.slope === 4 );
+
+	// The dashboard: it's a blank site, it opens as one, and no 3D map view was used.
+	await dashboard();
+	const listed = await page.evaluate( () => ( {
+		site: document.querySelector( '.project .site' ).textContent,
+		href: document.querySelector( '.project' ).getAttribute( 'href' ),
+		views: document.querySelector( '.meter-value' ).textContent,
+	} ) );
+	assert.equal( listed.site, 'Blank site, no map · Falls 4 % to the east' );
+	assert.match( listed.href, /\/build\/app\/\?blank=4%2C90&project=/ );
+	assert.equal( listed.views, '0 / 15', 'no 3D map view used' );
+	assert.deepEqual( googleAsked, [] );
+	await shot( 'dashboard-blank-project' );
+
+	// It's the free plan's one project: a second blank one is refused, as one at a place is.
+	await page.click( '#blank-start button' );
+	await page.locator( '#blank-note', { hasText: 'free plan saves one project' } ).waitFor();
+
+	// Moved to a real address from the Site button, it's a project on the map from then on.
+	await page.goto( listed.href );
+	await page.waitForFunction( () => window.twin?.sidebar );
+	await page.click( '.site-picker .site-current' );
+	await page.fill( '#site-query', 'CN Tower' );
+	await page.click( '.site-picker form > button' );
+	await page.waitForSelector( '.site-picker .site-results button:has-text("CN Tower")' );
+	await Promise.all( [ page.waitForNavigation(), page.click( '.site-picker .site-results button' ) ] );
+	await page.waitForFunction( async id => {
+
+		const body = await ( await fetch( `/build/api/layouts/${ id }` ) ).json();
+		return body.site === 'CN Tower, Front Street West' && body.blank === null && ! body.data.blank;
+
+	}, id, { timeout: 30000 } );
 
 } );
 

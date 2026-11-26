@@ -25,6 +25,7 @@ import { ZONE_ID, liftNow } from './flatten.js';
 import { MAX_GROUND_ERROR, MAX_REACH, gradeOffset, gradeRange, groundOffset, isGraded, pressedOnly } from './grade.js';
 import { clampToPolygon, insidePolygon, nearestOnPolygon, polygonDistance, winding } from './polygon.js';
 import { blocks } from './walk.js';
+import { SITE_GRID_GLSL, siteGridUniforms } from './blank-ground.js';
 
 // The ground you can dig into and pile onto: a heightfield in the scene frame, made only where
 // there are earthworks, in square chunks of CELLS x CELLS cells. Per chunk:
@@ -536,6 +537,8 @@ export class Terrain extends EventDispatcher {
 		};
 		this.maskDirty = false;
 		this.palette = [ GROUND_COLOUR, CUT_COLOUR, ...MATERIALS.map( m => m.colour ) ].map( c => new Color( c ) );
+		// Untouched ground is the stand-in's own colour (a blank site's light earth).
+		if ( this.standIn ) this.palette[ GROUND ].copy( this.standIn.colour );
 		this.raycaster = new Raycaster();
 		this.raycaster.firstHitOnly = true;
 
@@ -2296,8 +2299,10 @@ export class Terrain extends EventDispatcher {
 				const k = lj * NODES + li;
 				const corners = [ k, k + 1, k + NODES, k + NODES + 1 ];
 				// The stand-in draws untouched land too (it has a gap here), but not its water.
-				// (Not a cell wholly cut away round a flatten area: see sideClip.)
-				const draw = shown ? corners.some( c => shown[ c ] ) && corners.some( c => clip.array[ c ] >= 0 ) : corners.every( c => changed[ c ] || base[ c ] > - 1 );
+				// (Not a cell wholly cut away round a flatten area: see sideClip.) A blank site's
+				// sloping ground is all land, however low it goes.
+				const land = c => this.standIn ? ! this.standIn.water( chunk.x( c ), chunk.z( c ) ) : base[ c ] > - 1;
+				const draw = shown ? corners.some( c => shown[ c ] ) && corners.some( c => clip.array[ c ] >= 0 ) : corners.every( c => changed[ c ] || land( c ) );
 				if ( draw ) n = writeCell( index, n, k, chunk.flip[ lj * CELLS + li ] );
 
 			}
@@ -3321,7 +3326,9 @@ function decodeRuns( text ) {
 
 // Without Google tiles the ground is a flat stand-in (world.js). Pits must show through it, so its
 // land is rebuilt in strips with gaps where chunks are (they draw the land there), and so are its
-// grid lines, which the chunks draw on their own surface instead.
+// grid lines, which the chunks draw on their own surface instead. A blank site's ground
+// (blank-ground.js) may slope: its userData.heightAt says how high it is, and its grid is drawn by
+// its material (and the chunks', siteGrid) rather than by lines.
 function takeOverStandIn( ground ) {
 
 	const land = ground.children.find( o => o.isMesh && o.position.y === 0 );
@@ -3330,6 +3337,7 @@ function takeOverStandIn( ground ) {
 	if ( ! land ) return null;
 	const landBox = new Box3().setFromObject( land );
 	const waterBox = water ? new Box3().setFromObject( water ) : null;
+	const heightAt = ground.userData.heightAt ?? ( () => landBox.max.y );
 
 	const strips = new Mesh( new BufferGeometry(), land.material );
 	strips.name = 'stand-in land';
@@ -3361,10 +3369,18 @@ function takeOverStandIn( ground ) {
 
 	const inside = ( box, x, z ) => x >= box.min.x && x <= box.max.x && z >= box.min.z && z <= box.max.z;
 	const standIn = {
-		grid: gridSpec,
+		grid: ground.userData.siteGrid ? { site: true } : gridSpec,
+		// The land's colour, which untouched ground round pits and piles takes.
+		colour: land.material.color.clone(),
+		// Whether x, z is the stand-in's water (not its land).
+		water( x, z ) {
+
+			return !! waterBox && inside( waterBox, x, z ) && ! inside( landBox, x, z );
+
+		},
 		height( x, z ) {
 
-			if ( inside( landBox, x, z ) ) return landBox.max.y;
+			if ( inside( landBox, x, z ) ) return heightAt( x, z );
 			if ( waterBox && inside( waterBox, x, z ) ) return waterBox.max.y;
 			return null;
 
@@ -3372,7 +3388,7 @@ function takeOverStandIn( ground ) {
 		rebuild( chunks ) {
 
 			strips.geometry.dispose();
-			strips.geometry = landStrips( landBox, chunks );
+			strips.geometry = landStrips( landBox, chunks, heightAt );
 			if ( ! lines ) return;
 			lines.geometry.dispose();
 			lines.geometry = gridLines( gridSpec, chunks );
@@ -3384,15 +3400,16 @@ function takeOverStandIn( ground ) {
 
 }
 
-function landStrips( box, chunks ) {
+// heightAt( x, z ): the land's height (flat, or a blank site's even slope, so a strip's corners
+// are enough).
+function landStrips( box, chunks, heightAt ) {
 
 	const positions = [];
 	const indices = [];
-	const y = box.max.y;
 	const quad = ( x0, x1, z0, z1 ) => {
 
 		const n = positions.length / 3;
-		positions.push( x0, y, z0, x1, y, z0, x0, y, z1, x1, y, z1 );
+		positions.push( x0, heightAt( x0, z0 ), z0, x1, heightAt( x1, z0 ), z0, x0, heightAt( x0, z1 ), z1, x1, heightAt( x1, z1 ), z1 );
 		indices.push( n, n + 2, n + 1, n + 1, n + 2, n + 3 );
 
 	};
@@ -3417,8 +3434,9 @@ function landStrips( box, chunks ) {
 
 	const geometry = new BufferGeometry();
 	geometry.setAttribute( 'position', new BufferAttribute( new Float32Array( positions ), 3 ) );
-	geometry.setAttribute( 'normal', new BufferAttribute( new Float32Array( positions.length ).map( ( _, i ) => i % 3 === 1 ? 1 : 0 ), 3 ) );
 	geometry.setIndex( indices );
+	// Straight up on flat land, tilted with a sloping one.
+	geometry.computeVertexNormals();
 	return geometry;
 
 }
@@ -3520,15 +3538,19 @@ bool twinCovered( vec3 p ) {
 }
 `;
 
+// grid: the stand-in's grid lines ({ spacing, colour, centre }), or { site: true } for a blank site's
+// metre grid (blank-ground.js), drawn as its ground draws it.
 function createSurfaceMaterial( grid ) {
 
 	const material = new MeshStandardMaterial( { vertexColors: true, roughness: 1, metalness: 0 } );
+	const site = grid?.site === true;
 	const uniforms = {
 		detailMap: { value: createDetailTexture() },
-		gridOn: { value: grid ? 1 : 0 },
+		gridOn: { value: grid && ! site ? 1 : 0 },
 		gridSpacing: { value: grid?.spacing ?? 50 },
 		gridColour: { value: grid?.colour ?? new Color() },
 		gridCentre: { value: grid?.centre ?? new Color() },
+		...site ? siteGridUniforms() : {},
 	};
 	material.onBeforeCompile = shader => {
 
@@ -3547,6 +3569,7 @@ function createSurfaceMaterial( grid ) {
 				'varying float vDisturbed;',
 				'varying float vClip;',
 				'varying vec2 vGround;',
+				site ? SITE_GRID_GLSL : '',
 			].join( '\n' ) )
 			// Cut away along a flatten area's outline (Terrain.sideClip): mixed across the triangle
 			// from its corners, it's a straight edge wherever the outline crosses it.
@@ -3555,6 +3578,8 @@ function createSurfaceMaterial( grid ) {
 				'#include <color_fragment>',
 				'float grain = texture2D( detailMap, vGround / 3.1 ).r * 0.6 + texture2D( detailMap, vGround / 0.73 ).r * 0.4;',
 				'diffuseColor.rgb *= mix( 1.0, grain * 1.12, vDisturbed );',
+				// A blank site's grid, on the untouched ground only, as the stand-in's own lines.
+				site ? 'diffuseColor.rgb = mix( siteGrid( diffuseColor.rgb, vGround ), diffuseColor.rgb, smoothstep( 0.0, 0.5, vDisturbed ) );' : '',
 			].join( '\n' ) )
 			.replace( '#include <opaque_fragment>', [
 				'if ( gridOn > 0.5 ) {',
@@ -3571,7 +3596,7 @@ function createSurfaceMaterial( grid ) {
 			].join( '\n' ) );
 
 	};
-	material.customProgramCacheKey = () => 'earthworks-surface';
+	material.customProgramCacheKey = () => site ? 'earthworks-surface-site-grid' : 'earthworks-surface';
 	return material;
 
 }

@@ -17,6 +17,9 @@ import { HttpError } from '../http.js';
 // Google's terms: the picture says "Google" and the imagery's copyright on it, and the words that
 // go with it say them too.
 //
+// A blank site (src/blank-site.js) has no map: its picture is plain ground, the editor's light earth,
+// with the same grid (and fainter lines between) and what's placed, and nothing is asked of Google.
+//
 // Settings: GOOGLE_TILES_KEY, a key for this alone (the Map Tiles API), else the Maps key the editor
 // is handed; MAP_TILES_CACHE 'off' keeps no tiles (each look fetches them all from Google);
 // MAP_TILES_UPSTREAM (tests only: a stand-in for https://tile.googleapis.com).
@@ -38,6 +41,9 @@ const MISSING = [ 96, 96, 96 ];
 const BLACK = [ 0, 0, 0 ];
 const WHITE = [ 255, 255, 255 ];
 const SITE_POINT = [ 255, 40, 40 ];
+// A blank site's ground (src/blank-ground.js's light earth, darkened so what's drawn on stands out)
+// and its lines.
+const BLANK_GROUND = [ 112, 104, 88 ];
 
 // A session for the satellite tiles, kept while it lasts ({ id, expires, upstream, key }).
 let session = null;
@@ -47,11 +53,13 @@ let session = null;
 // many shapes are on it) }.
 // `at`: { lat, lon } of the site point; `centre`: { east, north } of the middle; `size`: metres
 // across; shapes: what's placed (see drawShape). context: { env, ctx, key, origin } (origin: the
-// site's, for the cache's keys and the Referer Google is sent).
-export async function siteView( context, { at, centre, size, shapes } ) {
+// site's, for the cache's keys and the Referer Google is sent). blank: a blank site's picture instead
+// (no `at` or context needed; zoom and copyright are null).
+export async function siteView( context, { at, centre, size, shapes, blank = false } ) {
 
 	const width = VIEW_PIXELS, height = VIEW_PIXELS;
 	const metresPerPixel = size / width;
+	if ( blank ) return blankView( { centre, size, shapes, width, height, metresPerPixel } );
 	// Where each column and row of the picture is, in metres from the site point and so in degrees.
 	const easts = Float64Array.from( { length: width }, ( _, i ) => centre.east + ( i + 0.5 - width / 2 ) * metresPerPixel );
 	const norths = Float64Array.from( { length: height }, ( _, i ) => centre.north + ( height / 2 - i - 0.5 ) * metresPerPixel );
@@ -90,6 +98,47 @@ export async function siteView( context, { at, centre, size, shapes } ) {
 	return {
 		bytes: encodeJpeg( image ), mimeType: 'image/jpeg', width, height, metresPerPixel, zoom, copyright: viewport.copyright, step, shown,
 		east: [ easts[ 0 ] - metresPerPixel / 2, easts[ width - 1 ] + metresPerPixel / 2 ], north: [ norths[ height - 1 ] - metresPerPixel / 2, norths[ 0 ] + metresPerPixel / 2 ],
+	};
+
+}
+
+// A blank site's picture: plain ground, the grid with fainter lines a fifth of its step apart, and
+// what's placed; no attribution, as nothing in it is anyone else's.
+function blankView( { centre, size, shapes, width, height, metresPerPixel } ) {
+
+	const image = { width, height, rgb: new Uint8Array( width * height * 3 ) };
+	for ( let i = 0; i < width * height; i ++ ) image.rgb.set( BLANK_GROUND, i * 3 );
+	const toPixel = ( east, north ) => [ ( east - centre.east ) / metresPerPixel + width / 2, ( centre.north - north ) / metresPerPixel + height / 2 ];
+	const step = STEPS.find( s => size / s <= 8 ) ?? STEPS.at( - 1 );
+	const minor = step / 5;
+	if ( minor / metresPerPixel >= 6 ) {
+
+		const half = size / 2;
+		for ( let e = Math.ceil( ( centre.east - half ) / minor ) * minor; e <= centre.east + half; e += minor ) {
+
+			const x = Math.floor( toPixel( e, 0 )[ 0 ] );
+			fillRect( image, x, 0, x + 1, height, WHITE, 0.1 );
+
+		}
+
+		for ( let n = Math.ceil( ( centre.north - half ) / minor ) * minor; n <= centre.north + half; n += minor ) {
+
+			const y = Math.floor( toPixel( 0, n )[ 1 ] );
+			fillRect( image, 0, y, width, y + 1, WHITE, 0.1 );
+
+		}
+
+	}
+
+	drawGrid( image, { centre, size, step, toPixel } );
+	const labels = [];
+	let shown = 0;
+	for ( const shape of shapes ) if ( drawShape( image, shape, toPixel, metresPerPixel, labels ) ) shown ++;
+	drawSitePoint( image, toPixel );
+	drawLabels( image, labels );
+	return {
+		bytes: encodeJpeg( image ), mimeType: 'image/jpeg', width, height, metresPerPixel, zoom: null, copyright: null, step, shown,
+		east: [ centre.east - size / 2, centre.east + size / 2 ], north: [ centre.north - size / 2, centre.north + size / 2 ],
 	};
 
 }
@@ -468,6 +517,7 @@ function drawSitePoint( image, toPixel ) {
 //   { type: 'box', east, north, heading, length (along the heading), width, colour, fill?, front?,
 //     label }
 //   { type: 'circle', east, north, radius, colour, label }
+//   { type: 'polygon', points: [ [ east, north ], ... ], colour, fill?, label } (a flatten area by its points)
 //   { type: 'line', points: [ [ east, north ], ... ], colour, arrow? (a head at the first), label }
 //   { type: 'spot', east, north, colour, label }
 // label: words put at its middle (or for an arrow, where its words go) where they don't cover
@@ -493,6 +543,24 @@ function drawShape( image, shape, toPixel, metresPerPixel, labels ) {
 			if ( shape.front ) line( image, at, toPixel( shape.east + f[ 0 ] * shape.length / 2, shape.north + f[ 1 ] * shape.length / 2 ), shape.colour );
 
 		}
+
+	} else if ( shape.type === 'polygon' ) {
+
+		const points = shape.points.map( ( [ e, n ] ) => toPixel( e, n ) );
+		if ( ! inView( points ) ) return false;
+		outline( image, points, shape.colour, { fill: shape.fill ?? 0 } );
+		// Its label at its middle: the centre of its area (an L's is in it, not at its inside corner).
+		let area = 0, cx = 0, cy = 0;
+		points.forEach( ( [ x0, y0 ], k ) => {
+
+			const [ x1, y1 ] = points[ ( k + 1 ) % points.length ];
+			const cross = x0 * y1 - x1 * y0;
+			area += cross;
+			cx += ( x0 + x1 ) * cross;
+			cy += ( y0 + y1 ) * cross;
+
+		} );
+		at = Math.abs( area ) > 1e-6 ? [ cx / ( 3 * area ), cy / ( 3 * area ) ] : points[ 0 ];
 
 	} else if ( shape.type === 'circle' ) {
 

@@ -57,8 +57,8 @@ and the Neptune twin.
   Plan & billing, Usage, Branding, Connected apps, Share links, Your data and Delete account
   (`#profile` ... `#delete`). Linked from the dashboard's top bar and the editor's account area
   (Build only). See "The account page" below.
-- **`/build/app/`, the editor**: the construction app, at `?at=lat,lon&place=Name`, opening
-  `?project=<id>` from the dashboard; **Projects** (top) goes back to the dashboard and **Site**
+- **`/build/app/`, the editor**: the construction app, at `?at=lat,lon&place=Name` (or `?blank` for
+  a blank site with no map, below), opening `?project=<id>` from the dashboard; **Projects** (top) goes back to the dashboard and **Site**
   moves the project.
 
 ## What people get
@@ -74,7 +74,7 @@ and the Neptune twin.
 - **A 3D map view** is a page load that's handed the Maps key: one billed Google 3D tiles session
   (about US$0.006). Signed out, or past the month's views, the page opens on flat ground and says
   why; everything else works. Claude's `view_site` (a satellite picture of the site, below) counts
-  one too, out of the same allowance.
+  one too, out of the same allowance. A blank site (no map, below) never takes one.
 - **Free views for everyone together** are capped at `BUILD_FREE_DAILY` a day (200: at most about
   US$1.20 a day), then free accounts get flat ground till midnight UTC.
 - **The site** is wherever the project is: the **Site** button (top) searches an address (World
@@ -84,6 +84,65 @@ and the Neptune twin.
   placed items, saved projects and shared links open for everyone, as with the Pro equipment pack.
 - Left out of Build: the Neptune project's own models (`public/models`, `MODELS` in config.js), the
   race pieces, and the key prompt.
+
+## Blank sites
+
+A project with no Google 3D map at all, for a site with no address yet, a yard plan, a training
+layout, or when the map would only get in the way (`src/blank-site.js`, `src/blank-ground.js`).
+
+- **Making one:** on the dashboard, below the address search, **No address? Start on a blank site**:
+  signed in, a name and **Start a blank project** (saved to the account, then opened, as **Start a
+  project here** does at a place); signed out, **Open a blank site** just opens one to look round. In
+  the editor, the **Site** button's search has **Blank site (no map)** under it, which moves the open
+  project onto a blank site. Claude makes one with `create_project`'s `blank: true` (below).
+- **The editor's address:** `?blank` (flat), or `?blank=<slope>,<toward>` for ground falling
+  `<slope>` % (0 to 10) toward the compass heading `<toward>` (degrees clockwise from north), e.g.
+  `/build/app/?blank=2,90&project=<id>` falls 2 % to the east. A link with only `?project=<id>` to a
+  blank project asks for it first (`openBlankProject` in `src/product.js`) and opens it at its own
+  address, before the page asks for its config, so no map view is taken on the way.
+- **No map, no map views:** the editor asks for its config with `blank=1` (`GET config?blank=1`,
+  `worker/drive/build.js`), which never hands out the Maps key or counts a 3D map view
+  (`mapsReason: 'blank'`); a share link to a blank project is the same whether or not it says so (the
+  server reads the project). Nothing is asked of Google (no tiles, no attribution), and there's no red
+  "tiles failed" banner or "sign in for the map" note: there's no map to be missing.
+- **The ground:** plain light earth, as on a site plan, with a grid in metres: faint lines every
+  metre, stronger ones every ten, and the two through the site point (east and north) stronger again.
+  Lines too close together on screen fade out rather than shimmer, and the far edge melts into the
+  sky (fog). It's the editor's stand-in ground (`takeOverStandIn` in `src/terrain.js`), so pits, piles
+  and flatten areas cut into it as they do with no key; the grid is drawn on their untouched ground
+  too (`SITE_GRID_GLSL`), with no seam. A north arrow (top right) turns as the view does, with what
+  the ground does under it ("Flat", "Falls 2 % to the east"). The status (top left) says "blank site:
+  no map" instead of a lat and lon.
+- **The slope:** the **Site** button on a blank site has **Ground: Slope [ ] % falling to the [ ]**
+  and **Apply**, which opens the page again with the new slope (as moving the site does) and saves it
+  to the project. The ground is one even plane through the site point: everything placed snaps to it,
+  and flatten areas grade against it.
+- **The Show panel:** no **Google 3D map** row; **Before** is the blank ground without anything
+  flattened, dug, piled or placed (the Controls panel and the B toast say so too).
+- **Everything else** works as on a site on the map: placing, sets, rows, flatten areas (by their
+  points too), excavations, stockpiles, markups, locking, undo, saving, export and import, share
+  links (read only) and Claude's tools. **A blank project is a project:** it counts toward the free
+  plan's one project (and Build Pro's 200) like any other.
+- **Moving it to a real address:** search in the **Site** button as anywhere else: the project moves
+  there and is a project on the map from then on (its 3D map view counted then, as for any site).
+- **Stored** in the layout itself, no new column: `{ ..., site: 'Blank site', lat: 0, lon: 0,
+  blank: { slope, toward } }` (`layout.js`'s data). `lat` and `lon` are a fixed point the editor's
+  east and north are reckoned from, never shown as a place. The server reads `blank` out of the data
+  (`json_extract`) for the project lists (`blank` on each summary: `{ slope, toward }` or `null`).
+  Projects without it are on the map, as they always were.
+- **Claude (MCP):** `create_project` with `blank: true` (and `slope`, `toward` if wanted; no `place`,
+  `lat` or `lon`) makes one; `list_projects` and `get_project` give its `blank: { slope, toward,
+  ground }` (and no lat and lon); its editor and share links open it blank. `view_site` on a blank
+  site draws the grid (with fainter lines between) and what's placed on plain ground, made in the
+  Worker (`site-view.js`'s `blankView`) with no request to Google, no map view counted and no
+  Google attribution.
+- **Tests:** `npm run test:build-ui` (the dashboard's blank choice signed out and in; the editor with
+  no request to Google, no key and no view counted, the blank ground, its north arrow and the SITE
+  pill; placing, a flatten area by its points, a stockpile and a dimension saved to the project; the
+  slope from the Site button; opened by its id alone; the free plan's one project; moved to an
+  address), `npm run test:build-mcp` (`create_project` blank, `list_projects` and `get_project`,
+  `view_site` with nothing asked of the tiles stand-in and no view counted, the share link) and
+  `npm run test:build-worker` (`config?blank=1` and a blank project's share link: no key, no view).
 
 ## Flatten areas: grading
 

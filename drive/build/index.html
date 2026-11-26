@@ -59,6 +59,20 @@
 						<button type="submit" id="find-go">Find site</button>
 					</form>
 					<ul class="results" id="results" aria-live="polite"></ul>
+					<!-- Or a blank site: no map at all (src/blank-site.js). Signed in, a project starts on one. -->
+					<div class="blank-choice" id="blank-choice">
+						<div class="blank-icon" aria-hidden="true"><span>N</span></div>
+						<div class="blank-text">
+							<strong>No address? Start on a blank site</strong>
+							<span>Plain ground with a metre grid and north up, flat or on a gentle slope. No map, so none of your 3D map views are used.</span>
+						</div>
+						<a class="blank-open" id="blank-open" href="/build/app/?blank=">Open a blank site →</a>
+						<form class="blank-start" id="blank-start" hidden>
+							<input type="text" id="blank-name" value="Blank site" maxlength="100" required aria-label="Project name" />
+							<button type="submit">Start a blank project</button>
+							<p class="small start-note" id="blank-note" hidden></p>
+						</form>
+					</div>
 					<p class="example">Or start from the example: <a id="example" href="/build/app/?at=49.305400,-123.049100&amp;place=North%20Vancouver%20waterfront%20(example)">North Vancouver waterfront</a></p>
 				</div>
 			</section>

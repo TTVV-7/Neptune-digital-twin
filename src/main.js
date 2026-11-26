@@ -28,13 +28,14 @@ import { setUpTowerCranes } from './tower-crane.js';
 import { setUpRows } from './rows.js';
 import { setUpMarkups } from './markups.js';
 import { accountMapsKey, loadConfig, setUpCloud } from './cloud.js';
-import { BUILD_APP, noMapReason, setUpLegalLinks, setUpSitePicker } from './product.js';
+import { BUILD_APP, noMapReason, openBlankProject, setUpLegalLinks, setUpSitePicker } from './product.js';
 import { setUpLogo } from './logo.js';
 import { getKind } from './kinds.js';
 import { setUpDriving } from './drive-prompt.js';
 import { createLegend } from './legend.js';
 import { createLayers } from './layers.js';
 import { setUpZoom } from './zoom.js';
+import { blankFog, createBlankGround, setUpNorthArrow } from './blank-ground.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
 const FEATURES = [ setUpEarthworks, setUpExcavator, setUpLaydown, setUpTowerCranes, setUpRows, setUpMarkups, setUpCloud ];
@@ -52,7 +53,10 @@ async function boot() {
 
 		// Build's own look (build-theme.css).
 		document.body.classList.add( 'build-app' );
+		if ( await openBlankProject() ) return;
 		const config = await loadConfig();
+		// A blank site (blank-site.js) has no map at all: no key was asked for, and nothing to say about it.
+		if ( SITE.blank ) return start( null, 'World Drive Build', null );
 		start( config?.mapsKey ?? null, 'World Drive Build', noMapReason( config ? config.mapsReason : 'unreachable', config?.plan, config?.premium?.billing?.hidden === true ) );
 		return;
 
@@ -147,7 +151,8 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 	const camera = new PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.1, 60000 );
 	addLights( scene );
 
-	// The ground is either Google's photorealistic tiles or a flat stand-in.
+	// The ground is either Google's photorealistic tiles or a flat stand-in, or for World Drive
+	// Build's blank site its own plain ground with a metre grid (blank-ground.js).
 	let tiles = null;
 	let ground;
 	if ( apiKey ) {
@@ -192,6 +197,12 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 			},
 		} );
 		ground = tiles.group;
+
+	} else if ( SITE.blank ) {
+
+		ground = createBlankGround( SITE.blank );
+		blankFog( scene );
+		document.body.classList.add( 'blank-site' );
 
 	} else {
 
@@ -340,6 +351,8 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 	if ( BUILD_APP ) setUpSitePicker( SITE, { toast } );
 	// And links to its terms, privacy policy and the rest, in the library and the help.
 	if ( BUILD_APP ) setUpLegalLinks();
+	// A blank site's north arrow: the grid alone doesn't say which way is north.
+	const northArrow = SITE.blank ? setUpNorthArrow( SITE.blank ) : null;
 	const legend = createLegend( { controls, driver, player, models, getSidebar: () => sidebar, getDriving: () => driving, getLayers: () => layers, getUnderground: () => underground, toggleHelp } );
 	setUpZoom( { canvas: renderer.domElement, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
 
@@ -372,6 +385,7 @@ function start( apiKey, keySource, noKeySaying = 'Running without Google tiles: 
 		sidebar?.update();
 		renderer.render( scene, camera );
 		player.afterRender();
+		northArrow?.( camera );
 
 		hudTimer -= dt;
 		if ( hudTimer <= 0 ) {
@@ -432,12 +446,13 @@ function updateStatus( camera, controls, tiles, driver, driving, layers, undergr
 	const mode = driver.active ? 'DRIVING' : controls.mode === 'walk' ? 'WALKING' : 'FLYING';
 	const lines = [
 		`${ mode }${ ! driver.active && controls.ghost ? ' · ghost: through walls (G)' : '' }${ ! driver.active && controls.mode === 'walk' && ! controls.groundFound ? ' (waiting for ground)' : '' }`,
-		`lat ${ lat.toFixed( 6 ) }  lon ${ lon.toFixed( 6 ) }`,
+		// A blank site is nowhere on the globe: its lat and lon would mean nothing.
+		SITE.blank ? 'blank site: no map' : `lat ${ lat.toFixed( 6 ) }  lon ${ lon.toFixed( 6 ) }`,
 		`east ${ east.toFixed( 1 ) } m  north ${ north.toFixed( 1 ) } m`,
 		`heading ${ yawToHeading( controls.yaw ).toFixed( 0 ) }°`,
 	];
 	if ( driving ) lines.push( driving.describe() );
-	if ( layers?.before ) lines.push( 'BEFORE: the site as Google captured it (B for after)' );
+	if ( layers?.before ) lines.push( SITE.blank ? 'BEFORE: the blank ground, before your changes (B for after)' : 'BEFORE: the site as Google captured it (B for after)' );
 	if ( underground?.on ) lines.push( 'UNDERGROUND: Google\'s ground cut away over your models (U)' );
 	else if ( underground?.active ) lines.push( 'Under the ground in your model: Google\'s ground cut away over it' );
 	if ( underground?.mapHidden ) lines.push( 'Google 3D map hidden (Show panel)' );

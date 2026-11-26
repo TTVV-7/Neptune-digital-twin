@@ -903,6 +903,8 @@ posted with the visit's signed token and checked against what the game can score
 anyone on World Drive's site and accounts, at any address, with a free plan (35 everyday items, 15
 3D map views a month, one saved project) and **Build Pro** (everything, 300 views, 200 projects
 and share links; US$5/month or US$50/year) sold through Stripe; World Drive's owner has everything.
+A project can also be a **blank site**: no map at all, plain ground with a metre grid and a north
+arrow, flat or on a gentle slope, which uses none of the month's 3D map views.
 
 **City Drive** (`/city/`, `drive/city/index.html`, `src/drive-app/city/`): a standalone page
 where you pick a city, a start spot and a ride and drive a whole city built from open data instead

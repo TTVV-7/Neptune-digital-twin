@@ -4,6 +4,7 @@ import { isTyping } from './walk.js';
 import { button, createLayoutsDialog, el } from './cloud-dialog.js';
 import { createPremium } from './premium.js';
 import { agreeNote, BUILD_APP } from './product.js';
+import { blankOf, slopeParam } from './blank-site.js';
 
 // Your account, when the site runs on its Cloudflare Worker (worker/index.js): sign in with
 // Google, save layouts to your account, open them on another computer, and share a read-only
@@ -63,6 +64,8 @@ async function fetchConfig() {
 	const url = new URL( `${ API }config`, document.baseURI );
 	const view = new URL( window.location.href ).searchParams.get( 'view' );
 	if ( view ) url.searchParams.set( 'view', view );
+	// World Drive Build's blank site (blank-site.js) has no map: no 3D map view is taken for it.
+	if ( SITE.blank ) url.searchParams.set( 'blank', '1' );
 	try {
 
 		// Give a share link longer: without the server it can't be opened at all. World Drive Build
@@ -336,7 +339,7 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 
 			}
 
-			tilesNote.hidden = ! res.hasMapsKey || !! tiles;
+			tilesNote.hidden = ! res.hasMapsKey || !! tiles || !! SITE.blank;
 
 		} catch ( err ) {
 
@@ -692,8 +695,11 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 			const current = link?.id === opened.id;
 			const open = ! current || ( opened.updatedAt !== link.updatedAt && ( safe( localLayout() ) || window.confirm( `"${ opened.name }" was changed somewhere else. Open that version? Changes made in this browser since are lost.` ) ) );
 			if ( open ) await use( opened );
-			// Moved (the site picker opens it at the new place): the project moves with it.
-			const moved = opened.site !== SITE.name || Math.abs( ( opened.lat ?? SITE.lat ) - SITE.lat ) > 1e-6 || Math.abs( ( opened.lon ?? SITE.lon ) - SITE.lon ) > 1e-6;
+			// Moved (the site picker opens it at the new place, or on a blank site, or there with a
+			// new slope): the project moves with it.
+			const blank = blankOf( opened.data );
+			const moved = opened.site !== SITE.name || Math.abs( ( opened.lat ?? SITE.lat ) - SITE.lat ) > 1e-6 || Math.abs( ( opened.lon ?? SITE.lon ) - SITE.lon ) > 1e-6
+				|| !! blank !== !! SITE.blank || ( blank && slopeParam( blank ) !== slopeParam( SITE.blank ) );
 			if ( open && moved && link?.id === opened.id ) {
 
 				const data = layout.getData();
@@ -798,7 +804,9 @@ export async function setUpCloud( { layout, models, sidebar, library, tiles, toa
 		url.hash = '';
 		// World Drive Build's editor is wherever the project is: the link names the place, from the
 		// project itself, as the address may not (the editor opened with no query uses the last site).
-		if ( BUILD_APP ) {
+		const blank = 'blank' in summary ? summary.blank : SITE.blank;
+		if ( BUILD_APP && blank ) url.searchParams.set( 'blank', slopeParam( blank ) );
+		else if ( BUILD_APP ) {
 
 			const lat = summary.lat ?? SITE.lat;
 			const lon = summary.lon ?? SITE.lon;

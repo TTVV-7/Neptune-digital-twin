@@ -1,5 +1,6 @@
 import { Box3, Matrix4, Raycaster, Vector3, Vector4 } from 'three';
 import { addHitFilter, isTyping } from './walk.js';
+import { SITE } from './config.js';
 
 // Under Google's ground in your own models (ones you dropped in or listed in MODELS, not library
 // items or earthworks): Google's mesh is cut away over the model's footprint, so you can walk
@@ -313,7 +314,8 @@ export function setUpUnderground( { tiles, models, camera, controls, driver, toa
 		count: () => yours().length,
 		setShown: () => setXray( ! layers.isLayerShown( XRAY_LAYER ), ! starting ),
 	} );
-	layers?.addLayer( MAP_LAYER, {
+	// Not on World Drive Build's blank site, which has no map (blank-site.js).
+	if ( ! SITE.blank ) layers?.addLayer( MAP_LAYER, {
 		name: 'Google 3D map',
 		count: () => true,
 		setShown: () => setMapHidden( ! layers.isLayerShown( MAP_LAYER ), ! starting ),

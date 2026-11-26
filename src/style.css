@@ -1060,6 +1060,78 @@ body.library-open .site-picker {
 	font-size: 10px;
 }
 
+/* Below the search: a blank site instead (product.js's blankChoice), or on one, its ground's slope
+   (groundSettings). */
+.site-picker .site-blank {
+	grid-column: 1 / -1;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 10px;
+	padding: 8px 4px 2px;
+	border-top: 1px solid rgba( 255, 255, 255, 0.12 );
+	font-size: 13px;
+}
+
+.site-picker .site-blank > span:first-child {
+	opacity: 0.75;
+}
+
+.site-picker .site-blank button {
+	padding: 5px 12px;
+	font: inherit;
+	font-weight: 600;
+	color: inherit;
+	background: rgba( 255, 255, 255, 0.08 );
+	border: 1px solid rgba( 255, 255, 255, 0.28 );
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.site-picker .site-blank button:hover,
+.site-picker .site-blank button:focus-visible {
+	border-color: #ffd60a;
+}
+
+.site-picker .site-blank .ground-label {
+	color: #ffd60a;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	font-size: 11px;
+	opacity: 1;
+}
+
+.site-picker .site-blank label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.site-picker .site-blank input {
+	width: 4.5em;
+	padding: 4px 6px;
+}
+
+.site-picker .site-blank select {
+	padding: 4px 6px;
+	font: inherit;
+	color: inherit;
+	background: rgba( 0, 0, 0, 0.3 );
+	border: 1px solid rgba( 255, 255, 255, 0.2 );
+	border-radius: 6px;
+}
+
+.site-picker .site-blank select option {
+	color: #10161c;
+}
+
+.site-picker .site-blank .ground-now {
+	flex-basis: 100%;
+	font-size: 12px;
+	opacity: 0.75;
+}
+
 /* Notices go below the Site button (product.js), not over it (on narrow screens they're already
    below the status block, lower still). */
 body.has-site-picker #banner {
@@ -1125,4 +1197,49 @@ body.has-site-picker.library-open #banner {
 .lil-gui .locked-item .lil-controller.lock-toggle .lil-name {
 	color: #ff8a84;
 	font-weight: 600;
+}
+
+/* World Drive Build's blank site (blank-ground.js): the north arrow, turning as the view does, and
+   what the ground does under it. */
+#north-arrow {
+	position: fixed;
+	top: 12px;
+	right: 16px;
+	z-index: 15;
+	display: grid;
+	justify-items: center;
+	gap: 2px;
+	pointer-events: none;
+	user-select: none;
+}
+
+#north-arrow svg {
+	filter: drop-shadow( 0 2px 6px rgba( 0, 0, 0, 0.35 ) );
+}
+
+#north-arrow .ring {
+	fill: rgba( 16, 22, 28, 0.82 );
+	stroke: rgba( 255, 255, 255, 0.22 );
+	stroke-width: 1.5;
+}
+
+#north-arrow .north {
+	fill: #ffd60a;
+}
+
+#north-arrow .south {
+	fill: rgba( 255, 255, 255, 0.55 );
+}
+
+#north-arrow .n {
+	fill: #fff;
+	font: 700 9px/1 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#north-arrow .ground {
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: rgba( 16, 22, 28, 0.82 );
+	font-size: 11px;
+	white-space: nowrap;
 }

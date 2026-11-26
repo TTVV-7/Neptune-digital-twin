@@ -3,6 +3,7 @@ import { CATEGORY_ORDER } from './library.js';
 import { getKind, listKinds } from './kinds.js';
 import { isTyping } from './walk.js';
 import { toast } from './placement.js';
+import { SITE } from './config.js';
 
 // The Show panel, on the right on top of the Controls panel (legend.js places the two together):
 // what's drawn. Each layer has an eye to hide it: the flatten areas' red boxes, the excavations'
@@ -57,6 +58,14 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 	const lockedHeading = lockedElement.querySelector( '.heading' );
 	const views = [ ...panel.querySelectorAll( '[data-view]' ) ];
 	const beforeNote = panel.querySelector( '.before-note' );
+	// A blank site (World Drive Build's, blank-site.js) has no map: Before is its plain ground.
+	if ( SITE.blank ) {
+
+		beforeNote.textContent = 'The blank ground, without anything you flattened, dug, piled or placed.';
+		panel.querySelector( '[data-view="before"]' ).title = 'The blank ground: nothing flattened, dug, piled or placed (B)';
+
+	}
+
 	const badge = button.querySelector( '.badge' );
 	const buttonIcon = button.querySelector( '.icon' );
 	const categories = new Map( library.map( item => [ item.id, item.category ] ) );
@@ -139,7 +148,7 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 		flattening.setEnabled( ! on );
 		for ( const fn of beforeAfter ) fn( on );
 		apply();
-		if ( say ) toast( on ? 'Before: the site as Google captured it. B shows your changes' : 'After: with your changes' );
+		if ( say ) toast( on ? `Before: ${ SITE.blank ? 'the blank ground' : 'the site as Google captured it' }. B shows your changes` : 'After: with your changes' );
 
 	}
 

@@ -1,11 +1,12 @@
 import { HttpError, json, randomToken } from '../http.js';
 import { bearerAccount } from './oauth.js';
-import { ACCOUNT_BYTES, LOG_KEEP_MS, countView, limitsOf, mayView, planOf } from './build.js';
+import { ACCOUNT_BYTES, LOG_KEEP_MS, blankColumn, countView, limitsOf, mayView, planOf } from './build.js';
 import { salesOn } from './billing.js';
 import { search } from './search.js';
 import { VIEW_PIXELS, base64, siteView, tilesKey } from './site-view.js';
 import CATALOG from './build-catalog.json' with { type: 'json' };
 import { MAX_POINTS, MIN_POINTS, isSimple, polygonArea } from '../../src/polygon.js';
+import { BLANK_AT, BLANK_NAME, MAX_SLOPE, blankOf, cleanSlope, describeSlope, slopeParam } from '../../src/blank-site.js';
 
 // World Drive Build's MCP server (worlddrive.app/mcp, docs/build.md): Claude (or any MCP client)
 // connected to someone's World Drive account through OAuth (oauth.js) lays out their construction
@@ -21,9 +22,13 @@ import { MAX_POINTS, MIN_POINTS, isSimple, polygonArea } from '../../src/polygon
 // event stream and no session. Positions are metres east and north of the project's site point (its
 // lat and lon), headings degrees clockwise from north (the way an item's front faces).
 //
+// A project can be a blank site instead (src/blank-site.js: create_project's blank): no place on the
+// map, plain ground with a metre grid, flat or on a gentle slope. Its view_site is that grid with
+// what's placed drawn on, made here without asking Google for anything, and isn't a map view.
+//
 // Settings: MCP_HOURLY, the tool calls an account may make an hour (300 if unset). view_site's
 // pictures are each one of those and one of the plan's map views a month as well (BUILD_PRO_MONTHLY,
-// build.js), as the editor's 3D map is: Google bills both.
+// build.js), as the editor's 3D map is: Google bills both (a blank site's aren't map views).
 
 const PROTOCOLS = [ '2025-06-18', '2025-03-26', '2024-11-05' ];
 const PROJECT_ITEMS = 2000;
@@ -137,7 +142,7 @@ async function handle( context, message ) {
 
 }
 
-const INSTRUCTIONS = `World Drive Build lays out construction sites on a 3D map of anywhere (worlddrive.app/build). Start with find_site for the address, then create_project there (or list_projects / get_project for one already made). Positions are metres east and north of the project's site point; a heading is degrees clockwise from north, the way an item's front faces. Before laying anything out, look at the site with view_site: a satellite picture, north up, with a grid in metres east and north of the site point, so you can see the roads, buildings, trees and open ground and read positions off it; look again afterwards to check what you placed (it's drawn on, numbered by index). Look sizes up with search_library before laying things out so they fit (a site office trailer is about 12 x 5 m, a 20 t excavator about 10 x 3 m, a tri-tri about 22 m long). Give the person the editor link at the end: they see it in 3D there.`;
+const INSTRUCTIONS = `World Drive Build lays out construction sites on a 3D map of anywhere (worlddrive.app/build). Start with find_site for the address, then create_project there (or list_projects / get_project for one already made). Positions are metres east and north of the project's site point; a heading is degrees clockwise from north, the way an item's front faces. Before laying anything out, look at the site with view_site: a satellite picture, north up, with a grid in metres east and north of the site point, so you can see the roads, buildings, trees and open ground and read positions off it; look again afterwards to check what you placed (it's drawn on, numbered by index). Look sizes up with search_library before laying things out so they fit (a site office trailer is about 12 x 5 m, a 20 t excavator about 10 x 3 m, a tri-tri about 22 m long). With no address (or when the person wants no map), create_project with blank: true makes a blank site instead: plain ground with a metre grid, north up, flat or on a gentle slope, with no map at all; view_site then shows its grid and what's placed. Give the person the editor link at the end: they see it in 3D there.`;
 
 // --- tools ------------------------------------------------------------------------------------
 
@@ -153,8 +158,8 @@ const TOOLS = [
 		annotations: { readOnlyHint: true }, run: findSite,
 	},
 	{
-		name: 'create_project', title: 'Make a project', description: 'Make a new, empty project at a site. Returns its id and the editor link.',
-		inputSchema: { type: 'object', properties: { name: { type: 'string' }, place: { type: 'string', description: 'The site\'s name as people know it, e.g. "1200 Main St"' }, lat: { type: 'number' }, lon: { type: 'number' } }, required: [ 'name', 'place', 'lat', 'lon' ] },
+		name: 'create_project', title: 'Make a project', description: 'Make a new, empty project at a site (place, lat and lon from find_site), or with blank: true on a blank site: no map at all, plain ground with a metre grid and north up, flat or falling `slope` % toward `toward` (no place, lat or lon then). Returns its id and the editor link.',
+		inputSchema: { type: 'object', properties: { name: { type: 'string' }, place: { type: 'string', description: 'The site\'s name as people know it, e.g. "1200 Main St" (not for a blank site)' }, lat: { type: 'number' }, lon: { type: 'number' }, blank: { type: 'boolean', default: false, description: 'a blank site with no map, instead of a place' }, slope: { type: 'number', minimum: 0, maximum: MAX_SLOPE, default: 0, description: '% the blank site\'s ground falls (0 flat)' }, toward: { type: 'number', minimum: 0, maximum: 359, default: 0, description: 'degrees clockwise from north the blank site\'s ground falls toward (90 east)' } }, required: [ 'name' ] },
 		run: createProject,
 	},
 	{
@@ -166,7 +171,7 @@ const TOOLS = [
 		inputSchema: { type: 'object', properties: { ...project }, required: [ 'project_id' ] }, annotations: { readOnlyHint: true }, run: getProject,
 	},
 	{
-		name: 'view_site', title: 'Look at the site', description: `A top-down satellite picture of the project's site (Google's imagery), north up, ${ VIEW_PIXELS } px square: a grid every few metres labelled in metres east (along the top, E+20) and north (down the left, N+20) of the site point (a red cross), and everything placed drawn on as its footprint, numbered with its get_project index (equipment yellow, with a tick to its front; flatten areas cyan; laydown areas their own colour; stockpiles orange; markups their colour). Look before laying out, to see roads, buildings, trees, parking and open ground and to read positions for place_items off the grid, and again after, to check. The imagery can be a few years old. Each look is one of the plan's map views this month.`,
+		name: 'view_site', title: 'Look at the site', description: `A top-down satellite picture of the project's site (Google's imagery), north up, ${ VIEW_PIXELS } px square: a grid every few metres labelled in metres east (along the top, E+20) and north (down the left, N+20) of the site point (a red cross), and everything placed drawn on as its footprint, numbered with its get_project index (equipment yellow, with a tick to its front; flatten areas cyan; laydown areas their own colour; stockpiles orange; markups their colour). Look before laying out, to see roads, buildings, trees, parking and open ground and to read positions for place_items off the grid, and again after, to check. The imagery can be a few years old. Each look is one of the plan's map views this month. A blank site (no map) is its plain ground with the grid instead, and isn't a map view.`,
 		inputSchema: { type: 'object', properties: { ...project, size: { type: 'number', minimum: 20, maximum: 2000, default: 150, description: 'Metres across (and up and down): 150 for a building lot, 400 or more for the streets round it' }, east: { type: 'number', description: 'The middle, metres east of the site point (default 0)' }, north: { type: 'number', description: 'The middle, metres north of the site point (default 0)' } }, required: [ 'project_id' ] },
 		annotations: { readOnlyHint: true }, run: viewSite,
 	},
@@ -282,13 +287,35 @@ function number( value, name, { min = - 1e6, max = 1e6, fallback } = {} ) {
 const where = args => ( { east: round( number( args.east, 'east', { min: - 20000, max: 20000 } ) ), north: round( number( args.north, 'north', { min: - 20000, max: 20000 } ) ) } );
 const turned = value => round( ( ( number( value, 'heading', { fallback: 0, min: - 3600, max: 3600 } ) % 360 ) + 360 ) % 360 );
 
+// row: { id, site, lat, lon, blank } (blank: a blank site's { slope, toward }, or null).
 function editorLink( origin, row ) {
 
 	const url = new URL( '/build/app/', origin );
-	if ( row.lat !== null && row.lat !== undefined ) url.searchParams.set( 'at', `${ Number( row.lat ).toFixed( 6 ) },${ Number( row.lon ).toFixed( 6 ) }` );
-	url.searchParams.set( 'place', row.site );
+	siteInLink( url, row );
 	url.searchParams.set( 'project', row.id );
 	return url.href;
+
+}
+
+// Where the editor opens: ?blank for a blank site (src/blank-site.js), else ?at and ?place.
+function siteInLink( url, row ) {
+
+	if ( row.blank ) {
+
+		url.searchParams.set( 'blank', slopeParam( row.blank ) );
+		return;
+
+	}
+
+	if ( row.lat !== null && row.lat !== undefined ) url.searchParams.set( 'at', `${ Number( row.lat ).toFixed( 6 ) },${ Number( row.lon ).toFixed( 6 ) }` );
+	url.searchParams.set( 'place', row.site );
+
+}
+
+// A blank site as Claude is told it: { slope (%), toward (degrees from north it falls to), ground }.
+function blankOut( blank ) {
+
+	return { slope: blank.slope, toward: blank.toward, ground: describeSlope( blank ) };
 
 }
 
@@ -299,7 +326,8 @@ async function ownProject( env, account, id ) {
 	if ( typeof id !== 'string' || ! ID_PATTERN.test( id ) ) throw new ToolError( 'No such project: list_projects has their ids' );
 	const row = await env.DB.prepare( 'SELECT id, site, name, data, lat, lon, updated_at, share_token FROM build_layouts WHERE id = ? AND account_id = ?' ).bind( id, account.id ).first();
 	if ( ! row ) throw new ToolError( 'No such project: list_projects has their ids' );
-	return { ...row, layout: JSON.parse( row.data ) };
+	const layout = JSON.parse( row.data );
+	return { ...row, layout, blank: blankOf( layout ) };
 
 }
 
@@ -363,29 +391,39 @@ async function createProject( context, args ) {
 
 	const { env, account, now, url } = context;
 	const name = String( args.name ?? '' ).trim().slice( 0, 100 );
-	const place = String( args.place ?? '' ).trim().slice( 0, 100 );
-	if ( ! name || ! place ) throw new ToolError( 'name and place, please' );
-	const lat = number( args.lat, 'lat', { min: - 85, max: 85 } );
-	const lon = number( args.lon, 'lon', { min: - 180, max: 180 } );
+	// A blank site has no place: its name, the fixed point it's reckoned from, and its slope.
+	const blank = args.blank === true ? cleanSlope( { slope: number( args.slope, 'slope', { min: 0, max: MAX_SLOPE, fallback: 0 } ), toward: number( args.toward, 'toward', { min: - 3600, max: 3600, fallback: 0 } ) } ) : null;
+	const place = blank ? BLANK_NAME : String( args.place ?? '' ).trim().slice( 0, 100 );
+	if ( ! name || ! place ) throw new ToolError( 'name and place, please (or blank: true for a blank site, with no place)' );
+	const lat = blank ? BLANK_AT.lat : number( args.lat, 'lat', { min: - 85, max: 85 } );
+	const lon = blank ? BLANK_AT.lon : number( args.lon, 'lon', { min: - 180, max: 180 } );
 	const plan = await planOf( env, account );
-	// The same limits as a project made in the editor (build.js's createLayout).
+	// The same limits as a project made in the editor (build.js's createLayout): a blank site is a
+	// project like any other.
 	const most = plan.tier === 'free' ? 1 : limitsOf( env ).layouts;
-	const layout = { version: 2, site: place, lat, lon, items: [], extras: {} };
+	const layout = { version: 2, site: place, lat, lon, ...blank ? { blank } : {}, items: [], extras: {} };
 	const { count, bytes } = await env.DB.prepare( 'SELECT COUNT(*) AS count, COALESCE( SUM( LENGTH( data ) ), 0 ) AS bytes FROM build_layouts WHERE account_id = ?' ).bind( account.id ).first();
 	if ( count >= most ) throw new ToolError( 'The account has as many projects as it can. Delete some in the editor first.' );
 	if ( bytes + JSON.stringify( layout ).length > ACCOUNT_BYTES ) throw new ToolError( 'The account is full. Delete some projects in the editor first.' );
 	const id = randomToken( 12 );
 	await env.DB.prepare( 'INSERT INTO build_layouts ( id, account_id, site, name, data, created_at, updated_at, lat, lon ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
 		.bind( id, account.id, place, name, JSON.stringify( layout ), now, now, lat, lon ).run();
-	return text( { project_id: id, name, site: place, editor: editorLink( url.origin, { id, site: place, lat, lon } ) } );
+	const made = { project_id: id, name, site: place, editor: editorLink( url.origin, { id, site: place, lat, lon, blank } ) };
+	return text( blank ? { ...made, blank: blankOut( blank ) } : made );
 
 }
 
 async function listProjects( { env, account, url } ) {
 
-	const { results } = await env.DB.prepare( 'SELECT id, site, name, lat, lon, updated_at FROM build_layouts WHERE account_id = ? ORDER BY updated_at DESC' ).bind( account.id ).all();
+	const { results } = await env.DB.prepare( 'SELECT id, site, name, lat, lon, updated_at, json_extract( data, \'$.blank\' ) AS blank FROM build_layouts WHERE account_id = ? ORDER BY updated_at DESC' ).bind( account.id ).all();
 	if ( ! results.length ) return text( 'No projects yet: find_site, then create_project.' );
-	return text( results.map( r => ( { project_id: r.id, name: r.name, site: r.site, saved: new Date( r.updated_at ).toISOString(), editor: editorLink( url.origin, r ) } ) ) );
+	return text( results.map( r => {
+
+		const blank = blankColumn( r.blank );
+		const out = { project_id: r.id, name: r.name, site: r.site, saved: new Date( r.updated_at ).toISOString(), editor: editorLink( url.origin, { ...r, blank } ) };
+		return blank ? { ...out, blank: blankOut( blank ) } : out;
+
+	} ) );
 
 }
 
@@ -412,7 +450,9 @@ function describe( item, index ) {
 async function getProject( { env, account, url }, args ) {
 
 	const row = await ownProject( env, account, args.project_id );
-	return text( { project_id: row.id, name: row.name, site: row.site, lat: row.lat, lon: row.lon, version: row.updated_at, editor: editorLink( url.origin, row ), items: row.layout.items.map( describe ) } );
+	// A blank site is nowhere on the map: no lat and lon, but its ground.
+	const where = row.blank ? { blank: blankOut( row.blank ) } : { lat: row.lat, lon: row.lon };
+	return text( { project_id: row.id, name: row.name, site: row.site, ...where, version: row.updated_at, editor: editorLink( url.origin, row ), items: row.layout.items.map( describe ) } );
 
 }
 
@@ -439,16 +479,8 @@ function shapeOf( item, index ) {
 	const p = item.params ?? {};
 	const label = String( index );
 	const sized = Number( p.width ) > 0 && Number( p.length ) > 0;
-	// A flatten area of any shape (its points, from its middle as if it faced north): its outline.
-	if ( item.kind === 'flatten-zone' && Array.isArray( p.points ) && p.points.length >= 3 ) {
-
-		const r = heading * Math.PI / 180;
-		const cos = Math.cos( r ), sin = Math.sin( r );
-		const points = p.points.map( ( [ x, y ] ) => [ at.east + x * cos + y * sin, at.north - x * sin + y * cos ] );
-		return { type: 'line', points: [ ...points, points[ 0 ] ], colour: COLOURS.flatten, label, area: true };
-
-	}
-
+	// A flatten area shaped by its points: that shape, not the box round it.
+	if ( item.kind === 'flatten-zone' && Array.isArray( p.points ) && p.points.length >= MIN_POINTS ) return { type: 'polygon', points: pointsOut( item ).map( q => [ q.east, q.north ] ), colour: COLOURS.flatten, fill: 0.12, label, area: true };
 	if ( item.kind === 'flatten-zone' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: COLOURS.flatten, fill: 0.12, label, area: true };
 	if ( item.kind === 'laydown' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: rgbOf( p.colour ) ?? COLOURS.laydown, fill: 0.15, label: p.label ? `${ index } ${ short( String( p.label ) ) }` : label, area: true };
 	if ( item.kind === 'stockpile' ) {
@@ -494,14 +526,11 @@ async function viewSite( context, args ) {
 
 	const { env, account, now, url, ctx } = context;
 	const row = await ownProject( env, account, args.project_id );
+	if ( row.blank ) return viewBlankSite( row, args );
 	if ( row.lat === null || row.lon === null ) throw new ToolError( 'The project has no site point on the map to look at. Open it in the editor and save it there first.' );
 	const key = tilesKey( env, context.mapsKey );
 	if ( ! key ) throw new ToolError( 'There\'s no Google map key on the server, so no pictures of sites for now. Carry on without: get_project has what\'s placed.' );
-	const size = round( number( args.size, 'size', { min: 20, max: 2000, fallback: 150 } ) );
-	const centre = {
-		east: round( number( args.east, 'east', { min: - 20000, max: 20000, fallback: 0 } ) ),
-		north: round( number( args.north, 'north', { min: - 20000, max: 20000, fallback: 0 } ) ),
-	};
+	const { size, centre } = viewArea( args );
 	const { tier } = await planOf( env, account, now );
 	const allowed = await mayView( env, account, tier, now );
 	if ( ! allowed.ok ) throw new ToolError( `This month's map views are used up (${ allowed.limit } on the plan: each look with view_site is one, as each time the editor opens the 3D map is). They start again on the 1st. Carry on without the picture: get_project has what's placed.` );
@@ -520,6 +549,37 @@ async function viewSite( context, args ) {
 		`Imagery: Google, ${ view.copyright }.`,
 	].join( '\n' );
 	return { content: [ { type: 'text', text: words }, { type: 'image', data: base64( view.bytes ), mimeType: view.mimeType } ] };
+
+}
+
+// A blank site from above: its grid and what's placed, drawn on plain ground (site-view.js's blank),
+// with nothing asked of Google and no map view counted.
+async function viewBlankSite( row, args ) {
+
+	const { size, centre } = viewArea( args );
+	const shapes = row.layout.items.map( shapeOf );
+	const view = await siteView( null, { centre, size, shapes: [ ...shapes.filter( s => s.area ), ...shapes.filter( s => ! s.area ) ], blank: true } );
+	const m = v => round( v );
+	const words = [
+		`${ row.name }, a blank site (no map: plain ground, ${ describeSlope( row.blank ).toLowerCase() }), from above, north up: ${ m( size ) } m across in ${ view.width } × ${ view.height } px, ${ m( view.metresPerPixel ) } m a pixel. It runs from ${ m( view.east[ 0 ] ) } to ${ m( view.east[ 1 ] ) } m east and ${ m( view.north[ 0 ] ) } to ${ m( view.north[ 1 ] ) } m north of the site point (the red cross, 0, 0).`,
+		`Grid lines every ${ view.step } m (fainter ones between), labelled along the top in metres east (E+${ view.step }) and down the left in metres north (N+${ view.step }) of the site point. Left (west) is negative east, down (south) is negative north. There's nothing on the ground but what's placed: lay it out wherever suits.`,
+		`Drawn on: ${ view.shown } of the project's ${ row.layout.items.length } things in view, each numbered with its get_project index: equipment yellow (a tick from its middle to its front), flatten areas cyan, laydown areas their own colour with their label, stockpiles orange, markups their colour.`,
+		'A blank site has no map, so this look isn\'t one of the plan\'s map views.',
+	].join( '\n' );
+	return { content: [ { type: 'text', text: words }, { type: 'image', data: base64( view.bytes ), mimeType: view.mimeType } ] };
+
+}
+
+// view_site's size (m across) and centre ({ east, north }), from its arguments.
+function viewArea( args ) {
+
+	return {
+		size: round( number( args.size, 'size', { min: 20, max: 2000, fallback: 150 } ) ),
+		centre: {
+			east: round( number( args.east, 'east', { min: - 20000, max: 20000, fallback: 0 } ) ),
+			north: round( number( args.north, 'north', { min: - 20000, max: 20000, fallback: 0 } ) ),
+		},
+	};
 
 }
 
@@ -1100,8 +1160,7 @@ async function shareProject( { env, account, url }, args ) {
 	}
 
 	const link = new URL( '/build/app/', url.origin );
-	if ( row.lat !== null ) link.searchParams.set( 'at', `${ Number( row.lat ).toFixed( 6 ) },${ Number( row.lon ).toFixed( 6 ) }` );
-	link.searchParams.set( 'place', row.site );
+	siteInLink( link, row );
 	link.searchParams.set( 'view', token );
 	return text( { share: link.href, note: 'Anyone with the link sees the project, read only.' } );
 

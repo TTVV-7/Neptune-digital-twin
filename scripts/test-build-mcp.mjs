@@ -7,7 +7,9 @@
 // lapses stops the tools, the hourly limit holds, and items locked in the editor are reported and
 // left alone. view_site's satellite picture is made from a stand-in for Google's Map Tiles API
 // (solid-colour tiles), decoded and looked at pixel by pixel: its size, the grid, what's placed
-// drawn where it is, the attribution, the cache, the map views it counts, and its errors.
+// drawn where it is, the attribution, the cache, the map views it counts, and its errors. And a blank
+// site (no map): made with no place, said to be blank, and its view_site drawn here with no request to
+// Google and no map view counted.
 // TEST_SCREENSHOTS=<dir> keeps the picture.
 //
 // Needs Playwright with Chromium, and the built site (npm run build:drive; built if missing).
@@ -233,14 +235,15 @@ after( async () => {
 } );
 
 // A stand-in for Google's Map Tiles API: a session, the viewport's attribution, and every 2D tile a
-// PNG of one colour. It keeps what it was asked ({ sessions, tiles, keys, referers }), and with
+// PNG of one colour. It keeps what it was asked ({ sessions, tiles, requests, keys, referers }), and with
 // refuse set turns everything away as Google does a key without the API on.
 async function serveTiles() {
 
 	const png = solidPng( 256, 256, GROUND );
-	const state = { sessions: 0, tiles: 0, keys: new Set(), referers: new Set(), refuse: false, bodies: [] };
+	const state = { sessions: 0, tiles: 0, requests: 0, keys: new Set(), referers: new Set(), refuse: false, bodies: [] };
 	const server = createServer( ( req, res ) => {
 
+		state.requests ++;
 		const url = new URL( req.url, 'http://localhost' );
 		state.keys.add( url.searchParams.get( 'key' ) );
 		state.referers.add( req.headers.referer );
@@ -765,6 +768,73 @@ test( 'view_site stops when the month\'s map views are used up', async () => {
 	const out = await look( { project_id: project } );
 	assert.equal( out.error, true );
 	assert.match( out.text, /map views are used up \(6 on the plan/ );
+
+} );
+
+test( 'a blank site: made with no place, said to be blank, and view_site draws it without Google or a map view', async () => {
+
+	const proCookie = await signIn( { sub: 'mcp-pro', email: 'pro@example.com', name: 'Pat Pro' } );
+	const views = async () => ( await call( '/build/api/me', { headers: { Cookie: proCookie } } ) ).json.plan.views;
+	// Room for it (BUILD_LAYOUT_LIMIT is 2 here, and a blank site counts as a project): Second goes.
+	const second = ( await tool( 'list_projects', {} ) ).value.find( p => p.name === 'Second' );
+	const gone = await call( `/build/api/layouts/${ second.project_id }`, { method: 'DELETE', body: {}, headers: { Cookie: proCookie, Origin: server.base } } );
+	assert.equal( gone.status, 204, gone.text );
+
+	const made = await tool( 'create_project', { name: 'Yard', blank: true, slope: 2, toward: 180 } );
+	assert.equal( made.error, false, made.text );
+	const id = made.value.project_id;
+	assert.equal( made.value.site, 'Blank site' );
+	assert.deepEqual( made.value.blank, { slope: 2, toward: 180, ground: 'Falls 2 % to the south' } );
+	assert.match( made.value.editor, /\/build\/app\/\?blank=2%2C180&project=[\w-]{16}$/ );
+	assert.match( ( await tool( 'create_project', { name: 'Third', blank: true } ) ).text, /as many projects as it can/, 'it counts as a project' );
+	assert.match( ( await tool( 'create_project', { name: 'Nowhere' } ) ).text, /name and place, please \(or blank: true/ );
+
+	// list_projects and get_project say it's blank, with its ground and no lat or lon.
+	const listed = ( await tool( 'list_projects', {} ) ).value.find( p => p.project_id === id );
+	assert.deepEqual( listed.blank, { slope: 2, toward: 180, ground: 'Falls 2 % to the south' } );
+	assert.equal( listed.editor, made.value.editor );
+	assert.equal( ( await tool( 'list_projects', {} ) ).value.find( p => p.project_id === project ).blank, undefined );
+	const stored = await call( `/build/api/layouts/${ id }`, { headers: { Cookie: proCookie } } );
+	assert.deepEqual( stored.json.data.blank, { slope: 2, toward: 180 } );
+	assert.deepEqual( stored.json.blank, { slope: 2, toward: 180 } );
+
+	// Laid out like any other: a trailer, a flatten area by its points and a stockpile.
+	assert.equal( ( await tool( 'place_items', { project_id: id, items: [ { item: 'office-trailer-10x40', east: - 10, north: 10, heading: 90 } ] } ) ).error, false );
+	assert.equal( ( await tool( 'add_flatten_area', { project_id: id, points: [ { east: 0, north: - 5 }, { east: 20, north: - 5 }, { east: 20, north: 15 }, { east: 10, north: 15 }, { east: 10, north: 5 }, { east: 0, north: 5 } ] } ) ).error, false );
+	assert.equal( ( await tool( 'add_stockpile', { project_id: id, east: - 15, north: - 15, volume: 60 } ) ).error, false );
+	const got = await tool( 'get_project', { project_id: id } );
+	assert.deepEqual( got.value.blank, { slope: 2, toward: 180, ground: 'Falls 2 % to the south' } );
+	assert.equal( got.value.lat, undefined );
+	assert.equal( got.value.items.length, 3 );
+
+	// view_site: the grid on plain ground with what's placed, nothing asked of Google, no map view
+	// taken (this month's are all used up by the test before), and no Google attribution.
+	const asked = { sessions: tiles.sessions, tiles: tiles.tiles, requests: tiles.requests };
+	const before = await views();
+	assert.equal( before.used, before.limit );
+	const seen = await look( { project_id: id, size: 60 } );
+	assert.equal( seen.error, false, seen.text );
+	if ( SCREENSHOTS ) writeFileSync( join( SCREENSHOTS, 'view-site-blank.jpg' ), seen.bytes );
+	assert.deepEqual( [ seen.image.width, seen.image.height ], [ 768, 768 ] );
+	assert.match( seen.text, /a blank site \(no map: plain ground, falls 2 % to the south\)/ );
+	assert.match( seen.text, /60 m across in 768 × 768 px/ );
+	assert.match( seen.text, /isn't one of the plan's map views/ );
+	assert.doesNotMatch( seen.text, /Google|Imagery/ );
+	assert.deepEqual( { sessions: tiles.sessions, tiles: tiles.tiles, requests: tiles.requests }, asked, 'nothing asked of Google' );
+	assert.deepEqual( await views(), before, 'no map view counted' );
+	const px = ( east, north ) => [ Math.floor( east / ( 60 / 768 ) + 384 ), Math.floor( 384 - north / ( 60 / 768 ) ) ];
+	// Plain ground away from everything, the flatten area's outline cyan along its points (here the
+	// L's inside edge, 10 m east), the trailer yellow, and no dark band of attribution at the foot.
+	const ground = seen.image.at( ...px( 25, - 25 ) );
+	assert.ok( near( ground, [ 112, 104, 88 ], 14 ), `the ground is ${ ground }` );
+	const inside = seen.image.at( ...px( 10, 10 ) );
+	assert.ok( inside[ 2 ] > 180 && inside[ 1 ] > 160 && inside[ 0 ] < 140, `the flatten area's edge is ${ inside }` );
+	const trailer = seen.image.at( ...px( - 10 + 2.9, 13 ) );
+	assert.ok( trailer[ 0 ] > 200 && trailer[ 1 ] > 170 && trailer[ 2 ] < 150, `the trailer's edge is ${ trailer }` );
+	assert.ok( near( seen.image.at( 700, 764 ), ground, 30 ), `the foot is ${ seen.image.at( 700, 764 ) }` );
+
+	// Its share link opens it blank too.
+	assert.match( ( await tool( 'share_project', { project_id: id } ) ).value.share, /\/build\/app\/\?blank=2%2C180&view=[\w-]{22}$/ );
 
 } );
 
