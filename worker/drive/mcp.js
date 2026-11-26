@@ -439,6 +439,16 @@ function shapeOf( item, index ) {
 	const p = item.params ?? {};
 	const label = String( index );
 	const sized = Number( p.width ) > 0 && Number( p.length ) > 0;
+	// A flatten area of any shape (its points, from its middle as if it faced north): its outline.
+	if ( item.kind === 'flatten-zone' && Array.isArray( p.points ) && p.points.length >= 3 ) {
+
+		const r = heading * Math.PI / 180;
+		const cos = Math.cos( r ), sin = Math.sin( r );
+		const points = p.points.map( ( [ x, y ] ) => [ at.east + x * cos + y * sin, at.north - x * sin + y * cos ] );
+		return { type: 'line', points: [ ...points, points[ 0 ] ], colour: COLOURS.flatten, label, area: true };
+
+	}
+
 	if ( item.kind === 'flatten-zone' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: COLOURS.flatten, fill: 0.12, label, area: true };
 	if ( item.kind === 'laydown' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: rgbOf( p.colour ) ?? COLOURS.laydown, fill: 0.15, label: p.label ? `${ index } ${ short( String( p.label ) ) }` : label, area: true };
 	if ( item.kind === 'stockpile' ) {
@@ -760,7 +770,7 @@ async function addFlatten( context, args ) {
 	const fence = FENCES.includes( args.fence ) ? args.fence : 'none';
 	const gates = fence === 'none' ? 0 : Math.min( 8, Math.max( 0, Math.round( Number( args.entrances ) || 0 ) ) );
 	const heading = turned( args.heading );
-	const shape = args.points === undefined || args.points === null ? null : shapeOf( args.points, heading );
+	const shape = args.points === undefined || args.points === null ? null : areaShape( args.points, heading );
 	// Heights given at its points: graded by them, unless another grade is asked for.
 	const grading = gradeOf( shape?.heights && args.grade === undefined ? { ...args, grade: 'points' } : args );
 	const overhead = keepOf( args );
@@ -782,7 +792,7 @@ async function addFlatten( context, args ) {
 // north, height? ] from there as if it faced north (turned back by its heading), to the
 // centimetre. Refused unless there are 3 to 50, no edge crosses another and it's no more than
 // 2000 m across.
-function shapeOf( list, heading ) {
+function areaShape( list, heading ) {
 
 	if ( ! Array.isArray( list ) || list.length < MIN_POINTS || list.length > MAX_POINTS ) throw new ToolError( `points: ${ MIN_POINTS } to ${ MAX_POINTS } corners, in order round the area` );
 	const given = list.map( ( p, i ) => {
