@@ -6,6 +6,8 @@ import { removeShared, saveShared } from './shared-items.js';
 
 // Common model units, as the scale that converts them to metres.
 const UNITS = { metres: 1, centimetres: 0.01, millimetres: 0.001, feet: 0.3048, inches: 0.0254 };
+// Locking in the editor (sidebar.js), as the key is written.
+const LOCK_KEY = /Mac|iPhone|iPad/.test( navigator.platform ?? '' ) ? '⌘L' : 'Ctrl+L';
 
 // Panel (toggle with P) for fine-tuning placed models by the numbers and lining your own models
 // up with the Google tiles. "Copy config" gives you an entry to paste into MODELS in src/config.js.
@@ -16,6 +18,8 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	// How a change to an `undoable` field or action is made: set by the sidebar to keep it for undo
 	// and redo (raise.js); straight to the params until then.
 	let changeParams = ( entry, patch ) => models.setParams( entry, patch );
+	// How its Locked tick box locks or unlocks: set by the sidebar to make it a step to undo.
+	let lockEntry = ( entry, on ) => models.setLocked( entry, on );
 	gui.hide();
 
 	const empty = gui.add( { hint: 'Drop a .glb file on the page' }, 'hint' ).name( 'No models yet' ).disable();
@@ -23,6 +27,9 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	const paramViews = new Map();
 	const readoutViews = new Map();
 	const fieldViews = new Map();
+	// entry -> { view, controller, keep }: its Locked tick box, and the controllers that still work
+	// while it's locked (that one, and Copy config).
+	const lockViews = new Map();
 
 	function addEntry( entry ) {
 
@@ -30,6 +37,11 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		const { state } = entry;
 		const folder = gui.addFolder( state.name ).close();
 		const apply = () => models.apply( entry );
+		// Locked in the editor (sidebar.js): first, as everything after it is read-only while it's on.
+		const lockView = { locked: entry.locked };
+		const lockController = folder.add( lockView, 'locked' ).name( `Locked (${ LOCK_KEY })` ).onChange( on => lockEntry( entry, on ) );
+		lockController.domElement.classList.add( 'lock-toggle' );
+		lockController.domElement.title = 'Locked, it can\'t be moved, turned, resized, changed or deleted by accident; untick to change it';
 
 		const kind = getKind( entry.kind );
 		// Kinds (areas, pits, piles) are sized by their own params rather than scaled, and their
@@ -120,10 +132,12 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		if ( fromModels && entry.url ) folder.add( actions, 'saveForEveryone' ).name( 'Save position for everyone' );
 		if ( ! fromModels ) folder.add( actions, 'saveShared' ).name( 'Save for everyone (admin)' );
 		const removeButton = folder.add( actions, 'removeShared' ).name( 'Remove for everyone (admin)' ).show( !! entry.sharedId );
-		folder.add( actions, 'copyConfig' ).name( 'Copy config' );
+		const copy = folder.add( actions, 'copyConfig' ).name( 'Copy config' );
 		folder.add( actions, 'remove' ).name( 'Remove' );
 
 		folders.set( entry, folder );
+		lockViews.set( entry, { view: lockView, controller: lockController, keep: [ lockController, copy ] } );
+		showLocked( entry );
 
 	}
 
@@ -292,6 +306,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	} );
 	models.addEventListener( 'change', ( { entry } ) => refresh( entry ) );
+	models.addEventListener( 'lock', ( { entry } ) => showLocked( entry ) );
 	models.addEventListener( 'remove', ( { entry } ) => {
 
 		folders.get( entry )?.destroy();
@@ -299,9 +314,31 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		paramViews.delete( entry );
 		readoutViews.delete( entry );
 		fieldViews.delete( entry );
+		lockViews.delete( entry );
 		if ( folders.size === 0 ) empty.show();
 
 	} );
+
+	// Locked, every field and button of an entry's but Locked and Copy config is greyed out and can't
+	// be used (inert, which also keeps the keyboard out); unlocked, they work again. Inert rather than
+	// lil-gui's disable(), which some fields already switch on and off as their params say.
+	function showLocked( entry ) {
+
+		const folder = folders.get( entry );
+		const lock = lockViews.get( entry );
+		if ( ! folder || ! lock ) return;
+		lock.view.locked = entry.locked;
+		lock.controller.updateDisplay();
+		folder.domElement.classList.toggle( 'locked-item', entry.locked );
+		for ( const controller of folder.controllersRecursive() ) {
+
+			if ( lock.keep.includes( controller ) ) continue;
+			controller.domElement.inert = entry.locked;
+			controller.domElement.classList.toggle( 'locked-field', entry.locked );
+
+		}
+
+	}
 
 	// Open just this entry's settings, and show the panel unless asked not to, scrolled to them
 	// when there are many. A panel folded away by its title stays folded.
@@ -393,9 +430,10 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 				}
 
 				controller.name( typeof field.label === 'function' ? field.key : field.label ?? field.key );
+				// Not those that are locked.
 				controller.onChange( value => {
 
-					for ( const entry of entries ) if ( models.entries.includes( entry ) ) models.setParams( entry, { [ field.key ]: value } );
+					for ( const entry of entries ) if ( models.entries.includes( entry ) && ! entry.locked ) models.setParams( entry, { [ field.key ]: value } );
 
 				} );
 
@@ -444,6 +482,12 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		set onChangeParams( fn ) {
 
 			changeParams = fn;
+
+		},
+		// How the Locked tick box locks or unlocks: ( entry, on ) (sidebar.js).
+		set onLock( fn ) {
+
+			lockEntry = fn;
 
 		},
 	};

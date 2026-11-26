@@ -9,10 +9,15 @@
 //   and cut into.
 // - What does stand on it (a shed, a car, a stand of trees, a building as wide as 30 m) is still
 //   left out, on flat ground, a 30% slope, a curved hillside and a crest.
+// - An area shaped by its points (src/polygon.js): simple outlines told from crossed ones, cut
+//   into triangles and cells that cover it exactly, inset, and its 'points' grade a plane through
+//   the heights at each triangle's corners (points with none on the plane through the rest), held
+//   at the outline's nearest point outside it, with its highest and lowest at its points.
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { fitSurface, gridAt, surfaceLayout, surfacePoints } from '../src/grade.js';
+import { describeGrade, fitSurface, gradeOffset, gradeRange, gridAt, pointHeights, surfaceLayout, surfacePoints } from '../src/grade.js';
+import { clampToPolygon, gridTriangles, insetPolygon, isSimple, polygonArea, polygonDistance, triangulate } from '../src/polygon.js';
 
 // The worst and RMS difference (m) between the fitted surface and the bare ground over a width ×
 // length area smoothed over `smoothing` m, with boxes [ { x, z, w, d, h } ] standing on the ground.
@@ -108,6 +113,80 @@ describe( 'the smoothed ground (src/grade.js fitSurface)', () => {
 			assert.ok( e.worst < 0.3, `${ what } on a crest: worst ${ e.worst.toFixed( 2 ) } m` );
 
 		}
+
+	} );
+
+} );
+
+describe( 'an area shaped by its points', () => {
+
+	// An L, its corners [ east, north ] as flatten.js keeps them, going round anticlockwise.
+	const ell = [ [ - 12, - 10 ], [ 12, - 10 ], [ 12, - 2 ], [ - 4, - 2 ], [ - 4, 10 ], [ - 12, 10 ] ];
+
+	test( 'outlines: simple or not, cut into triangles and cells that cover them, inset', () => {
+
+		assert.ok( isSimple( ell ) );
+		assert.ok( isSimple( [ ...ell ].reverse() ), 'either way round' );
+		assert.ok( ! isSimple( [ [ 0, 0 ], [ 10, 10 ], [ 10, 0 ], [ 0, 10 ] ] ), 'a figure eight' );
+		assert.ok( ! isSimple( [ [ 0, 0 ], [ 10, 0 ], [ 10, 0 ], [ 0, 10 ] ] ), 'two corners together' );
+		assert.ok( ! isSimple( [ [ 0, 0 ], [ 10, 0 ], [ 20, 0 ] ] ), 'no area' );
+		assert.ok( ! isSimple( [ [ 0, 0 ], [ 10, 0 ], [ 10, 10 ], [ 5, 0 ], [ 0, 10 ] ] ), 'a corner on another edge' );
+		assert.equal( polygonArea( ell ), 288 );
+		for ( const outline of [ ell, [ ...ell ].reverse(), [ [ 0, 0 ], [ 30, 0 ], [ 12, 20 ] ] ] ) {
+
+			const triangles = triangulate( outline );
+			assert.equal( triangles.length, outline.length - 2 );
+			const area = triangles.reduce( ( sum, t ) => sum + polygonArea( t.map( i => outline[ i ] ) ), 0 );
+			assert.ok( Math.abs( area - polygonArea( outline ) ) < 1e-9, `its triangles cover it: ${ area }` );
+			const cells = gridTriangles( outline, 1.5 ).reduce( ( sum, t ) => sum + polygonArea( t ), 0 );
+			assert.ok( Math.abs( cells - polygonArea( outline ) ) < 1e-6, `its cells cover it: ${ cells }` );
+
+		}
+
+		const inset = insetPolygon( ell, 0.3 );
+		assert.ok( Math.abs( polygonArea( inset ) - polygonArea( ell ) + 0.3 * 88 ) < 1, `inset 0.3 m: ${ polygonArea( inset ) } m²` );
+		assert.deepEqual( inset[ 3 ].map( v => Math.round( v * 10 ) / 10 ), [ - 4.3, - 2.3 ], 'its inside corner moved in both ways' );
+		assert.ok( polygonDistance( ell, 6, 5 ) < 0, 'the notch is outside' );
+		assert.deepEqual( clampToPolygon( ell, 6, 5 ), [ 6, - 2 ], 'held at the nearest of its edge' );
+
+	} );
+
+	test( 'graded by its points: a plane across each triangle, through the heights set and the plane of those', () => {
+
+		// Heights at three points; the others take the plane through those three.
+		const params = { width: 24, length: 20, grade: 'points', points: [ [ - 12, - 10, 0 ], [ 12, - 10, 2 ], [ 12, - 2 ], [ - 4, - 2 ], [ - 4, 10, - 1.5 ], [ - 12, 10 ] ] };
+		const heights = pointHeights( params );
+		// The plane through (-12, -10, 0), (12, -10, 2), (-4, 10, -1.5): 1/12 per m east, then north.
+		const plane = ( e, n ) => ( e + 12 ) / 12 + ( n + 10 ) * ( - 1.5 - 8 / 12 ) / 20;
+		for ( const k of [ 2, 3, 5 ] ) assert.ok( Math.abs( heights[ k ] - Math.round( plane( ...params.points[ k ] ) * 100 ) / 100 ) < 1e-9, `point ${ k + 1 }: ${ heights[ k ] }` );
+		// At each point its own height (gradeOffset's z is -north), and halfway along an edge the
+		// mean of its ends.
+		params.points.forEach( ( [ e, n ], k ) => assert.ok( Math.abs( gradeOffset( params, null, e, - n ) - heights[ k ] ) < 1e-9, `at point ${ k + 1 }` ) );
+		assert.ok( Math.abs( gradeOffset( params, null, 0, 10 ) - ( heights[ 0 ] + heights[ 1 ] ) / 2 ) < 1e-9, 'halfway along the south edge' );
+		// Inside a triangle, linear between its corners.
+		const triangle = { width: 30, length: 20, grade: 'points', points: [ [ - 15, - 10, 1.5 ], [ 15, - 10, - 1 ], [ - 3, 10, 0.5 ] ] };
+		assert.ok( Math.abs( gradeOffset( triangle, null, - 1, 10 / 3 ) - 1 / 3 ) < 1e-9, 'its middle: the mean of its corners' );
+		// Outside, at the nearest point of the outline; its range at its points.
+		assert.ok( Math.abs( gradeOffset( triangle, null, 0, 30 ) - gradeOffset( triangle, null, 0, 10 ) ) < 1e-9, 'held at its edge outside' );
+		assert.deepEqual( gradeRange( triangle, null ), { min: - 1, max: 1.5 } );
+		assert.equal( describeGrade( triangle ), 'by points, −1.00 m to +1.50 m' );
+		// With fewer heights: two make a slope from one to the other; one, level at it; none, level.
+		const two = pointHeights( { points: [ [ 0, 0, 0 ], [ 10, 0, 1 ], [ 10, 10 ], [ 0, 10 ] ] } );
+		assert.deepEqual( two, [ 0, 1, 1, 0 ] );
+		assert.deepEqual( pointHeights( { points: [ [ 0, 0, 0.7 ], [ 10, 0 ], [ 0, 10 ] ] } ), [ 0.7, 0.7, 0.7 ] );
+		assert.deepEqual( pointHeights( { points: [ [ 0, 0 ], [ 10, 0 ], [ 0, 10 ] ] } ), [ 0, 0, 0 ] );
+
+	} );
+
+	test( 'other grades over an outline: held at its nearest edge outside, their range over it only', () => {
+
+		const params = { width: 24, length: 20, grade: 'slope', fall: 10, toward: 'front', points: ell.map( p => [ ...p ] ) };
+		// A 10% fall to the front (-z, north at heading 0): in the notch (north-east) it's held at
+		// the inside corner's edges, not carried on.
+		assert.ok( Math.abs( gradeOffset( params, null, 6, - 5 ) - gradeOffset( params, null, 6, 2 ) ) < 1e-9 );
+		// Its range: from the north edge (+1 m) to the south (-1 m), as over the box round it.
+		const range = gradeRange( params, null );
+		assert.ok( Math.abs( range.max - 1 ) < 1e-9 && Math.abs( range.min + 1 ) < 1e-9, JSON.stringify( range ) );
 
 	} );
 

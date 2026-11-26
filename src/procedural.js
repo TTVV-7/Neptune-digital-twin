@@ -1,6 +1,5 @@
 import {
 	BoxGeometry,
-	Color,
 	CylinderGeometry,
 	ExtrudeGeometry,
 	Group,
@@ -20,6 +19,11 @@ import { CRANE_ITEMS } from './crane-models.js';
 import { TRUCK_ITEMS } from './truck-models.js';
 import { KART_ITEM } from './kart.js';
 import { fencePanel } from './fence-panel.js';
+import { EXTRA_ITEMS } from './site-extras.js';
+import { FOUNDATION_ITEMS } from './foundation-rigs.js';
+import { MORE_PLANT_ITEMS } from './more-plant.js';
+import { BATCH_PLANT_ITEMS } from './batch-plant.js';
+import { CONTAINER_ITEMS, shippingContainer } from './containers.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -47,8 +51,8 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'office-double-wide-24x60', name: 'Site office trailer, double-wide 7.3 × 18.3 m (24 × 60 ft)', category: 'Site trailers & containers', build: () => trailer( 'office-double-wide-24x60' ) },
 	{ id: 'washroom-trailer-8x28', name: 'Washroom / shower trailer 2.4 × 8.5 m (8 × 28 ft)', category: 'Site trailers & containers', build: () => trailer( 'washroom-trailer-8x28' ) },
 	{ id: 'lunchroom-trailer-12x40', name: 'Lunchroom / dry trailer 3.7 × 12.2 m (12 × 40 ft)', category: 'Site trailers & containers', build: () => trailer( 'lunchroom-trailer-12x40' ) },
-	{ id: 'container-20', name: 'Shipping container (20 ft)', category: 'Site trailers & containers', build: () => container( 6.058, 2.591, 0x8e3b2a ) },
-	{ id: 'container-40hc', name: 'Shipping container (40 ft high cube)', category: 'Site trailers & containers', build: () => container( 12.192, 2.896, 0x2a4f8e ) },
+	{ id: 'container-20', name: 'Shipping container (20 ft)', category: 'Site trailers & containers', keywords: 'sea can seacan conex iso shipping container storage 20 foot', build: () => shippingContainer( { length: 6.058, color: 0x8e3b2a, pockets: [ - 1.025, 1.025 ] } ) },
+	{ id: 'container-40hc', name: 'Shipping container (40 ft high cube)', category: 'Site trailers & containers', keywords: 'sea can seacan conex iso shipping container storage 40 foot high cube hc', build: () => shippingContainer( { length: 12.192, height: 2.896, color: 0x2a4f8e } ) },
 	{ id: 'rolloff-20', name: 'Roll-off dumpster (20 yd)', category: 'Waste', build: () => rollOff( 4.5 * FT, 0x2f5f8f ) },
 	{ id: 'rolloff-40', name: 'Roll-off dumpster (40 yd)', category: 'Waste', build: () => rollOff( 8 * FT, 0x3d6b3d ) },
 	{ id: 'frontload-6yd', name: 'Front-load bin (6 yd)', category: 'Waste', build: frontLoadBin },
@@ -94,6 +98,18 @@ export const PROCEDURAL_ITEMS = [
 	...TRUCK_ITEMS,
 	// A go-kart with a driver (kart.js), drivable like the other vehicles.
 	KART_ITEM,
+	// Rail track, an indirect-fired heater with its ducts and stop signs (site-extras.js).
+	...EXTRA_ITEMS,
+	// CSM rig, trench cutter, bentonite slurry plant, rebar cages, tremie rack, guide walls (foundation-rigs.js).
+	...FOUNDATION_ITEMS,
+	// Paving, pipeline and HDD plant, a mast climber, compactors, crane mats and road plates, rebar benches (more-plant.js).
+	...MORE_PLANT_ITEMS,
+	// A portable batch plant, its bin and silo, concrete tools, formwork and shoring frames (batch-plant.js).
+	...BATCH_PLANT_ITEMS,
+	// More sea cans (10 ft, 40 ft, doors open, colours, stacked, an office conversion), tool cribs,
+	// a tool crib trailer, gang boxes and a tool cage (containers.js); the 20 ft and 40 ft high cube
+	// above are built there too.
+	...CONTAINER_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
@@ -200,60 +216,6 @@ function pipeBollard() {
 
 // --- site trailers & containers --------------------------------------------------------------
 
-function container( length, height, color ) {
-
-	const group = new Group();
-	const width = 2.438;
-	const paint = mat( color, { roughness: 0.7, metalness: 0.2 } );
-	const frame = mat( new Color( color ).multiplyScalar( 0.7 ).getHex(), { roughness: 0.7, metalness: 0.2 } );
-	const post = 0.16;
-
-	// Body, with corrugation ribs on the long sides and the closed end.
-	box( group, paint, [ length - 0.04, height - 0.02, width - 0.08 ], [ 0, 0.01, 0 ] );
-	const ribs = Math.floor( ( length - 2 * post ) / 0.28 );
-	for ( let i = 0; i < ribs; i ++ ) {
-
-		const x = - length / 2 + post + 0.14 + i * 0.28;
-		for ( const z of [ - width / 2 + 0.03, width / 2 - 0.03 ] ) box( group, paint, [ 0.09, height - 0.3, 0.03 ], [ x, 0.15, z ] );
-
-	}
-
-	// Corner posts and top/bottom rails.
-	for ( const x of [ - length / 2 + post / 2, length / 2 - post / 2 ] ) {
-
-		for ( const z of [ - width / 2 + post / 2, width / 2 - post / 2 ] ) box( group, frame, [ post, height, post ], [ x, 0, z ] );
-
-	}
-
-	for ( const y of [ 0, height - 0.15 ] ) {
-
-		for ( const z of [ - width / 2 + 0.05, width / 2 - 0.05 ] ) box( group, frame, [ length, 0.15, 0.1 ], [ 0, y, z ] );
-
-	}
-
-	// Built lying along x with the doors on the -x end, then turned so the doors face -Z.
-	const doorEnd = - length / 2 - 0.01;
-	for ( const z of [ - width / 4, width / 4 ] ) {
-
-		box( group, frame, [ 0.03, height - 0.3, width / 2 - 0.12 ], [ doorEnd, 0.15, z ] );
-		for ( const dz of [ - 0.25, 0.25 ] ) cylinder( group, STEEL(), 0.02, height - 0.4, [ doorEnd - 0.03, 0.2, z + dz ], 8 );
-
-	}
-
-	group.rotation.y = - Math.PI / 2;
-	return wrap( group );
-
-}
-
-// Put a rotated part inside a plain group, so callers can treat the result like any other item.
-function wrap( object ) {
-
-	const group = new Group();
-	group.add( object );
-	return group;
-
-}
-
 // A fabric canopy over the 40 ft (12.2 m) gap between two 40 ft containers, doors to the front, as
 // set up for a covered work or storage area between them (covers.js makes the canopy).
 function containerShelter() {
@@ -264,7 +226,7 @@ function containerShelter() {
 	const height = 2.591;
 	for ( const [ side, color ] of [ [ - 1, 0x8e3b2a ], [ 1, 0x2a4f8e ] ] ) {
 
-		const box = container( 12.192, height, color );
+		const box = shippingContainer( { length: 12.192, height, color } );
 		box.position.x = side * ( clear / 2 + width / 2 );
 		group.add( box );
 

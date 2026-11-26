@@ -733,7 +733,7 @@ test( 'undo never selects something hidden, so Delete can\'t take it unseen', as
 
 } );
 
-test( 'with the library closed, Ctrl+V leaves the plan alone but Ctrl+Z and Ctrl+Y still undo and redo, saying what', async () => {
+test( 'with the library closed, Ctrl+V opens it and pastes in the middle of the view, and Ctrl+Z and Ctrl+Y still undo and redo, saying what', async () => {
 
 	await clearAll();
 	await layOut();
@@ -753,10 +753,6 @@ test( 'with the library closed, Ctrl+V leaves the plan alone but Ctrl+Z and Ctrl
 	const history = await page.evaluate( () => window.twin.sidebar.history.size );
 	const spot = await groundOnScreen( 0, 30 );
 	await page.mouse.move( spot.x, spot.y );
-	// Paste needs the library open: nothing is added.
-	await page.keyboard.press( 'Control+V' );
-	await settle( page, 800 );
-	assert.equal( ( await placed() ).length, count );
 	// Undo works with nothing selected and the library closed, and says what it undid.
 	await page.keyboard.press( 'Control+Z' );
 	await settle();
@@ -772,7 +768,12 @@ test( 'with the library closed, Ctrl+V leaves the plan alone but Ctrl+Z and Ctrl
 	// Undo and redo select what they changed, so it's seen.
 	assert.equal( ( await selectedNames() ).length, 1 );
 	await shot( 'undo-library-closed' );
-	await page.evaluate( () => document.getElementById( 'library-toggle' ).click() );
+	// Paste opens the library and adds the copies in the middle of the view, selected.
+	await page.keyboard.press( 'Control+V' );
+	await settle( page, 800 );
+	assert.equal( await page.evaluate( () => window.twin.sidebar.isOpen() ), true );
+	assert.equal( ( await placed() ).length, count + 2 );
+	assert.equal( ( await selectedNames() ).length, 2 );
 
 } );
 

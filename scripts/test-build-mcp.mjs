@@ -4,18 +4,25 @@
 // Build Pro and the owner can), the code and PKCE verifier become tokens, and every tool lays out a
 // project, which then opens in the real editor (/build/app/) in a browser with what was placed. And:
 // codes are used once, refresh tokens are replaced, signing out everywhere disconnects, a plan that
-// lapses stops the tools, and the hourly limit holds.
+// lapses stops the tools, the hourly limit holds, and items locked in the editor are reported and
+// left alone. view_site's satellite picture is made from a stand-in for Google's Map Tiles API
+// (solid-colour tiles), decoded and looked at pixel by pixel: its size, the grid, what's placed
+// drawn where it is, the attribution, the cache, the map views it counts, and its errors. And a blank
+// site (no map): made with no place, said to be blank, and its view_site drawn here with no request to
+// Google and no map view counted.
+// TEST_SCREENSHOTS=<dir> keeps the picture.
 //
 // Needs Playwright with Chromium, and the built site (npm run build:drive; built if missing).
 
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { join, relative } from 'node:path';
 import { after, before, test } from 'node:test';
+import { deflateSync } from 'node:zlib';
 import { CLIENT_ID, ROOT, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
@@ -26,12 +33,19 @@ const DIST = join( ROOT, 'dist-drive', 'build' );
 const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
 const WEBHOOK_SECRET = 'whsec_test_mcp';
 const BUILD_LINK_ID = 'plink_build0000000000000001';
-const HOURLY = 80;
+const HOURLY = 120;
+// Build Pro's map views a month here: view_site's pictures count against them.
+const PRO_MONTHLY = 6;
+const SCREENSHOTS = process.env.TEST_SCREENSHOTS;
+// The stand-in tiles' colour, and the attribution its viewport gives.
+const GROUND = [ 40, 110, 50 ];
+const COPYRIGHT = 'Imagery ©2026 Test Imagery Co.';
 
 let server;
 let keys;
 let googleKey;
 let upstream;
+let tiles;
 let client;
 let tokens;
 let project;
@@ -180,6 +194,7 @@ before( async () => {
 
 	} );
 	await new Promise( resolve => upstream.listen( 0, '127.0.0.1', resolve ) );
+	tiles = await serveTiles();
 	googleKey = await makeKey( 'mcp-test-key-1' );
 	keys = await serveKeys( [ googleKey.jwk ] );
 	server = await startWorker( { port: PORT, config: 'wrangler.drive.jsonc', vars: workerVars(), assets: assetsOf() } );
@@ -202,6 +217,8 @@ function workerVars( extra = {} ) {
 		MCP_HOURLY: String( HOURLY ),
 		BUILD_LAYOUT_LIMIT: '2',
 		SEARCH_UPSTREAM: `http://127.0.0.1:${ upstream.address().port }/search`,
+		MAP_TILES_UPSTREAM: tiles.url,
+		BUILD_PRO_MONTHLY: String( PRO_MONTHLY ),
 		...extra,
 	};
 
@@ -213,8 +230,125 @@ after( async () => {
 	server?.stop();
 	keys?.close();
 	upstream?.close();
+	tiles?.server.close();
 
 } );
+
+// A stand-in for Google's Map Tiles API: a session, the viewport's attribution, and every 2D tile a
+// PNG of one colour. It keeps what it was asked ({ sessions, tiles, requests, keys, referers }), and with
+// refuse set turns everything away as Google does a key without the API on.
+async function serveTiles() {
+
+	const png = solidPng( 256, 256, GROUND );
+	const state = { sessions: 0, tiles: 0, requests: 0, keys: new Set(), referers: new Set(), refuse: false, bodies: [] };
+	const server = createServer( ( req, res ) => {
+
+		state.requests ++;
+		const url = new URL( req.url, 'http://localhost' );
+		state.keys.add( url.searchParams.get( 'key' ) );
+		state.referers.add( req.headers.referer );
+		if ( state.refuse ) {
+
+			res.writeHead( 403, { 'Content-Type': 'application/json' } );
+			return res.end( JSON.stringify( { error: { code: 403, message: 'Map Tiles API has not been used in project 1 before or it is disabled.', status: 'PERMISSION_DENIED' } } ) );
+
+		}
+
+		if ( req.method === 'POST' && url.pathname === '/v1/createSession' ) {
+
+			let body = '';
+			req.on( 'data', chunk => body += chunk );
+			req.on( 'end', () => {
+
+				state.sessions ++;
+				state.bodies.push( JSON.parse( body ) );
+				res.writeHead( 200, { 'Content-Type': 'application/json' } );
+				res.end( JSON.stringify( { session: 'fake-session', expiry: String( Math.floor( Date.now() / 1000 ) + 14 * 86400 ), tileWidth: 256, tileHeight: 256, imageFormat: 'png' } ) );
+
+			} );
+			return;
+
+		}
+
+		if ( url.pathname === '/tile/v1/viewport' && url.searchParams.get( 'session' ) === 'fake-session' ) {
+
+			res.writeHead( 200, { 'Content-Type': 'application/json' } );
+			return res.end( JSON.stringify( { copyright: COPYRIGHT, maxZoomRects: [ { maxZoom: 19, north: 90, south: - 90, east: 180, west: - 180 } ] } ) );
+
+		}
+
+		if ( /^\/v1\/2dtiles\/\d+\/\d+\/\d+$/.test( url.pathname ) && url.searchParams.get( 'session' ) === 'fake-session' ) {
+
+			state.tiles ++;
+			res.writeHead( 200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400' } );
+			return res.end( png );
+
+		}
+
+		res.writeHead( 404 );
+		res.end();
+
+	} );
+	await new Promise( resolve => server.listen( 0, '127.0.0.1', resolve ) );
+	return Object.assign( state, { server, url: `http://127.0.0.1:${ server.address().port }` } );
+
+}
+
+// A PNG of one colour, made here (8-bit RGB, no filtering).
+function solidPng( width, height, [ r, g, b ] ) {
+
+	const crcTable = Array.from( { length: 256 }, ( _, n ) => {
+
+		let c = n;
+		for ( let k = 0; k < 8; k ++ ) c = c & 1 ? 0xedb88320 ^ ( c >>> 1 ) : c >>> 1;
+		return c >>> 0;
+
+	} );
+	const crc = bytes => {
+
+		let c = 0xffffffff;
+		for ( const byte of bytes ) c = crcTable[ ( c ^ byte ) & 0xff ] ^ ( c >>> 8 );
+		return ( c ^ 0xffffffff ) >>> 0;
+
+	};
+	const chunk = ( name, body ) => {
+
+		const head = Buffer.alloc( 8 );
+		head.writeUInt32BE( body.length, 0 );
+		head.write( name, 4, 'latin1' );
+		const tail = Buffer.alloc( 4 );
+		tail.writeUInt32BE( crc( Buffer.concat( [ head.subarray( 4 ), body ] ) ), 0 );
+		return Buffer.concat( [ head, body, tail ] );
+
+	};
+	const header = Buffer.alloc( 13 );
+	header.writeUInt32BE( width, 0 );
+	header.writeUInt32BE( height, 4 );
+	header.set( [ 8, 2, 0, 0, 0 ], 8 );
+	const row = Buffer.alloc( 1 + width * 3 );
+	for ( let x = 0; x < width; x ++ ) row.set( [ r, g, b ], 1 + x * 3 );
+	const raw = Buffer.concat( Array.from( { length: height }, () => row ) );
+	return Buffer.concat( [ Buffer.from( [ 137, 80, 78, 71, 13, 10, 26, 10 ] ), chunk( 'IHDR', header ), chunk( 'IDAT', deflateSync( raw ) ), chunk( 'IEND', Buffer.alloc( 0 ) ) ] );
+
+}
+
+// view_site's answer, its picture decoded: { error, text, image: { width, height, at( x, y ) }, bytes }.
+async function look( args, token ) {
+
+	const result = await rpc( 'tools/call', { name: 'view_site', arguments: args }, token );
+	const text = result.content.find( c => c.type === 'text' )?.text ?? '';
+	const picture = result.content.find( c => c.type === 'image' );
+	if ( result.isError || ! picture ) return { error: !! result.isError, text };
+	assert.equal( picture.mimeType, 'image/jpeg' );
+	const bytes = Buffer.from( picture.data, 'base64' );
+	const sharp = require( 'sharp' );
+	const { data, info } = await sharp( bytes ).raw().toBuffer( { resolveWithObject: true } );
+	const at = ( x, y ) => [ ...data.subarray( ( y * info.width + x ) * info.channels, ( y * info.width + x ) * info.channels + 3 ) ];
+	return { error: false, text, bytes, image: { width: info.width, height: info.height, format: ( await sharp( bytes ).metadata() ).format, at } };
+
+}
+
+const near = ( got, want, by = 40 ) => got.every( ( v, k ) => Math.abs( v - want[ k ] ) <= by );
 
 test( 'without a token, /mcp says where to connect; the metadata says how', async () => {
 
@@ -292,8 +426,9 @@ test( 'initialize, tools/list and a notification', async () => {
 	assert.equal( init.protocolVersion, '2025-06-18' );
 	assert.equal( init.serverInfo.name, 'world-drive-build' );
 	assert.match( init.instructions, /find_site/ );
+	assert.match( init.instructions, /view_site/ );
 	const { tools } = await rpc( 'tools/list', {} );
-	assert.deepEqual( tools.map( t => t.name ), [ 'find_site', 'create_project', 'list_projects', 'get_project', 'search_library', 'list_sets', 'place_items', 'place_set', 'place_row', 'add_flatten_area', 'add_laydown_area', 'add_stockpile', 'add_markup', 'move_item', 'remove_items', 'share_project' ] );
+	assert.deepEqual( tools.map( t => t.name ), [ 'find_site', 'create_project', 'list_projects', 'get_project', 'view_site', 'search_library', 'list_sets', 'place_items', 'place_set', 'place_row', 'add_flatten_area', 'add_laydown_area', 'add_stockpile', 'add_markup', 'move_item', 'remove_items', 'share_project' ] );
 	for ( const t of tools ) assert.equal( t.inputSchema.type, 'object', t.name );
 	const note = await call( '/mcp', { method: 'POST', body: { jsonrpc: '2.0', method: 'notifications/initialized' }, headers: { Authorization: `Bearer ${ tokens.access_token }` } } );
 	assert.equal( note.status, 202 );
@@ -353,6 +488,16 @@ test( 'the tools lay out a site', async () => {
 	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 260, north: 60, width: 20, length: 20, grade: 'level', raise: - 99 } ) ).text, /level, lowered 30 m from the ground's height/ );
 	assert.match( ( await tool( 'add_flatten_area', { project_id: project, east: 260, north: 100, width: 20, length: 20, grade: 'level', finished_height: 42.5, keep_overhead: 'auto' } ) ).text, /level, finished at 42\.5 m \(as the editor's up\), keeping what passes/ );
 	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, east: 260, north: 140, width: 20, length: 20, raise: 'up a bit' } ) ).error );
+	// Any shape, by its points: a triangle with its own slopes (graded through them), and an L
+	// turned 30° with none (graded as asked). Edges that cross, too few or too many points, or one
+	// over 2000 m across are refused.
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 300, north: 0, up: 1 }, { east: 330, north: 0, up: - 0.5 }, { east: 310, north: 24 } ] } ) ).text, /Flattened a 3-point area of 360 m² \(30 × 24 m across\), surfaced with gravel, graded through the heights at its points/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, heading: 30, grade: 'level', points: [ { east: 340, north: 0 }, { east: 360, north: 0 }, { east: 360, north: 8 }, { east: 348, north: 8 }, { east: 348, north: 20 }, { east: 340, north: 20 } ] } ) ).text, /a 6-point area of 256 m²/ );
+	assert.match( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 0, north: 0 }, { east: 10, north: 10 }, { east: 10, north: 0 }, { east: 0, north: 10 } ] } ) ).text, /the edges cross/ );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 0, north: 0 }, { east: 10, north: 0 } ] } ) ).error );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, points: Array.from( { length: 51 }, ( _, i ) => ( { east: 10 * Math.cos( i / 51 * 6.28 ), north: 10 * Math.sin( i / 51 * 6.28 ) } ) ) } ) ).error );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 0, north: 0 }, { east: 2500, north: 0 }, { east: 0, north: 10 } ] } ) ).error );
+	assert.ok( ( await tool( 'add_flatten_area', { project_id: project, points: [ { east: 0, north: 0 }, { east: 10, north: 0 }, { east: 0, north: 10, up: 'high' } ] } ) ).error );
 	assert.match( ( await tool( 'add_laydown_area', { project_id: project, east: 25, north: 25, width: 15, length: 10, label: 'Rebar' } ) ).text, /Rebar/ );
 	assert.match( ( await tool( 'add_stockpile', { project_id: project, east: 30, north: - 10, material: 'road-base', volume: 80 } ) ).text, /road-base, 80 m³/ );
 	// Bigger than the editor makes them is refused, not reported and then drawn smaller.
@@ -363,7 +508,7 @@ test( 'the tools lay out a site', async () => {
 	const got = await tool( 'get_project', { project_id: project } );
 	const items = got.value.items;
 	const lane = 10; // the lane closure set: arrow board, two flaggers, seven cones
-	assert.equal( items.length, 3 + lane + 10 + 12 );
+	assert.equal( items.length, 3 + lane + 10 + 14 );
 	const panels = items.filter( i => i.item === 'fence-panel' );
 	assert.deepEqual( panels.slice( 0, 2 ).map( i => [ i.east, i.north, i.heading ] ), [ [ 10, 1.53, 270 ], [ 10, 4.58, 270 ] ] );
 	assert.deepEqual( items[ 0 ], { index: 0, item: 'office-trailer-10x40', name: items[ 0 ].name, east: 0, north: 20, heading: 180, size: items[ 0 ].size } );
@@ -379,6 +524,16 @@ test( 'the tools lay out a site', async () => {
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.finished === 42.5 && ! ( 'raise' in i.params ) && i.params.keep === 'auto' ) );
 	// The usual smoothing isn't saved, as the editor saves it.
 	assert.ok( items.some( i => i.item === 'flatten-zone' && i.params.surface === 'asphalt' && ! ( 'smoothing' in i.params ) ) );
+	// The shaped areas: their points as saved (from their middle, as if they faced north) and where
+	// they are on the site, as they were given.
+	const triangle = items.find( i => i.item === 'flatten-zone' && i.params.points?.length === 3 );
+	assert.deepEqual( [ triangle.east, triangle.north, triangle.params.width, triangle.params.length, triangle.params.grade ], [ 315, 12, 30, 24, 'points' ] );
+	assert.deepEqual( triangle.params.points, [ [ - 15, - 12, 1 ], [ 15, - 12, - 0.5 ], [ - 5, 12 ] ] );
+	assert.deepEqual( triangle.points, [ { east: 300, north: 0, up: 1 }, { east: 330, north: 0, up: - 0.5 }, { east: 310, north: 24 } ] );
+	const ell = items.find( i => i.item === 'flatten-zone' && i.params.points?.length === 6 );
+	assert.equal( ell.heading, 30 );
+	assert.equal( ell.params.grade, undefined, 'level, as saved' );
+	ell.points.forEach( ( p, k ) => assert.ok( Math.hypot( p.east - [ 340, 360, 360, 348, 348, 340 ][ k ], p.north - [ 0, 0, 8, 8, 20, 20 ][ k ] ) < 0.03, JSON.stringify( ell.points ) ) );
 	// Indexes come with the version they're from: without it, or once the project has been saved
 	// since (here by the editor, as when someone moves something), they're refused, not acted on.
 	assert.ok( ( await tool( 'move_item', { project_id: project, index: 1, east: 4 } ) ).error );
@@ -395,6 +550,35 @@ test( 'the tools lay out a site', async () => {
 	const saved = await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: { ...data, items: data.items.reverse() } }, headers: { Cookie: proCookie, Origin: server.base } } );
 	assert.equal( saved.status, 200, saved.text );
 	assert.match( ( await tool( 'remove_items', { project_id: project, version: before.version, indexes: [ 0 ] } ) ).text, /changed since those indexes were read/ );
+	// Something locked in the editor (saved with locked: true) says so in get_project, and isn't
+	// moved or removed from here: nothing changes, with a remove of it and something else too.
+	// Unlocked again, it moves.
+	const lockedData = ( await call( `/build/api/layouts/${ project }`, { headers: { Cookie: proCookie } } ) ).json.data;
+	lockedData.items[ 0 ].locked = true;
+	assert.equal( ( await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: lockedData }, headers: { Cookie: proCookie, Origin: server.base } } ) ).status, 200 );
+	const withLock = ( await tool( 'get_project', { project_id: project } ) ).value;
+	assert.equal( withLock.items[ 0 ].locked, true );
+	assert.ok( withLock.items.slice( 1 ).every( i => ! ( 'locked' in i ) ) );
+	const lockedMove = await tool( 'move_item', { project_id: project, version: withLock.version, index: 0, east: 50 } );
+	assert.ok( lockedMove.error );
+	assert.match( lockedMove.text, /^Item 0 \(.+\) is locked in the editor; unlock it there first\. Nothing was changed\./ );
+	const lockedRemove = await tool( 'remove_items', { project_id: project, version: withLock.version, indexes: [ 1, 0 ] } );
+	assert.ok( lockedRemove.error );
+	assert.match( lockedRemove.text, /^Item 0 .* is locked in the editor; unlock it there first/ );
+	const untouched = ( await tool( 'get_project', { project_id: project } ) ).value;
+	assert.equal( untouched.version, withLock.version );
+	assert.deepEqual( untouched.items, withLock.items );
+	lockedData.items[ 0 ].locked = true;
+	lockedData.items[ 1 ].locked = true;
+	assert.equal( ( await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: lockedData }, headers: { Cookie: proCookie, Origin: server.base } } ) ).status, 200 );
+	const both = ( await tool( 'get_project', { project_id: project } ) ).value;
+	assert.match( ( await tool( 'remove_items', { project_id: project, version: both.version, indexes: [ 0, 1, 2 ] } ) ).text, /^Items 0, 1 are locked in the editor; unlock them there first/ );
+	delete lockedData.items[ 0 ].locked;
+	delete lockedData.items[ 1 ].locked;
+	assert.equal( ( await call( `/build/api/layouts/${ project }`, { method: 'PUT', body: { data: lockedData }, headers: { Cookie: proCookie, Origin: server.base } } ) ).status, 200 );
+	const unlocked = ( await tool( 'get_project', { project_id: project } ) ).value;
+	assert.ok( unlocked.items.every( i => ! ( 'locked' in i ) ) );
+	assert.equal( ( await tool( 'move_item', { project_id: project, version: unlocked.version, index: 0, east: unlocked.items[ 0 ].east } ) ).error, false );
 
 	// A barrier loop round a 10 m square: end to end all the way, across the corners rather than
 	// short of them or sticking out past them, with what's over left where the loop closes.
@@ -452,6 +636,79 @@ test( 'the tools lay out a site', async () => {
 
 } );
 
+test( 'view_site: the site from above, with the grid and what\'s placed drawn on', async () => {
+
+	const proCookie = await signIn( { sub: 'mcp-pro', email: 'pro@example.com', name: 'Pat Pro' } );
+	const viewsUsed = async () => ( await call( '/build/api/me', { headers: { Cookie: proCookie } } ) ).json.plan.views.used;
+	const before = await viewsUsed();
+	const seen = await look( { project_id: project } );
+	assert.equal( seen.error, false, seen.text );
+	assert.equal( seen.image.format, 'jpeg' );
+	assert.deepEqual( [ seen.image.width, seen.image.height ], [ 768, 768 ] );
+	if ( SCREENSHOTS ) {
+
+		mkdirSync( SCREENSHOTS, { recursive: true } );
+		writeFileSync( join( SCREENSHOTS, 'view-site.jpg' ), seen.bytes );
+
+	}
+
+	// 150 m across by default, round the site point: 0.195 m a pixel, the site point in the middle.
+	assert.match( seen.text, /150 m across in 768 × 768 px, 0\.2 m a pixel\. It runs from -75 to 75 m east and -75 to 75 m north/ );
+	assert.match( seen.text, /Grid lines every 20 m/ );
+	assert.ok( seen.text.includes( `Imagery: Google, ${ COPYRIGHT }.` ), seen.text );
+	assert.match( seen.text, /one of the plan's map views: \d+ of 6 this month/ );
+	const px = ( east, north ) => [ Math.floor( east / ( 150 / 768 ) + 384 ), Math.floor( 384 - north / ( 150 / 768 ) ) ];
+	// Open ground away from everything is the tiles' own colour.
+	assert.ok( near( seen.image.at( ...px( - 65, 65 ) ), GROUND, 12 ), String( seen.image.at( ...px( - 65, 65 ) ) ) );
+	// The office trailer at 0, 20 facing south: 12.29 m across, 5.83 m along its heading, so its
+	// north edge 2.9 m north of its middle, drawn yellow, numbered with its index.
+	const edge = seen.image.at( ...px( 3, 22.92 ) );
+	assert.ok( edge[ 0 ] > 200 && edge[ 1 ] > 170 && edge[ 2 ] < 150, `the trailer's edge is ${ edge }` );
+	const trailer = ( await tool( 'get_project', { project_id: project } ) ).value.items.find( i => i.item === 'office-trailer-10x40' );
+	assert.match( seen.text, /Drawn on: \d+ of the project's \d+ things in view, each numbered with its get_project index/ );
+	assert.ok( Number.isInteger( trailer.index ) );
+	// The grid: a line every 20 m (lighter than the ground), and the site point's red cross.
+	const line = seen.image.at( px( - 60, 0 )[ 0 ], px( 0, - 65 )[ 1 ] );
+	assert.ok( line[ 0 ] > GROUND[ 0 ] + 60, `the grid line at 60 m west is ${ line }` );
+	const cross = seen.image.at( 384, 378 );
+	assert.ok( cross[ 0 ] > 200 && cross[ 1 ] < 110 && cross[ 2 ] < 110, `the site point's cross is ${ cross }` );
+	// The labels along the top are white, and "Google" and the copyright darken the foot.
+	const top = Array.from( { length: 14 * 768 }, ( _, k ) => seen.image.at( k % 768, 4 + Math.floor( k / 768 ) ) );
+	assert.ok( top.some( p => p.every( v => v > 220 ) ), 'no white labels along the top' );
+	const foot = seen.image.at( 380, 762 );
+	assert.ok( foot[ 1 ] < GROUND[ 1 ] - 20 || foot.every( v => v > 200 ), `the foot is ${ foot }` );
+	// One map view counted; the key the editor's handed, as from the site's own pages; satellite, PNG tiles.
+	assert.equal( await viewsUsed(), before + 1 );
+	assert.deepEqual( [ ...tiles.keys ], [ 'test-maps-key-not-real' ] );
+	assert.ok( [ ...tiles.referers ].every( r => /\/build\/app\/$/.test( r ) ), [ ...tiles.referers ].join() );
+	assert.deepEqual( tiles.bodies[ 0 ], { mapType: 'satellite', language: 'en-US', region: 'US', imageFormat: 'png' } );
+
+	// The same view again: the tiles come from the cache, and the session is kept.
+	const fetched = tiles.tiles;
+	assert.ok( fetched > 0 && fetched <= 49, `${ fetched } tiles` );
+	assert.equal( ( await look( { project_id: project } ) ).error, false );
+	assert.equal( tiles.tiles, fetched, 'the tiles were fetched again' );
+	assert.equal( tiles.sessions, 1 );
+	// Somewhere else, bigger: 400 m round 100 m east, the trailer a few pixels, still drawn.
+	const wide = await look( { project_id: project, east: 100, north: 0, size: 400 } );
+	assert.match( wide.text, /400 m across .* -100 to 300 m east and -200 to 200 m north/ );
+	assert.match( wide.text, /Grid lines every 50 m/ );
+	assert.equal( await viewsUsed(), before + 3 );
+
+	// Refused: no such project, a size out of range, and Google turning the key away (nothing counted).
+	assert.match( ( await look( { project_id: 'nope' } ) ).text, /No such project/ );
+	assert.match( ( await look( { project_id: project, size: 5 } ) ).text, /size must be a number from 20 to 2000/ );
+	tiles.refuse = true;
+	const refused = await look( { project_id: project, size: 160 } );
+	tiles.refuse = false;
+	assert.equal( refused.error, true );
+	assert.match( refused.text, /turned the key away \(403\)\. .*Map Tiles API/ );
+	assert.doesNotMatch( refused.text, /test-maps-key-not-real/ );
+	assert.equal( await viewsUsed(), before + 3 );
+	assert.equal( ( await look( { project_id: project, size: 160 } ) ).error, false, 'a new session once Google takes the key again' );
+
+} );
+
 test( 'the project opens in the editor with what was placed', async () => {
 
 	const { chromium } = require( 'playwright' );
@@ -492,7 +749,92 @@ test( 'the project opens in the editor with what was placed', async () => {
 	// The raised and the exact-height areas as Claude made them.
 	const heights = await page.evaluate( () => window.twin.models.entries.filter( e => e.kind === 'flatten-zone' ).map( e => [ e.params.raise, e.params.finished ] ) );
 	assert.ok( heights.some( ( [ r, f ] ) => r === 1.25 && f === null ) && heights.some( ( [ r, f ] ) => r === - 30 ) && heights.some( ( [ , f ] ) => f === 42.5 ), JSON.stringify( heights ) );
+	// The shaped ones as Claude made them: the triangle graded through its points' heights.
+	const shaped = await page.evaluate( () => window.twin.models.entries.filter( e => e.kind === 'flatten-zone' && e.params.points ).map( e => ( { points: e.params.points, grade: e.params.grade, saved: window.twin.models.toConfig( e ).params.points } ) ) );
+	assert.equal( shaped.length, 2 );
+	const tri = shaped.find( a => a.points.length === 3 );
+	assert.equal( tri.grade, 'points' );
+	assert.deepEqual( tri.saved, [ [ - 15, - 12, 1 ], [ 15, - 12, - 0.5 ], [ - 5, 12 ] ] );
 	assert.deepEqual( errors, [] );
+
+} );
+
+test( 'view_site stops when the month\'s map views are used up', async () => {
+
+	const proCookie = await signIn( { sub: 'mcp-pro', email: 'pro@example.com', name: 'Pat Pro' } );
+	const { used, limit } = ( await call( '/build/api/me', { headers: { Cookie: proCookie } } ) ).json.plan.views;
+	assert.equal( limit, PRO_MONTHLY );
+	for ( let i = used; i < limit; i ++ ) assert.equal( ( await look( { project_id: project } ) ).error, false );
+	const out = await look( { project_id: project } );
+	assert.equal( out.error, true );
+	assert.match( out.text, /map views are used up \(6 on the plan/ );
+
+} );
+
+test( 'a blank site: made with no place, said to be blank, and view_site draws it without Google or a map view', async () => {
+
+	const proCookie = await signIn( { sub: 'mcp-pro', email: 'pro@example.com', name: 'Pat Pro' } );
+	const views = async () => ( await call( '/build/api/me', { headers: { Cookie: proCookie } } ) ).json.plan.views;
+	// Room for it (BUILD_LAYOUT_LIMIT is 2 here, and a blank site counts as a project): Second goes.
+	const second = ( await tool( 'list_projects', {} ) ).value.find( p => p.name === 'Second' );
+	const gone = await call( `/build/api/layouts/${ second.project_id }`, { method: 'DELETE', body: {}, headers: { Cookie: proCookie, Origin: server.base } } );
+	assert.equal( gone.status, 204, gone.text );
+
+	const made = await tool( 'create_project', { name: 'Yard', blank: true, slope: 2, toward: 180 } );
+	assert.equal( made.error, false, made.text );
+	const id = made.value.project_id;
+	assert.equal( made.value.site, 'Blank site' );
+	assert.deepEqual( made.value.blank, { slope: 2, toward: 180, ground: 'Falls 2 % to the south' } );
+	assert.match( made.value.editor, /\/build\/app\/\?blank=2%2C180&project=[\w-]{16}$/ );
+	assert.match( ( await tool( 'create_project', { name: 'Third', blank: true } ) ).text, /as many projects as it can/, 'it counts as a project' );
+	assert.match( ( await tool( 'create_project', { name: 'Nowhere' } ) ).text, /name and place, please \(or blank: true/ );
+
+	// list_projects and get_project say it's blank, with its ground and no lat or lon.
+	const listed = ( await tool( 'list_projects', {} ) ).value.find( p => p.project_id === id );
+	assert.deepEqual( listed.blank, { slope: 2, toward: 180, ground: 'Falls 2 % to the south' } );
+	assert.equal( listed.editor, made.value.editor );
+	assert.equal( ( await tool( 'list_projects', {} ) ).value.find( p => p.project_id === project ).blank, undefined );
+	const stored = await call( `/build/api/layouts/${ id }`, { headers: { Cookie: proCookie } } );
+	assert.deepEqual( stored.json.data.blank, { slope: 2, toward: 180 } );
+	assert.deepEqual( stored.json.blank, { slope: 2, toward: 180 } );
+
+	// Laid out like any other: a trailer, a flatten area by its points and a stockpile.
+	assert.equal( ( await tool( 'place_items', { project_id: id, items: [ { item: 'office-trailer-10x40', east: - 10, north: 10, heading: 90 } ] } ) ).error, false );
+	assert.equal( ( await tool( 'add_flatten_area', { project_id: id, points: [ { east: 0, north: - 5 }, { east: 20, north: - 5 }, { east: 20, north: 15 }, { east: 10, north: 15 }, { east: 10, north: 5 }, { east: 0, north: 5 } ] } ) ).error, false );
+	assert.equal( ( await tool( 'add_stockpile', { project_id: id, east: - 15, north: - 15, volume: 60 } ) ).error, false );
+	const got = await tool( 'get_project', { project_id: id } );
+	assert.deepEqual( got.value.blank, { slope: 2, toward: 180, ground: 'Falls 2 % to the south' } );
+	assert.equal( got.value.lat, undefined );
+	assert.equal( got.value.items.length, 3 );
+
+	// view_site: the grid on plain ground with what's placed, nothing asked of Google, no map view
+	// taken (this month's are all used up by the test before), and no Google attribution.
+	const asked = { sessions: tiles.sessions, tiles: tiles.tiles, requests: tiles.requests };
+	const before = await views();
+	assert.equal( before.used, before.limit );
+	const seen = await look( { project_id: id, size: 60 } );
+	assert.equal( seen.error, false, seen.text );
+	if ( SCREENSHOTS ) writeFileSync( join( SCREENSHOTS, 'view-site-blank.jpg' ), seen.bytes );
+	assert.deepEqual( [ seen.image.width, seen.image.height ], [ 768, 768 ] );
+	assert.match( seen.text, /a blank site \(no map: plain ground, falls 2 % to the south\)/ );
+	assert.match( seen.text, /60 m across in 768 × 768 px/ );
+	assert.match( seen.text, /isn't one of the plan's map views/ );
+	assert.doesNotMatch( seen.text, /Google|Imagery/ );
+	assert.deepEqual( { sessions: tiles.sessions, tiles: tiles.tiles, requests: tiles.requests }, asked, 'nothing asked of Google' );
+	assert.deepEqual( await views(), before, 'no map view counted' );
+	const px = ( east, north ) => [ Math.floor( east / ( 60 / 768 ) + 384 ), Math.floor( 384 - north / ( 60 / 768 ) ) ];
+	// Plain ground away from everything, the flatten area's outline cyan along its points (here the
+	// L's inside edge, 10 m east), the trailer yellow, and no dark band of attribution at the foot.
+	const ground = seen.image.at( ...px( 25, - 25 ) );
+	assert.ok( near( ground, [ 112, 104, 88 ], 14 ), `the ground is ${ ground }` );
+	const inside = seen.image.at( ...px( 10, 10 ) );
+	assert.ok( inside[ 2 ] > 180 && inside[ 1 ] > 160 && inside[ 0 ] < 140, `the flatten area's edge is ${ inside }` );
+	const trailer = seen.image.at( ...px( - 10 + 2.9, 13 ) );
+	assert.ok( trailer[ 0 ] > 200 && trailer[ 1 ] > 170 && trailer[ 2 ] < 150, `the trailer's edge is ${ trailer }` );
+	assert.ok( near( seen.image.at( 700, 764 ), ground, 30 ), `the foot is ${ seen.image.at( 700, 764 ) }` );
+
+	// Its share link opens it blank too.
+	assert.match( ( await tool( 'share_project', { project_id: id } ) ).value.share, /\/build\/app\/\?blank=2%2C180&view=[\w-]{22}$/ );
 
 } );
 
@@ -545,7 +887,8 @@ test( 'a plan that lapses stops the tools; the hourly limit holds', async () => 
 test( 'with BUILD_SALES on: the authorize page and the tools offer Build Pro to the free plan', async () => {
 
 	server?.stop();
-	server = await startWorker( { port: SALES_PORT, config: 'wrangler.drive.jsonc', vars: workerVars( { BUILD_SALES: 'on' } ), assets: assetsOf() } );
+	// And no Maps key: view_site says there are no pictures.
+	server = await startWorker( { port: SALES_PORT, config: 'wrangler.drive.jsonc', vars: workerVars( { BUILD_SALES: 'on', GOOGLE_MAPS_API_KEY: '' } ), assets: assetsOf() } );
 	const registered = await call( '/oauth/register', { method: 'POST', body: { redirect_uris: [ REDIRECT ], client_name: 'Claude' } } );
 	assert.equal( registered.status, 201, registered.text );
 	client = registered.json;
@@ -564,6 +907,10 @@ test( 'with BUILD_SALES on: the authorize page and the tools offer Build Pro to 
 	const connected = await connect( cookie );
 	assert.ok( connected.tokens, connected.page?.text.slice( -600 ) );
 	assert.equal( ( await tool( 'list_projects', {}, connected.tokens.access_token ) ).error, false );
+	const made = await tool( 'create_project', { name: 'No map', place: 'Somewhere', lat: 49.2827, lon: - 123.1207 }, connected.tokens.access_token );
+	const keyless = await look( { project_id: made.value.project_id }, connected.tokens.access_token );
+	assert.equal( keyless.error, true );
+	assert.match( keyless.text, /no Google map key on the server/ );
 	await webhook( { id: 'evt_sales_pro_end', object: 'event', type: 'customer.subscription.deleted', livemode: false, created: Math.floor( Date.now() / 1000 ) + 10, data: { object: { id: 'sub_sales_pro', object: 'subscription', status: 'canceled' } } } );
 	const lapsed = await tool( 'list_projects', {}, connected.tokens.access_token );
 	assert.equal( lapsed.error, true );

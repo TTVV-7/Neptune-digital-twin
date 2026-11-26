@@ -38,7 +38,8 @@ const coarseHit = hit => ( hit.object.userData.tile?.geometricError ?? 0 ) > MAX
 // Loads your own glTF/GLB models and places them in the terminal frame.
 // Each entry keeps an editable `state` that the placement panel changes.
 // Dispatches 'add', 'change' and 'remove' events with the entry, 'hide' with the entry when it's
-// hidden or shown by hand (setHidden), and 'visibility' when what's hidden changes at all.
+// hidden or shown by hand (setHidden), 'lock' with the entry when it's locked or unlocked
+// (setLocked), and 'visibility' when what's hidden changes at all.
 //
 // An entry is hidden (isHidden) when it's hidden by hand, which is part of the plan and saved
 // with it, or when `concealed( entry )` says so: the Show panel (layers.js) sets that, for
@@ -151,6 +152,10 @@ export class ModelManager extends EventDispatcher {
 			id: typeof config.id === 'string' && config.id ? config.id : null,
 			// Hidden by hand (the selection toolbar's Hide): saved with the layout.
 			hidden: config.hidden === true,
+			// Locked in the editor (sidebar.js), so it isn't moved, turned, resized, changed or deleted
+			// by accident: saved with the layout. Not the same as a Pro library item that's locked for
+			// a free account (premium.js), which is about picking new ones.
+			locked: config.locked === true,
 			footprint: new Box3().setFromObject( content ),
 			state: {
 				name: config.name ?? kind?.label ?? 'Model',
@@ -637,6 +642,15 @@ export class ModelManager extends EventDispatcher {
 
 	}
 
+	// Lock an entry in the editor, or unlock it. It's saved like that.
+	setLocked( entry, locked ) {
+
+		if ( entry.locked === locked ) return;
+		entry.locked = locked;
+		this.dispatchEvent( { type: 'lock', entry } );
+
+	}
+
 	// Work out again which entries are drawn, after `concealed` changes what it says.
 	refreshHidden( entries = this.entries ) {
 
@@ -711,6 +725,7 @@ export class ModelManager extends EventDispatcher {
 		if ( ! entry.recenter ) config.recenter = false;
 		if ( entry.front ) config.front = entry.front;
 		if ( entry.hidden ) config.hidden = true;
+		if ( entry.locked ) config.locked = true;
 		if ( entry.pivotAhead ) config.pivot = { ahead: round( entry.pivotAhead * state.scale ) };
 		if ( entry.library && ! entry.kind ) config.library = entry.library;
 		if ( entry.id ) config.id = entry.id;

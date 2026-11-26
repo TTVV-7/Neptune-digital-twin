@@ -102,7 +102,8 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | Square handles | On an area, excavation or stockpile: drag to resize; Shift for any size |
 | Arrow in a pit | Drag down to dig deeper, up for shallower |
 | P on a pit | Its sides sloped, stepped or shored (the whole pit or each side), support levels, dig stage; **Section across** / **Section along** cuts through it (Esc closes the section) |
-| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, row (more of it along a line), break apart (a row), edit, hide, delete |
+| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, row (more of it along a line), break apart (a row), edit, lock, hide, delete |
+| Ctrl/Cmd+L | Lock what's selected so it can't be moved, turned, resized, changed or deleted by accident (it's outlined red); again to unlock. Also Lock on the toolbar and the edit bar |
 | R / Shift+R | Turn the selected item 15° |
 | Delete | Remove the selected item (Undo for 5 seconds) |
 | Esc | Cancel placing or drawing / deselect |
@@ -539,7 +540,11 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
   of large triangles, and ones that cross the edge slope up to the uncleared side. Areas show as red
   boxes while the library is open (the Show panel hides them); select one to move, turn, resize or
   delete it, which brings the original back, and **B** shows the original everywhere for a moment.
-  It only changes what this app draws; Google's data isn't touched.
+  It only changes what this app draws; Google's data isn't touched. Its P panel's **shape: by points
+  (any shape)** makes it a triangle, an L or any other outline: drag its corners, click the plus on
+  an edge to add one, click a corner and press Delete to take it out (edges never cross); give the
+  corners heights (or Alt-drag them up and down) and its ground **by points** slopes through them,
+  batters and all (docs/build.md, *Flatten areas: any shape, by its points*).
   - **Surface:** a flattened area is laid with **gravel** to start, so it reads as a finished pad
     instead of Google's photo of what stood there, pressed flat. Its P panel (and the selection's
     Size editor) switches it to **asphalt**, **concrete** or **none (just flatten)**, and the next
@@ -694,6 +699,8 @@ which you chose, and on a phone it starts folded.
   that layer again.
 - **Hidden items**: **Hide** on the selection toolbar hides just that item (with Undo). Hidden
   items are listed at the bottom of the panel with **Show** each and **Show all**.
+- **Locked items**: how many are locked in the editor (Ctrl/Cmd+L, or Lock on the toolbar), with
+  **Unlock all**.
 
 Hidden things aren't drawn, can't be clicked or selected, and don't block walking or driving;
 nothing is moved or deleted. Items hidden one by one are part of the plan: they're saved with the
@@ -893,9 +900,11 @@ player's best stunt run today, this week and all time (a nickname, no sign-up) i
 posted with the visit's signed token and checked against what the game can score.
 
 **World Drive Build** (`/build/`, [docs/build.md](docs/build.md)): this construction app offered to
-anyone on World Drive's site and accounts, at any address, with a free plan (33 everyday items, 15
+anyone on World Drive's site and accounts, at any address, with a free plan (35 everyday items, 15
 3D map views a month, one saved project) and **Build Pro** (everything, 300 views, 200 projects
 and share links; US$5/month or US$50/year) sold through Stripe; World Drive's owner has everything.
+A project can also be a **blank site**: no map at all, plain ground with a metre grid and a north
+arrow, flat or on a gentle slope, which uses none of the month's 3D map views.
 
 **City Drive** (`/city/`, `drive/city/index.html`, `src/drive-app/city/`): a standalone page
 where you pick a city, a start spot and a ride and drive a whole city built from open data instead

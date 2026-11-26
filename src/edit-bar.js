@@ -1,7 +1,8 @@
 // The edit bar (sidebar.js): along the bottom while the library is open, or while more than one
 // thing is selected. Select (a drag on the ground then selects everything in a box, for touch and
 // trackpads, as Shift+drag does with a mouse), how many are selected, and Copy, Cut, Paste,
-// Duplicate, Undo and Redo, which the keys do too (Ctrl/Cmd+C, X, V, D, Z, Shift+Z).
+// Duplicate, Lock, Undo and Redo, which the keys do too (Ctrl/Cmd+C, X, V, D, L, Z, Shift+Z). Lock
+// locks what's selected so it isn't changed by accident, or unlocks it once all of it is locked.
 
 const icon = paths => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ paths }</svg>`;
 const ICONS = {
@@ -10,6 +11,8 @@ const ICONS = {
 	cut: icon( '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M7.8 16.2 17 4M16.2 16.2 7 4"/>' ),
 	paste: icon( '<path d="M9 4h6v3H9z"/><path d="M15 5.5h2.5A1.5 1.5 0 0 1 19 7v12.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5V7a1.5 1.5 0 0 1 1.5-1.5H9"/><path d="M9 12h6M9 16h4"/>' ),
 	duplicate: icon( '<rect x="4" y="4" width="11" height="11" rx="2"/><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M14.5 12.5v5M12 15h5"/>' ),
+	lock: icon( '<rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/><path d="M12 15v2"/>' ),
+	unlock: icon( '<rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 7.7-1.5"/><path d="M12 15v2"/>' ),
 	undo: icon( '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>' ),
 	redo: icon( '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>' ),
 };
@@ -20,7 +23,7 @@ const PHONE = window.matchMedia( '( max-width: 700px )' );
 // The panels at the bottom right (layers.js, legend.js) the bar keeps clear of.
 const PANELS = '#layers > :not([hidden]), #legend > :not([hidden])';
 
-// actions: { boxMode( on ), copy(), cut(), paste(), duplicate(), undo(), redo() }.
+// actions: { toggleBox(), copy(), cut(), paste(), duplicate(), lock(), undo(), redo() }.
 export function createEditBar( actions ) {
 
 	const root = document.createElement( 'div' );
@@ -62,6 +65,7 @@ export function createEditBar( actions ) {
 		cut: button( 'cut', 'Cut', `Cut the selection (${ MOD }X): copy it and take it away` ),
 		paste: button( 'paste', 'Paste', `Paste what you copied where the pointer is, or in the middle of the view (${ MOD }V)` ),
 		duplicate: button( 'duplicate', 'Duplicate', `Duplicate the selection beside itself (${ MOD }D)` ),
+		lock: button( 'lock', 'Lock', '' ),
 		undo: button( 'undo', 'Undo', `Undo (${ MOD }Z)` ),
 		redo: button( 'redo', 'Redo', `Redo (${ MOD }${ MAC ? '⇧Z' : 'Y' })` ),
 	} );
@@ -69,7 +73,7 @@ export function createEditBar( actions ) {
 
 	// Along the bottom, in the middle of the map between the library (open, on the left) and the
 	// Show and Controls panels (bottom right), which come and go and change size; where there's no
-	// room between them, at the top (as on a phone, style.css).
+	// room between them, at the top (as on a phone, style.css), beside the P panel if it's open.
 	let placedAt = - Infinity;
 	function place() {
 
@@ -103,6 +107,9 @@ export function createEditBar( actions ) {
 
 			left = sheet && sheet.top <= 0 ? sheet.right + MARGIN : MARGIN;
 			right = window.innerWidth - MARGIN;
+			// Beside the P panel (top right) while it's open, where there's room.
+			const gui = document.querySelector( '.lil-gui.lil-root' )?.getBoundingClientRect();
+			if ( gui && gui.width > 0 && gui.top < 200 && gui.left - MARGIN - left >= width ) right = Math.min( right, gui.left - MARGIN );
 
 		}
 
@@ -128,12 +135,13 @@ export function createEditBar( actions ) {
 
 	}
 
-	// shown, boxing (Select is on), selected (how many), canPaste, undo / redo: labels or null.
+	// shown, boxing (Select is on), selected (how many), locked (all of them are), canPaste, undo /
+	// redo: labels or null.
 	let last = '';
-	function update( { shown, boxing, selected, canPaste, undo, redo } ) {
+	function update( { shown, boxing, selected, locked = false, canPaste, undo, redo } ) {
 
 		place();
-		const key = JSON.stringify( [ shown, boxing, selected, canPaste, undo, redo ] );
+		const key = JSON.stringify( [ shown, boxing, selected, locked, canPaste, undo, redo ] );
 		if ( key === last ) return;
 		last = key;
 		root.hidden = ! shown;
@@ -144,6 +152,13 @@ export function createEditBar( actions ) {
 		buttons.copy.disabled = selected === 0;
 		buttons.cut.disabled = selected === 0;
 		buttons.duplicate.disabled = selected === 0;
+		// Lock, or Unlock (pressed, a closed padlock) once everything selected is locked.
+		buttons.lock.disabled = selected === 0;
+		buttons.lock.setAttribute( 'aria-pressed', String( locked ) );
+		buttons.lock.innerHTML = `${ ICONS[ locked ? 'lock' : 'unlock' ] }<span>${ locked ? 'Unlock' : 'Lock' }</span>`;
+		buttons.lock.title = locked
+			? `Unlock the selection (${ MOD }L), so it can be moved, changed and deleted again`
+			: `Lock the selection (${ MOD }L), so it can't be moved, turned, resized, changed or deleted by accident`;
 		buttons.paste.disabled = ! canPaste;
 		buttons.undo.disabled = ! undo;
 		buttons.redo.disabled = ! redo;

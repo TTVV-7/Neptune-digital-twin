@@ -1,24 +1,34 @@
 import { HttpError, json, randomToken } from '../http.js';
 import { bearerAccount } from './oauth.js';
-import { ACCOUNT_BYTES, LOG_KEEP_MS, limitsOf, planOf } from './build.js';
+import { ACCOUNT_BYTES, LOG_KEEP_MS, blankColumn, countView, limitsOf, mayView, planOf } from './build.js';
 import { salesOn } from './billing.js';
 import { search } from './search.js';
+import { VIEW_PIXELS, base64, siteView, tilesKey } from './site-view.js';
 import CATALOG from './build-catalog.json' with { type: 'json' };
+import { MAX_POINTS, MIN_POINTS, isSimple, polygonArea } from '../../src/polygon.js';
+import { BLANK_AT, BLANK_NAME, MAX_SLOPE, blankOf, cleanSlope, describeSlope, slopeParam } from '../../src/blank-site.js';
 
 // World Drive Build's MCP server (worlddrive.app/mcp, docs/build.md): Claude (or any MCP client)
 // connected to someone's World Drive account through OAuth (oauth.js) lays out their construction
-// sites: finds a site by address, makes a project there, looks up the library (build-catalog.json,
-// npm run make-build-catalog: every item with its real size, and the sets) and places equipment,
-// sets, rows, flatten areas, laydown areas, stockpiles and markups (dimensions, arrows and notes),
-// moves and removes them, and shares the
-// project. Projects are World Drive Build's own (build_layouts, build.js), so what Claude lays out
-// opens in the editor (/build/app/), and the other way round. Build Pro and the owner only.
+// sites: finds a site by address, makes a project there, looks at it from above (view_site: Google's
+// satellite imagery with a metre grid and what's placed drawn on, site-view.js), looks up the
+// library (build-catalog.json, npm run make-build-catalog: every item with its real size, and the
+// sets) and places equipment, sets, rows, flatten areas, laydown areas, stockpiles and markups
+// (dimensions, arrows and notes), moves and removes them, and shares the project. Projects are
+// World Drive Build's own (build_layouts, build.js), so what Claude lays out opens in the editor
+// (/build/app/), and the other way round. Build Pro and the owner only.
 //
 // Streamable HTTP, stateless: each POST is a JSON-RPC message (or a batch) answered with JSON; no
 // event stream and no session. Positions are metres east and north of the project's site point (its
 // lat and lon), headings degrees clockwise from north (the way an item's front faces).
 //
-// Settings: MCP_HOURLY, the tool calls an account may make an hour (300 if unset).
+// A project can be a blank site instead (src/blank-site.js: create_project's blank): no place on the
+// map, plain ground with a metre grid, flat or on a gentle slope. Its view_site is that grid with
+// what's placed drawn on, made here without asking Google for anything, and isn't a map view.
+//
+// Settings: MCP_HOURLY, the tool calls an account may make an hour (300 if unset). view_site's
+// pictures are each one of those and one of the plan's map views a month as well (BUILD_PRO_MONTHLY,
+// build.js), as the editor's 3D map is: Google bills both (a blank site's aren't map views).
 
 const PROTOCOLS = [ '2025-06-18', '2025-03-26', '2024-11-05' ];
 const PROJECT_ITEMS = 2000;
@@ -34,9 +44,12 @@ const FENCES = Object.keys( FENCE_NAMES );
 // src/flatten.js's surfaces (gravel is road base).
 const SURFACES = [ 'gravel', 'clear-crush', 'pea-gravel', 'drain-rock', 'crusher-dust', 'pit-run', 'recycled-concrete', 'rip-rap', 'millings', 'asphalt', 'concrete', 'none' ];
 // src/grade.js's grades, and what each takes.
-const GRADES = [ 'level', 'follow', 'plane', 'slope', 'ridge', 'valley', 'terraces' ];
+const GRADES = [ 'level', 'follow', 'plane', 'slope', 'ridge', 'valley', 'terraces', 'points' ];
 const TOWARD = [ 'front', 'back', 'left', 'right' ];
 const BATTERS = [ 1.5, 2, 3 ];
+// How high or low a flatten area's point can be set from the area's height (src/flatten.js's
+// POINT_HEIGHT), m.
+const POINT_HEIGHT = 50;
 // What a flatten area keeps overhead (src/flatten.js's KEEPS).
 const KEEPS = [ 'off', 'auto', 'height' ];
 // Pieces placed touching end to end in a row; anything else a metre apart.
@@ -129,7 +142,7 @@ async function handle( context, message ) {
 
 }
 
-const INSTRUCTIONS = `World Drive Build lays out construction sites on a 3D map of anywhere (worlddrive.app/build). Start with find_site for the address, then create_project there (or list_projects / get_project for one already made). Positions are metres east and north of the project's site point; a heading is degrees clockwise from north, the way an item's front faces. Look sizes up with search_library before laying things out so they fit (a site office trailer is about 12 x 5 m, a 20 t excavator about 10 x 3 m, a tri-tri about 22 m long). Give the person the editor link at the end: they see it in 3D there.`;
+const INSTRUCTIONS = `World Drive Build lays out construction sites on a 3D map of anywhere (worlddrive.app/build). Start with find_site for the address, then create_project there (or list_projects / get_project for one already made). Positions are metres east and north of the project's site point; a heading is degrees clockwise from north, the way an item's front faces. Before laying anything out, look at the site with view_site: a satellite picture, north up, with a grid in metres east and north of the site point, so you can see the roads, buildings, trees and open ground and read positions off it; look again afterwards to check what you placed (it's drawn on, numbered by index). Look sizes up with search_library before laying things out so they fit (a site office trailer is about 12 x 5 m, a 20 t excavator about 10 x 3 m, a tri-tri about 22 m long). With no address (or when the person wants no map), create_project with blank: true makes a blank site instead: plain ground with a metre grid, north up, flat or on a gentle slope, with no map at all; view_site then shows its grid and what's placed. Give the person the editor link at the end: they see it in 3D there.`;
 
 // --- tools ------------------------------------------------------------------------------------
 
@@ -145,8 +158,8 @@ const TOOLS = [
 		annotations: { readOnlyHint: true }, run: findSite,
 	},
 	{
-		name: 'create_project', title: 'Make a project', description: 'Make a new, empty project at a site. Returns its id and the editor link.',
-		inputSchema: { type: 'object', properties: { name: { type: 'string' }, place: { type: 'string', description: 'The site\'s name as people know it, e.g. "1200 Main St"' }, lat: { type: 'number' }, lon: { type: 'number' } }, required: [ 'name', 'place', 'lat', 'lon' ] },
+		name: 'create_project', title: 'Make a project', description: 'Make a new, empty project at a site (place, lat and lon from find_site), or with blank: true on a blank site: no map at all, plain ground with a metre grid and north up, flat or falling `slope` % toward `toward` (no place, lat or lon then). Returns its id and the editor link.',
+		inputSchema: { type: 'object', properties: { name: { type: 'string' }, place: { type: 'string', description: 'The site\'s name as people know it, e.g. "1200 Main St" (not for a blank site)' }, lat: { type: 'number' }, lon: { type: 'number' }, blank: { type: 'boolean', default: false, description: 'a blank site with no map, instead of a place' }, slope: { type: 'number', minimum: 0, maximum: MAX_SLOPE, default: 0, description: '% the blank site\'s ground falls (0 flat)' }, toward: { type: 'number', minimum: 0, maximum: 359, default: 0, description: 'degrees clockwise from north the blank site\'s ground falls toward (90 east)' } }, required: [ 'name' ] },
 		run: createProject,
 	},
 	{
@@ -154,8 +167,13 @@ const TOOLS = [
 		inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true }, run: listProjects,
 	},
 	{
-		name: 'get_project', title: 'What\'s in a project', description: 'Everything placed in a project, each with its index (for move_item and remove_items), what it is, where and which way it faces, and its size; and the project\'s version, which move_item and remove_items take so they don\'t act on indexes that have changed since.',
+		name: 'get_project', title: 'What\'s in a project', description: 'Everything placed in a project, each with its index (for move_item and remove_items), what it is, where and which way it faces, and its size, and locked: true on those the person locked in the editor (move_item and remove_items leave them be); and the project\'s version, which move_item and remove_items take so they don\'t act on indexes that have changed since.',
 		inputSchema: { type: 'object', properties: { ...project }, required: [ 'project_id' ] }, annotations: { readOnlyHint: true }, run: getProject,
+	},
+	{
+		name: 'view_site', title: 'Look at the site', description: `A top-down satellite picture of the project's site (Google's imagery), north up, ${ VIEW_PIXELS } px square: a grid every few metres labelled in metres east (along the top, E+20) and north (down the left, N+20) of the site point (a red cross), and everything placed drawn on as its footprint, numbered with its get_project index (equipment yellow, with a tick to its front; flatten areas cyan; laydown areas their own colour; stockpiles orange; markups their colour). Look before laying out, to see roads, buildings, trees, parking and open ground and to read positions for place_items off the grid, and again after, to check. The imagery can be a few years old. Each look is one of the plan's map views this month. A blank site (no map) is its plain ground with the grid instead, and isn't a map view.`,
+		inputSchema: { type: 'object', properties: { ...project, size: { type: 'number', minimum: 20, maximum: 2000, default: 150, description: 'Metres across (and up and down): 150 for a building lot, 400 or more for the streets round it' }, east: { type: 'number', description: 'The middle, metres east of the site point (default 0)' }, north: { type: 'number', description: 'The middle, metres north of the site point (default 0)' } }, required: [ 'project_id' ] },
+		annotations: { readOnlyHint: true }, run: viewSite,
 	},
 	{
 		name: 'search_library', title: 'Search the library', description: 'Equipment, vehicles, trailers, barriers, materials and people to place, each with its id and real size in metres (length along its front, width, height). With no query: the categories.',
@@ -182,8 +200,8 @@ const TOOLS = [
 		run: placeRow,
 	},
 	{
-		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle of the 3D map (what\'s there is pressed flat), grade it and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none. Graded (anything but level), its edges meet the ground on batters: an embankment where it\'s built up, a cut slope where it\'s dug in; over 300 m wide or long it is only pressed down onto its shape, with no batters. Under a bridge, viaduct, overpass or canopy, keep_overhead keeps what passes over it: auto keeps what has open space under it (a deck, a canopy, and the pillars under it) and clears the rest, hiding the walls Google\'s 3D map hangs from a deck\'s edge; height keeps everything higher than keep_above m over the area\'s floor.',
-		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading' }, length: { type: 'number', description: 'm, along its heading' }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' }, grade: { type: 'string', enum: GRADES, default: 'follow', description: 'level (dead flat: at the ground\'s usual height under it when surfaced, down to the lowest ground under it with surface none), follow (a smoothed copy of the bare ground: follows the grade as it changes across the area, with what stands on it, bumps and debris taken away, smoothed over `smoothing` m; max_grade caps it), plane (one best-fit slope through the ground, as follow was before; max_grade caps it), slope (one plane falling `fall` % toward a side), ridge (a crown down the middle falling `fall` % to both sides), valley (a swale down the middle), terraces (`steps` level benches down the ground\'s slope)' }, fall: { type: 'number', minimum: 0.5, maximum: 20, default: 2, description: '%, for slope, ridge and valley' }, toward: { type: 'string', enum: TOWARD, default: 'front', description: 'the side a slope falls toward (front is the way it faces)' }, ridge_along: { type: 'string', enum: [ 'length', 'width' ], default: 'length', description: 'which way a ridge or valley runs' }, steps: { type: 'integer', minimum: 2, maximum: 8, default: 3, description: 'benches, for terraces' }, smoothing: { type: 'number', minimum: 2, maximum: 50, default: 10, description: 'm a follow area\'s ground is smoothed over: small hugs the ground, large is gentle' }, max_grade: { type: 'number', minimum: 0, maximum: 50, default: 0, description: '% steepest a follow or plane area may be anywhere, 0 for as steep as the ground' }, batter: { type: 'number', enum: BATTERS, default: 2, description: 'edge batters, horizontal to 1 vertical' }, keep_overhead: { type: 'string', enum: KEEPS, default: 'off', description: 'what passing over the area is kept: off (everything above the floor is flattened), auto (what has open space under it at least 2.5 m up: a bridge deck, a viaduct, a canopy, and its pillars), height (everything higher than keep_above)' }, keep_above: { type: 'number', minimum: 0.5, maximum: 200, default: 5, description: 'm above the area\'s floor, for keep_overhead height' }, raise: { type: 'number', minimum: - 30, maximum: 30, default: 0, description: 'm to raise (positive) or lower (negative) the whole finished area, every shape and its batters, from the ground\'s height it otherwise takes; it keeps this wherever it\'s moved' }, finished_height: { type: 'number', minimum: - 500, maximum: 9000, description: 'an exact finished height instead of raise: m above the project site\'s origin, as the editor\'s "up" (it stays there wherever it\'s moved)' } }, required: [ 'project_id', 'east', 'north', 'width', 'length' ] },
+		name: 'add_flatten_area', title: 'Flatten an area', description: 'Clear a rectangle (east, north, width, length) or any other shape (points: its corners in order, 3 to 50, no edges crossing) of the 3D map (what\'s there is pressed flat), grade it and surface it: gravel (road base), clear-crush, pea-gravel, drain-rock, crusher-dust, pit-run, recycled-concrete, rip-rap, millings, asphalt, concrete, or none. Graded (anything but level), its edges meet the ground on batters: an embankment where it\'s built up, a cut slope where it\'s dug in; over 300 m wide or long it is only pressed down onto its shape, with no batters. Under a bridge, viaduct, overpass or canopy, keep_overhead keeps what passes over it: auto keeps what has open space under it (a deck, a canopy, and the pillars under it) and clears the rest, hiding the walls Google\'s 3D map hangs from a deck\'s edge; height keeps everything higher than keep_above m over the area\'s floor. Your own slopes: give points an up each (m above or below the area\'s own height, the ground\'s height it snaps to plus any raise) and grade points: the ground is the triangles between the points, each a plane through the heights at its corners; a point without one takes the plane through those that have one.',
+		inputSchema: { type: 'object', properties: { ...project, ...point, width: { type: 'number', description: 'm, across its heading (a rectangle)' }, length: { type: 'number', description: 'm, along its heading (a rectangle)' }, points: { type: 'array', minItems: MIN_POINTS, maxItems: MAX_POINTS, description: 'instead of east, north, width and length: the area\'s corners in order round it (any shape, edges not crossing), metres east and north of the site point, each with an optional up (m from the area\'s height) for grade points', items: { type: 'object', properties: { east: { type: 'number' }, north: { type: 'number' }, up: { type: 'number', minimum: - POINT_HEIGHT, maximum: POINT_HEIGHT } }, required: [ 'east', 'north' ] } }, ...heading, surface: { type: 'string', enum: SURFACES, default: 'gravel' }, fence: { type: 'string', enum: [ 'none', ...FENCES ], default: 'none', description: 'round its edge: mesh (chain-link temp fence panels, see-through), screened (green privacy screen), screened-black, mesh-silt (panels with silt fence at their foot), silt (silt fence alone), safety (orange plastic fence on T-posts, see-through)' }, entrances: { type: 'integer', minimum: 0, maximum: 8, description: '24 ft entrances (open double gates in panel fence, gaps in silt or safety fence), one to a side in turn: the front (the side it faces), back, right, left' }, grade: { type: 'string', enum: GRADES, default: 'follow', description: 'level (dead flat: at the ground\'s usual height under it when surfaced, down to the lowest ground under it with surface none), follow (a smoothed copy of the bare ground: follows the grade as it changes across the area, with what stands on it, bumps and debris taken away, smoothed over `smoothing` m; max_grade caps it), plane (one best-fit slope through the ground, as follow was before; max_grade caps it), slope (one plane falling `fall` % toward a side), ridge (a crown down the middle falling `fall` % to both sides), valley (a swale down the middle), terraces (`steps` level benches down the ground\'s slope), points (your own slopes: the heights given at its points, the default when any point has an up)' }, fall: { type: 'number', minimum: 0.5, maximum: 20, default: 2, description: '%, for slope, ridge and valley' }, toward: { type: 'string', enum: TOWARD, default: 'front', description: 'the side a slope falls toward (front is the way it faces)' }, ridge_along: { type: 'string', enum: [ 'length', 'width' ], default: 'length', description: 'which way a ridge or valley runs' }, steps: { type: 'integer', minimum: 2, maximum: 8, default: 3, description: 'benches, for terraces' }, smoothing: { type: 'number', minimum: 2, maximum: 50, default: 10, description: 'm a follow area\'s ground is smoothed over: small hugs the ground, large is gentle' }, max_grade: { type: 'number', minimum: 0, maximum: 50, default: 0, description: '% steepest a follow or plane area may be anywhere, 0 for as steep as the ground' }, batter: { type: 'number', enum: BATTERS, default: 2, description: 'edge batters, horizontal to 1 vertical' }, keep_overhead: { type: 'string', enum: KEEPS, default: 'off', description: 'what passing over the area is kept: off (everything above the floor is flattened), auto (what has open space under it at least 2.5 m up: a bridge deck, a viaduct, a canopy, and its pillars), height (everything higher than keep_above)' }, keep_above: { type: 'number', minimum: 0.5, maximum: 200, default: 5, description: 'm above the area\'s floor, for keep_overhead height' }, raise: { type: 'number', minimum: - 30, maximum: 30, default: 0, description: 'm to raise (positive) or lower (negative) the whole finished area, every shape and its batters, from the ground\'s height it otherwise takes; it keeps this wherever it\'s moved' }, finished_height: { type: 'number', minimum: - 500, maximum: 9000, description: 'an exact finished height instead of raise: m above the project site\'s origin, as the editor\'s "up" (it stays there wherever it\'s moved)' } }, required: [ 'project_id' ] },
 		run: addFlatten,
 	},
 	{
@@ -202,12 +220,12 @@ const TOOLS = [
 		run: addMarkup,
 	},
 	{
-		name: 'move_item', title: 'Move an item', description: 'Move or turn something already placed (its index from get_project).',
+		name: 'move_item', title: 'Move an item', description: 'Move or turn something already placed (its index from get_project). Not one that\'s locked: the person unlocks it in the editor first.',
 		inputSchema: { type: 'object', properties: { ...project, ...version, index: { type: 'number' }, east: { type: 'number' }, north: { type: 'number' }, heading: { type: 'number' } }, required: [ 'project_id', 'version', 'index' ] },
 		run: moveItem,
 	},
 	{
-		name: 'remove_items', title: 'Remove items', description: 'Remove things already placed, by their indexes from get_project.',
+		name: 'remove_items', title: 'Remove items', description: 'Remove things already placed, by their indexes from get_project. Not those that are locked: the person unlocks them in the editor first.',
 		inputSchema: { type: 'object', properties: { ...project, ...version, indexes: { type: 'array', items: { type: 'number' } } }, required: [ 'project_id', 'version', 'indexes' ] },
 		annotations: { destructiveHint: true }, run: removeItems,
 	},
@@ -269,13 +287,35 @@ function number( value, name, { min = - 1e6, max = 1e6, fallback } = {} ) {
 const where = args => ( { east: round( number( args.east, 'east', { min: - 20000, max: 20000 } ) ), north: round( number( args.north, 'north', { min: - 20000, max: 20000 } ) ) } );
 const turned = value => round( ( ( number( value, 'heading', { fallback: 0, min: - 3600, max: 3600 } ) % 360 ) + 360 ) % 360 );
 
+// row: { id, site, lat, lon, blank } (blank: a blank site's { slope, toward }, or null).
 function editorLink( origin, row ) {
 
 	const url = new URL( '/build/app/', origin );
-	if ( row.lat !== null && row.lat !== undefined ) url.searchParams.set( 'at', `${ Number( row.lat ).toFixed( 6 ) },${ Number( row.lon ).toFixed( 6 ) }` );
-	url.searchParams.set( 'place', row.site );
+	siteInLink( url, row );
 	url.searchParams.set( 'project', row.id );
 	return url.href;
+
+}
+
+// Where the editor opens: ?blank for a blank site (src/blank-site.js), else ?at and ?place.
+function siteInLink( url, row ) {
+
+	if ( row.blank ) {
+
+		url.searchParams.set( 'blank', slopeParam( row.blank ) );
+		return;
+
+	}
+
+	if ( row.lat !== null && row.lat !== undefined ) url.searchParams.set( 'at', `${ Number( row.lat ).toFixed( 6 ) },${ Number( row.lon ).toFixed( 6 ) }` );
+	url.searchParams.set( 'place', row.site );
+
+}
+
+// A blank site as Claude is told it: { slope (%), toward (degrees from north it falls to), ground }.
+function blankOut( blank ) {
+
+	return { slope: blank.slope, toward: blank.toward, ground: describeSlope( blank ) };
 
 }
 
@@ -286,7 +326,8 @@ async function ownProject( env, account, id ) {
 	if ( typeof id !== 'string' || ! ID_PATTERN.test( id ) ) throw new ToolError( 'No such project: list_projects has their ids' );
 	const row = await env.DB.prepare( 'SELECT id, site, name, data, lat, lon, updated_at, share_token FROM build_layouts WHERE id = ? AND account_id = ?' ).bind( id, account.id ).first();
 	if ( ! row ) throw new ToolError( 'No such project: list_projects has their ids' );
-	return { ...row, layout: JSON.parse( row.data ) };
+	const layout = JSON.parse( row.data );
+	return { ...row, layout, blank: blankOf( layout ) };
 
 }
 
@@ -350,29 +391,39 @@ async function createProject( context, args ) {
 
 	const { env, account, now, url } = context;
 	const name = String( args.name ?? '' ).trim().slice( 0, 100 );
-	const place = String( args.place ?? '' ).trim().slice( 0, 100 );
-	if ( ! name || ! place ) throw new ToolError( 'name and place, please' );
-	const lat = number( args.lat, 'lat', { min: - 85, max: 85 } );
-	const lon = number( args.lon, 'lon', { min: - 180, max: 180 } );
+	// A blank site has no place: its name, the fixed point it's reckoned from, and its slope.
+	const blank = args.blank === true ? cleanSlope( { slope: number( args.slope, 'slope', { min: 0, max: MAX_SLOPE, fallback: 0 } ), toward: number( args.toward, 'toward', { min: - 3600, max: 3600, fallback: 0 } ) } ) : null;
+	const place = blank ? BLANK_NAME : String( args.place ?? '' ).trim().slice( 0, 100 );
+	if ( ! name || ! place ) throw new ToolError( 'name and place, please (or blank: true for a blank site, with no place)' );
+	const lat = blank ? BLANK_AT.lat : number( args.lat, 'lat', { min: - 85, max: 85 } );
+	const lon = blank ? BLANK_AT.lon : number( args.lon, 'lon', { min: - 180, max: 180 } );
 	const plan = await planOf( env, account );
-	// The same limits as a project made in the editor (build.js's createLayout).
+	// The same limits as a project made in the editor (build.js's createLayout): a blank site is a
+	// project like any other.
 	const most = plan.tier === 'free' ? 1 : limitsOf( env ).layouts;
-	const layout = { version: 2, site: place, lat, lon, items: [], extras: {} };
+	const layout = { version: 2, site: place, lat, lon, ...blank ? { blank } : {}, items: [], extras: {} };
 	const { count, bytes } = await env.DB.prepare( 'SELECT COUNT(*) AS count, COALESCE( SUM( LENGTH( data ) ), 0 ) AS bytes FROM build_layouts WHERE account_id = ?' ).bind( account.id ).first();
 	if ( count >= most ) throw new ToolError( 'The account has as many projects as it can. Delete some in the editor first.' );
 	if ( bytes + JSON.stringify( layout ).length > ACCOUNT_BYTES ) throw new ToolError( 'The account is full. Delete some projects in the editor first.' );
 	const id = randomToken( 12 );
 	await env.DB.prepare( 'INSERT INTO build_layouts ( id, account_id, site, name, data, created_at, updated_at, lat, lon ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
 		.bind( id, account.id, place, name, JSON.stringify( layout ), now, now, lat, lon ).run();
-	return text( { project_id: id, name, site: place, editor: editorLink( url.origin, { id, site: place, lat, lon } ) } );
+	const made = { project_id: id, name, site: place, editor: editorLink( url.origin, { id, site: place, lat, lon, blank } ) };
+	return text( blank ? { ...made, blank: blankOut( blank ) } : made );
 
 }
 
 async function listProjects( { env, account, url } ) {
 
-	const { results } = await env.DB.prepare( 'SELECT id, site, name, lat, lon, updated_at FROM build_layouts WHERE account_id = ? ORDER BY updated_at DESC' ).bind( account.id ).all();
+	const { results } = await env.DB.prepare( 'SELECT id, site, name, lat, lon, updated_at, json_extract( data, \'$.blank\' ) AS blank FROM build_layouts WHERE account_id = ? ORDER BY updated_at DESC' ).bind( account.id ).all();
 	if ( ! results.length ) return text( 'No projects yet: find_site, then create_project.' );
-	return text( results.map( r => ( { project_id: r.id, name: r.name, site: r.site, saved: new Date( r.updated_at ).toISOString(), editor: editorLink( url.origin, r ) } ) ) );
+	return text( results.map( r => {
+
+		const blank = blankColumn( r.blank );
+		const out = { project_id: r.id, name: r.name, site: r.site, saved: new Date( r.updated_at ).toISOString(), editor: editorLink( url.origin, { ...r, blank } ) };
+		return blank ? { ...out, blank: blankOut( blank ) } : out;
+
+	} ) );
 
 }
 
@@ -382,12 +433,16 @@ function describe( item, index ) {
 	const known = ITEMS.get( item.library );
 	const out = { index, item: item.library ?? item.kind ?? null, name: item.name ?? known?.name ?? item.kind, east: item.east, north: item.north, heading: item.heading ?? 0 };
 	if ( item.kind && item.params ) out.params = item.params;
+	// A flatten area shaped by its points: where they are on the site, as add_flatten_area takes them.
+	if ( item.kind === 'flatten-zone' && Array.isArray( item.params?.points ) && Number.isFinite( item.east ) && Number.isFinite( item.north ) ) out.points = pointsOut( item );
 	// A dimension's length (or height) as its label in the editor says it.
 	const [ a, b ] = item.kind === 'markup' && item.params?.type === 'dimension' && Array.isArray( item.params.points ) ? item.params.points : [];
 	if ( a && b ) out.measures = `${ ( item.params.vertical ? Math.abs( ( b[ 2 ] ?? 0 ) - ( a[ 2 ] ?? 0 ) ) : Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] ) ).toFixed( 1 ) } m`;
 	if ( known?.dimensions ) out.size = known.dimensions;
 	const by = placedBy( item.kind, item.params );
 	if ( by ) out.placed = by;
+	// Locked in the editor, so it isn't changed by accident (move_item and remove_items refuse it).
+	if ( item.locked === true ) out.locked = true;
 	return out;
 
 }
@@ -395,7 +450,136 @@ function describe( item, index ) {
 async function getProject( { env, account, url }, args ) {
 
 	const row = await ownProject( env, account, args.project_id );
-	return text( { project_id: row.id, name: row.name, site: row.site, lat: row.lat, lon: row.lon, version: row.updated_at, editor: editorLink( url.origin, row ), items: row.layout.items.map( describe ) } );
+	// A blank site is nowhere on the map: no lat and lon, but its ground.
+	const where = row.blank ? { blank: blankOut( row.blank ) } : { lat: row.lat, lon: row.lon };
+	return text( { project_id: row.id, name: row.name, site: row.site, ...where, version: row.updated_at, editor: editorLink( url.origin, row ), items: row.layout.items.map( describe ) } );
+
+}
+
+// --- looking at the site ---------------------------------------------------------------------
+
+// What's placed is drawn in these (r, g, b); laydown areas and markups in their own colours.
+const COLOURS = {
+	equipment: [ 255, 225, 77 ], flatten: [ 56, 217, 255 ], laydown: [ 255, 214, 10 ], stockpile: [ 255, 154, 60 ],
+	red: [ 255, 59, 48 ], amber: [ 255, 176, 0 ], blue: [ 58, 134, 255 ], green: [ 52, 199, 89 ], white: [ 255, 255, 255 ],
+};
+// src/terrain.js's materials' angles of repose (degrees), for a cone pile's footprint.
+const REPOSE = { gravel: 37, sand: 33, topsoil: 35, soil: 34, 'road-base': 38, riprap: 40, coal: 38, potash: 32 };
+
+const rgbOf = hex => /^#[0-9a-f]{6}$/i.test( hex ?? '' ) ? [ 1, 3, 5 ].map( k => parseInt( hex.slice( k, k + 2 ), 16 ) ) : null;
+const short = words => words.length > 24 ? `${ words.slice( 0, 23 ) }…` : words;
+
+// A placed thing as view_site draws it (site-view.js's shapes): its footprint from its size and
+// heading, numbered with its index. Areas go under everything else, and their labels after.
+function shapeOf( item, index ) {
+
+	const at = { east: Number( item.east ) || 0, north: Number( item.north ) || 0 };
+	const heading = Number( item.heading ) || 0;
+	const scale = Number( item.scale ) || 1;
+	const p = item.params ?? {};
+	const label = String( index );
+	const sized = Number( p.width ) > 0 && Number( p.length ) > 0;
+	// A flatten area shaped by its points: that shape, not the box round it.
+	if ( item.kind === 'flatten-zone' && Array.isArray( p.points ) && p.points.length >= MIN_POINTS ) return { type: 'polygon', points: pointsOut( item ).map( q => [ q.east, q.north ] ), colour: COLOURS.flatten, fill: 0.12, label, area: true };
+	if ( item.kind === 'flatten-zone' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: COLOURS.flatten, fill: 0.12, label, area: true };
+	if ( item.kind === 'laydown' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: rgbOf( p.colour ) ?? COLOURS.laydown, fill: 0.15, label: p.label ? `${ index } ${ short( String( p.label ) ) }` : label, area: true };
+	if ( item.kind === 'stockpile' ) {
+
+		if ( p.shape === 'ridge' && sized ) return { type: 'box', ...at, heading, width: p.width, length: p.length, colour: COLOURS.stockpile, fill: 0.2, label };
+		// A cone at its material's angle of repose (src/terrain.js's coneRadius).
+		const tan = Math.tan( ( REPOSE[ p.material ] ?? 37 ) * Math.PI / 180 );
+		return { type: 'circle', ...at, radius: Math.cbrt( 3 * ( Number( p.volume ) || 50 ) * tan * tan / Math.PI ) / tan, colour: COLOURS.stockpile, label };
+
+	}
+
+	if ( item.kind === 'markup' && Array.isArray( p.points ) && p.points.length ) {
+
+		const colour = COLOURS[ p.colour ] ?? COLOURS.white;
+		const points = p.points.map( q => [ at.east + ( Number( q[ 0 ] ) || 0 ), at.north + ( Number( q[ 1 ] ) || 0 ) ] );
+		const words = String( p.text ?? '' ).trim();
+		if ( p.type === 'note' || points.length < 2 ) return { type: 'spot', east: points[ 0 ][ 0 ], north: points[ 0 ][ 1 ], colour, label: words ? `${ index } ${ short( words ) }` : label };
+		if ( p.type === 'arrow' ) return { type: 'line', points, arrow: true, colour, label: words ? `${ index } ${ short( words ) }` : label };
+		return { type: 'line', points, colour, label: p.vertical ? label : `${ index } ${ describe( item, index ).measures ?? '' }`.trim() };
+
+	}
+
+	// A tower crane stands by its mast (placedBy): its jib out in front, its counter-jib behind.
+	if ( item.kind === 'tower-crane' ) {
+
+		const jib = Math.min( 80, Math.max( 20, Number( p.jib ) || 50 ) );
+		const front = jib + 1, back = Math.max( 12, Math.round( jib * 0.32 ) );
+		const h = heading * Math.PI / 180;
+		const ahead = ( front - back ) / 2;
+		return { type: 'box', east: at.east + Math.sin( h ) * ahead, north: at.north + Math.cos( h ) * ahead, heading, length: front + back, width: 4, colour: COLOURS.equipment, front: true, label };
+
+	}
+
+	const known = ITEMS.get( item.library )?.dimensions;
+	if ( known ) return { type: 'box', ...at, heading, length: known.length * scale, width: known.width * scale, colour: COLOURS.equipment, front: true, label };
+	// Anything else with a size (another kind of area), else a spot where it is.
+	if ( sized ) return { type: 'box', ...at, heading, width: p.width * scale, length: p.length * scale, colour: COLOURS.equipment, fill: 0.1, label, area: true };
+	return { type: 'spot', ...at, colour: COLOURS.equipment, label };
+
+}
+
+async function viewSite( context, args ) {
+
+	const { env, account, now, url, ctx } = context;
+	const row = await ownProject( env, account, args.project_id );
+	if ( row.blank ) return viewBlankSite( row, args );
+	if ( row.lat === null || row.lon === null ) throw new ToolError( 'The project has no site point on the map to look at. Open it in the editor and save it there first.' );
+	const key = tilesKey( env, context.mapsKey );
+	if ( ! key ) throw new ToolError( 'There\'s no Google map key on the server, so no pictures of sites for now. Carry on without: get_project has what\'s placed.' );
+	const { size, centre } = viewArea( args );
+	const { tier } = await planOf( env, account, now );
+	const allowed = await mayView( env, account, tier, now );
+	if ( ! allowed.ok ) throw new ToolError( `This month's map views are used up (${ allowed.limit } on the plan: each look with view_site is one, as each time the editor opens the 3D map is). They start again on the 1st. Carry on without the picture: get_project has what's placed.` );
+	const shapes = row.layout.items.map( shapeOf );
+	const ordered = [ ...shapes.filter( s => s.area ), ...shapes.filter( s => ! s.area ) ];
+	const view = await siteView( { env, ctx, key, origin: url.origin }, { at: { lat: row.lat, lon: row.lon }, centre, size, shapes: ordered } );
+	await countView( env, account, tier, now );
+	const m = v => round( v );
+	const counted = allowed.limit === null ? 'The owner\'s views aren\'t counted.' : `This was one of the plan's map views: ${ allowed.used + 1 } of ${ allowed.limit } this month.`;
+	const words = [
+		`${ row.site }, from above (Google's satellite imagery), north up: ${ m( size ) } m across in ${ view.width } × ${ view.height } px, ${ m( view.metresPerPixel ) } m a pixel. It runs from ${ m( view.east[ 0 ] ) } to ${ m( view.east[ 1 ] ) } m east and ${ m( view.north[ 0 ] ) } to ${ m( view.north[ 1 ] ) } m north of the site point (the red cross, 0, 0).`,
+		`Grid lines every ${ view.step } m, labelled along the top in metres east (E+${ view.step }) and down the left in metres north (N+${ view.step }) of the site point: read positions for place_items off them. Left (west) is negative east, down (south) is negative north.`,
+		`Drawn on: ${ view.shown } of the project's ${ row.layout.items.length } things in view, each numbered with its get_project index: equipment yellow (a tick from its middle to its front), flatten areas cyan, laydown areas their own colour with their label, stockpiles orange, markups their colour.`,
+		'The imagery can be a few years old, and trees, shadows and bridges hide the ground: what\'s on site now may differ.',
+		counted,
+		`Imagery: Google, ${ view.copyright }.`,
+	].join( '\n' );
+	return { content: [ { type: 'text', text: words }, { type: 'image', data: base64( view.bytes ), mimeType: view.mimeType } ] };
+
+}
+
+// A blank site from above: its grid and what's placed, drawn on plain ground (site-view.js's blank),
+// with nothing asked of Google and no map view counted.
+async function viewBlankSite( row, args ) {
+
+	const { size, centre } = viewArea( args );
+	const shapes = row.layout.items.map( shapeOf );
+	const view = await siteView( null, { centre, size, shapes: [ ...shapes.filter( s => s.area ), ...shapes.filter( s => ! s.area ) ], blank: true } );
+	const m = v => round( v );
+	const words = [
+		`${ row.name }, a blank site (no map: plain ground, ${ describeSlope( row.blank ).toLowerCase() }), from above, north up: ${ m( size ) } m across in ${ view.width } × ${ view.height } px, ${ m( view.metresPerPixel ) } m a pixel. It runs from ${ m( view.east[ 0 ] ) } to ${ m( view.east[ 1 ] ) } m east and ${ m( view.north[ 0 ] ) } to ${ m( view.north[ 1 ] ) } m north of the site point (the red cross, 0, 0).`,
+		`Grid lines every ${ view.step } m (fainter ones between), labelled along the top in metres east (E+${ view.step }) and down the left in metres north (N+${ view.step }) of the site point. Left (west) is negative east, down (south) is negative north. There's nothing on the ground but what's placed: lay it out wherever suits.`,
+		`Drawn on: ${ view.shown } of the project's ${ row.layout.items.length } things in view, each numbered with its get_project index: equipment yellow (a tick from its middle to its front), flatten areas cyan, laydown areas their own colour with their label, stockpiles orange, markups their colour.`,
+		'A blank site has no map, so this look isn\'t one of the plan\'s map views.',
+	].join( '\n' );
+	return { content: [ { type: 'text', text: words }, { type: 'image', data: base64( view.bytes ), mimeType: view.mimeType } ] };
+
+}
+
+// view_site's size (m across) and centre ({ east, north }), from its arguments.
+function viewArea( args ) {
+
+	return {
+		size: round( number( args.size, 'size', { min: 20, max: 2000, fallback: 150 } ) ),
+		centre: {
+			east: round( number( args.east, 'east', { min: - 20000, max: 20000, fallback: 0 } ) ),
+			north: round( number( args.north, 'north', { min: - 20000, max: 20000, fallback: 0 } ) ),
+		},
+	};
 
 }
 
@@ -645,17 +829,82 @@ async function addFlatten( context, args ) {
 	const surface = SURFACES.includes( args.surface ) ? args.surface : 'gravel';
 	const fence = FENCES.includes( args.fence ) ? args.fence : 'none';
 	const gates = fence === 'none' ? 0 : Math.min( 8, Math.max( 0, Math.round( Number( args.entrances ) || 0 ) ) );
-	const grading = gradeOf( args );
+	const heading = turned( args.heading );
+	const shape = args.points === undefined || args.points === null ? null : areaShape( args.points, heading );
+	// Heights given at its points: graded by them, unless another grade is asked for.
+	const grading = gradeOf( shape?.heights && args.grade === undefined ? { ...args, grade: 'points' } : args );
 	const overhead = keepOf( args );
 	const height = heightOf( args );
-	const params = { width: size( args.width, 'width', 2000 ), length: size( args.length, 'length', 2000 ), height: overhead.height, ...overhead.params, ...height.params, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params };
-	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...where( args ), up: null, heading: turned( args.heading ), scale: 1 };
+	const box = shape ? { width: shape.width, length: shape.length } : { width: size( args.width, 'width', 2000 ), length: size( args.length, 'length', 2000 ) };
+	const params = { ...box, height: overhead.height, ...overhead.params, ...height.params, surface, ...( fence === 'none' ? {} : { fence, gates } ), ...grading.params, ...( shape ? { points: shape.points } : {} ) };
+	const config = { name: 'Flattened area', kind: 'flatten-zone', params, ...( shape ? { east: shape.east, north: shape.north } : where( args ) ), up: null, heading, scale: 1 };
 	return await change( context, args.project_id, layout => {
 
 		layout.items.push( config );
-		return `Flattened ${ params.width } × ${ params.length } m${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }, ${ grading.text }${ height.text }${ overhead.text }.`;
+		return `Flattened ${ shape ? `a ${ shape.points.length }-point area of ${ Math.round( polygonArea( shape.points ) ).toLocaleString( 'en-CA' ) } m² (${ params.width } × ${ params.length } m across)` : `${ params.width } × ${ params.length } m` }${ surface === 'none' ? '' : `, surfaced with ${ surface }` }${ fence === 'none' ? '' : `, fenced (${ FENCE_NAMES[ fence ] }) with ${ gates } ${ gates === 1 ? 'entrance' : 'entrances' }` }, ${ grading.text }${ height.text }${ overhead.text }.`;
 
 	} );
+
+}
+
+// A flatten area shaped by its points (src/flatten.js's points), from [ { east, north, up? } ] in the
+// site's frame: its middle (the box round them, as the editor keeps it), and each point [ east,
+// north, height? ] from there as if it faced north (turned back by its heading), to the
+// centimetre. Refused unless there are 3 to 50, no edge crosses another and it's no more than
+// 2000 m across.
+function areaShape( list, heading ) {
+
+	if ( ! Array.isArray( list ) || list.length < MIN_POINTS || list.length > MAX_POINTS ) throw new ToolError( `points: ${ MIN_POINTS } to ${ MAX_POINTS } corners, in order round the area` );
+	const given = list.map( ( p, i ) => {
+
+		if ( ! p || typeof p !== 'object' ) throw new ToolError( `points[ ${ i } ]: { east, north, up? }` );
+		const at = { east: number( p.east, `points[ ${ i } ].east`, { min: - 20000, max: 20000 } ), north: number( p.north, `points[ ${ i } ].north`, { min: - 20000, max: 20000 } ) };
+		if ( p.up !== undefined && p.up !== null ) at.up = round( number( p.up, `points[ ${ i } ].up`, { min: - POINT_HEIGHT, max: POINT_HEIGHT } ) );
+		return at;
+
+	} );
+	const span = k => Math.max( ...given.map( p => p[ k ] ) ) - Math.min( ...given.map( p => p[ k ] ) );
+	const middle = k => round( ( Math.max( ...given.map( p => p[ k ] ) ) + Math.min( ...given.map( p => p[ k ] ) ) ) / 2 );
+	const east = middle( 'east' ), north = middle( 'north' );
+	const r = heading * Math.PI / 180;
+	const cos = Math.cos( r ), sin = Math.sin( r );
+	const points = given.map( p => {
+
+		const de = p.east - east, dn = p.north - north;
+		const at = [ round( de * cos - dn * sin ), round( de * sin + dn * cos ) ];
+		return p.up === undefined ? at : [ ...at, p.up ];
+
+	} );
+	if ( ! isSimple( points ) ) throw new ToolError( 'points: the edges cross (or two corners are in the same place); give the corners in order round the area' );
+	const across = k => round( Math.max( ...points.map( p => p[ k ] ) ) - Math.min( ...points.map( p => p[ k ] ) ) );
+	const width = across( 0 ), length = across( 1 );
+	if ( Math.max( width, length, span( 'east' ), span( 'north' ) ) > 2000 ) throw new ToolError( 'points: an area is no more than 2000 m across' );
+	if ( polygonArea( points ) < 1 ) throw new ToolError( 'points: the area is too small (under 1 m²)' );
+	// Turned, the box round them has its middle somewhere else: set it there, as the editor does.
+	const mu = ( Math.max( ...points.map( p => p[ 0 ] ) ) + Math.min( ...points.map( p => p[ 0 ] ) ) ) / 2;
+	const mv = ( Math.max( ...points.map( p => p[ 1 ] ) ) + Math.min( ...points.map( p => p[ 1 ] ) ) ) / 2;
+	return {
+		east: round( east + mu * cos + mv * sin ),
+		north: round( north - mu * sin + mv * cos ),
+		points: points.map( ( [ u, v, ...rest ] ) => [ round( u - mu ), round( v - mv ), ...rest ] ),
+		width: Math.max( 1, width ),
+		length: Math.max( 1, length ),
+		heights: given.some( p => p.up !== undefined ),
+	};
+
+}
+
+// A flatten area shaped by its points, as get_project gives them: each { east, north } in the site's
+// frame, with up where it has a height (m from the area's height).
+function pointsOut( item ) {
+
+	const r = ( item.heading ?? 0 ) * Math.PI / 180;
+	const cos = Math.cos( r ), sin = Math.sin( r );
+	return item.params.points.map( ( [ e, n, h ] ) => ( {
+		east: round( item.east + e * cos + n * sin ),
+		north: round( item.north - e * sin + n * cos ),
+		...( Number.isFinite( h ) ? { up: h } : {} ),
+	} ) );
 
 }
 
@@ -715,6 +964,12 @@ function gradeOf( args ) {
 
 		params.steps = Math.round( clamp( args.steps, 'steps', 2, 8, 3 ) );
 		text = `in ${ params.steps } terraces`;
+
+	} else if ( grade === 'points' ) {
+
+		// (A rectangle graded by points is shaped by its four corners, with no heights yet: level
+		// until some are set in the editor.)
+		text = 'graded through the heights at its points';
 
 	} else {
 
@@ -849,11 +1104,25 @@ function index( layout, value ) {
 
 }
 
+// Items locked in the editor (the person's Lock, saved as locked: true) aren't moved or removed
+// from here either: they asked for them to stay as they are.
+function refuseLocked( layout, indexes ) {
+
+	const locked = indexes.filter( i => layout.items[ i ].locked === true );
+	if ( locked.length === 0 ) return;
+	const [ first ] = locked;
+	if ( locked.length === 1 ) throw new ToolError( `Item ${ first } (${ layout.items[ first ].name ?? 'it' }) is locked in the editor; unlock it there first. Nothing was changed.` );
+	throw new ToolError( `Items ${ locked.join( ', ' ) } are locked in the editor; unlock them there first. Nothing was changed.` );
+
+}
+
 async function moveItem( context, args ) {
 
 	return await change( context, args.project_id, layout => {
 
-		const item = layout.items[ index( layout, args.index ) ];
+		const i = index( layout, args.index );
+		refuseLocked( layout, [ i ] );
+		const item = layout.items[ i ];
 		if ( args.east !== undefined ) item.east = where( { east: args.east, north: 0 } ).east;
 		if ( args.north !== undefined ) item.north = where( { east: 0, north: args.north } ).north;
 		if ( args.heading !== undefined ) item.heading = turned( args.heading );
@@ -870,6 +1139,7 @@ async function removeItems( context, args ) {
 	return await change( context, args.project_id, layout => {
 
 		const gone = new Set( indexes.map( i => index( layout, i ) ) );
+		refuseLocked( layout, [ ...gone ] );
 		const names = [ ...gone ].map( i => layout.items[ i ] );
 		layout.items = layout.items.filter( ( _, i ) => ! gone.has( i ) );
 		return `Removed ${ gone.size }: ${ summary( names ) }. The rest are numbered again: get_project for their indexes.`;
@@ -890,8 +1160,7 @@ async function shareProject( { env, account, url }, args ) {
 	}
 
 	const link = new URL( '/build/app/', url.origin );
-	if ( row.lat !== null ) link.searchParams.set( 'at', `${ Number( row.lat ).toFixed( 6 ) },${ Number( row.lon ).toFixed( 6 ) }` );
-	link.searchParams.set( 'place', row.site );
+	siteInLink( link, row );
 	link.searchParams.set( 'view', token );
 	return text( { share: link.href, note: 'Anyone with the link sees the project, read only.' } );
 

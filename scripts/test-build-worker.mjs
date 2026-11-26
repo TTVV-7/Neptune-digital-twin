@@ -449,6 +449,47 @@ describe( 'World Drive Build', () => {
 
 	} );
 
+	test( 'a blank site (no map): saved as one, opened with no Maps key and no 3D map view, its share link too', async () => {
+
+		const views = async () => ( await call( '/build/api/me', { cookie: pro.cookie } ) ).json.plan.views.used;
+		const before = await views();
+		const data = { version: 2, site: 'Blank site', lat: 0, lon: 0, blank: { slope: 3, toward: 270 }, items: LAYOUT.items, extras: {} };
+		const made = await call( '/build/api/layouts', { method: 'POST', body: { site: 'Blank site', name: 'Yard', data }, cookie: pro.cookie } );
+		assert.equal( made.status, 201, made.text );
+		assert.deepEqual( made.json.blank, { slope: 3, toward: 270 } );
+		const listed = ( await call( '/build/api/layouts', { cookie: pro.cookie } ) ).json.layouts;
+		assert.deepEqual( listed.find( l => l.id === made.json.id ).blank, { slope: 3, toward: 270 } );
+		assert.ok( listed.filter( l => l.id !== made.json.id ).every( l => l.blank === null ), 'the others are on the map' );
+
+		// The editor on it asks with blank=1: no key, nothing counted (and nothing turned away).
+		const opened = await config( pro.cookie, DAY + 10 * HOUR, '?blank=1' );
+		assert.equal( opened.json.mapsKey, undefined );
+		assert.equal( opened.json.mapsReason, 'blank' );
+		assert.equal( opened.json.signedIn, true );
+		assert.equal( await views(), before );
+
+		// Its share link: no key and no view of the owner's, even asked without blank=1.
+		const token = ( await call( `/build/api/layouts/${ made.json.id }/share`, { method: 'POST', cookie: pro.cookie } ) ).json.shareToken;
+		for ( const query of [ `?view=${ token }`, `?view=${ token }&blank=1` ] ) {
+
+			const viewer = await config( undefined, DAY + 10 * HOUR, query );
+			assert.equal( viewer.json.mapsKey, undefined, query );
+			assert.equal( viewer.json.mapsReason, 'blank', query );
+
+		}
+
+		assert.equal( await views(), before );
+		assert.deepEqual( ( await call( `/build/api/shared/${ token }` ) ).json.data.blank, { slope: 3, toward: 270 } );
+
+		// Moved onto the map (the editor's site picker saves it without blank): an ordinary project.
+		const moved = await call( `/build/api/layouts/${ made.json.id }`, { method: 'PUT', body: { site: 'Test site', data: LAYOUT }, cookie: pro.cookie } );
+		assert.equal( moved.status, 200, moved.text );
+		assert.equal( moved.json.blank, null );
+		assert.equal( moved.json.lat, 49.28 );
+		assert.equal( ( await call( `/build/api/layouts/${ made.json.id }`, { method: 'DELETE', cookie: pro.cookie } ) ).status, 204 );
+
+	} );
+
 	test( 'a Supporter Pass isn\'t Build Pro', async () => {
 
 		const fan = await signIn( { sub: 'fan-1', email: 'fan@example.com', name: 'Fay Fan' } );

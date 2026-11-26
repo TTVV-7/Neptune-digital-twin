@@ -1,0 +1,250 @@
+/* World Drive Build's look (body.build-app, set by main.js in Build only): the Library and the Show
+   and Controls panels on the right as frosted glass over the map, edged and lit in a warm
+   construction amber, with a glowing scrollbar down the Library's cards. The Neptune twin keeps the
+   plain panels of style.css. */
+
+body.build-app {
+	--glass: rgba( 14, 20, 27, 0.74 );
+	--glass-edge: rgba( 255, 255, 255, 0.09 );
+	--amber: #ffb02e;
+	--amber-deep: #ff7a1a;
+	--amber-glow: rgba( 255, 160, 40, 0.45 );
+}
+
+/* --- the Library ---------------------------------------------------------------------------- */
+
+body.build-app #library {
+	background: linear-gradient( 180deg, rgba( 18, 26, 34, 0.86 ), rgba( 10, 15, 20, 0.9 ) );
+	backdrop-filter: blur( 16px ) saturate( 1.3 );
+	-webkit-backdrop-filter: blur( 16px ) saturate( 1.3 );
+	border-right: 1px solid var( --glass-edge );
+	box-shadow: 1px 0 0 rgba( 255, 176, 46, 0.25 ), 8px 0 32px rgba( 0, 0, 0, 0.35 );
+}
+
+body.build-app #library h2 {
+	background: linear-gradient( 90deg, #fff, var( --amber ) );
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	letter-spacing: 0.02em;
+}
+
+body.build-app #library input[type='search'] {
+	border-color: rgba( 255, 255, 255, 0.12 );
+	background: rgba( 0, 0, 0, 0.35 );
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+body.build-app #library input[type='search']:focus {
+	outline: none;
+	border-color: var( --amber );
+	box-shadow: 0 0 0 3px rgba( 255, 176, 46, 0.18 ), 0 0 18px var( --amber-glow );
+}
+
+body.build-app #library .items h3 {
+	color: var( --amber );
+	text-shadow: 0 0 10px rgba( 255, 176, 46, 0.35 );
+}
+
+body.build-app #library .card {
+	background: rgba( 255, 255, 255, 0.045 );
+	border: 1px solid rgba( 255, 255, 255, 0.06 );
+	transition: background 0.18s, border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+}
+
+body.build-app #library .card:hover {
+	background: rgba( 255, 255, 255, 0.08 );
+	border-color: rgba( 255, 176, 46, 0.45 );
+	box-shadow: 0 4px 18px rgba( 0, 0, 0, 0.35 ), 0 0 14px rgba( 255, 160, 40, 0.18 );
+	transform: translateY( -1px );
+}
+
+/* The cards scroll under a soft fade at the top and bottom, not a hard edge. */
+body.build-app #library .items {
+	padding-right: 4px;
+	-webkit-mask-image: linear-gradient( 180deg, transparent 0, #000 14px, #000 calc( 100% - 18px ), transparent 100% );
+	mask-image: linear-gradient( 180deg, transparent 0, #000 14px, #000 calc( 100% - 18px ), transparent 100% );
+	scrollbar-width: thin;
+	scrollbar-color: var( --amber ) transparent;
+}
+
+/* The scrollbar: a slim glowing amber bar on a faint track, brighter and wider under the pointer. */
+body.build-app #library .items::-webkit-scrollbar {
+	width: 8px;
+}
+
+body.build-app #library .items::-webkit-scrollbar-button {
+	display: none;
+}
+
+body.build-app #library .items::-webkit-scrollbar-track {
+	margin: 10px 0;
+	border-radius: 8px;
+	background: rgba( 255, 255, 255, 0.04 );
+}
+
+body.build-app #library .items::-webkit-scrollbar-thumb {
+	border: 2px solid transparent;
+	border-radius: 8px;
+	background: linear-gradient( 180deg, #ffd45c, var( --amber ) 45%, var( --amber-deep ) ) padding-box;
+	box-shadow: inset 0 0 6px rgba( 255, 220, 140, 0.6 ), 0 0 10px var( --amber-glow );
+}
+
+body.build-app #library .items::-webkit-scrollbar-thumb:hover,
+body.build-app #library .items::-webkit-scrollbar-thumb:active {
+	border-width: 1px;
+	background: linear-gradient( 180deg, #ffe08a, #ffbf47 45%, #ff8a2a ) padding-box;
+}
+
+/* --- the Show and Controls panels on the right ---------------------------------------------- */
+
+body.build-app #layers .layers-panel,
+body.build-app #legend .legend-panel {
+	position: relative;
+	border: 1px solid var( --glass-edge );
+	border-radius: 12px;
+	background: var( --glass );
+	backdrop-filter: blur( 14px ) saturate( 1.4 );
+	-webkit-backdrop-filter: blur( 14px ) saturate( 1.4 );
+	box-shadow: 0 10px 30px rgba( 0, 0, 0, 0.35 ), inset 0 1px 0 rgba( 255, 255, 255, 0.06 );
+	animation: build-panel-in 0.28s ease-out;
+	scrollbar-width: thin;
+	scrollbar-color: var( --amber ) transparent;
+}
+
+/* A lit amber edge along each panel's top. */
+body.build-app #layers .layers-panel::before,
+body.build-app #legend .legend-panel::before {
+	content: '';
+	position: absolute;
+	top: -1px;
+	left: 14px;
+	right: 14px;
+	height: 2px;
+	border-radius: 2px;
+	background: linear-gradient( 90deg, transparent, var( --amber ), var( --amber-deep ), transparent );
+	box-shadow: 0 0 12px var( --amber-glow );
+	pointer-events: none;
+}
+
+body.build-app #layers .layers-panel::-webkit-scrollbar,
+body.build-app #legend .legend-panel::-webkit-scrollbar {
+	width: 6px;
+}
+
+body.build-app #layers .layers-panel::-webkit-scrollbar-thumb,
+body.build-app #legend .legend-panel::-webkit-scrollbar-thumb {
+	border-radius: 6px;
+	background: linear-gradient( 180deg, var( --amber ), var( --amber-deep ) );
+	box-shadow: 0 0 8px var( --amber-glow );
+}
+
+body.build-app #layers .title,
+body.build-app #legend .title {
+	color: var( --amber );
+	text-shadow: 0 0 10px rgba( 255, 176, 46, 0.4 );
+}
+
+body.build-app #legend .mode {
+	color: #fff;
+}
+
+/* Folded, each is a glass pill that lights up under the pointer. */
+body.build-app #layers .layers-open,
+body.build-app #legend .legend-open {
+	border: 1px solid var( --glass-edge );
+	border-radius: 999px;
+	background: var( --glass );
+	backdrop-filter: blur( 12px );
+	-webkit-backdrop-filter: blur( 12px );
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+body.build-app #layers .layers-open:hover,
+body.build-app #legend .legend-open:hover {
+	border-color: rgba( 255, 176, 46, 0.6 );
+	box-shadow: 0 0 16px var( --amber-glow );
+}
+
+body.build-app #layers .hide:hover,
+body.build-app #layers .hide:focus-visible,
+body.build-app #legend .hide:hover,
+body.build-app #legend .hide:focus-visible {
+	background: rgba( 255, 176, 46, 0.16 );
+	color: var( --amber );
+}
+
+/* Before / After: the lit half glows. */
+body.build-app #layers .before-after {
+	border: 1px solid rgba( 255, 255, 255, 0.06 );
+	border-radius: 9px;
+	background: rgba( 0, 0, 0, 0.4 );
+}
+
+body.build-app #layers .before-after button {
+	border-radius: 7px;
+	transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+body.build-app #layers .before-after button[aria-checked='true'] {
+	background: linear-gradient( 180deg, #ffc04d, var( --amber-deep ) );
+	color: #1a1106;
+	box-shadow: 0 0 14px var( --amber-glow ), inset 0 1px 0 rgba( 255, 255, 255, 0.4 );
+}
+
+body.build-app #layers .before-after button[data-view='before'][aria-checked='true'] {
+	background: linear-gradient( 180deg, #7fc4ff, #3d8bff );
+	color: #06101a;
+	box-shadow: 0 0 14px rgba( 80, 160, 255, 0.45 ), inset 0 1px 0 rgba( 255, 255, 255, 0.4 );
+}
+
+body.build-app #layers .layer {
+	transition: background 0.15s;
+}
+
+/* Keys as small lit chips. */
+body.build-app #legend kbd,
+body.build-app #layers kbd {
+	border-color: rgba( 255, 176, 46, 0.45 );
+	background: rgba( 255, 176, 46, 0.08 );
+	color: #ffe2b0;
+	box-shadow: 0 0 6px rgba( 255, 160, 40, 0.15 );
+}
+
+body.build-app #legend .all {
+	border: 1px solid rgba( 255, 176, 46, 0.3 );
+	background: rgba( 255, 176, 46, 0.08 );
+	transition: background 0.2s, box-shadow 0.2s;
+}
+
+body.build-app #legend .all:hover {
+	background: rgba( 255, 176, 46, 0.18 );
+	box-shadow: 0 0 14px var( --amber-glow );
+}
+
+@keyframes build-panel-in {
+
+	from {
+		opacity: 0;
+		transform: translateY( 8px );
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	body.build-app #layers .layers-panel,
+	body.build-app #legend .legend-panel {
+		animation: none;
+	}
+
+	body.build-app #library .card:hover {
+		transform: none;
+	}
+
+}

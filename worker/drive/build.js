@@ -7,6 +7,7 @@ import { googleClientId } from './settings.js';
 import { deleteAccount, disconnectClient, exportAccount, getAccount } from './build-account.js';
 import { countDaily } from './stats.js';
 import { METRICS } from '../../src/drive-app/stats-protocol.js';
+import { blankOf } from '../../src/blank-site.js';
 
 // World Drive Build (worlddrive.app/build/, docs/build.md): the construction mock-up app (the
 // Neptune digital twin's app, built for World Drive by vite.drive.config.js's buildApp) on World
@@ -24,7 +25,9 @@ import { METRICS } from '../../src/drive-app/stats-protocol.js';
 //   owner  an account in ADMIN_EMAILS (World Drive's owner, admin.js): everything, never counted
 //
 // A 3D map view is a page that's handed the Maps key (GET config): one billed Google 3D tiles
-// session, as World Drive's own Earth drives are. Signed out there's no key, and the page shows
+// session, as World Drive's own Earth drives are. A blank site (src/blank-site.js: a project with no
+// map, its layout's blank) never is: the editor asks for no key for one (GET config?blank=1), nor does
+// a share link to one. Signed out there's no key, and the page shows
 // flat ground and asks you to sign in. A share link's viewer gets the map on its owner's views,
 // while the owner is on Pro (or is the owner); the layout opens either way.
 //
@@ -41,7 +44,8 @@ const LAYOUT_BYTES = 1024 * 1024;
 export const ACCOUNT_BYTES = 25 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const SHARE_PATTERN = /^[A-Za-z0-9_-]{22}$/;
-const SUMMARY = 'id, site, name, share_token, updated_at, lat, lon';
+// A blank site's (src/blank-site.js) is read out of its layout: { slope, toward }, kept in the data.
+const SUMMARY = 'id, site, name, share_token, updated_at, lat, lon, json_extract( data, \'$.blank\' ) AS blank';
 const DAY_MS = 24 * 60 * 60 * 1000;
 // How long map views and AI app calls are kept (the Privacy Policy's 13 months, a little over).
 export const LOG_KEEP_MS = 396 * DAY_MS;
@@ -230,23 +234,41 @@ async function viewsOf( env, account, tier, now ) {
 async function takeView( env, account, tier, mapsKey, now ) {
 
 	if ( ! mapsKey ) return { ok: false, reason: 'off' };
-	if ( tier === 'owner' ) return { ok: true };
+	const allowed = await mayView( env, account, tier, now );
+	if ( allowed.ok ) await countView( env, account, tier, now );
+	return allowed;
+
+}
+
+// Whether this account may have a map view now, not yet counted: { ok, reason?, limit, used }
+// (limit null for the owner's, never counted). The MCP server's view_site asks this before it
+// fetches Google's imagery, and counts the view (countView) once it has the picture.
+export async function mayView( env, account, tier, now ) {
+
+	if ( tier === 'owner' ) return { ok: true, limit: null, used: 0 };
 	const { limit, used } = await viewsOf( env, account, tier, now );
-	if ( used >= limit ) return { ok: false, reason: 'used-up' };
+	if ( used >= limit ) return { ok: false, reason: 'used-up', limit, used };
 	if ( tier === 'free' ) {
 
 		const today = Math.floor( now / DAY_MS ) * DAY_MS;
 		const row = await env.DB.prepare( 'SELECT COUNT(*) AS n FROM build_views WHERE tier = \'free\' AND at >= ? AND at < ?' ).bind( today, today + DAY_MS ).first();
-		if ( ( row?.n ?? 0 ) >= limitsOf( env ).freeDaily ) return { ok: false, reason: 'busy' };
+		if ( ( row?.n ?? 0 ) >= limitsOf( env ).freeDaily ) return { ok: false, reason: 'busy', limit, used };
 
 	}
 
+	return { ok: true, limit, used };
+
+}
+
+// Counts a map view (the owner's never are).
+export async function countView( env, account, tier, now ) {
+
+	if ( tier === 'owner' ) return;
 	// Views older than the Privacy Policy keeps them (LOG_KEEP_MS) go as new ones come, a few at a time.
 	await env.DB.batch( [
 		env.DB.prepare( 'INSERT INTO build_views ( account_id, tier, at ) VALUES ( ?, ?, ? )' ).bind( account.id, tier, now ),
 		env.DB.prepare( 'DELETE FROM build_views WHERE rowid IN ( SELECT rowid FROM build_views WHERE at < ? LIMIT 100 )' ).bind( now - LOG_KEEP_MS ),
 	] );
-	return { ok: true };
 
 }
 
@@ -290,10 +312,11 @@ async function planFor( env, account, plan, now ) {
 
 // --- config, session, me ---------------------------------------------------------------------
 
-// GET config[?view=<share token>]: { googleClientId, signedIn, user?, plan?, premium, mapsKey?,
-// mapsReason? }. mapsKey only when a view is taken (takeView); mapsReason says why not:
+// GET config[?view=<share token>][&blank=1]: { googleClientId, signedIn, user?, plan?, premium,
+// mapsKey?, mapsReason? }. mapsKey only when a view is taken (takeView); mapsReason says why not:
 // 'sign-in', 'used-up', 'busy', 'off', 'owner-free' (a share link whose owner isn't on Pro),
-// 'owner-used-up' (one whose owner has used this month's views, opened by someone with none to use).
+// 'owner-used-up' (one whose owner has used this month's views, opened by someone with none to use),
+// 'blank' (a blank site, which has no map: blank=1, or a share link to one; no view is taken).
 async function getConfig( context ) {
 
 	const { env, url, now, mapsKey } = context;
@@ -301,11 +324,12 @@ async function getConfig( context ) {
 	const plan = account ? await planOf( env, account, now ) : null;
 	const config = { googleClientId: googleClientId( env ), signedIn: !! account, premium: premiumFor( env, account, plan ) };
 	const view = url.searchParams.get( 'view' );
-	let taken = null;
-	if ( view ) {
+	let taken = url.searchParams.get( 'blank' ) === '1' ? { ok: false, reason: 'blank', final: true } : null;
+	if ( view && ! taken ) {
 
-		const shared = await sharedLayout( env, view, 'l.account_id' );
-		if ( shared ) {
+		const shared = await sharedLayout( env, view, 'l.account_id, json_extract( l.data, \'$.blank\' ) AS blank' );
+		if ( shared && blankColumn( shared.blank ) ) taken = { ok: false, reason: 'blank', final: true };
+		else if ( shared ) {
 
 			const owner = await accountById( env.DB, shared.account_id );
 			const ownerPlan = owner ? await planOf( env, owner, now ) : null;
@@ -317,7 +341,7 @@ async function getConfig( context ) {
 
 	}
 
-	if ( ! taken?.ok && account ) taken = await takeView( env, account, plan.tier, mapsKey, now );
+	if ( ! taken?.ok && ! taken?.final && account ) taken = await takeView( env, account, plan.tier, mapsKey, now );
 	if ( account ) {
 
 		config.user = userOf( account );
@@ -676,9 +700,28 @@ function expectedVersion( request, body ) {
 
 }
 
+// blank: a blank site's { slope, toward } (src/blank-site.js), null for one on the map.
 function summary( row ) {
 
-	return { id: row.id, site: row.site, name: row.name, shared: !! row.share_token, shareToken: row.share_token ?? null, updatedAt: row.updated_at, lat: row.lat ?? null, lon: row.lon ?? null };
+	return { id: row.id, site: row.site, name: row.name, shared: !! row.share_token, shareToken: row.share_token ?? null, updatedAt: row.updated_at, lat: row.lat ?? null, lon: row.lon ?? null, blank: blankColumn( row.blank ) };
+
+}
+
+// What json_extract( data, '$.blank' ) gives (SQLite's 1 for true, an object as JSON text, NULL for
+// none) as a blank site's { slope, toward }, or null.
+export function blankColumn( value ) {
+
+	if ( value === null || value === undefined ) return null;
+	if ( typeof value !== 'string' ) return blankOf( { blank: value === 1 || value === true } );
+	try {
+
+		return blankOf( { blank: JSON.parse( value ) } );
+
+	} catch {
+
+		return null;
+
+	}
 
 }
 
