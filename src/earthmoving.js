@@ -1126,7 +1126,8 @@ function washPlant() {
 		parts.box( dark, [ 0.4, 0.05, 0.4 ], [ p.x, 0, p.z ] );
 
 	}
-	parts.cylinder( SAND(), 2.2, 2.0, [ - 2.6, 0, - 6.9 ], 18, 0.2 );
+	// The washed sand pile under the screw's top end, out to the left clear of the chassis jacks.
+	parts.cylinder( SAND(), 2.0, 1.4, [ - 3.0, 0, - 5.7 ], 18, 0.2 );
 
 	// Conveyors: the feed in from behind to the screen's feed box, and the two product belts out
 	// to the right off the screen's lips, each with its stone pile.

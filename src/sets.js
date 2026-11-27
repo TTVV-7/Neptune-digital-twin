@@ -511,21 +511,27 @@ export const SETS = [
 		name: 'Quarry and aggregate plant (drill, magazine, 90 t excavator, haul truck, crushers, screen, stacker, wash plant, scale)',
 		keywords: 'quarry pit aggregate plant crushing screening wash plant blasting drill haul truck loader scale house gravel',
 		members: [
-			// The face at the back: the drill on the bench, the magazine well off to the side (a real
-			// one stands at the distance its quantity-distance table sets), the excavator loading the
-			// haul truck.
+			// The face at the back: the drill on the bench, the haul truck tipping shot rock beside the
+			// 90 t excavator, and the excavator feeding the jaw crusher's hopper from the side.
 			{ item: 'drill-rig-surface-blasthole', right: - 40, forward: - 32, turn: 0 },
-			{ item: 'explosives-magazine-type2', right: - 62, forward: - 40, turn: 0 },
-			{ item: 'excavator-mass-90t', right: - 28, forward: - 20, turn: 0 },
-			{ item: 'haul-truck-100t', right: - 19, forward: - 16, turn: 0 },
-			// The plant in a line: jaw crusher, impact crusher, screen, stacker and its pile, wash plant.
-			{ item: 'mobile-jaw-crusher', right: - 8, forward: - 5, turn: 0 },
-			{ item: 'impact-crusher-tracked', right: 2, forward: - 5, turn: 0 },
-			{ item: 'screening-plant-3deck-tracked', right: 22, forward: - 5, turn: 0 },
-			{ item: 'radial-stacker-100ft', right: 42, forward: - 8, turn: 0 },
-			{ item: 'gravel-pile', right: 42, forward: 12, turn: 0 },
-			{ item: 'wash-plant-sand-screw', right: 58, forward: - 5, turn: 0 },
-			{ item: 'wheel-loader-large-988', right: 30, forward: 14, turn: 0 },
+			{ item: 'haul-truck-100t', right: - 42, forward: - 5, turn: 270 },
+			{ item: 'excavator-mass-90t', right: - 30.5, forward: - 13, turn: 0 },
+			// The explosives magazine well away from the face, the plant and the haul road (over 100 m
+			// here; a real one stands at the distance its quantity-distance table sets).
+			{ item: 'explosives-magazine-type2', right: - 135, forward: - 75, turn: 0 },
+			// The crushing train laid head to tail, the rock moving to the right: the jaw crusher's
+			// conveyor drops into the impact crusher's hopper, the impact crusher's into the screen's,
+			// the screen's fines conveyor onto the stacker's tail, and the gravel pile under the
+			// stacker's head.
+			{ item: 'mobile-jaw-crusher', right: - 26, forward: - 5, turn: 90 },
+			{ item: 'impact-crusher-tracked', right: - 13.3, forward: - 5, turn: 90 },
+			{ item: 'screening-plant-3deck-tracked', right: 2.8, forward: - 5, turn: 90 },
+			{ item: 'radial-stacker-100ft', right: 26.9, forward: - 5, turn: 90 },
+			{ item: 'gravel-pile', right: 42.5, forward: - 5, turn: 90 },
+			// The loader facing the pile, loading the wash plant's feed conveyor behind it; the wash
+			// plant turned so its feed end comes towards the loader.
+			{ item: 'wheel-loader-large-988', right: 42.5, forward: 8, turn: 180 },
+			{ item: 'wash-plant-sand-screw', right: 62, forward: - 8, turn: 180 },
 			// The way out: the scale across the front with the scale house beside it, its window to the scale.
 			{ item: 'truck-scale-70ft', right: - 10, forward: 22, turn: 90 },
 			{ item: 'scale-house', right: - 10, forward: 27, turn: 180 },
