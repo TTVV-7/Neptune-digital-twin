@@ -21,7 +21,7 @@ const UP = new Vector3( 0, 1, 0 );
 
 export const TRUCKS_TRAILERS_ITEMS = [
 	// Delivery trucks.
-	{ id: 'knuckle-boom-delivery-truck', name: 'Knuckle-boom delivery truck, flatbed with rear-mount crane (tandem, 24 ft deck, outriggers set, boom unfolded, drywall load)', category: 'Vehicles',
+	{ id: 'knuckle-boom-delivery-truck', name: 'Knuckle-boom delivery truck, flatbed with rear-mount crane (tandem, 24 ft deck, outriggers set, boom unfolded, drywall load)', category: 'Cranes & lifts',
 		keywords: 'boom truck knuckle boom crane truck drywall delivery gyprock sheetrock board stocker block brick truss delivery flatbed hiab articulating crane',
 		build: knuckleBoomTruck },
 	{ id: 'rolloff-truck-30yd', name: 'Roll-off truck, cable hoist, carrying a 30 yd³ bin (tandem)', category: 'Vehicles',
@@ -1094,8 +1094,10 @@ function crewVan() {
 
 	}
 
-	parts.box( GLASS(), [ 0.01, 0.55, 0.85 ], [ - ( W / 2 + 0.002 ), 1.45, - 1.15 ] );
-	parts.box( DARK(), [ 0.01, 1.85, 0.015 ], [ W / 2 + 0.003, 0.45, - 0.7 ] );
+	// Left side: a small quarter glass just behind the B-pillar. Right side: the sliding door's
+	// back seam, about 1.3 m behind the front door's.
+	parts.box( GLASS(), [ 0.01, 0.55, 0.22 ], [ - ( W / 2 + 0.002 ), 1.45, - 0.76 ] );
+	parts.box( DARK(), [ 0.01, 1.85, 0.015 ], [ W / 2 + 0.003, 0.45, 0.4 ] );
 	for ( const x of [ - 0.48, 0.48 ] ) parts.box( GLASS(), [ 0.78, 0.6, 0.01 ], [ x, 1.4, L / 2 + 0.003 ] );
 	parts.box( DARK(), [ 0.015, 2.2, 0.01 ], [ 0, 0.45, L / 2 + 0.004 ] );
 	tailLamps( parts, L / 2 + 0.01, 1.5, W / 2 - 0.08 );
@@ -1238,7 +1240,7 @@ function lowboyExcavator() {
 	parts.box( WOOD(), [ W - 0.3, 0.02, end - well1 - 0.1 ], [ 0, rearY, ( well1 + end ) / 2 + 0.05 ] );
 	for ( const z of [ T + 12.93, T + 14.3, T + 15.67 ] ) axle( parts, z, { r: 0.42, x: 0.93, width: 0.26, dual: true } );
 	flaps( parts, end - 0.08, 0.95, 0.5 );
-	tailLamps( parts, end + 0.01, rearY - 0.15 );
+	tailLamps( parts, end + 0.01, rearY - 0.15, 1.2 );
 
 	// The excavator in the well facing back.
 	const sz = T + 8.6;
