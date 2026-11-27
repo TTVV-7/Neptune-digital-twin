@@ -478,6 +478,9 @@ export const SETS = [
 			{ item: 'worker-pointing', right: 6.8, forward: - 1.2, turn: 120 },
 			{ item: 'worker-standing', right: 9.6, forward: - 6, turn: 330 },
 			{ item: 'worker-walking', right: 2.2, forward: - 5.5, turn: 90 },
+		],
+	},
+	{
 		id: 'set-gate-security',
 		name: 'Gate and security (20 ft gate, turnstile, barrier arm, card reader, CCTV tower, PPE and rules signs, parking)',
 		keywords: 'gate security access control turnstile barrier arm card reader cctv camera tower ppe sign site rules parking wheel stops entrance',
