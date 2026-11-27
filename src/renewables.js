@@ -763,8 +763,9 @@ function hubOnStand() {
 
 	}
 
-	// Nose cone (spinner) over the top.
-	parts.cylinder( WHITE(), 1.5, 1.15, [ 0, c + 0.55, 0 ], 28, 0.42 );
+	// Nose cone (spinner) over the top, its base kept just inside the casting (the 1.55 m sphere is
+	// about 1.45 m across at c + 0.55) and on the sphere's 24 segments so the seam stays even.
+	parts.cylinder( WHITE(), 1.4, 1.15, [ 0, c + 0.55, 0 ], 24, 0.42 );
 	parts.sphere( WHITE(), 0.42, [ 0, c + 1.7, 0 ], [ 16, 8 ], [ 1, 0.8, 1 ] );
 	return parts.build();
 
