@@ -1414,6 +1414,110 @@
 		}
 	},
 	{
+		"id": "commercial-building-small",
+		"name": "Commercial building, small single storey (brick, hip roof, 21 × 18 m)",
+		"category": "Landscaping & site context",
+		"file": "commercial-building-small.glb",
+		"thumb": "thumbs/commercial-building-small.webp",
+		"front": "+x",
+		"scale": 0.01,
+		"dimensions": {
+			"length": 21.17,
+			"width": 18.04,
+			"height": 4.81
+		},
+		"triangles": 42655,
+		"sizeKB": 1940,
+		"source": {
+			"site": "Sketchfab",
+			"id": "9e32430bcdfb4ee5aabcfdea64c6ee65",
+			"url": "https://sketchfab.com/3d-models/textured-commercial-building-9e32430bcdfb4ee5aabcfdea64c6ee65",
+			"title": "Textured Commercial Building",
+			"author": "Lodgelus",
+			"authorUrl": "https://sketchfab.com/lodgelus",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "cmu-block-wall",
+		"name": "Concrete block (CMU) wall section, 8 m (scanned, with kerb strip)",
+		"category": "Landscaping & site context",
+		"file": "cmu-block-wall.glb",
+		"thumb": "thumbs/cmu-block-wall.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.76,
+			"width": 8.17,
+			"height": 2.51
+		},
+		"triangles": 166216,
+		"sizeKB": 1012,
+		"source": {
+			"site": "Sketchfab",
+			"id": "ac768b3bb0b3455da44eb4acb76f896e",
+			"url": "https://sketchfab.com/3d-models/block-wall-ac768b3bb0b3455da44eb4acb76f896e",
+			"title": "Block wall",
+			"author": "Florian Stephens",
+			"authorUrl": "https://sketchfab.com/florianstephens",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "concrete-frame-under-construction",
+		"name": "Concrete frame building under construction (6 storey, block infill)",
+		"category": "Landscaping & site context",
+		"file": "concrete-frame-under-construction.glb",
+		"thumb": "thumbs/concrete-frame-under-construction.webp",
+		"front": "+z",
+		"scale": 0.62,
+		"dimensions": {
+			"length": 8.1,
+			"width": 14.35,
+			"height": 21.06
+		},
+		"triangles": 10819,
+		"sizeKB": 979,
+		"source": {
+			"site": "Sketchfab",
+			"id": "84e65d542fa9456593b10ffb0d0802ec",
+			"url": "https://sketchfab.com/3d-models/construction-84e65d542fa9456593b10ffb0d0802ec",
+			"title": "Construction",
+			"author": "Stas Gunko",
+			"authorUrl": "https://sketchfab.com/Stasgunko",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "gas-station",
+		"name": "Gas station (canopy, 2 pump islands, kiosk store, price sign)",
+		"category": "Landscaping & site context",
+		"file": "gas-station.glb",
+		"thumb": "thumbs/gas-station.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 31.11,
+			"width": 19.65,
+			"height": 10.17
+		},
+		"triangles": 31370,
+		"sizeKB": 511,
+		"source": {
+			"site": "Sketchfab",
+			"id": "02a11319cb744999adddd7236a46bf8e",
+			"url": "https://sketchfab.com/3d-models/lowpoly-gas-station-02a11319cb744999adddd7236a46bf8e",
+			"title": "Lowpoly Gas Station",
+			"author": "AspectStudios",
+			"authorUrl": "https://sketchfab.com/AspectStudio",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "hedge-clipped-8m",
 		"name": "Hedge, clipped (8 m run, 0.9 m high)",
 		"category": "Landscaping & site context",
@@ -1437,6 +1541,111 @@
 			"authorUrl": "https://sketchfab.com/Ingenuitee",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "house-timber-frame-framing",
+		"name": "House under construction, timber frame (2 storey, framing and roof trusses)",
+		"category": "Landscaping & site context",
+		"file": "house-timber-frame-framing.glb",
+		"thumb": "thumbs/house-timber-frame-framing.webp",
+		"front": "+z",
+		"scale": 0.3048,
+		"dimensions": {
+			"length": 13.93,
+			"width": 15.59,
+			"height": 7.54
+		},
+		"triangles": 144593,
+		"sizeKB": 1574,
+		"source": {
+			"site": "Sketchfab",
+			"id": "2c7629f083ce494f83ef4be7a7b3c602",
+			"url": "https://sketchfab.com/3d-models/standard-house-type-framing-only-2c7629f083ce494f83ef4be7a7b3c602",
+			"title": "Standard house type framing only",
+			"author": "andrew.baker-kean",
+			"authorUrl": "https://sketchfab.com/andrew.baker-kean",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "house-timber-frame-walls",
+		"name": "House under construction, timber frame walls and floors (2 storey, before roof)",
+		"category": "Landscaping & site context",
+		"file": "house-timber-frame-walls.glb",
+		"thumb": "thumbs/house-timber-frame-walls.webp",
+		"front": "+z",
+		"scale": 0.3048,
+		"dimensions": {
+			"length": 11.44,
+			"width": 14.55,
+			"height": 7.44
+		},
+		"triangles": 151562,
+		"sizeKB": 1577,
+		"source": {
+			"site": "Sketchfab",
+			"id": "df3ead9464f449d687781cf7c5e90e2d",
+			"url": "https://sketchfab.com/3d-models/house-framing-only-df3ead9464f449d687781cf7c5e90e2d",
+			"title": "House framing only",
+			"author": "andrew.baker-kean",
+			"authorUrl": "https://sketchfab.com/andrew.baker-kean",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "house-ranch-small",
+		"name": "House, small single storey (siding, front porch)",
+		"category": "Landscaping & site context",
+		"file": "house-ranch-small.glb",
+		"thumb": "thumbs/house-ranch-small.webp",
+		"front": "+x",
+		"scale": 1.35,
+		"dimensions": {
+			"length": 10.99,
+			"width": 10.92,
+			"height": 5.39
+		},
+		"triangles": 1000,
+		"sizeKB": 169,
+		"source": {
+			"site": "Sketchfab",
+			"id": "76b36c015ac3400d8539fc6f7f22d1bd",
+			"url": "https://sketchfab.com/3d-models/lowpoly-suburban-house-76b36c015ac3400d8539fc6f7f22d1bd",
+			"title": "LowPoly Suburban House",
+			"author": "DarwinDOS",
+			"authorUrl": "https://sketchfab.com/darwin.art",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "house-farmhouse-garage",
+		"name": "House, suburban single family (1½ storey, attached 2-car garage)",
+		"category": "Landscaping & site context",
+		"file": "house-farmhouse-garage.glb",
+		"thumb": "thumbs/house-farmhouse-garage.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 15.47,
+			"width": 19.5,
+			"height": 8.64
+		},
+		"triangles": 35214,
+		"sizeKB": 1559,
+		"source": {
+			"site": "Sketchfab",
+			"id": "798ffaeadacf4e08a2665785422fb45d",
+			"url": "https://sketchfab.com/3d-models/american-house-798ffaeadacf4e08a2665785422fb45d",
+			"title": "American House",
+			"author": "AleixoAlonso",
+			"authorUrl": "https://sketchfab.com/AleixoAlonso",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"extraCredit": "Textures from ambientCG.com (CC0)"
 		}
 	},
 	{
@@ -1514,6 +1723,32 @@
 			"title": "Log pile (game ready asset)",
 			"author": "Aparicio Silva 3D",
 			"authorUrl": "https://sketchfab.com/apariciosilva3D",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "manufactured-home-single-wide",
+		"name": "Manufactured home, single-wide (14 × 60 ft, with entry deck)",
+		"category": "Landscaping & site context",
+		"file": "manufactured-home-single-wide.glb",
+		"thumb": "thumbs/manufactured-home-single-wide.webp",
+		"front": "+z",
+		"scale": 0.0254,
+		"dimensions": {
+			"length": 5.7,
+			"width": 18.48,
+			"height": 3.36
+		},
+		"triangles": 2188,
+		"sizeKB": 61,
+		"source": {
+			"site": "Sketchfab",
+			"id": "f7423e66e638457fb2d2ad54b8ee89a4",
+			"url": "https://sketchfab.com/3d-models/hoppers-mobile-home-f7423e66e638457fb2d2ad54b8ee89a4",
+			"title": "Hopper's Mobile Home",
+			"author": "Sea Land Air",
+			"authorUrl": "https://sketchfab.com/sealandair",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -1672,6 +1907,33 @@
 			"authorUrl": "https://sketchfab.com/intice184",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "steel-portal-frame-building",
+		"name": "Steel portal frame building, erected (16.5 × 26 m, purlins and girts, no cladding)",
+		"category": "Landscaping & site context",
+		"file": "steel-portal-frame-building.glb",
+		"thumb": "thumbs/steel-portal-frame-building.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 26.2,
+			"width": 16.5,
+			"height": 7.53
+		},
+		"triangles": 81044,
+		"sizeKB": 2394,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8a28911ec3d346e4b585fd9335931414",
+			"url": "https://sketchfab.com/3d-models/steel-portal-frame-building-with-doors-8a28911ec3d346e4b585fd9335931414",
+			"title": "Steel portal frame building with doors",
+			"author": "GoModl",
+			"authorUrl": "https://sketchfab.com/GoModl",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"extraCredit": "Modelled in gomodl (gomodl.com)"
 		}
 	},
 	{
@@ -3271,6 +3533,32 @@
 		}
 	},
 	{
+		"id": "guard-booth",
+		"name": "Guard booth / gatehouse (8 × 8 ft, hip roof)",
+		"category": "Site services",
+		"file": "guard-booth.glb",
+		"thumb": "thumbs/guard-booth.webp",
+		"front": "-z",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.65,
+			"width": 2.65,
+			"height": 2.88
+		},
+		"triangles": 4850,
+		"sizeKB": 618,
+		"source": {
+			"site": "Sketchfab",
+			"id": "181cd7b921c14f70ba5b64d3f4fdd8db",
+			"url": "https://sketchfab.com/3d-models/guard-booth-with-interior-181cd7b921c14f70ba5b64d3f4fdd8db",
+			"title": "Guard Booth with interior",
+			"author": "castleonsandYT",
+			"authorUrl": "https://sketchfab.com/castleonsandYT",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "torch-cart-oxy-acetylene",
 		"name": "Oxy-acetylene torch cart",
 		"category": "Site services",
@@ -4028,6 +4316,32 @@
 		}
 	},
 	{
+		"id": "city-transit-bus",
+		"name": "City transit bus (40 ft, low floor)",
+		"category": "Vehicles",
+		"file": "city-transit-bus.glb",
+		"thumb": "thumbs/city-transit-bus.webp",
+		"front": "+x",
+		"scale": 7.96095,
+		"dimensions": {
+			"length": 12,
+			"width": 3.17,
+			"height": 3.67
+		},
+		"triangles": 84886,
+		"sizeKB": 766,
+		"source": {
+			"site": "Sketchfab",
+			"id": "4ef3179268ee4de8bf12e9f4905bbde9",
+			"url": "https://sketchfab.com/3d-models/public-bus-transportation-vehicle-city-transit-4ef3179268ee4de8bf12e9f4905bbde9",
+			"title": "Public Bus Transportation Vehicle City Transit",
+			"author": "N Skeba",
+			"authorUrl": "https://sketchfab.com/skeban",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "concrete-mixer-truck",
 		"name": "Concrete mixer truck (10 yd³)",
 		"category": "Vehicles",
@@ -4075,6 +4389,32 @@
 		"triangles": 130208,
 		"sizeKB": 904,
 		"own": "Weave-Trial: construction_site/Concrete_Mixer_Truck_8m3.glb"
+	},
+	{
+		"id": "dry-van-trailer-45",
+		"name": "Dry van trailer (45 ft, tandem), parked on landing gear",
+		"category": "Vehicles",
+		"file": "dry-van-trailer-45.glb",
+		"thumb": "thumbs/dry-van-trailer-45.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 13.6,
+			"width": 2.99,
+			"height": 4.21
+		},
+		"triangles": 3868,
+		"sizeKB": 90,
+		"source": {
+			"site": "Sketchfab",
+			"id": "0c568e77a9604c51a280588854edad38",
+			"url": "https://sketchfab.com/3d-models/semi-trailer-freestanding-0c568e77a9604c51a280588854edad38",
+			"title": "Semi trailer freestanding",
+			"author": "zairiq zairiq",
+			"authorUrl": "https://sketchfab.com/zairiqzairiq",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "dump-truck-tandem",
@@ -4157,6 +4497,32 @@
 			"title": "Flatbed Trailer",
 			"author": "Arsen Ismailov",
 			"authorUrl": "https://sketchfab.com/fdgasd7",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "flatbed-truck-loaded",
+		"name": "Flatbed truck, loaded with rebar, block and bagged material (tandem, 24 ft deck)",
+		"category": "Vehicles",
+		"file": "flatbed-truck-loaded.glb",
+		"thumb": "thumbs/flatbed-truck-loaded.webp",
+		"front": "-x",
+		"scale": 1,
+		"dimensions": {
+			"length": 9.96,
+			"width": 2.65,
+			"height": 2.85
+		},
+		"triangles": 181900,
+		"sizeKB": 1739,
+		"source": {
+			"site": "Sketchfab",
+			"id": "e0534bcffc5948669044dfe98b2e5e3a",
+			"url": "https://sketchfab.com/3d-models/flatbed-truck-loaded-e0534bcffc5948669044dfe98b2e5e3a",
+			"title": "Flatbed Truck Loaded",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -4315,6 +4681,32 @@
 		}
 	},
 	{
+		"id": "school-bus",
+		"name": "School bus, conventional (Type C, 38 ft)",
+		"category": "Vehicles",
+		"file": "school-bus.glb",
+		"thumb": "thumbs/school-bus.webp",
+		"front": "+z",
+		"scale": 1.16457,
+		"dimensions": {
+			"length": 11.6,
+			"width": 2.74,
+			"height": 3.26
+		},
+		"triangles": 16282,
+		"sizeKB": 472,
+		"source": {
+			"site": "Sketchfab",
+			"id": "a959ee8ce17d434f9fdbc93cad199a21",
+			"url": "https://sketchfab.com/3d-models/school-bus-a959ee8ce17d434f9fdbc93cad199a21",
+			"title": "School Bus",
+			"author": "Macaroni",
+			"authorUrl": "https://sketchfab.com/Macaroniii",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "semi-tractor-w900",
 		"name": "Semi tractor (long-nose sleeper)",
 		"category": "Vehicles",
@@ -4369,6 +4761,32 @@
 			"title": "Kenworth T 800",
 			"author": "gelber",
 			"authorUrl": "https://sketchfab.com/liebherr996litronic",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "step-van",
+		"name": "Step van, delivery (Utilimaster P900 type, 14 ft body)",
+		"category": "Vehicles",
+		"file": "step-van.glb",
+		"thumb": "thumbs/step-van.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 7.38,
+			"width": 3.05,
+			"height": 3.28
+		},
+		"triangles": 137326,
+		"sizeKB": 915,
+		"source": {
+			"site": "Sketchfab",
+			"id": "44d1e847bba4465dbf0bf5384eaa9ba9",
+			"url": "https://sketchfab.com/3d-models/3d-scanned-utilimaster-p900-step-van-free-44d1e847bba4465dbf0bf5384eaa9ba9",
+			"title": "3D Scanned Utilimaster P900 Step Van [Free]",
+			"author": "agent",
+			"authorUrl": "https://sketchfab.com/agentmooshroom5",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}

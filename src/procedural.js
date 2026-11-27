@@ -17,6 +17,7 @@ import { person, PEOPLE_ITEMS } from './people.js';
 import { POWER_ITEMS } from './power-models.js';
 import { TEMP_POWER_ITEMS } from './temp-power.js';
 import { CRANE_ITEMS } from './crane-models.js';
+import { MORE_CRANE_ITEMS } from './more-cranes.js';
 import { TRUCK_ITEMS } from './truck-models.js';
 import { KART_ITEM } from './kart.js';
 import { fencePanel } from './fence-panel.js';
@@ -29,6 +30,10 @@ import { CIVIL_ITEMS } from './civil-pieces.js';
 import { ENVIRONMENTAL_ITEMS } from './environmental.js';
 import { TOOL_ITEMS } from './tools-attachments.js';
 import { HEAVY_CIVIL_ITEMS } from './heavy-civil.js';
+import { TUNNEL_FORMWORK_ITEMS } from './tunnel-formwork.js';
+import { ROAD_ITEMS } from './road-plant.js';
+import { UTILITY_PLANT_ITEMS } from './utility-plant.js';
+import { SAFETY_ITEMS } from './site-safety.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -101,6 +106,8 @@ export const PROCEDURAL_ITEMS = [
 	// (crane-models.js, tower-crane.js).
 	...POWER_ITEMS,
 	...CRANE_ITEMS,
+	// More cranes, aerial work platforms, a material hoist, tower crane parts and rigging (more-cranes.js).
+	...MORE_CRANE_ITEMS,
 	// Temporary power: service pole, spider box, cord reel, cords and lights on stands (temp-power.js).
 	...TEMP_POWER_ITEMS,
 	// Tridem dump trucks, pups, transfer, end dump, belly dump and lowboy trailers (truck-models.js).
@@ -127,6 +134,14 @@ export const PROCEDURAL_ITEMS = [
 	...TOOL_ITEMS,
 	// Barges, a push boat, skiff, turbidity curtain and sheet pile template; a screener, cone crusher and asphalt plant; high-reach and long-reach excavators and a pile driving rig (heavy-civil.js).
 	...HEAVY_CIVIL_ITEMS,
+	// Tunnel segments, MSV, muck train, vent fan and duct, shaft gantry, cutterhead; table, climbing, wall and column forms, slab shoring; drywall cart, material lift, tilt truck, mortar mixer, stair tower (tunnel-formwork.js).
+	...TUNNEL_FORMWORK_ITEMS,
+	// Road building and paving: rollers, the paving train, striping and patching (road-plant.js).
+	...ROAD_ITEMS,
+	// Digger derricks, pole and wire reel trailers, a puller-tensioner, cable reels, a cable plow, conduit, a handhole, vault and duct bank, a splicing tent, a jetter, a hydrant meter and bypass pumping (utility-plant.js).
+	...UTILITY_PLANT_ITEMS,
+	// Edge protection, fall arrest anchors, a lifeline, CCTV tower, turnstile, barrier arm, safety signs, wind sock and weather station (site-safety.js).
+	...SAFETY_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {

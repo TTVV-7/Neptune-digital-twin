@@ -115,6 +115,26 @@ export const SETS = [
 		],
 	},
 	{
+		id: 'set-paving-train',
+		name: 'Asphalt paving train (distributor, trucks, transfer vehicle, paver, rollers)',
+		keywords: 'paving train asphalt paving mtv shuttle buggy paver rollers tack distributor dump trucks mainline overlay',
+		// In paving order along one lane: the distributor tacking ahead, a truck backed onto the
+		// transfer vehicle's hopper with the next one waiting beside it, the transfer vehicle's
+		// conveyor over the paver's hopper, a screed hand, then the breakdown, pneumatic and
+		// finish rollers behind.
+		members: [
+			{ item: 'asphalt-distributor-truck', right: 0, forward: 40, turn: 0 },
+			{ item: 'dump-truck-tandem', right: 4, forward: 27, turn: 0 },
+			{ item: 'dump-truck-tandem', right: 0, forward: 22.3, turn: 0 },
+			{ item: 'material-transfer-vehicle', right: 0, forward: 9.7, turn: 0 },
+			{ item: 'asphalt-paver-10ft', right: 0, forward: 0, turn: 0 },
+			{ item: 'worker-standing', right: 2.2, forward: - 3.6, turn: 270 },
+			{ item: 'roller-tandem-67in', right: 0, forward: - 9, turn: 0 },
+			{ item: 'roller-pneumatic-9wheel', right: 0.5, forward: - 17, turn: 0 },
+			{ item: 'roller-tandem', right: - 0.8, forward: - 24, turn: 0 },
+		],
+	},
+	{
 		id: 'set-trucks',
 		name: 'Gravel trucks (tandem, tridem, truck and pup, truck and transfer, tri-tri)',
 		keywords: 'trucks gravel aggregate dump tandem tridem pup transfer tri-tri haul',
@@ -407,6 +427,83 @@ export const SETS = [
 			{ item: 'worker-vest-drawings', right: - 2.8, forward: - 6, turn: 90 },
 			{ item: 'worker-walking', right: 3.0, forward: - 24, turn: 0 },
 			{ item: 'flagger', right: 3.5, forward: 37, turn: 0 },
+		],
+	},
+	{
+		id: 'set-tunnel-shaft',
+		name: 'Tunnel shaft work area (gantry over the shaft, segments, vent fan, muck train, grout, office)',
+		keywords: 'tunnel shaft launch shaft tbm gantry segments muck train vent fan grout tunnelling',
+		members: [
+			// The gantry over the shaft in the middle, segments stacked within its reach on the right.
+			{ item: 'shaft-gantry-20t', right: 0, forward: 0, turn: 0 },
+			{ item: 'tunnel-segment-stack-6m', right: 12, forward: - 4, turn: 0 },
+			{ item: 'tunnel-segment-stack-6m', right: 12, forward: - 1.5, turn: 0 },
+			{ item: 'tunnel-segment-stack-6m', right: 12, forward: 1, turn: 0 },
+			// The vent fan on the left blowing toward the shaft, a spare cutterhead behind it.
+			{ item: 'tunnel-vent-fan-48in', right: - 13, forward: 3, turn: 90 },
+			{ item: 'tbm-cutterhead-6-5m', right: - 12.5, forward: - 8, turn: 0 },
+			// Muck cars waiting on the track behind the shaft, grout beside the segments.
+			{ item: 'muck-train-3-car', right: 0, forward: - 14, turn: 90 },
+			{ item: 'grout-pump-skid', right: 12, forward: 6, turn: 0 },
+			{ item: 'slurry-mixer-skid', right: 12, forward: 9.5, turn: 0 },
+			{ item: 'office-trailer-10x40', right: - 10, forward: 15, turn: 0 },
+			{ item: 'worker-standing', right: 9.5, forward: 2, turn: 270 },
+			{ item: 'worker-standing', right: 5, forward: 9.5, turn: 180 },
+		],
+	},
+	{
+		id: 'set-pole-replacement',
+		name: 'Pole replacement (digger derrick augering, pole trailer, old pole, lane closure, flagger, crew)',
+		keywords: 'pole replacement pole change utility pole power line digger derrick line crew lineman hydro lane closure',
+		members: [
+			// The digger derrick in the curb lane, outriggers down, augering the new hole on its right
+			// beside the old pole; the pole trailer parked behind it, a pickup ahead.
+			{ item: 'digger-derrick-47ft-working', right: 0, forward: 0, turn: 0 },
+			{ item: 'utility-pole-transformers', right: 9.8, forward: - 2, turn: 90 },
+			{ item: 'pole-trailer-loaded', right: 0, forward: - 13.8, turn: 0 },
+			{ item: 'pickup-truck', right: 0, forward: 9.5, turn: 0 },
+			// The lane closed with a cone taper from the front, the sign and flagger ahead of it.
+			{ item: 'traffic-cone', right: 1.2, forward: 22, turn: 0 },
+			{ item: 'traffic-cone', right: 0, forward: 18.5, turn: 0 },
+			{ item: 'traffic-cone', right: - 1.2, forward: 15, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.4, forward: 11.5, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: 5, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: - 2, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: - 9, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: - 16, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: - 22, turn: 0 },
+			{ item: 'sign-work-zone-stand', right: - 3, forward: 32, turn: 0 },
+			{ item: 'flagger', right: - 3.4, forward: 26, turn: 0 },
+			// The crew at the hole and the truck's controls.
+			{ item: 'worker-pointing', right: 6.8, forward: - 1.2, turn: 120 },
+			{ item: 'worker-standing', right: 9.6, forward: - 6, turn: 330 },
+			{ item: 'worker-walking', right: 2.2, forward: - 5.5, turn: 90 },
+		],
+	},
+	{
+		id: 'set-gate-security',
+		name: 'Gate and security (20 ft gate, turnstile, barrier arm, card reader, CCTV tower, PPE and rules signs, parking)',
+		keywords: 'gate security access control turnstile barrier arm card reader cctv camera tower ppe sign site rules parking wheel stops entrance',
+		members: [
+			// The vehicle gate in the fence line with a barrier arm inside it and the card reader on
+			// the driver's side ahead of the arm; the turnstile set into the fence to its right.
+			{ item: 'fence-gate-20ft', right: 0, forward: 0, turn: 0 },
+			...[ 4.572, 7.62, 10.668 ].map( d => ( { item: 'fence-panel', right: - d, forward: 0, turn: 0 } ) ),
+			{ item: 'fence-panel', right: 4.572, forward: 0, turn: 0 },
+			{ item: 'turnstile-full-height', right: 6.85, forward: 0, turn: 0 },
+			{ item: 'fence-panel', right: 9.14, forward: 0, turn: 0 },
+			{ item: 'fence-panel', right: 12.19, forward: 0, turn: 0 },
+			{ item: 'barrier-arm-12ft', right: 0, forward: - 5, turn: 0 },
+			{ item: 'card-reader-pedestal', right: 1.75, forward: - 2.6, turn: 0 },
+			// Signs outside facing the way in, the emergency board inside, and the camera tower
+			// watching the gate from inside the corner.
+			{ item: 'sign-ppe-required', right: 9.2, forward: 2, turn: 0 },
+			{ item: 'site-rules-board', right: 11.8, forward: 2, turn: 0 },
+			{ item: 'sign-emergency-contacts', right: 8.6, forward: - 2.2, turn: 180 },
+			{ item: 'cctv-tower-trailer', right: - 9, forward: - 6, turn: 0 },
+			// Parking along the fence outside, to the left of the gate.
+			...[ - 6, - 9, - 12 ].map( right => ( { item: 'wheel-stop-6ft', right, forward: 2.5, turn: 0 } ) ),
+			{ item: 'worker-standing', right: 6.4, forward: - 2.2, turn: 180 },
 		],
 	},
 ];
