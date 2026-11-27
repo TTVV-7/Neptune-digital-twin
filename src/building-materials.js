@@ -16,7 +16,7 @@ const _s = new Vector3();
 
 export const BUILDING_MATERIAL_ITEMS = [
 	{ id: 'tilt-up-panel-braced', name: 'Tilt-up concrete wall panel, erected with pipe braces (30 × 40 ft, 9¼ in, 4 braces to deadmen)', category: 'Concrete & batching',
-		keywords: 'tilt up tiltup tilt-wall concrete wall panel braces pipe brace deadman deadmen big box warehouse distribution center erection lifting inserts', build: tiltUpPanel },
+		keywords: 'tilt up tiltup tilt-wall concrete wall panel braces pipe brace deadman deadmen big box warehouse distribution center erection lifting inserts', build: tiltUpPanel, rowLength: 30 * FT + 0.75 * IN },
 	{ id: 'hollow-core-plank-stack', name: 'Precast hollow-core planks on dunnage (6 × 4 ft × 30 ft, 8 in deep)', category: 'Materials',
 		keywords: 'hollow core hollowcore plank precast prestressed floor slab spancrete planks stack dunnage', build: hollowCoreStack },
 	{ id: 'precast-double-tee', name: 'Precast double tee on laydown blocks (10 ft wide × 60 ft, 24 in stems, ~21 t)', category: 'Materials',
@@ -184,8 +184,10 @@ function tiltUpPanel() {
 	const zp = reach / 2 + 0.2;
 	const face = zp - T / 2;
 
-	// Footing strip, its top a little above grade, the grout bed and the panel on it.
-	parts.box( dark, [ W + 0.6, footing, 0.9 ], [ 0, 0, zp ] );
+	// Footing strip, its top a little above grade, the grout bed and the panel on it. The strip is
+	// the panel plus a ¾ in joint wide, so panels in a wall line (a row, rowLength) set a joint apart
+	// on footings that just meet.
+	parts.box( dark, [ W + 0.75 * IN, footing, 0.9 ], [ 0, 0, zp ] );
 	parts.box( mat( 0x77736d, { roughness: 1 } ), [ W, 0.02, T ], [ 0, footing, zp ] );
 	parts.box( concrete, [ W, H, T ], [ 0, base, zp ] );
 

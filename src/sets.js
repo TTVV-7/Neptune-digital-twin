@@ -631,8 +631,9 @@ export const SETS = [
 		name: 'Tilt-up erection (3 braced 30 × 40 ft panels, 100 t crawler crane, spreader bar, telehandler, rebar, washout, light tower)',
 		keywords: 'tilt up tiltup tilt wall panel erection crane braces warehouse big box distribution center concrete panels',
 		members: [
-			// Three panels stood up side by side along the wall line, their braces to the inside (ahead).
-			...[ - 9.16, 0, 9.16 ].map( right => ( { item: 'tilt-up-panel-braced', right, forward: 0, turn: 0 } ) ),
+			// Three panels stood up side by side along the wall line a ¾ in joint apart (30 ft ¾ in
+			// centres), their braces to the inside (ahead).
+			...[ - 9.163, 0, 9.163 ].map( right => ( { item: 'tilt-up-panel-braced', right, forward: 0, turn: 0 } ) ),
 			// The crawler on the slab facing the wall to pick the next panel, its spreader bar beside it.
 			{ item: 'crane-crawler-100t', right: 0, forward: 20, turn: 180 },
 			{ item: 'spreader-bar-slings', right: 9, forward: 12, turn: 0 },
