@@ -30,6 +30,7 @@ import { CIVIL_ITEMS } from './civil-pieces.js';
 import { ENVIRONMENTAL_ITEMS } from './environmental.js';
 import { TOOL_ITEMS } from './tools-attachments.js';
 import { HEAVY_CIVIL_ITEMS } from './heavy-civil.js';
+import { TUNNEL_FORMWORK_ITEMS } from './tunnel-formwork.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -130,6 +131,8 @@ export const PROCEDURAL_ITEMS = [
 	...TOOL_ITEMS,
 	// Barges, a push boat, skiff, turbidity curtain and sheet pile template; a screener, cone crusher and asphalt plant; high-reach and long-reach excavators and a pile driving rig (heavy-civil.js).
 	...HEAVY_CIVIL_ITEMS,
+	// Tunnel segments, MSV, muck train, vent fan and duct, shaft gantry, cutterhead; table, climbing, wall and column forms, slab shoring; drywall cart, material lift, tilt truck, mortar mixer, stair tower (tunnel-formwork.js).
+	...TUNNEL_FORMWORK_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {

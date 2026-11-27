@@ -27,6 +27,7 @@ export const CATEGORY_ORDER = [
 	'Utilities',
 	'Access & scaffolding',
 	'Shoring',
+	'Tunnelling',
 	'Materials',
 	'Landscaping & site context',
 	'People',
