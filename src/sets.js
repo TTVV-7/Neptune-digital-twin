@@ -713,6 +713,25 @@ export const SETS = [
 			{ item: 'water-truck-4000gal', right: 16, forward: 13, turn: 270 },
 		],
 	},
+	{
+		id: 'set-crane-pick-zone',
+		name: 'Crane pick zone (40 t rough-terrain crane, concrete bucket, pallet forks, debris skip, cribbing, outrigger pads, signaller)',
+		keywords: 'crane pick zone lifting area laydown rigging concrete bucket crane forks debris skip cribbing outrigger pads swing radius signaller hoisting',
+		members: [
+			// The crane at the back, its front to the laydown, with the spare outrigger pads beside it
+			// and the swing radius sign at its corner.
+			{ item: 'crane-rough-terrain-40t', right: 0, forward: - 6, turn: 0 },
+			{ item: 'outrigger-pads-4x4', right: 6, forward: - 2, turn: 0 },
+			{ item: 'sign-crane-radius', right: - 5.5, forward: 2.5, turn: 0 },
+			// The rigging laid down in a row in front, within reach of the hook, cribbing at the end.
+			{ item: 'crane-concrete-bucket-2yd', right: - 4.5, forward: 5, turn: 0 },
+			{ item: 'crane-pallet-forks', right: - 1.5, forward: 5, turn: 0 },
+			{ item: 'crane-debris-skip', right: 1.5, forward: 5, turn: 0 },
+			{ item: 'cribbing-stack-timber', right: 4.5, forward: 5, turn: 0 },
+			// The signaller in front of it all, facing the operator.
+			{ item: 'worker-crane-signaller', right: 0, forward: 9, turn: 180 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
