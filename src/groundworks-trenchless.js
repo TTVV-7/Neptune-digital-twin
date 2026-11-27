@@ -53,8 +53,8 @@ export const GROUNDWORKS_ITEMS = [
 	{ id: 'pipe-bursting-power-pack', name: 'Pipe bursting hydraulic power pack, diesel skid (with hose reel)', category: 'Utilities',
 		keywords: 'pipe bursting power pack hydraulic power unit hpu grundoburst power pack diesel hydraulic skid hose reel trenchless',
 		build: burstPowerPack },
-	{ id: 'microtunnel-shaft-setup', name: 'Microtunnelling jacking shaft set-up for a 48 in MTBM (12 × 26 ft shaft, control container, separation plant, jacking pipe)', category: 'Tunnelling',
-		keywords: 'microtunnel microtunnelling mtbm pipe jacking jacking shaft launch shaft slurry separation plant control container rcp jacking pipe trenchless',
+	{ id: 'microtunnel-shaft-setup', name: 'Microtunnelling jacking shaft set-up for a 48 in MTBM (12 × 26 ft shaft top, gantry crane lowering jacking pipe, control container, separation plant)', category: 'Tunnelling',
+		keywords: 'microtunnel microtunnelling mtbm pipe jacking jacking shaft launch shaft slurry separation plant control container rcp jacking pipe trenchless gantry crane pipe lowering',
 		build: microtunnelSetup },
 	{ id: 'vacuum-excavator-trailer', name: 'Vacuum excavator trailer (800 gal debris tank, 500 gal water, 15 ft boom, potholing)', category: 'Utilities',
 		keywords: 'vac trailer vacuum excavator hydro excavation hydrovac trailer potholing daylighting locate utilities vactor vermeer ditch witch suction',
@@ -101,6 +101,7 @@ const CONCRETE = () => mat( 0xa9a59c, { roughness: 0.95 } );
 const STONE = () => mat( 0x9a958c, { roughness: 1 } );
 const SOIL = () => mat( 0x6e5a45, { roughness: 1 } );
 const SHAFT = () => mat( 0x141516, { roughness: 1 } );
+const PIT = () => mat( 0x1d1916, { roughness: 1 } );
 const AMBER = () => mat( 0xff9a1a, { roughness: 0.3, emissive: 0xc76a00, emissiveIntensity: 0.6 } );
 const RED_LAMP = () => mat( 0xb3141b, { roughness: 0.3, emissive: 0x7a0a0e, emissiveIntensity: 0.6 } );
 
@@ -198,16 +199,21 @@ function louvres( parts, material, x, y0, z, rows, length, pitch = 0.08 ) {
 }
 
 // Steel walls round a pit of [ width, length ] inside, `high` tall and `thick` thick, with
-// vertical stiffeners down the inside of the long walls every metre or so.
-function pitWalls( parts, material, [ width, length ], high, thick ) {
+// vertical stiffeners down the inside of the long walls every metre or so. The inner half of each
+// wall takes the `inside` material (near black by default), so that looking over the rim the pit
+// reads as a hole going down and not as a tank standing on the ground.
+function pitWalls( parts, material, [ width, length ], high, thick, inside = PIT() ) {
 
 	const [ hx, hz ] = [ width / 2, length / 2 ];
+	const half = thick / 2;
 	for ( const s of [ - 1, 1 ] ) {
 
-		parts.box( material, [ thick, high, length + 2 * thick ], [ s * ( hx + thick / 2 ), 0, 0 ] );
-		parts.box( material, [ width, high, thick ], [ 0, 0, s * ( hz + thick / 2 ) ] );
+		parts.box( material, [ half, high, length + 2 * thick ], [ s * ( hx + half * 1.5 ), 0, 0 ] );
+		parts.box( material, [ width + thick, high, half ], [ 0, 0, s * ( hz + half * 1.5 ) ] );
+		parts.box( inside, [ half, high, length + thick ], [ s * ( hx + half / 2 ), 0, 0 ] );
+		parts.box( inside, [ width, high, half ], [ 0, 0, s * ( hz + half / 2 ) ] );
 		const ribs = Math.max( 2, Math.round( length / 1.2 ) );
-		for ( let i = 1; i < ribs; i ++ ) parts.box( material, [ 0.05, high, 0.1 ], [ s * ( hx - 0.025 ), 0, - hz + length * i / ribs ] );
+		for ( let i = 1; i < ribs; i ++ ) parts.box( inside, [ 0.05, high, 0.1 ], [ s * ( hx - 0.025 ), 0, - hz + length * i / ribs ] );
 		parts.box( DARK(), [ thick + 0.02, 0.08, length + 2 * thick ], [ s * ( hx + thick / 2 ), high - 0.08, 0 ] );
 
 	}
@@ -805,8 +811,11 @@ function burstPowerPack() {
 
 // --- microtunnel shaft set-up ----------------------------------------------------------------
 
-// The surface set-up for a 48 in microtunnel drive: the jacking shaft 12 × 26 ft inside, its
-// steel sheet piling standing 3 ft proud with a guard rail on top and the ladder's top showing;
+// The surface set-up for a 48 in microtunnel drive: the top of the jacking shaft, 12 × 26 ft
+// inside, its steel sheet piling standing 3 ft proud with a guard rail on top and the ladder's top
+// showing (the jacking frame, thrust wall and launch seal are down on the shaft floor, below
+// grade: dig the shaft with the excavation tool and set this over it); a gantry crane straddling
+// the shaft lowering the next joint of jacking pipe;
 // the slurry lines and power cables over its edge; a 20 ft control container on the right with
 // its door, window and air conditioner; the slurry separation plant on the left (tank skid,
 // shaker screen, hydrocyclones, walkway); the jacking power unit beside the shaft; and a 10 ft
@@ -824,6 +833,52 @@ function microtunnelSetup() {
 	parts.box( SHAFT(), [ W, 0.01, L ], [ 0, 0, 0 ] );
 	railing( parts, [ - hx - t / 2, hx + t / 2 ], [ - hz - t / 2, hz + t / 2 ], H, [ 0, 1, 2, 3 ], YELLOW() );
 	ladder( parts, GALV(), [ - 0.9, hz - 0.1 ], 0, H + 1.0 );
+
+	// A 10 t gantry crane straddling the shaft on rails either side of it, lowering the next joint
+	// of 48 in jacking pipe (58 in outside, 10 ft long) on a spreader beam into the shaft: two
+	// braced portal legs each side, the box girder across the top, the hoist trolley, its hook
+	// block and ropes, and the two slings round the pipe.
+	const gx = hx + t + 0.3;
+	const gTop = 6.2;
+	const gz = 0.5;
+	const legZ = 1.4;
+	for ( const s of [ - 1, 1 ] ) {
+
+		parts.box( STEEL(), [ 0.14, 0.12, 5.5 ], [ s * gx, 0, gz ] );
+		for ( const z of [ gz - legZ, gz + legZ ] ) {
+
+			parts.box( dark, [ 0.35, 0.3, 0.5 ], [ s * gx, 0.12, z ] );
+			member( parts, YELLOW(), [ 0.22, 0.22 ], [ s * gx, 0.42, z ], [ s * gx, gTop - 0.5, gz + ( z - gz ) * 0.15 ] );
+
+		}
+
+		member( parts, YELLOW(), [ 0.18, 0.3 ], [ s * gx, gTop - 0.65, gz - legZ * 0.3 ], [ s * gx, gTop - 0.65, gz + legZ * 0.3 ] );
+		member( parts, YELLOW(), [ 0.1, 0.1 ], [ s * gx, 1.4, gz - legZ * 0.85 ], [ s * gx, 1.4, gz + legZ * 0.85 ] );
+
+	}
+
+	parts.box( YELLOW(), [ 2 * gx + 0.5, 0.6, 0.4 ], [ 0, gTop - 0.6, gz ] );
+	parts.box( dark, [ 0.9, 0.35, 0.8 ], [ 0.2, gTop - 0.95, gz ] );
+	parts.box( paint( 0x3a6ea5 ), [ 0.5, 0.4, 0.4 ], [ 0.75, gTop - 1.0, gz ] );
+	const r = 29 * IN;
+	const py = H + 0.5 + r;
+	const spreader = py + r + 1.1;
+	const hook = spreader + 1.0;
+	for ( const dz of [ - 0.12, 0.12 ] ) parts.rod( STEEL(), [ 0.2, gTop - 0.95, gz + dz ], [ 0, hook + 0.4, gz + dz ], 0.012, 4 );
+	parts.box( YELLOW(), [ 0.3, 0.45, 0.2 ], [ 0, hook, gz ] );
+	parts.rod( dark, [ 0, hook, gz ], [ 0, hook - 0.18, gz ], 0.035, 6 );
+	for ( const dz of [ - 1.1, 1.1 ] ) parts.rod( STEEL(), [ 0, hook - 0.15, gz ], [ 0, spreader + 0.2, gz + dz ], 0.014, 4 );
+	parts.box( YELLOW(), [ 0.2, 0.2, 2.6 ], [ 0, spreader, gz ] );
+	for ( const dz of [ - 1.0, 1.0 ] ) {
+
+		parts.rod( dark, [ 0.06, spreader, gz + dz ], [ r + 0.02, py, gz + dz ], 0.02, 4 );
+		parts.rod( dark, [ - 0.06, spreader, gz + dz ], [ - r - 0.02, py, gz + dz ], 0.02, 4 );
+		parts.rod( dark, [ 0, py, gz + dz - 0.02 ], [ 0, py, gz + dz + 0.02 ], r + 0.02, 24 );
+
+	}
+
+	parts.rod( CONCRETE(), [ 0, py, gz - 5 * FT + 0.01 ], [ 0, py, gz + 5 * FT - 0.01 ], r, 28 );
+	parts.rod( SHAFT(), [ 0, py, gz - 5 * FT ], [ 0, py, gz + 5 * FT ], 24 * IN, 24 );
 
 	// Control container on the right.
 	const cx = hx + t + 2.4;
@@ -883,8 +938,7 @@ function microtunnelSetup() {
 
 	}
 
-	// A joint of 48 in jacking pipe (58 in outside) staged behind the shaft on two timbers.
-	const r = 29 * IN;
+	// The joint after it staged behind the shaft on two timbers.
 	const p0 = hz + t + 1.0;
 	const p1 = p0 + 10 * FT;
 	for ( const z of [ p0 + 0.6, p1 - 0.6 ] ) parts.box( TIMBER(), [ 1.8, 0.15, 0.15 ], [ 0, 0, z ] );
