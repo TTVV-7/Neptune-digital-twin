@@ -4879,32 +4879,6 @@
 		}
 	},
 	{
-		"id": "garbage-truck-front-loader",
-		"name": "Garbage truck, front loader (Autocar / McNeilus type, 40 yd³)",
-		"category": "Waste",
-		"file": "garbage-truck-front-loader.glb",
-		"thumb": "thumbs/garbage-truck-front-loader.webp",
-		"front": "-x",
-		"scale": 1.4707,
-		"dimensions": {
-			"length": 9.6,
-			"width": 2.76,
-			"height": 4.43
-		},
-		"triangles": 43247,
-		"sizeKB": 1137,
-		"source": {
-			"site": "Sketchfab",
-			"id": "21d0c35687894e3aa2ee2814da21fcf2",
-			"url": "https://sketchfab.com/3d-models/autocar-mcneilus-pacific-front-load-refuse-truck-21d0c35687894e3aa2ee2814da21fcf2",
-			"title": "Autocar McNeilus Pacific Front Load Refuse Truck",
-			"author": "Trashbulldogproductions",
-			"authorUrl": "https://sketchfab.com/Trashbulldogproductions",
-			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
-		}
-	},
-	{
 		"id": "rolloff-20-detailed",
 		"name": "Roll-off dumpster, detailed (20 yd)",
 		"category": "Waste",
