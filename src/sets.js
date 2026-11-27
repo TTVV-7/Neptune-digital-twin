@@ -506,6 +506,30 @@ export const SETS = [
 			{ item: 'worker-standing', right: 6.4, forward: - 2.2, turn: 180 },
 		],
 	},
+	{
+		id: 'set-pipeline-spread',
+		name: 'Pipeline spread (strung 36 in pipe, sidebooms, weld shack, rig welder, bender, stringing truck, vacuum lifter, padder)',
+		keywords: 'pipeline spread right of way row mainline line pipe stringing welding sideboom pipelayer bending padding oil gas transmission',
+		members: [
+			// Six joints strung end to end along the ditch line, the weld shack over the joint in
+			// the middle and the rig welder parked beside it on a short run of mats.
+			...[ - 2.5, - 1.5, - 0.5, 0.5, 1.5, 2.5 ].map( i => ( { item: 'line-pipe-joint-on-skids', right: 0, forward: i * 24.69, turn: 0 } ) ),
+			{ item: 'pipe-welding-shack', right: 0, forward: 0, turn: 0 },
+			...[ 14, 18.3, 22.6 ].map( forward => ( { item: 'access-mat-8x14', right: - 6, forward, turn: 0 } ) ),
+			{ item: 'welding-rig-truck', right: - 6, forward: 18, turn: 0 },
+			// Three sidebooms on the working side, their booms out over the pipe.
+			...[ - 22, - 8, 6 ].map( forward => ( { item: 'pipelayer-583', right: 5.8, forward, turn: 0 } ) ),
+			// The travel lane: the stringing truck with the vacuum lifter excavator unloading it, the
+			// bending machine ahead.
+			{ item: 'pipe-stringing-trailer', right: 12, forward: 30, turn: 0 },
+			{ item: 'pipe-vacuum-lifter-excavator', right: 5, forward: 30, turn: 90 },
+			{ item: 'pipe-bending-machine-36in', right: 12, forward: - 40, turn: 0 },
+			// The spoil side: the holiday detector on its test length, the padder and the carrier.
+			{ item: 'holiday-detector', right: - 6, forward: - 20, turn: 0 },
+			{ item: 'padding-machine', right: - 8, forward: 45, turn: 0 },
+			{ item: 'tracked-carrier-morooka', right: - 7, forward: - 45, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
