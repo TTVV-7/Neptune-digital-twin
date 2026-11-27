@@ -940,13 +940,20 @@ function dustWall() {
 
 	}
 
-	// The zips: grey zipper tape stuck on the poly, a pull at the top of each.
+	// The door: two white adhesive zipper strips stuck on the poly, each with the dark slit of the
+	// zip down its middle and a pull near the top, a strip of tape across the head of the opening
+	// between them, and the panel between them a touch more frosted so it reads as a doorway.
+	const zipTape = mat( 0xf4f4f0, { roughness: 0.7 } );
+	parts.box( mat( 0xf2f6f8, { roughness: 0.3, transparent: true, opacity: 0.35, side: DoubleSide, depthWrite: false } ), [ 0.86, 2.1, 0.002 ], [ 0, 0.07, 0.008 ] );
 	for ( const x of [ - 0.45, 0.45 ] ) {
 
-		parts.box( mat( 0x55595d, { roughness: 0.6 } ), [ 0.035, 2.13, 0.004 ], [ x, 0.06, - 0.003 ] );
-		parts.box( DARK(), [ 0.02, 0.05, 0.012 ], [ x, 2.0, - 0.008 ] );
+		parts.box( zipTape, [ 0.07, 2.13, 0.004 ], [ x, 0.06, - 0.004 ] );
+		parts.box( BLACK(), [ 0.008, 2.07, 0.002 ], [ x, 0.09, - 0.007 ] );
+		parts.box( DARK(), [ 0.025, 0.06, 0.012 ], [ x, 1.95, - 0.012 ] );
 
 	}
+
+	parts.box( zipTape, [ 0.97, 0.07, 0.004 ], [ 0, 2.12, - 0.004 ] );
 
 	return parts.build();
 
@@ -1241,8 +1248,8 @@ function toolFrame( end, angle ) {
 }
 
 // A 30 t excavator set up for demolition and loading: the cab guard on, and a rotating sorting
-// grapple on the stick in place of a bucket, its two tined shells open over a heap of broken
-// concrete and timber in front.
+// grapple on the stick in place of a bucket, its two tined shells swung open over a heap of broken
+// concrete and timber in front, ready to bite.
 function grappleExcavator() {
 
 	const parts = new Parts();
@@ -1253,35 +1260,48 @@ function grappleExcavator() {
 	} );
 	guardedCab( parts, body, [ 1.0, 1.7, 1.9 ], [ - 0.98, 1.35, - 1.05 ] );
 	for ( const x of [ - 0.2, 0.55 ] ) parts.box( DARK(), [ 0.1, 0.9, 1.2 ], [ x, 1.35, - 1.3 ] );
-	const { end } = front( parts, body, { foot: [ 0.18, 2.1, - 1.35 ], boom: [ 50, 3.0, 10, 3.2 ], stick: [ - 58, 3.0 ], section: [ 0.55, 0.8 ] } );
+	const { end } = front( parts, body, { foot: [ 0.18, 2.1, - 1.35 ], boom: [ 50, 3.0, 10, 3.2 ], stick: [ - 48, 3.0 ], section: [ 0.55, 0.8 ] } );
 
 	// The grapple hangs straight down: the rotator, the body, and two shells opening fore and aft.
 	const at = toolFrame( end, 90 );
 	const steel = mat( 0x3d4144, { roughness: 0.55, metalness: 0.4 } );
 	parts.rod( DARK(), at( 0.1 ).toArray(), at( 0.35 ).toArray(), 0.32, 18 );
 	parts.rod( steel, at( 0.35 ).toArray(), at( 0.85 ).toArray(), 0.38, 8 );
+	const open = 15 * DEG;
 	for ( const s of [ - 1, 1 ] ) {
 
-		// Each shell a hooked plate seen from the side, extruded across, with its ram above.
+		// Each shell is drawn closed in its own (down, out) frame, then swung open about its pivot
+		// at the bottom of the body.
+		const shell = ( a, b ) => {
+
+			const da = a - 0.75;
+			const db = b - s * 0.1;
+			return at( 0.75 + da * Math.cos( open ) - s * db * Math.sin( open ), s * 0.1 + db * Math.cos( open ) + s * da * Math.sin( open ) );
+
+		};
+
+		// A hooked plate seen from the side, extruded across, its tines along the tip and its ram
+		// from the body down onto the back of the shell.
 		const outer = [ [ 0.75, s * 0.1 ], [ 0.9, s * 0.55 ], [ 1.2, s * 0.85 ], [ 1.6, s * 0.85 ], [ 1.95, s * 0.6 ], [ 2.1, s * 0.3 ] ];
 		const inner = outer.slice().reverse().map( ( [ a, b ], i ) => [ a - ( i === 0 ? 0.1 : 0.06 ), b - s * ( i === 0 ? 0.02 : 0.13 ) ] );
 		const outline = [ ...outer, ...inner ].map( ( [ a, b ] ) => {
 
-			const p = at( a, b );
+			const p = shell( a, b );
 			return [ p.z, p.y ];
 
 		} );
 		parts.prism( steel, outline, 1.1, end.x );
-		const tip = at( 2.1, s * 0.3 );
-		for ( const x of [ - 0.4, 0, 0.4 ] ) parts.rod( BLACK(), [ end.x + x, tip.y + 0.06, tip.z ], [ end.x + x, tip.y - 0.12, tip.z - s * 0.08 ], [ 0.06, 0.02 ], 5 );
-		ram( parts, 0.07, at( 0.5, s * 0.25 ).add( new Vector3( 0.4, 0, 0 ) ), at( 1.1, s * 0.7 ).add( new Vector3( 0.4, 0, 0 ) ) );
+		const tip = shell( 2.1, s * 0.3 );
+		const point = shell( 2.24, s * 0.2 );
+		for ( const x of [ - 0.4, 0, 0.4 ] ) parts.rod( BLACK(), [ end.x + x, tip.y + 0.04, tip.z ], [ end.x + x, point.y, point.z ], [ 0.06, 0.02 ], 5 );
+		ram( parts, 0.07, at( 0.5, s * 0.25 ), shell( 1.02, s * 0.73 ) );
 
 	}
 
-	// The heap under it.
+	// The heap under it, between the open shells and clear of the tines.
 	const heap = mat( 0x8f8a80, { roughness: 1 } );
 	const lumber = TIMBER();
-	for ( const [ x, z, r ] of [ [ 0.2, 0.2, 0.4 ], [ - 0.5, - 0.4, 0.32 ], [ 0.6, - 0.5, 0.3 ], [ - 0.3, 0.6, 0.28 ], [ 0.1, - 0.9, 0.24 ] ] ) parts.sphere( heap, r, [ end.x + x, r * 0.6, at( 2.1 ).z + z ], [ 7, 5 ], [ 1.3, 0.6, 1 ] );
+	for ( const [ x, z, r ] of [ [ 0.2, 0.05, 0.4 ], [ - 0.5, - 0.2, 0.32 ], [ 0.6, - 0.25, 0.3 ], [ - 0.3, 0.3, 0.28 ], [ 0.1, - 1.2, 0.24 ] ] ) parts.sphere( heap, r, [ end.x + x, r * 0.6, at( 2.1 ).z + z ], [ 7, 5 ], [ 1.3, 0.6, 1 ] );
 	parts.block( lumber, [ 0.09, 0.04, 2.0 ], [ end.x - 0.2, 0.25, at( 2.1 ).z - 0.1 ], [ 0.15, 0.6, 0.1 ] );
 	parts.block( lumber, [ 0.14, 0.04, 1.6 ], [ end.x + 0.5, 0.2, at( 2.1 ).z + 0.2 ], [ - 0.1, - 0.9, 0 ] );
 	return parts.build();

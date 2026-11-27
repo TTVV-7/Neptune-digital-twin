@@ -632,11 +632,11 @@ export const SETS = [
 		keywords: 'abatement asbestos lead interior demolition selective demo containment decon negative air hepa brokk robot dumpster grapple',
 		members: [
 			// The containment line across the work area, the robot and two negative air machines
-			// inside it, the machines' ducts run out through the poly.
+			// inside it, the machines' ducts run out through the poly and on about a metre past it.
 			...[ - 6.1, 0, 6.1 ].map( right => ( { item: 'dust-barrier-zipwall', right, forward: - 6, turn: 0 } ) ),
 			{ item: 'demolition-robot', right: - 3, forward: - 11, turn: 180 },
-			{ item: 'negative-air-machine', right: 2, forward: - 8.5, turn: 180 },
-			{ item: 'negative-air-machine', right: 5, forward: - 8.5, turn: 180 },
+			{ item: 'negative-air-machine', right: 2, forward: - 7.5, turn: 180 },
+			{ item: 'negative-air-machine', right: 5, forward: - 7.5, turn: 180 },
 			// The decon trailer on the left, its equipment room door nearest the containment, with the
 			// generator and a toilet in front of it.
 			{ item: 'decon-trailer', right: - 13, forward: 1, turn: 0 },
