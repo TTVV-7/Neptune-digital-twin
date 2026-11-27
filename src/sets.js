@@ -370,6 +370,28 @@ export const SETS = [
 			{ item: 'worker-standing', right: 4, forward: - 9.5, turn: 180 },
 		],
 	},
+	{
+		id: 'set-rail-work-block',
+		name: 'Rail work block (tamper, ballast regulator, track panels, hi-rail trucks, crew)',
+		keywords: 'rail work block track maintenance tamper regulator hi-rail surfacing gang railroad mow',
+		members: [
+			// One line of track along the set, 39 ft panels butted to the machines' own track: the
+			// tamper working towards the front, the regulator behind it.
+			{ item: 'rail-track-39ft', right: 0, forward: 29.72, turn: 0 },
+			{ item: 'rail-track-39ft', right: 0, forward: 17.83, turn: 0 },
+			{ item: 'production-tamper', right: 0, forward: 0, turn: 0 },
+			{ item: 'ballast-regulator', right: 0, forward: - 17.83, turn: 0 },
+			{ item: 'rail-track-39ft', right: 0, forward: - 29.72, turn: 0 },
+			// The hi-rail trucks set off on the access road beside the track, the crew on the shoulder.
+			{ item: 'hi-rail-pickup', right: 6, forward: 20, turn: 0 },
+			{ item: 'hi-rail-truck', right: 6, forward: - 14, turn: 0 },
+			{ item: 'worker-pointing', right: 2.8, forward: 13, turn: 270 },
+			{ item: 'worker-standing', right: 3.2, forward: 4, turn: 300 },
+			{ item: 'worker-vest-drawings', right: - 2.8, forward: - 6, turn: 90 },
+			{ item: 'worker-walking', right: 3.0, forward: - 24, turn: 0 },
+			{ item: 'flagger', right: 3.5, forward: 37, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out

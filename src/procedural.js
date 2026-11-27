@@ -26,6 +26,7 @@ import { BATCH_PLANT_ITEMS } from './batch-plant.js';
 import { CONTAINER_ITEMS, shippingContainer } from './containers.js';
 import { CIVIL_ITEMS } from './civil-pieces.js';
 import { ENVIRONMENTAL_ITEMS } from './environmental.js';
+import { TOOL_ITEMS } from './tools-attachments.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -116,6 +117,8 @@ export const PROCEDURAL_ITEMS = [
 	...CIVIL_ITEMS,
 	// Erosion and sediment control, washouts, spill containment, tree protection, a debris chute and a glass vacuum lifter (environmental.js).
 	...ENVIRONMENTAL_ITEMS,
+	// Hi-rail trucks, track machines, a turnout and track stops, staged attachments and small site gear (tools-attachments.js).
+	...TOOL_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
