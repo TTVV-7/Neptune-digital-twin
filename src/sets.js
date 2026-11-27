@@ -508,17 +508,16 @@ export const SETS = [
 	},
 	{
 		id: 'set-landscape-restoration',
-		name: 'Landscape restoration (nursery trees on pallets, mulch pile, straw bales, plantings, skid steer, hydroseeder)',
-		keywords: 'landscape landscaping restoration planting nursery balled burlapped trees mulch wood chips straw bales hydroseed seeding ornamental grass shrubs skid steer',
+		name: 'Landscape restoration (nursery trees on pallets, mulch pile, straw bales, plantings, skid steer)',
+		keywords: 'landscape landscaping restoration planting nursery balled burlapped trees mulch wood chips straw bales seeding ornamental grass shrubs skid steer',
 		members: [
 			// Deliveries staged at the back: nursery trees on their pallets, the mulch pile and the straw.
 			{ item: 'tree-bb-pallet', right: - 7, forward: - 5, turn: 0 },
 			{ item: 'tree-bb-pallet', right: - 3.8, forward: - 5.3, turn: 10 },
 			{ item: 'wood-chip-pile', right: 1.5, forward: - 5.5, turn: 0 },
 			{ item: 'straw-bale-stack', right: 6.5, forward: - 5.5, turn: 0 },
-			// The skid steer between the stock and the beds, the hydroseeder parked on the right.
+			// The skid steer between the stock and the beds.
 			{ item: 'skid-steer-loader', right: - 1, forward: 0, turn: 200 },
-			{ item: 'hydroseeder-truck', right: 11, forward: 0, turn: 0 },
 			// The new bed along the front: grass clumps and shrubs set out, a worker planting.
 			...[ - 6, - 4.5, - 3 ].map( right => ( { item: 'ornamental-grass-clump', right, forward: 5, turn: 0 } ) ),
 			{ item: 'shrub-round', right: 0, forward: 5.2, turn: 0 },

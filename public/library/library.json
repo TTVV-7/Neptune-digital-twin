@@ -850,7 +850,7 @@
 			"height": 1.48
 		},
 		"triangles": 9492,
-		"sizeKB": 1290,
+		"sizeKB": 1375,
 		"source": {
 			"site": "Sketchfab",
 			"id": "e01a6a0f9ed843279adfac2427c99679",
@@ -1948,8 +1948,8 @@
 			"width": 5.28,
 			"height": 12.2
 		},
-		"triangles": 88284,
-		"sizeKB": 2027,
+		"triangles": 30894,
+		"sizeKB": 1145,
 		"source": {
 			"site": "Sketchfab",
 			"id": "053319107d4949f0b504199ed762a072",
@@ -2153,12 +2153,12 @@
 		"front": "+z",
 		"scale": 0.81,
 		"dimensions": {
-			"length": 9.09,
-			"width": 9.32,
-			"height": 10.65
+			"length": 8.94,
+			"width": 9.31,
+			"height": 10.48
 		},
-		"triangles": 86745,
-		"sizeKB": 1715,
+		"triangles": 40889,
+		"sizeKB": 815,
 		"source": {
 			"site": "Sketchfab",
 			"id": "6c49b1d81c4949b0a409a278a283cc0d",
@@ -2865,7 +2865,7 @@
 			"height": 1.36
 		},
 		"triangles": 21007,
-		"sizeKB": 1127,
+		"sizeKB": 1093,
 		"source": {
 			"site": "Sketchfab",
 			"id": "7e12a141e87c4b23a932a5bd7754caa7",
@@ -5087,19 +5087,19 @@
 	},
 	{
 		"id": "brush-pile",
-		"name": "Brush pile / clearing slash (4.6 m / 15 ft across)",
+		"name": "Brush pile / clearing slash (5 m / 16 ft across)",
 		"category": "Waste",
 		"file": "brush-pile.glb",
 		"thumb": "thumbs/brush-pile.webp",
 		"front": "+z",
 		"scale": 1.07,
 		"dimensions": {
-			"length": 2.95,
-			"width": 4.6,
-			"height": 1.27
+			"length": 3.25,
+			"width": 5.16,
+			"height": 1.99
 		},
-		"triangles": 55897,
-		"sizeKB": 1878,
+		"triangles": 32437,
+		"sizeKB": 1781,
 		"source": {
 			"site": "Sketchfab",
 			"id": "31a023461b2f4b1fb912b25e86acb586",
