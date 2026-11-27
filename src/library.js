@@ -26,6 +26,7 @@ export const CATEGORY_ORDER = [
 	'Access & scaffolding',
 	'Shoring',
 	'Materials',
+	'Landscaping & site context',
 	'People',
 	'Race',
 ];
