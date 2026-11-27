@@ -37,6 +37,7 @@ import { SAFETY_ITEMS } from './site-safety.js';
 import { RENEWABLE_ITEMS } from './renewables.js';
 import { PIPELINE_ITEMS } from './pipeline.js';
 import { EARTHMOVING_ITEMS } from './earthmoving.js';
+import { BUILDING_MATERIAL_ITEMS } from './building-materials.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -151,6 +152,8 @@ export const PROCEDURAL_ITEMS = [
 	...PIPELINE_ITEMS,
 	// Scraper, D10 dozer, 90 t and hammer excavators, 988 loader, 100 t haul truck, water wagon; drill rig, magazine, impact crusher, wash plant; truck scale and scale house; VMS, TMA and hydroseeder (earthmoving.js).
 	...EARTHMOVING_ITEMS,
+	// Building structure and envelope: braced tilt-up panel, precast plank, double tee, wall panels and stairs, joists, girder, deck, trusses, glulam, CLT, curtain wall and windows, rebar and roofing (building-materials.js).
+	...BUILDING_MATERIAL_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {

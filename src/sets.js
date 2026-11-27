@@ -626,6 +626,23 @@ export const SETS = [
 			{ item: 'worker-standing', right: - 1.5, forward: 3.8, turn: 180 },
 		],
 	},
+	{
+		id: 'set-tilt-up-erection',
+		name: 'Tilt-up erection (3 braced 30 × 40 ft panels, 100 t crawler crane, spreader bar, telehandler, rebar, washout, light tower)',
+		keywords: 'tilt up tiltup tilt wall panel erection crane braces warehouse big box distribution center concrete panels',
+		members: [
+			// Three panels stood up side by side along the wall line, their braces to the inside (ahead).
+			...[ - 9.16, 0, 9.16 ].map( right => ( { item: 'tilt-up-panel-braced', right, forward: 0, turn: 0 } ) ),
+			// The crawler on the slab facing the wall to pick the next panel, its spreader bar beside it.
+			{ item: 'crane-crawler-100t', right: 0, forward: 20, turn: 180 },
+			{ item: 'spreader-bar-slings', right: 9, forward: 12, turn: 0 },
+			// The telehandler, rebar staged for the next panels, and the washout and light at the side.
+			{ item: 'telehandler-10k', right: - 13, forward: 12, turn: 90 },
+			{ item: 'rebar-bundle-dunnage', right: - 13, forward: 22, turn: 0 },
+			{ item: 'washout-rolloff', right: 15, forward: 22, turn: 0 },
+			{ item: 'light-tower-led', right: 17, forward: 8, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
