@@ -409,6 +409,28 @@ export const SETS = [
 			{ item: 'flagger', right: 3.5, forward: 37, turn: 0 },
 		],
 	},
+	{
+		id: 'set-tunnel-shaft',
+		name: 'Tunnel shaft work area (gantry over the shaft, segments, vent fan, muck train, grout, office)',
+		keywords: 'tunnel shaft launch shaft tbm gantry segments muck train vent fan grout tunnelling',
+		members: [
+			// The gantry over the shaft in the middle, segments stacked within its reach on the right.
+			{ item: 'shaft-gantry-20t', right: 0, forward: 0, turn: 0 },
+			{ item: 'tunnel-segment-stack-6m', right: 12, forward: - 4, turn: 0 },
+			{ item: 'tunnel-segment-stack-6m', right: 12, forward: - 1.5, turn: 0 },
+			{ item: 'tunnel-segment-stack-6m', right: 12, forward: 1, turn: 0 },
+			// The vent fan on the left blowing toward the shaft, a spare cutterhead behind it.
+			{ item: 'tunnel-vent-fan-48in', right: - 13, forward: 3, turn: 90 },
+			{ item: 'tbm-cutterhead-6-5m', right: - 12.5, forward: - 8, turn: 0 },
+			// Muck cars waiting on the track behind the shaft, grout beside the segments.
+			{ item: 'muck-train-3-car', right: 0, forward: - 14, turn: 90 },
+			{ item: 'grout-pump-skid', right: 12, forward: 6, turn: 0 },
+			{ item: 'slurry-mixer-skid', right: 12, forward: 9.5, turn: 0 },
+			{ item: 'office-trailer-10x40', right: - 10, forward: 15, turn: 0 },
+			{ item: 'worker-standing', right: 9.5, forward: 2, turn: 270 },
+			{ item: 'worker-standing', right: 5, forward: 9.5, turn: 180 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
