@@ -346,6 +346,23 @@ export const SETS = [
 		],
 	},
 	{
+		id: 'set-marine-piling',
+		name: 'Marine piling spread (spud barge crane, pile barge and push boat, skiff, sheet pile template, turbidity curtain)',
+		keywords: 'marine piling spread barge crane spud barge material barge tug push boat skiff template turbidity curtain waterfront wharf pier dock bulkhead',
+		members: [
+			// The crane barge with its boom over the bow and the template ahead of it on the pile line.
+			{ item: 'spud-barge-crane-spuds-down', right: 0, forward: 0, turn: 0 },
+			{ item: 'sheet-pile-template-40ft', right: 0, forward: 24.5, turn: 0 },
+			// The pile barge alongside on the right, the push boat on its stern, the skiff off the left.
+			{ item: 'deck-barge-150x40-pipe-piles', right: 14.3, forward: - 2, turn: 0 },
+			{ item: 'push-boat-65ft', right: 14.3, forward: - 35.1, turn: 0 },
+			{ item: 'work-skiff-24ft', right: - 13, forward: 12, turn: 20 },
+			// Turbidity curtain round the work: across the front and down both sides.
+			...[ - 22.86, - 7.62, 7.62, 22.86 ].map( right => ( { item: 'turbidity-curtain-50ft', right, forward: 32, turn: 0 } ) ),
+			...[ - 1, 1 ].flatMap( s => [ 24.38, 9.14 ].map( forward => ( { item: 'turbidity-curtain-50ft', right: s * 30.48, forward, turn: 90 } ) ) ),
+		],
+	},
+	{
 		id: 'set-erosion-perimeter',
 		name: 'Erosion control perimeter (silt fence, construction entrance, inlet protection, washout, tree protection)',
 		keywords: 'erosion sediment control esc swppp silt fence construction entrance inlet protection concrete washout tree protection perimeter',
