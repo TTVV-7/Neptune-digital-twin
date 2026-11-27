@@ -37,6 +37,7 @@ import { SAFETY_ITEMS } from './site-safety.js';
 import { RENEWABLE_ITEMS } from './renewables.js';
 import { PIPELINE_ITEMS } from './pipeline.js';
 import { EARTHMOVING_ITEMS } from './earthmoving.js';
+import { BRIDGE_HIGHWAY_ITEMS } from './bridge-highway.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -151,6 +152,8 @@ export const PROCEDURAL_ITEMS = [
 	...PIPELINE_ITEMS,
 	// Scraper, D10 dozer, 90 t and hammer excavators, 988 loader, 100 t haul truck, water wagon; drill rig, magazine, impact crusher, wash plant; truck scale and scale house; VMS, TMA and hydroseeder (earthmoving.js).
 	...EARTHMOVING_ITEMS,
+	// Bridge girders (hauled and laid down), deck finisher, overhang brackets, pier cap falsework, tower bent, cofferdam, panel bridge, MSE panels, wall blocks, gabions, W-beam guardrail, sand barrels and an overhead sign (bridge-highway.js).
+	...BRIDGE_HIGHWAY_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {

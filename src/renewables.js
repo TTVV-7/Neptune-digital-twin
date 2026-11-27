@@ -173,7 +173,7 @@ function label( parts, material, size, centre, turn ) {
 
 // The parts built and moved so the middle of the item's box is over the origin, as items are
 // placed by (the long loads are laid out from the tractor's bumper back).
-function centred( parts ) {
+export function centred( parts ) {
 
 	const group = parts.build();
 	const { min, max } = new Box3().setFromObject( group );
@@ -188,8 +188,8 @@ function centred( parts ) {
 // A heavy-haul conventional tractor with its front bumper at z = front: long hood, cab, an optional
 // raised sleeper, and two or three drive axles under the fifth wheel. `ballast` puts a ballast box
 // on the frame instead, for a push truck. Returns where the fifth wheel's middle and the frame's
-// end are.
-function tractor( parts, front, { colour = 0xb4231b, sleeper = true, drives = 3, ballast = false } = {} ) {
+// end are. (The girder haul in bridge-highway.js uses it too.)
+export function tractor( parts, front, { colour = 0xb4231b, sleeper = true, drives = 3, ballast = false } = {} ) {
 
 	const body = paint( colour );
 	const z = d => front + d;

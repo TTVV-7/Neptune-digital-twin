@@ -626,6 +626,30 @@ export const SETS = [
 			{ item: 'worker-standing', right: - 1.5, forward: 3.8, turn: 180 },
 		],
 	},
+	{
+		id: 'set-girder-erection',
+		name: 'Bridge girder erection (300 t and 100 t crawler cranes, 2 falsework bents, girders laid down and arriving, spreader bar)',
+		keywords: 'bridge girder erection girder setting tandem pick crawler cranes falsework bent precast girder bulb tee haul steerable dolly spreader bar highway bridge',
+		members: [
+			// The span across the middle: a falsework bent at each end, 130 ft apart, their caps
+			// across the girder line.
+			{ item: 'falsework-tower-bent', right: - 19.8, forward: 0, turn: 90 },
+			{ item: 'falsework-tower-bent', right: 19.8, forward: 0, turn: 90 },
+			// The two cranes behind the span for a tandem pick, booms out over it.
+			{ item: 'crane-crawler-300t-luffing', right: - 14, forward: - 26, turn: 0 },
+			{ item: 'crane-crawler-100t', right: 16, forward: - 20, turn: 0 },
+			// Girders laid down in front, the spreader bar beside them, the next one arriving on its
+			// dolly along the haul road.
+			{ item: 'bridge-girder-laydown', right: 0, forward: 10, turn: 90 },
+			{ item: 'bridge-girder-laydown', right: 0, forward: 14, turn: 90 },
+			{ item: 'spreader-bar-slings', right: - 6, forward: 5, turn: 0 },
+			{ item: 'precast-girder-on-trailer', right: 0, forward: 22, turn: 90 },
+			// Traffic control on the road in front and a light tower for the night shift.
+			{ item: 'jersey-barrier-run-3', right: - 12, forward: 29, turn: 90 },
+			{ item: 'arrow-board-trailer', right: 31, forward: 30, turn: 0 },
+			{ item: 'light-tower-led', right: - 32, forward: 6, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
