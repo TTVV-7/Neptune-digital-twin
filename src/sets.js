@@ -626,6 +626,93 @@ export const SETS = [
 			{ item: 'worker-standing', right: - 1.5, forward: 3.8, turn: 180 },
 		],
 	},
+	{
+		id: 'set-tilt-up-erection',
+		name: 'Tilt-up erection (3 braced 30 × 40 ft panels, 100 t crawler crane, spreader bar, telehandler, rebar, washout, light tower)',
+		keywords: 'tilt up tiltup tilt wall panel erection crane braces warehouse big box distribution center concrete panels',
+		members: [
+			// Three panels stood up side by side along the wall line a ¾ in joint apart (30 ft ¾ in
+			// centres), their braces to the inside (ahead).
+			...[ - 9.163, 0, 9.163 ].map( right => ( { item: 'tilt-up-panel-braced', right, forward: 0, turn: 0 } ) ),
+			// The crawler on the slab facing the wall to pick the next panel, its spreader bar beside it.
+			{ item: 'crane-crawler-100t', right: 0, forward: 20, turn: 180 },
+			{ item: 'spreader-bar-slings', right: 9, forward: 12, turn: 0 },
+			// The telehandler, rebar staged for the next panels, and the washout and light at the side.
+			{ item: 'telehandler-10k', right: - 13, forward: 12, turn: 90 },
+			{ item: 'rebar-bundle-dunnage', right: - 13, forward: 22, turn: 0 },
+			{ item: 'washout-rolloff', right: 15, forward: 22, turn: 0 },
+			{ item: 'light-tower-led', right: 17, forward: 8, turn: 0 },
+		],
+	},
+	{
+		id: 'set-girder-erection',
+		name: 'Bridge girder erection (300 t all-terrain and 100 t crawler cranes in a tandem pick, 2 falsework bents, girders laid down and arriving, spreader bar)',
+		keywords: 'bridge girder erection girder setting tandem pick crawler crane all terrain crane falsework bent precast girder bulb tee haul steerable dolly spreader bar highway bridge',
+		members: [
+			// The span across the middle: a falsework bent at each end, 130 ft apart, their caps
+			// across the girder line.
+			{ item: 'falsework-tower-bent', right: - 19.8, forward: 0, turn: 90 },
+			{ item: 'falsework-tower-bent', right: 19.8, forward: 0, turn: 90 },
+			// Girders laid down just behind the span, between the cranes, so each crane picks its end
+			// and sets it on the bent without swinging over the span.
+			{ item: 'bridge-girder-laydown', right: 0, forward: - 9, turn: 90 },
+			{ item: 'bridge-girder-laydown', right: 0, forward: - 12.5, turn: 90 },
+			// A crane outboard of each end for the tandem pick, slewing centres level with the middle
+			// of the moves, booms in toward the girder ends: the 300 t all-terrain about 15 to 16 m
+			// from its picks and set, the 100 t crawler about 12 to 14 m from its.
+			{ item: 'crane-all-terrain-300t-superlift', right: - 32.1, forward: - 6, turn: 90 },
+			{ item: 'crane-crawler-100t', right: 26.3, forward: - 6, turn: 270 },
+			// The next girder arriving on its dolly along the haul road behind, the spreader bar
+			// on its dunnage behind that.
+			{ item: 'precast-girder-on-trailer', right: 0, forward: - 18, turn: 90 },
+			{ item: 'spreader-bar-slings', right: 0, forward: - 24, turn: 0 },
+			// Traffic control on the road in front and a light tower for the night shift.
+			{ item: 'jersey-barrier-run-3', right: - 12, forward: 29, turn: 90 },
+			{ item: 'arrow-board-trailer', right: 31, forward: 30, turn: 0 },
+			{ item: 'light-tower-led', right: - 32, forward: 6, turn: 0 },
+		],
+	},
+	{
+		id: 'set-interior-demo-abatement',
+		name: 'Interior demolition and abatement (decon trailer, dust walls, negative air machines, demolition robot, grapple excavator, 40 yd roll-off)',
+		keywords: 'abatement asbestos lead interior demolition selective demo containment decon negative air hepa brokk robot dumpster grapple',
+		members: [
+			// The containment line across the work area, the robot and two negative air machines
+			// inside it, the machines' ducts run out through the poly and on about a metre past it.
+			...[ - 6.1, 0, 6.1 ].map( right => ( { item: 'dust-barrier-zipwall', right, forward: - 6, turn: 0 } ) ),
+			{ item: 'demolition-robot', right: - 3, forward: - 11, turn: 180 },
+			{ item: 'negative-air-machine', right: 2, forward: - 7.5, turn: 180 },
+			{ item: 'negative-air-machine', right: 5, forward: - 7.5, turn: 180 },
+			// The decon trailer on the left, its equipment room door nearest the containment, with the
+			// generator and a toilet in front of it.
+			{ item: 'decon-trailer', right: - 13, forward: 1, turn: 0 },
+			{ item: 'generator-60kva', right: - 20, forward: 8, turn: 0 },
+			{ item: 'porta-potty', right: - 16, forward: 8, turn: 0 },
+			// The roll-off on the right, the grapple excavator behind it loading the debris.
+			{ item: 'rolloff-40', right: 13, forward: 0, turn: 0 },
+			{ item: 'excavator-demolition-grapple', right: 13, forward: - 10, turn: 0 },
+		],
+	},
+	{
+		id: 'set-demolition-yard',
+		name: 'Demolition yard (part-demolished building, breaker excavator, rubble and scrap piles, roll-off, jaw crusher, water truck)',
+		keywords: 'demolition demo wreck tear down rubble debris concrete rebar brick scrap metal salvage crusher dust hoe ram breaker hammer',
+		members: [
+			// The building being taken down at the back, the excavator breaking up its front wall with
+			// its hammer and the sorted piles in front: concrete with rebar either side, brick to one side, scrap metal to the other.
+			{ item: 'partially-demolished-building', right: 0, forward: - 12, turn: 0 },
+			{ item: 'excavator-hammer-30t', right: - 4, forward: 1, turn: 180 },
+			{ item: 'concrete-rubble-pile-rebar', right: - 12, forward: 1.5, turn: 20 },
+			{ item: 'concrete-rubble-pile-rebar', right: 4.5, forward: 0.5, turn: 0 },
+			{ item: 'brick-rubble-pile', right: - 19, forward: 2, turn: 90 },
+			{ item: 'scrap-metal-pile', right: 14, forward: 3, turn: 0 },
+			// Along the front: the roll-off for mixed waste, the jaw crusher for the concrete and the
+			// water truck keeping the dust down.
+			{ item: 'rolloff-40', right: 2, forward: 9, turn: 90 },
+			{ item: 'mobile-jaw-crusher', right: - 14, forward: 10, turn: 90 },
+			{ item: 'water-truck-4000gal', right: 16, forward: 13, turn: 270 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out

@@ -37,6 +37,9 @@ import { SAFETY_ITEMS } from './site-safety.js';
 import { RENEWABLE_ITEMS } from './renewables.js';
 import { PIPELINE_ITEMS } from './pipeline.js';
 import { EARTHMOVING_ITEMS } from './earthmoving.js';
+import { BUILDING_MATERIAL_ITEMS } from './building-materials.js';
+import { BRIDGE_HIGHWAY_ITEMS } from './bridge-highway.js';
+import { FITOUT_DEMO_ITEMS } from './fitout-demo.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -151,6 +154,12 @@ export const PROCEDURAL_ITEMS = [
 	...PIPELINE_ITEMS,
 	// Scraper, D10 dozer, 90 t and hammer excavators, 988 loader, 100 t haul truck, water wagon; drill rig, magazine, impact crusher, wash plant; truck scale and scale house; VMS, TMA and hydroseeder (earthmoving.js).
 	...EARTHMOVING_ITEMS,
+	// Building structure and envelope: braced tilt-up panel, precast plank, double tee, wall panels and stairs, joists, girder, deck, trusses, glulam, CLT, curtain wall and windows, rebar and roofing (building-materials.js).
+	...BUILDING_MATERIAL_ITEMS,
+	// Bridge girders (hauled and laid down), deck finisher, overhang brackets, pier cap falsework, tower bent, cofferdam, panel bridge, MSE panels, wall blocks, gabions, W-beam guardrail, sand barrels and an overhead sign (bridge-highway.js).
+	...BRIDGE_HIGHWAY_ITEMS,
+	// Interior fit-out (Baker scaffold, drywall lift, studs, duct, pipe cart, wire cart, threader), crated switchgear, RTU and chiller, dust wall, negative air machine, decon trailer, demolition robot, grapple and pulverizer excavators (fitout-demo.js).
+	...FITOUT_DEMO_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
