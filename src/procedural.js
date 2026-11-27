@@ -40,6 +40,7 @@ import { EARTHMOVING_ITEMS } from './earthmoving.js';
 import { BUILDING_MATERIAL_ITEMS } from './building-materials.js';
 import { BRIDGE_HIGHWAY_ITEMS } from './bridge-highway.js';
 import { FITOUT_DEMO_ITEMS } from './fitout-demo.js';
+import { TRUCKS_TRAILERS_ITEMS } from './trucks-trailers.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -160,6 +161,8 @@ export const PROCEDURAL_ITEMS = [
 	...BRIDGE_HIGHWAY_ITEMS,
 	// Interior fit-out (Baker scaffold, drywall lift, studs, duct, pipe cart, wire cart, threader), crated switchgear, RTU and chiller, dust wall, negative air machine, decon trailer, demolition robot, grapple and pulverizer excavators (fitout-demo.js).
 	...FITOUT_DEMO_ITEMS,
+	// Knuckle-boom drywall truck, roll-off, pneumatic tanker, volumetric mixer, combo vac, side dump, crew van, 55 ft bucket truck, mechanic's truck; gooseneck, tag, utility, dump and fuel trailers and a loaded lowboy (trucks-trailers.js).
+	...TRUCKS_TRAILERS_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {

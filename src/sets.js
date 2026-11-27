@@ -713,6 +713,24 @@ export const SETS = [
 			{ item: 'water-truck-4000gal', right: 16, forward: 13, turn: 270 },
 		],
 	},
+	{
+		id: 'set-equipment-delivery',
+		name: 'Equipment delivery at the gate (loaded lowboy, gooseneck with track loader, tag trailer with mini excavator, knuckle-boom drywall truck, flagger, cones)',
+		keywords: 'equipment delivery mobilization mobilisation lowboy float gooseneck tag trailer boom truck drywall delivery staging gate unloading',
+		// Side by side with their fronts lined up towards the gate, the boom truck on the right with
+		// its crane reaching out over its right side; a flagger and cones at the gate and a worker
+		// guiding the unload at the back.
+		members: [
+			{ item: 'lowboy-loaded-excavator', right: - 10, forward: 0.2, turn: 0 },
+			{ item: 'gooseneck-trailer-ctl', right: - 5.3, forward: 2.5, turn: 0 },
+			{ item: 'tag-trailer-mini-excavator', right: - 1, forward: 3.6, turn: 0 },
+			// Its middle is out to the right of the truck, as the boom reaches 8 m that way.
+			{ item: 'knuckle-boom-delivery-truck', right: 7.2, forward: 4, turn: 0 },
+			...[ - 12, - 7.5, - 3, 1.5 ].map( right => ( { item: 'traffic-cone', right, forward: 13, turn: 0 } ) ),
+			{ item: 'flagger', right: 6, forward: 14, turn: 0 },
+			{ item: 'worker-pointing', right: - 7.5, forward: - 9, turn: 90 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
