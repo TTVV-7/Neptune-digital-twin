@@ -115,6 +115,26 @@ export const SETS = [
 		],
 	},
 	{
+		id: 'set-paving-train',
+		name: 'Asphalt paving train (distributor, trucks, transfer vehicle, paver, rollers)',
+		keywords: 'paving train asphalt paving mtv shuttle buggy paver rollers tack distributor dump trucks mainline overlay',
+		// In paving order along one lane: the distributor tacking ahead, a truck backed onto the
+		// transfer vehicle's hopper with the next one waiting beside it, the transfer vehicle's
+		// conveyor over the paver's hopper, a screed hand, then the breakdown, pneumatic and
+		// finish rollers behind.
+		members: [
+			{ item: 'asphalt-distributor-truck', right: 0, forward: 40, turn: 0 },
+			{ item: 'dump-truck-tandem', right: 4, forward: 27, turn: 0 },
+			{ item: 'dump-truck-tandem', right: 0, forward: 22.3, turn: 0 },
+			{ item: 'material-transfer-vehicle', right: 0, forward: 9.7, turn: 0 },
+			{ item: 'asphalt-paver-10ft', right: 0, forward: 0, turn: 0 },
+			{ item: 'worker-standing', right: 2.2, forward: - 3.6, turn: 270 },
+			{ item: 'roller-tandem-67in', right: 0, forward: - 9, turn: 0 },
+			{ item: 'roller-pneumatic-9wheel', right: 0.5, forward: - 17, turn: 0 },
+			{ item: 'roller-tandem', right: - 0.8, forward: - 24, turn: 0 },
+		],
+	},
+	{
 		id: 'set-trucks',
 		name: 'Gravel trucks (tandem, tridem, truck and pup, truck and transfer, tri-tri)',
 		keywords: 'trucks gravel aggregate dump tandem tridem pup transfer tri-tri haul',
