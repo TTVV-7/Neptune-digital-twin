@@ -157,7 +157,7 @@ function cab( parts, [ w, h, l ], [ x, y, z ], body ) {
 // A lattice boom from `foot` raised `angle` above horizontal towards -Z, `length` long, its chords
 // [ half width, half depth ] apart in the middle and closer at the foot and head. Returns at( t,
 // x, n ): the point t along it, x across and n towards its back (upper side).
-function latticeBoom( parts, material, foot, angle, length, [ hw, hd ], chord = 0.08 ) {
+export function latticeBoom( parts, material, foot, angle, length, [ hw, hd ], chord = 0.08 ) {
 
 	const along = new Vector3( 0, Math.sin( angle ), - Math.cos( angle ) );
 	const back = new Vector3( 0, Math.cos( angle ), Math.sin( angle ) );
@@ -191,7 +191,7 @@ function latticeBoom( parts, material, foot, angle, length, [ hw, hd ], chord = 
 }
 
 // A crane hook block hanging with its top at `top`, `size` scaling it from a 100 t block.
-function hookBlock( parts, [ x, y, z ], size = 1 ) {
+export function hookBlock( parts, [ x, y, z ], size = 1 ) {
 
 	const s = size;
 	parts.box( YELLOW(), [ 0.8 * s, 1.0 * s, 0.5 * s ], [ x, y - 1.0 * s, z ] );
@@ -205,8 +205,8 @@ function hookBlock( parts, [ x, y, z ], size = 1 ) {
 // A lattice boom crawler crane: tracks, the upper with its machinery house, cab on the left front
 // and counterweight at the back, a gantry, and the boom from its foot pin at the front with the
 // pendants back to the gantry. Stands at y0, its slewing centre at z0. Returns the point at the
-// boom head the hoist ropes hang from.
-function crawlerCrane( parts, { y0 = 0, z0 = 0, track, boom, angle, half = [ 0.85, 0.85 ] } ) {
+// boom head the hoist ropes hang from. more-cranes.js builds its crawler cranes with it too.
+export function crawlerCrane( parts, { y0 = 0, z0 = 0, track, boom, angle, half = [ 0.85, 0.85 ] } ) {
 
 	const k = track.length / 7.7;
 	tracks( parts, track, y0, z0 );

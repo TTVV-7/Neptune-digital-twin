@@ -17,6 +17,7 @@ import { person, PEOPLE_ITEMS } from './people.js';
 import { POWER_ITEMS } from './power-models.js';
 import { TEMP_POWER_ITEMS } from './temp-power.js';
 import { CRANE_ITEMS } from './crane-models.js';
+import { MORE_CRANE_ITEMS } from './more-cranes.js';
 import { TRUCK_ITEMS } from './truck-models.js';
 import { KART_ITEM } from './kart.js';
 import { fencePanel } from './fence-panel.js';
@@ -101,6 +102,8 @@ export const PROCEDURAL_ITEMS = [
 	// (crane-models.js, tower-crane.js).
 	...POWER_ITEMS,
 	...CRANE_ITEMS,
+	// More cranes, aerial work platforms, a material hoist, tower crane parts and rigging (more-cranes.js).
+	...MORE_CRANE_ITEMS,
 	// Temporary power: service pole, spider box, cord reel, cords and lights on stands (temp-power.js).
 	...TEMP_POWER_ITEMS,
 	// Tridem dump trucks, pups, transfer, end dump, belly dump and lowboy trailers (truck-models.js).
