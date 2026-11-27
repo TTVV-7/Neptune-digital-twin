@@ -44,7 +44,7 @@ export const SITE_LOGISTICS_ITEMS = [
 		keywords: 'holding tank wastewater tank sewage tank septic tank grey water black water trailer waste tank pump out vac truck',
 		build: holdingTank },
 	{ id: 'first-aid-trailer-8x16', name: 'First aid / medic trailer (8 × 16 ft, steps and ramp, AED)', category: 'Site trailers & containers',
-		keywords: 'first aid trailer medic trailer first aid room medical trailer emergency treatment aed red cross first aid station',
+		keywords: 'first aid trailer medic trailer first aid room medical trailer emergency treatment aed first aid station first aid cross',
 		build: firstAidTrailer },
 	{ id: 'balloon-light-tripod', name: 'Balloon light on tripod (4,000 W LED, glare-free, 12 ft stand)', category: 'Power & air',
 		keywords: 'balloon light glare free light airstar night work lighting paving light tripod light moon light',
@@ -154,17 +154,20 @@ function wheel( parts, x, z, r, w ) {
 
 // A small single-axle sign trailer: a deck `width` by `length` at `deckY`, the axle under its
 // middle, the tongue to the back (+Z, so a sign on the front faces traffic) and a levelling jack
-// at each corner, down on its pad.
-function signTrailer( parts, { width, length, deckY, colour } ) {
+// at each corner, down on its pad. `tongue: -1` puts the tongue to the front (-Z) instead, the
+// way towed equipment with no sign faces.
+function signTrailer( parts, { width, length, deckY, colour, tongue: side = 1 } ) {
 
 	const frame = galvanised();
 	const r = 0.3;
 	parts.box( frame, [ width, 0.1, length ], [ 0, deckY, 0 ] );
-	const tongue = length / 2 + 1.2;
-	parts.path( frame, [ [ - 0.45, deckY + 0.05, length / 2 - 0.1 ], [ 0, deckY + 0.05, tongue ], [ 0.45, deckY + 0.05, length / 2 - 0.1 ] ], 0.04, 6 );
+	const tongue = side * ( length / 2 + 1.2 );
+	const root = side * ( length / 2 - 0.1 );
+	const jack = tongue - side * 0.25;
+	parts.path( frame, [ [ - 0.45, deckY + 0.05, root ], [ 0, deckY + 0.05, tongue ], [ 0.45, deckY + 0.05, root ] ], 0.04, 6 );
 	parts.cylinder( frame, 0.045, 0.1, [ 0, deckY, tongue ], 10 );
-	parts.cylinder( dark(), 0.025, deckY - 0.04, [ 0, 0.04, tongue - 0.25 ], 8 );
-	parts.box( dark(), [ 0.12, 0.04, 0.12 ], [ 0, 0, tongue - 0.25 ] );
+	parts.cylinder( dark(), 0.025, deckY - 0.04, [ 0, 0.04, jack ], 8 );
+	parts.box( dark(), [ 0.12, 0.04, 0.12 ], [ 0, 0, jack ] );
 
 	for ( const s of [ - 1, 1 ] ) {
 
@@ -823,7 +826,7 @@ function holdingTank() {
 
 }
 
-// An 8 × 16 ft first aid trailer on blocking behind a skirt: white walls with red crosses and
+// An 8 × 16 ft first aid trailer on blocking behind a skirt: white walls with green-and-white crosses and
 // FIRST AID lettering, the door on the front with an AED sign by it, windows, a wall AC unit on
 // the right end, and a landing at the door with steps down to the front and a railed ramp off to
 // the right for a stretcher or wheelchair.
@@ -863,15 +866,19 @@ function firstAidTrailer() {
 	parts.box( mat( 0xd9d9d4, { roughness: 0.6 } ), [ 0.35, 0.45, 0.6 ], [ length / 2 + 0.17, floor + 1.4, 0 ] );
 	for ( let i = 0; i < 5; i ++ ) parts.box( dark(), [ 0.01, 0.02, 0.5 ], [ length / 2 + 0.35, floor + 1.5 + i * 0.06, 0 ] );
 
-	// Markings: a red cross and FIRST AID on the front, back and both ends, and the AED sign.
+	// Markings: the first aid symbol (a white cross on a green square, ISO 7010 E003) and FIRST AID
+	// on the front, back and both ends, and the AED sign.
 	const marking = drawn( 'first aid marking', [ 512, 192 ], ( ctx, w, h ) => {
 
 		ctx.fillStyle = '#ffffff';
 		ctx.fillRect( 0, 0, w, h );
-		ctx.fillStyle = '#d0141e';
+		ctx.fillStyle = '#1e9a4a';
 		const c = 96;
-		ctx.fillRect( c - 26, 16, 52, 160 );
-		ctx.fillRect( c - 80, 70, 160, 52 );
+		ctx.fillRect( c - 84, 12, 168, 168 );
+		ctx.fillStyle = '#ffffff';
+		ctx.fillRect( c - 20, 36, 40, 120 );
+		ctx.fillRect( c - 60, 76, 120, 40 );
+		ctx.fillStyle = '#145c2e';
 		ctx.font = 'bold 76px sans-serif';
 		ctx.textBaseline = 'middle';
 		ctx.fillText( 'FIRST', 196, 60 );
@@ -995,35 +1002,36 @@ function balloonLight() {
 
 // A trailer that brings internet to a remote site: a single-axle trailer on its jacks with an
 // equipment and battery cabinet, three solar panels over it, a satellite dish on the deck, and a
-// 20 ft mast at the front topped with LTE panel antennas, Wi-Fi omnis and a beacon.
+// 20 ft mast at the back topped with LTE panel antennas, Wi-Fi omnis and a beacon. The drawbar is
+// to the front (-Z), like the generators and light towers.
 function internetMast() {
 
 	const parts = new Parts();
 	const body = white();
 	const alu = galvanised();
 	const deckY = 0.5;
-	signTrailer( parts, { width: 1.6, length: 2.6, deckY, colour: body } );
+	signTrailer( parts, { width: 1.6, length: 2.6, deckY, colour: body, tongue: - 1 } );
 
 	// The cabinet, with vents and a door seam on the front, and the solar panels above.
 	const cabTop = deckY + 0.1 + 0.9;
-	parts.box( body, [ 1.3, 0.9, 1.3 ], [ 0, deckY + 0.1, 0.45 ] );
-	parts.box( dark(), [ 0.004, 0.75, 0.004 ], [ 0, deckY + 0.15, - 0.205 ] );
-	for ( let i = 0; i < 4; i ++ ) parts.box( dark(), [ 0.3, 0.015, 0.01 ], [ 0.35, deckY + 0.6 + i * 0.05, - 0.2 ] );
-	solarPanels( parts, 3, [ 0.66, 1.6 ], [ cabTop + 0.75, 0.5 ], - 18 * Math.PI / 180, cabTop );
+	parts.box( body, [ 1.3, 0.9, 1.3 ], [ 0, deckY + 0.1, - 0.45 ] );
+	parts.box( dark(), [ 0.004, 0.75, 0.004 ], [ 0, deckY + 0.15, - 1.105 ] );
+	for ( let i = 0; i < 4; i ++ ) parts.box( dark(), [ 0.3, 0.015, 0.01 ], [ 0.35, deckY + 0.6 + i * 0.05, - 1.1 ] );
+	solarPanels( parts, 3, [ 0.66, 1.6 ], [ cabTop + 0.75, - 0.5 ], - 18 * Math.PI / 180, cabTop );
 
-	// The satellite dish on a short post at the back right of the deck, aimed up and back.
+	// The satellite dish on a short post at the front right of the deck, aimed up and forward.
 	const dish = white();
-	const post = [ 0.55, deckY + 0.1, 1.2 ];
+	const post = [ 0.55, deckY + 0.1, - 1.2 ];
 	parts.cylinder( alu, 0.035, 0.75, post, 10 );
 	const centre = [ post[ 0 ], post[ 1 ] + 0.95, post[ 2 ] ];
-	const aim = [ 0, Math.sin( 0.7 ), Math.cos( 0.7 ) ];
+	const aim = [ 0, Math.sin( 0.7 ), - Math.cos( 0.7 ) ];
 	parts.rod( dish, centre, [ centre[ 0 ] - aim[ 0 ] * 0.14, centre[ 1 ] - aim[ 1 ] * 0.14, centre[ 2 ] - aim[ 2 ] * 0.14 ], [ 0.42, 0.06 ], 20 );
 	parts.rod( alu, [ centre[ 0 ], centre[ 1 ] - 0.4, centre[ 2 ] ], [ centre[ 0 ], centre[ 1 ] - 0.12, centre[ 2 ] ], 0.03, 8 );
-	parts.rod( alu, [ centre[ 0 ], centre[ 1 ] - 0.3, centre[ 2 ] + 0.02 ], [ centre[ 0 ], centre[ 1 ] + aim[ 1 ] * 0.5, centre[ 2 ] + aim[ 2 ] * 0.5 ], 0.012, 6 );
+	parts.rod( alu, [ centre[ 0 ], centre[ 1 ] - 0.3, centre[ 2 ] - 0.02 ], [ centre[ 0 ], centre[ 1 ] + aim[ 1 ] * 0.5, centre[ 2 ] + aim[ 2 ] * 0.5 ], 0.012, 6 );
 	parts.box( dark(), [ 0.08, 0.08, 0.12 ], [ centre[ 0 ], centre[ 1 ] + aim[ 1 ] * 0.5 - 0.04, centre[ 2 ] + aim[ 2 ] * 0.5 ] );
 
 	// The mast: a base box and three sections narrowing to 20 ft.
-	const mastZ = - 0.6;
+	const mastZ = 0.6;
 	const top = 20 * FT;
 	parts.box( body, [ 0.22, 1.0, 0.22 ], [ 0, deckY + 0.1, mastZ ] );
 	for ( const [ w, y0, y1 ] of [ [ 0.15, cabTop, 3.0 ], [ 0.11, 3.0, 4.6 ], [ 0.08, 4.6, top - 0.6 ] ] ) parts.box( alu, [ w, y1 - y0, w ], [ 0, y0, mastZ ] );
