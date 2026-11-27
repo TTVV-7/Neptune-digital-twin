@@ -2,7 +2,7 @@
 //
 //   npm run add-asset -- <source> --id pickup --name "Pickup truck" --category Vehicles \
 //     --length 5.9 [--front=+z] [--max-texture 1024] [--simplify 0.3] [--file local.glb] \
-//     [--credit "Logo by ..."] [--new-thumb]
+//     [--credit "Logo by ..."] [--changes "Compressed and rescaled for this project; ..."] [--new-thumb]
 //   (--scale 0.01 instead of --length when the factor from file units to metres is known;
 //   rigged models need --scale, as they are measured in their bind pose)
 //
@@ -13,12 +13,16 @@
 // recorded with a thumbnail and credit in library.json and CREDITS.md. --simplify keeps that
 // fraction of the triangles, for detailed models that are too heavy for a browser. The model's
 // description is printed: read it for anyone else to credit (e.g. a logo's designer), which
-// goes in --credit, and for any extra conditions.
+// goes in --credit, and for any extra conditions. CC Attribution asks for changes to be indicated:
+// when a model was changed by more than compressing and rescaling (copies arranged, ground cut
+// away, recoloured), say so in --changes, which replaces "Compressed and rescaled for this
+// project" in its credit. Both are kept in the entry's source, so CREDITS.md, which is written
+// afresh from library.json each run, never loses them.
 //
 // Running it again for an id already in the library (to try another --front, say) replaces the
 // entry but keeps what was added to it by hand, such as a machine's `drive` tuning. For the same
 // model it also keeps the thumbnail (some were rendered in the app instead; --new-thumb fetches
-// the source's again), an earlier --credit, and a rigged model's size, which is measured in its
+// the source's again), an earlier --credit and --changes, and a rigged model's size, which is measured in its
 // bind pose and so may have been corrected by hand.
 //
 // Sketchfab needs an API token (sketchfab.com > Settings > Password & API) in an environment
@@ -56,6 +60,7 @@ const { values: opts, positionals } = parseArgs( {
 		simplify: { type: 'string' },
 		file: { type: 'string' },
 		credit: { type: 'string' },
+		changes: { type: 'string' },
 		'new-thumb': { type: 'boolean' },
 	},
 } );
@@ -99,6 +104,14 @@ else if ( same?.source.extraCredit ) {
 
 	source.extraCredit = same.source.extraCredit;
 	kept.push( 'extra credit' );
+
+}
+
+if ( opts.changes ) source.changes = opts.changes;
+else if ( same?.source.changes ) {
+
+	source.changes = same.source.changes;
+	kept.push( 'note of changes' );
 
 }
 
@@ -306,10 +319,11 @@ async function fromPolyHaven( id ) {
 
 function credits( list, before = '' ) {
 
-	// Our own models (add-own-asset.mjs) have no source and need no credit.
+	// Our own models (add-own-asset.mjs) have no source and need no credit. Each credit ends with
+	// what was changed in the model (source.changes), compressing and rescaling if nothing more.
 	const lines = list.filter( item => item.source ).map( item => `- **${ item.name }** (\`${ item.file }\`): "[${ item.source.title }](${ item.source.url })" by ` +
 		`${ item.source.authorUrl ? `[${ item.source.author }](${ item.source.authorUrl })` : item.source.author } on ${ item.source.site }, ` +
-		`licensed [${ item.source.license }](${ item.source.licenseUrl }).${ item.source.extraCredit ? ` ${ item.source.extraCredit }.` : '' } Compressed and rescaled for this project.` );
+		`licensed [${ item.source.license }](${ item.source.licenseUrl }).${ item.source.extraCredit ? ` ${ item.source.extraCredit }.` : '' } ${ item.source.changes ?? 'Compressed and rescaled for this project' }.` );
 	// The file's opening, up to its list, is kept as it is: notes written into it by hand stay.
 	const start = before.search( /^- \*\*/m );
 	const head = start > 0 ? before.slice( 0, start ) : '# Asset library credits\n\nThese models come from Sketchfab and Poly Haven under the licences listed. ' +

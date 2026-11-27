@@ -628,13 +628,13 @@ export const SETS = [
 	},
 	{
 		id: 'set-demolition-yard',
-		name: 'Demolition yard (part-demolished building, rubble and scrap piles, roll-off, jaw crusher, water truck)',
-		keywords: 'demolition demo wreck tear down rubble debris concrete rebar brick scrap metal salvage crusher dust',
+		name: 'Demolition yard (part-demolished building, breaker excavator, rubble and scrap piles, roll-off, jaw crusher, water truck)',
+		keywords: 'demolition demo wreck tear down rubble debris concrete rebar brick scrap metal salvage crusher dust hoe ram breaker hammer',
 		members: [
-			// The building being taken down at the back, the demolition excavator facing it and the
-			// sorted piles in front: concrete with rebar either side, brick to one side, scrap metal to the other.
+			// The building being taken down at the back, the excavator breaking up its front wall with
+			// its hammer and the sorted piles in front: concrete with rebar either side, brick to one side, scrap metal to the other.
 			{ item: 'partially-demolished-building', right: 0, forward: - 12, turn: 0 },
-			{ item: 'excavator-demolition-grapple', right: - 4, forward: 1, turn: 180 },
+			{ item: 'excavator-hammer-30t', right: - 4, forward: 1, turn: 180 },
 			{ item: 'concrete-rubble-pile-rebar', right: - 12, forward: 1.5, turn: 20 },
 			{ item: 'concrete-rubble-pile-rebar', right: 4.5, forward: 0.5, turn: 0 },
 			{ item: 'brick-rubble-pile', right: - 19, forward: 2, turn: 90 },

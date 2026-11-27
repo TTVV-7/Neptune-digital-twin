@@ -544,10 +544,10 @@ function showLibraryCredits( library ) {
 	const link = ( href, text ) => Object.assign( document.createElement( 'a' ), { href, textContent: text, target: '_blank', rel: 'noopener' } );
 	for ( const { name, source } of downloaded ) {
 
-		// The licences ask for the licence itself and a note that the models were changed.
+		// The licences ask for the licence itself and a note of how the models were changed.
 		const item = document.createElement( 'li' );
 		item.append( `${ name }: `, link( source.url, source.title ), ` by ${ source.author }, `, link( source.licenseUrl, source.license ),
-			source.extraCredit ? `. ${ source.extraCredit }` : '', '. Modified: compressed and rescaled.' );
+			source.extraCredit ? `. ${ source.extraCredit }` : '', `. ${ source.changes ?? 'Modified: compressed and rescaled' }.` );
 		list.append( item );
 
 	}

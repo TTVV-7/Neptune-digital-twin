@@ -837,32 +837,6 @@
 		}
 	},
 	{
-		"id": "rusty-drum-cluster",
-		"name": "Rusty steel drums, cluster of 8 (55 gal, 3 tipped over)",
-		"category": "Environmental & erosion control",
-		"file": "rusty-drum-cluster.glb",
-		"thumb": "thumbs/rusty-drum-cluster.webp",
-		"front": "+z",
-		"scale": 0.371,
-		"dimensions": {
-			"length": 2.05,
-			"width": 2.8,
-			"height": 0.88
-		},
-		"triangles": 9696,
-		"sizeKB": 724,
-		"source": {
-			"site": "Sketchfab",
-			"id": "8df46c47099a4b9d9bc4a69edcad1b88",
-			"url": "https://sketchfab.com/3d-models/low-poly-closed-barrels-8df46c47099a4b9d9bc4a69edcad1b88",
-			"title": "Low Poly | Closed Barrels",
-			"author": "Anna Denisova",
-			"authorUrl": "https://sketchfab.com/Den1121",
-			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
-		}
-	},
-	{
 		"id": "straw-bale-stack",
 		"name": "Straw bales, stacked (16 small square bales, 2.8 m / 9 ft long)",
 		"category": "Environmental & erosion control",
@@ -885,7 +859,8 @@
 			"author": "NoodlePoodle",
 			"authorUrl": "https://sketchfab.com/NoodePoodle",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "The bale stacked 16 times and recoloured to straw. Compressed and rescaled for this project"
 		}
 	},
 	{
@@ -1441,19 +1416,19 @@
 	},
 	{
 		"id": "wrecked-car",
-		"name": "Abandoned car wreck, rusted sedan (14.5 ft)",
+		"name": "Abandoned car wreck, rusted sedan (14 ft)",
 		"category": "Landscaping & site context",
 		"file": "wrecked-car.glb",
 		"thumb": "thumbs/wrecked-car.webp",
 		"front": "-x",
 		"scale": 6.54103,
 		"dimensions": {
-			"length": 4.4,
+			"length": 4.24,
 			"width": 1.75,
-			"height": 1.16
+			"height": 1.15
 		},
-		"triangles": 133315,
-		"sizeKB": 1368,
+		"triangles": 123766,
+		"sizeKB": 1285,
 		"source": {
 			"site": "Sketchfab",
 			"id": "edf5a6638e0e4176893192a3913e195f",
@@ -1462,7 +1437,8 @@
 			"author": "vswrks",
 			"authorUrl": "https://sketchfab.com/vswrks",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; scanned ground and the shards of it hanging below the body removed"
 		}
 	},
 	{
@@ -1488,7 +1464,8 @@
 			"author": "Igor_K.",
 			"authorUrl": "https://sketchfab.com/Igor_K.",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "One sapling from the pack, set four times on burlap root balls and a pallet modelled for this project. Compressed and rescaled for this project"
 		}
 	},
 	{
@@ -1514,7 +1491,8 @@
 			"author": "b_nealie",
 			"authorUrl": "https://sketchfab.com/b_nealie",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; sand ground removed and levelled"
 		}
 	},
 	{
@@ -1540,7 +1518,8 @@
 			"author": "LOLIPOP",
 			"authorUrl": "https://sketchfab.com/lolipop_1707",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "One tree from the pack. Compressed and rescaled for this project"
 		}
 	},
 	{
@@ -1592,7 +1571,8 @@
 			"author": "AlkaliDragon",
 			"authorUrl": "https://sketchfab.com/AlkaliDragon",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; 14 copies arranged into a clump"
 		}
 	},
 	{
@@ -2088,7 +2068,8 @@
 			"author": "LOLIPOP",
 			"authorUrl": "https://sketchfab.com/lolipop_1707",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Three of the tall grass models grouped into one clump. Compressed and rescaled for this project"
 		}
 	},
 	{
@@ -2140,7 +2121,8 @@
 			"author": "soleares2018",
 			"authorUrl": "https://sketchfab.com/soleares2018",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; terrain below ground level cut off, squared to the axes, simplified"
 		}
 	},
 	{
@@ -2349,7 +2331,8 @@
 			"author": "Pasha",
 			"authorUrl": "https://sketchfab.com/homxis-mydqyp-juNke1",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed, thinned and rescaled for this project"
 		}
 	},
 	{
@@ -3056,7 +3039,8 @@
 			"author": "bimage",
 			"authorUrl": "https://sketchfab.com/bimage",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; recoloured to mulch brown"
 		}
 	},
 	{
@@ -3082,7 +3066,8 @@
 			"author": "MaX3Dd",
 			"authorUrl": "https://sketchfab.com/MaX3Dd",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; 20 copies stacked"
 		}
 	},
 	{
@@ -5316,7 +5301,8 @@
 			"author": "axonite",
 			"authorUrl": "https://sketchfab.com/axonite",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; ground skirt removed and levelled"
 		}
 	},
 	{
@@ -5342,7 +5328,8 @@
 			"author": "Оrрндп ЯТG",
 			"authorUrl": "https://sketchfab.com/orphanrtg",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; ground skirt and a loose block removed"
 		}
 	},
 	{
@@ -5368,12 +5355,13 @@
 			"author": "matousekfoto",
 			"authorUrl": "https://sketchfab.com/matousekfoto",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; ground skirt removed, heap made taller, green recoloured brown and branches added"
 		}
 	},
 	{
 		"id": "concrete-rubble-pile-rebar",
-		"name": "Concrete demolition rubble with exposed rebar (5 m / 17 ft across, 1.8 m high)",
+		"name": "Concrete demolition rubble with exposed rebar and stacked slabs (5 m / 17 ft across, 1.8 m high)",
 		"category": "Waste",
 		"file": "concrete-rubble-pile-rebar.glb",
 		"thumb": "thumbs/concrete-rubble-pile-rebar.webp",
@@ -5394,7 +5382,8 @@
 			"author": "Оrрндп ЯТG",
 			"authorUrl": "https://sketchfab.com/orphanrtg",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; ground skirt removed"
 		}
 	},
 	{
@@ -5420,7 +5409,8 @@
 			"author": "Ramzi Sfeir",
 			"authorUrl": "https://sketchfab.com/RamziSfeir",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; ground skirt removed and levelled, simplified"
 		}
 	},
 	{
@@ -5468,6 +5458,33 @@
 		"own": "Weave-Trial: construction_site/Roll_Off_Dumpster_20yd.glb"
 	},
 	{
+		"id": "rusty-drum-cluster",
+		"name": "Rusty steel drums, cluster of 8 (55 gal, 3 tipped over)",
+		"category": "Waste",
+		"file": "rusty-drum-cluster.glb",
+		"thumb": "thumbs/rusty-drum-cluster.webp",
+		"front": "+z",
+		"scale": 0.371,
+		"dimensions": {
+			"length": 2.05,
+			"width": 2.8,
+			"height": 0.88
+		},
+		"triangles": 9696,
+		"sizeKB": 724,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8df46c47099a4b9d9bc4a69edcad1b88",
+			"url": "https://sketchfab.com/3d-models/low-poly-closed-barrels-8df46c47099a4b9d9bc4a69edcad1b88",
+			"title": "Low Poly | Closed Barrels",
+			"author": "Anna Denisova",
+			"authorUrl": "https://sketchfab.com/Den1121",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; 8 of the drums arranged into a cluster, 3 tipped over"
+		}
+	},
+	{
 		"id": "scrap-metal-pile",
 		"name": "Scrap metal pile, mixed steel and salvage (9 m / 30 ft across)",
 		"category": "Waste",
@@ -5490,7 +5507,8 @@
 			"author": "Оrрндп ЯТG",
 			"authorUrl": "https://sketchfab.com/orphanrtg",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; ground removed and levelled, simplified"
 		}
 	},
 	{
@@ -5516,7 +5534,8 @@
 			"author": "Оrрндп ЯТG",
 			"authorUrl": "https://sketchfab.com/orphanrtg",
 			"license": "CC Attribution",
-			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"changes": "Compressed and rescaled for this project; ground removed and levelled"
 		}
 	},
 	{
