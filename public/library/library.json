@@ -1388,6 +1388,345 @@
 		"own": "Weave-Trial: construction_site/Wheel_Loader_3yd.glb"
 	},
 	{
+		"id": "boulder-large-2m",
+		"name": "Boulder, large (2 m high, ~7 t)",
+		"category": "Landscaping & site context",
+		"file": "boulder-large-2m.glb",
+		"thumb": "thumbs/boulder-large-2m.webp",
+		"front": "+z",
+		"scale": 0.6623,
+		"dimensions": {
+			"length": 1.6,
+			"width": 1.48,
+			"height": 2
+		},
+		"triangles": 11102,
+		"sizeKB": 612,
+		"source": {
+			"site": "Sketchfab",
+			"id": "620936a382274ab5bc108e1a64e17adc",
+			"url": "https://sketchfab.com/3d-models/realistic-boulder-620936a382274ab5bc108e1a64e17adc",
+			"title": "Realistic boulder",
+			"author": "Luke.G",
+			"authorUrl": "https://sketchfab.com/LukeCG",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "hedge-clipped-8m",
+		"name": "Hedge, clipped (8 m run, 0.9 m high)",
+		"category": "Landscaping & site context",
+		"file": "hedge-clipped-8m.glb",
+		"thumb": "thumbs/hedge-clipped-8m.webp",
+		"front": "-z",
+		"scale": 0.7036,
+		"dimensions": {
+			"length": 0.88,
+			"width": 8,
+			"height": 0.88
+		},
+		"triangles": 1700,
+		"sizeKB": 546,
+		"source": {
+			"site": "Sketchfab",
+			"id": "96bfd9a2cb854f239c5b58ead1fb431d",
+			"url": "https://sketchfab.com/3d-models/hedge-96bfd9a2cb854f239c5b58ead1fb431d",
+			"title": "Hedge",
+			"author": "Ingenuitee",
+			"authorUrl": "https://sketchfab.com/Ingenuitee",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-linden-12m",
+		"name": "Linden tree, street tree (12 m high, 8 m spread)",
+		"category": "Landscaping & site context",
+		"file": "tree-linden-12m.glb",
+		"thumb": "thumbs/tree-linden-12m.webp",
+		"front": "+z",
+		"scale": 0.76775,
+		"dimensions": {
+			"length": 7.99,
+			"width": 7.77,
+			"height": 12
+		},
+		"triangles": 45605,
+		"sizeKB": 1242,
+		"source": {
+			"site": "Sketchfab",
+			"id": "c0c3aa73cc9945d2a36c01a0d8d6d4bb",
+			"url": "https://sketchfab.com/3d-models/linden-tree-c0c3aa73cc9945d2a36c01a0d8d6d4bb",
+			"title": "Linden tree",
+			"author": "Georgeous",
+			"authorUrl": "https://sketchfab.com/intice184",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "log-pile-cut",
+		"name": "Log pile, cut logs (2.6 m)",
+		"category": "Landscaping & site context",
+		"file": "log-pile-cut.glb",
+		"thumb": "thumbs/log-pile-cut.webp",
+		"front": "+x",
+		"scale": 0.990287,
+		"dimensions": {
+			"length": 2.6,
+			"width": 1.29,
+			"height": 0.71
+		},
+		"triangles": 3858,
+		"sizeKB": 671,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3f4205a30a7d4adda50c775fb8cce06c",
+			"url": "https://sketchfab.com/3d-models/log-pile-game-ready-2k-pbr-3f4205a30a7d4adda50c775fb8cce06c",
+			"title": "Log Pile (Game Ready / 2K PBR)",
+			"author": "Meerschaum Digital",
+			"authorUrl": "https://sketchfab.com/meerschaumdigital",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"extraCredit": "Optimised from \"[Log pile](https://skfb.ly/op7UT)\" by matousekfoto, licensed CC BY 4.0"
+		}
+	},
+	{
+		"id": "log-stack-trunks",
+		"name": "Log stack, felled trunks (5 logs, 4 m)",
+		"category": "Landscaping & site context",
+		"file": "log-stack-trunks.glb",
+		"thumb": "thumbs/log-stack-trunks.webp",
+		"front": "+x",
+		"scale": 1.2868,
+		"dimensions": {
+			"length": 4,
+			"width": 1.43,
+			"height": 0.75
+		},
+		"triangles": 1980,
+		"sizeKB": 627,
+		"source": {
+			"site": "Sketchfab",
+			"id": "0bad9fd158ab4cc187857609f710a440",
+			"url": "https://sketchfab.com/3d-models/log-pile-game-ready-asset-0bad9fd158ab4cc187857609f710a440",
+			"title": "Log pile (game ready asset)",
+			"author": "Aparicio Silva 3D",
+			"authorUrl": "https://sketchfab.com/apariciosilva3D",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-maple-12m",
+		"name": "Maple tree (12 m high, 10 m spread)",
+		"category": "Landscaping & site context",
+		"file": "tree-maple-12m.glb",
+		"thumb": "thumbs/tree-maple-12m.webp",
+		"front": "+z",
+		"scale": 2.0761,
+		"dimensions": {
+			"length": 9.35,
+			"width": 10.27,
+			"height": 12.01
+		},
+		"triangles": 20921,
+		"sizeKB": 1381,
+		"source": {
+			"site": "Sketchfab",
+			"id": "b5e945e7abcc471da6547c04e314774c",
+			"url": "https://sketchfab.com/3d-models/maple-tree-b5e945e7abcc471da6547c04e314774c",
+			"title": "Maple Tree",
+			"author": "evolveduk",
+			"authorUrl": "https://sketchfab.com/evolveduk",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-oak-15m",
+		"name": "Oak tree, mature (15 m high, 16 m spread)",
+		"category": "Landscaping & site context",
+		"file": "tree-oak-15m.glb",
+		"thumb": "thumbs/tree-oak-15m.webp",
+		"front": "+z",
+		"scale": 0.70126,
+		"dimensions": {
+			"length": 16.35,
+			"width": 16.11,
+			"height": 15
+		},
+		"triangles": 26723,
+		"sizeKB": 1197,
+		"source": {
+			"site": "Sketchfab",
+			"id": "748ebed1c5f244bb8f470c4ad5557431",
+			"url": "https://sketchfab.com/3d-models/petiolate-oak-tree-748ebed1c5f244bb8f470c4ad5557431",
+			"title": "Petiolate oak tree",
+			"author": "Georgeous",
+			"authorUrl": "https://sketchfab.com/intice184",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-pine-20m",
+		"name": "Pine tree, Scots pine (20 m high, 7 m spread)",
+		"category": "Landscaping & site context",
+		"file": "tree-pine-20m.glb",
+		"thumb": "thumbs/tree-pine-20m.webp",
+		"front": "+z",
+		"scale": 1.5432,
+		"dimensions": {
+			"length": 7.63,
+			"width": 6.97,
+			"height": 19.99
+		},
+		"triangles": 20327,
+		"sizeKB": 985,
+		"source": {
+			"site": "Sketchfab",
+			"id": "6c0ca146235e49529828136cd0cee63a",
+			"url": "https://sketchfab.com/3d-models/pine-tree-6c0ca146235e49529828136cd0cee63a",
+			"title": "Pine tree",
+			"author": "Georgeous",
+			"authorUrl": "https://sketchfab.com/intice184",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "boulder-riprap-1m",
+		"name": "Rip-rap / armour stone boulder (1.1 m, ~2 t)",
+		"category": "Landscaping & site context",
+		"file": "boulder-riprap-1m.glb",
+		"thumb": "thumbs/boulder-riprap-1m.webp",
+		"front": "+z",
+		"scale": 0.01,
+		"dimensions": {
+			"length": 1.01,
+			"width": 1.15,
+			"height": 1.1
+		},
+		"triangles": 18024,
+		"sizeKB": 620,
+		"source": {
+			"site": "Sketchfab",
+			"id": "0079cb0e717c4aeebe6bca21ec21b0d9",
+			"url": "https://sketchfab.com/3d-models/rock-boulder-game-ready-asset-0079cb0e717c4aeebe6bca21ec21b0d9",
+			"title": "Rock boulder (game ready asset)",
+			"author": "Aparicio Silva 3D",
+			"authorUrl": "https://sketchfab.com/apariciosilva3D",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "shrub-round",
+		"name": "Shrub, round (1.6 m across, 1.2 m high)",
+		"category": "Landscaping & site context",
+		"file": "shrub-round.glb",
+		"thumb": "thumbs/shrub-round.webp",
+		"front": "+z",
+		"scale": 0.953909,
+		"dimensions": {
+			"length": 1.6,
+			"width": 1.46,
+			"height": 1.21
+		},
+		"triangles": 244,
+		"sizeKB": 300,
+		"source": {
+			"site": "Sketchfab",
+			"id": "7a0f2bf2982c4ff8bacc67856fdbfae2",
+			"url": "https://sketchfab.com/3d-models/cliff-shrub-for-terrain-7a0f2bf2982c4ff8bacc67856fdbfae2",
+			"title": "Cliff Shrub For Terrain",
+			"author": "Natural_Disbuster",
+			"authorUrl": "https://sketchfab.com/lemedesign",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-spruce-18m",
+		"name": "Spruce tree, conifer (18 m high, 9 m spread)",
+		"category": "Landscaping & site context",
+		"file": "tree-spruce-18m.glb",
+		"thumb": "thumbs/tree-spruce-18m.webp",
+		"front": "+z",
+		"scale": 1.08499,
+		"dimensions": {
+			"length": 9.14,
+			"width": 8.78,
+			"height": 18
+		},
+		"triangles": 10289,
+		"sizeKB": 757,
+		"source": {
+			"site": "Sketchfab",
+			"id": "7a5db417827244d98827459bce0cc944",
+			"url": "https://sketchfab.com/3d-models/spruce-tree-7a5db417827244d98827459bce0cc944",
+			"title": "Spruce tree",
+			"author": "Georgeous",
+			"authorUrl": "https://sketchfab.com/intice184",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-street-young-6m",
+		"name": "Street tree, young (6 m high, 3 m spread)",
+		"category": "Landscaping & site context",
+		"file": "tree-street-young-6m.glb",
+		"thumb": "thumbs/tree-street-young-6m.webp",
+		"front": "+z",
+		"scale": 0.63158,
+		"dimensions": {
+			"length": 2.67,
+			"width": 2.72,
+			"height": 6
+		},
+		"triangles": 4512,
+		"sizeKB": 512,
+		"source": {
+			"site": "Sketchfab",
+			"id": "f36443d3e59946bfa38b3f5cb90ea5fa",
+			"url": "https://sketchfab.com/3d-models/elm-tree-f36443d3e59946bfa38b3f5cb90ea5fa",
+			"title": "Elm tree",
+			"author": "evolveduk",
+			"authorUrl": "https://sketchfab.com/evolveduk",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-stump-poplar",
+		"name": "Tree stump, cut poplar (1.2 m across roots)",
+		"category": "Landscaping & site context",
+		"file": "tree-stump-poplar.glb",
+		"thumb": "thumbs/tree-stump-poplar.webp",
+		"front": "+z",
+		"scale": 0.170491,
+		"dimensions": {
+			"length": 1.2,
+			"width": 1.1,
+			"height": 1.07
+		},
+		"triangles": 31448,
+		"sizeKB": 726,
+		"source": {
+			"site": "Sketchfab",
+			"id": "604a5c25e3b84fa0ae520460112c9f92",
+			"url": "https://sketchfab.com/3d-models/old-poplar-tree-stump-free-604a5c25e3b84fa0ae520460112c9f92",
+			"title": "Old Poplar tree stump -free",
+			"author": "matousekfoto",
+			"authorUrl": "https://sketchfab.com/matousekfoto",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "conveyor-gallery-12m",
 		"name": "Conveyor gallery module on bent (12 m)",
 		"category": "Material handling",
@@ -1706,6 +2045,32 @@
 		"own": "Weave-Trial: construction_site/Concrete_Pipe_Stack_24in.glb"
 	},
 	{
+		"id": "gravel-pile",
+		"name": "Gravel pile (6 × 4.3 m, 1.2 m high, ~20 m³)",
+		"category": "Materials",
+		"file": "gravel-pile.glb",
+		"thumb": "thumbs/gravel-pile.webp",
+		"front": "+z",
+		"scale": 0.289581,
+		"dimensions": {
+			"length": 6,
+			"width": 4.32,
+			"height": 1.25
+		},
+		"triangles": 12140,
+		"sizeKB": 578,
+		"source": {
+			"site": "Sketchfab",
+			"id": "f882c34269f54657b761e69cd18fd242",
+			"url": "https://sketchfab.com/3d-models/pile-of-gravel-f882c34269f54657b761e69cd18fd242",
+			"title": "pile of gravel",
+			"author": "xtremederpie",
+			"authorUrl": "https://sketchfab.com/xtremederpie",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "ibc-tote",
 		"name": "IBC tote (1000 L)",
 		"category": "Materials",
@@ -2017,6 +2382,32 @@
 		}
 	},
 	{
+		"id": "worker-chainsaw",
+		"name": "Arborist / worker with chainsaw, hard hat (1.75 m)",
+		"category": "People",
+		"file": "worker-chainsaw.glb",
+		"thumb": "thumbs/worker-chainsaw.webp",
+		"front": "-z",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.54,
+			"width": 0.67,
+			"height": 1.76
+		},
+		"triangles": 52517,
+		"sizeKB": 756,
+		"source": {
+			"site": "Sketchfab",
+			"id": "48e0e21c308e4ec39f537c5857185a46",
+			"url": "https://sketchfab.com/3d-models/worker-chain-saw-48e0e21c308e4ec39f537c5857185a46",
+			"title": "Worker chain saw",
+			"author": "grewe.juergen",
+			"authorUrl": "https://sketchfab.com/grewe.juergen",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "worker-coverall-broom",
 		"name": "Construction labourer, hi-vis coveralls with broom (1.78 m)",
 		"category": "People",
@@ -2142,6 +2533,162 @@
 			"title": "Construction Worker in Orange Safety Vest",
 			"author": "restore50",
 			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pedestrian-man-suit",
+		"name": "Pedestrian, man in suit, standing (1.80 m)",
+		"category": "People",
+		"file": "pedestrian-man-suit.glb",
+		"thumb": "thumbs/pedestrian-man-suit.webp",
+		"front": "+z",
+		"scale": 0.00962,
+		"dimensions": {
+			"length": 0.43,
+			"width": 0.62,
+			"height": 1.8
+		},
+		"triangles": 49982,
+		"sizeKB": 451,
+		"source": {
+			"site": "Sketchfab",
+			"id": "e211ffd52a96416e89c0cc415a388d61",
+			"url": "https://sketchfab.com/3d-models/dennis-posed-004-male-standing-business-model-e211ffd52a96416e89c0cc415a388d61",
+			"title": "Dennis Posed 004 - Male Standing Business Model",
+			"author": "Renderpeople",
+			"authorUrl": "https://sketchfab.com/renderpeople",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pedestrian-man-dog",
+		"name": "Pedestrian, man walking a dog (1.80 m)",
+		"category": "People",
+		"file": "pedestrian-man-dog.glb",
+		"thumb": "thumbs/pedestrian-man-dog.webp",
+		"front": "+z",
+		"scale": 0.947,
+		"dimensions": {
+			"length": 1.45,
+			"width": 1,
+			"height": 1.8
+		},
+		"triangles": 57750,
+		"sizeKB": 1149,
+		"source": {
+			"site": "Sketchfab",
+			"id": "70f7994b44004eb383b85db561ec9082",
+			"url": "https://sketchfab.com/3d-models/man-walking-a-german-shepherd-70f7994b44004eb383b85db561ec9082",
+			"title": "Man Walking a German Shepherd",
+			"author": "restore50",
+			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pedestrian-mother-child",
+		"name": "Pedestrian, woman carrying child (1.71 m)",
+		"category": "People",
+		"file": "pedestrian-mother-child.glb",
+		"thumb": "thumbs/pedestrian-mother-child.webp",
+		"front": "+z",
+		"scale": 0.01,
+		"dimensions": {
+			"length": 0.48,
+			"width": 0.65,
+			"height": 1.71
+		},
+		"triangles": 59940,
+		"sizeKB": 781,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8c9bfd4fb8a444b3a42a4fc31935a2fb",
+			"url": "https://sketchfab.com/3d-models/fabienne-percy-001-mother-and-child-8c9bfd4fb8a444b3a42a4fc31935a2fb",
+			"title": "Fabienne & Percy 001 - Mother and Child",
+			"author": "Renderpeople",
+			"authorUrl": "https://sketchfab.com/renderpeople",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pedestrian-stroller",
+		"name": "Pedestrian, woman pushing a stroller (1.68 m)",
+		"category": "People",
+		"file": "pedestrian-stroller.glb",
+		"thumb": "thumbs/pedestrian-stroller.webp",
+		"front": "+z",
+		"scale": 0.884,
+		"dimensions": {
+			"length": 1.26,
+			"width": 0.55,
+			"height": 1.68
+		},
+		"triangles": 58067,
+		"sizeKB": 1498,
+		"source": {
+			"site": "Sketchfab",
+			"id": "61a9ba3af5e44a8ca191c2aa12b92845",
+			"url": "https://sketchfab.com/3d-models/women-with-stroller-61a9ba3af5e44a8ca191c2aa12b92845",
+			"title": "women with stroller",
+			"author": "inescardullo",
+			"authorUrl": "https://sketchfab.com/inescardullo",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pedestrian-woman-walking-folder",
+		"name": "Pedestrian, woman walking with folder (1.70 m)",
+		"category": "People",
+		"file": "pedestrian-woman-walking-folder.glb",
+		"thumb": "thumbs/pedestrian-woman-walking-folder.webp",
+		"front": "+x",
+		"scale": 0.01,
+		"dimensions": {
+			"length": 0.61,
+			"width": 0.54,
+			"height": 1.7
+		},
+		"triangles": 50004,
+		"sizeKB": 379,
+		"source": {
+			"site": "Sketchfab",
+			"id": "07f308b81bc045c8917104a72ce2ffe4",
+			"url": "https://sketchfab.com/3d-models/mei-posed-001-female-walking-business-model-07f308b81bc045c8917104a72ce2ffe4",
+			"title": "Mei Posed 001 - Female Walking Business Model",
+			"author": "Renderpeople",
+			"authorUrl": "https://sketchfab.com/renderpeople",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pedestrian-woman-walking",
+		"name": "Pedestrian, young woman walking (1.66 m)",
+		"category": "People",
+		"file": "pedestrian-woman-walking.glb",
+		"thumb": "thumbs/pedestrian-woman-walking.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.73,
+			"width": 0.47,
+			"height": 1.65
+		},
+		"triangles": 50000,
+		"sizeKB": 723,
+		"source": {
+			"site": "Sketchfab",
+			"id": "b92bdca7a9cf4798b851a5e883e392af",
+			"url": "https://sketchfab.com/3d-models/stride-in-style-young-woman-walking-b92bdca7a9cf4798b851a5e883e392af",
+			"title": "Stride In Style Young Woman Walking",
+			"author": "kanistra",
+			"authorUrl": "https://sketchfab.com/kanistra",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
