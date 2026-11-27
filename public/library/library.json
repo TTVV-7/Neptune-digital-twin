@@ -668,6 +668,32 @@
 		}
 	},
 	{
+		"id": "crane-hook-block",
+		"name": "Crane hook block (50 t class)",
+		"category": "Cranes & lifts",
+		"file": "crane-hook-block.glb",
+		"thumb": "thumbs/crane-hook-block.webp",
+		"front": "+z",
+		"scale": 0.906851,
+		"dimensions": {
+			"length": 0.41,
+			"width": 0.68,
+			"height": 1.81
+		},
+		"triangles": 33178,
+		"sizeKB": 663,
+		"source": {
+			"site": "Sketchfab",
+			"id": "c23de791ddab490e86c0a27cc2ef79a9",
+			"url": "https://sketchfab.com/3d-models/crane-hook-c23de791ddab490e86c0a27cc2ef79a9",
+			"title": "Crane Hook",
+			"author": "Robert Wojciechowski",
+			"authorUrl": "https://sketchfab.com/robertvoy",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "crane-crawler",
 		"name": "Crawler crane (250 t, lattice boom)",
 		"category": "Cranes & lifts",
@@ -2095,6 +2121,58 @@
 		}
 	},
 	{
+		"id": "worker-orange-vest-belt",
+		"name": "Construction worker, orange vest and tool belt, standing (1.78 m)",
+		"category": "People",
+		"file": "worker-orange-vest-belt.glb",
+		"thumb": "thumbs/worker-orange-vest-belt.webp",
+		"front": "+z",
+		"scale": 0.936743,
+		"dimensions": {
+			"length": 0.4,
+			"width": 0.58,
+			"height": 1.78
+		},
+		"triangles": 71893,
+		"sizeKB": 1328,
+		"source": {
+			"site": "Sketchfab",
+			"id": "1a97c94b13114a1cac814e063da45399",
+			"url": "https://sketchfab.com/3d-models/construction-worker-in-orange-safety-vest-1a97c94b13114a1cac814e063da45399",
+			"title": "Construction Worker in Orange Safety Vest",
+			"author": "restore50",
+			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "worker-walking-clipboard",
+		"name": "Site supervisor, hi-vis vest, walking with clipboard (1.78 m)",
+		"category": "People",
+		"file": "worker-walking-clipboard.glb",
+		"thumb": "thumbs/worker-walking-clipboard.webp",
+		"front": "+z",
+		"scale": 0.939298,
+		"dimensions": {
+			"length": 0.73,
+			"width": 0.67,
+			"height": 1.78
+		},
+		"triangles": 80470,
+		"sizeKB": 1371,
+		"source": {
+			"site": "Sketchfab",
+			"id": "d17e174d9bfc4c8f822072eed04b105d",
+			"url": "https://sketchfab.com/3d-models/construction-worker-in-reflective-safety-gear-d17e174d9bfc4c8f822072eed04b105d",
+			"title": "Construction Worker In Reflective Safety Gear",
+			"author": "restore50",
+			"authorUrl": "https://sketchfab.com/restore50",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "worker-welder",
 		"name": "Welder with MIG torch and mask (1.78 m)",
 		"category": "People",
@@ -2224,6 +2302,32 @@
 		"own": "Weave-Trial: construction_site/LED_Light_Tower.glb"
 	},
 	{
+		"id": "propane-tank-500gal",
+		"name": "Propane tank on legs (500 gal, 10 ft)",
+		"category": "Power & air",
+		"file": "propane-tank-500gal.glb",
+		"thumb": "thumbs/propane-tank-500gal.webp",
+		"front": "+z",
+		"scale": 0.606855,
+		"dimensions": {
+			"length": 3.05,
+			"width": 0.85,
+			"height": 1.46
+		},
+		"triangles": 460,
+		"sizeKB": 123,
+		"source": {
+			"site": "Sketchfab",
+			"id": "0b9597d6959343409017ed7c96533f4a",
+			"url": "https://sketchfab.com/3d-models/propane-tank-0b9597d6959343409017ed7c96533f4a",
+			"title": "Propane Tank",
+			"author": "CommonSpence",
+			"authorUrl": "https://sketchfab.com/commonspence",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "work-light-tripod",
 		"name": "Work light, twin-head on tripod stand",
 		"category": "Power & air",
@@ -2267,6 +2371,32 @@
 		"own": "Weave-Trial: construction_site/Rail_Gondola_Coal.glb"
 	},
 	{
+		"id": "rail-plate-broom",
+		"name": "Plate broom, rail-bound (Knox Kershaw KPB-200 type)",
+		"category": "Rail",
+		"file": "rail-plate-broom.glb",
+		"thumb": "thumbs/rail-plate-broom.webp",
+		"front": "+z",
+		"scale": 0.949495,
+		"dimensions": {
+			"length": 5.62,
+			"width": 2.6,
+			"height": 2.14
+		},
+		"triangles": 173637,
+		"sizeKB": 1395,
+		"source": {
+			"site": "Sketchfab",
+			"id": "d44e4d7a209345f89b03950a9f9f679a",
+			"url": "https://sketchfab.com/3d-models/knox-kershaw-kpb-200-plate-broom-d44e4d7a209345f89b03950a9f9f679a",
+			"title": "Knox Kershaw KPB-200 Plate Broom",
+			"author": "znttnt11",
+			"authorUrl": "https://sketchfab.com/znttnt11",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "railcar-mover",
 		"name": "Railcar mover (road-rail)",
 		"category": "Rail",
@@ -2282,6 +2412,84 @@
 		"triangles": 54712,
 		"sizeKB": 447,
 		"own": "Weave-Trial: construction_site/Road_Rail_Railcar_Mover.glb"
+	},
+	{
+		"id": "rail-crossing-signal",
+		"name": "Railroad crossing signal with gate, arm raised (LED flashers)",
+		"category": "Rail",
+		"file": "rail-crossing-signal.glb",
+		"thumb": "thumbs/rail-crossing-signal.webp",
+		"front": "+z",
+		"scale": 0.790281,
+		"dimensions": {
+			"length": 1,
+			"width": 1.2,
+			"height": 6.1
+		},
+		"triangles": 10917,
+		"sizeKB": 221,
+		"source": {
+			"site": "Sketchfab",
+			"id": "88502dcbab414a0b8c13938caaed2be3",
+			"url": "https://sketchfab.com/3d-models/simple-wc-hayes-grade-crossing-signal-88502dcbab414a0b8c13938caaed2be3",
+			"title": "Simple WC Hayes Grade Crossing Signal",
+			"author": "Signalrenders",
+			"authorUrl": "https://sketchfab.com/Signalrenders",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "locomotive-sw1500",
+		"name": "Switcher locomotive (EMD SW1500, 1,500 hp, 45 ft)",
+		"category": "Rail",
+		"file": "locomotive-sw1500.glb",
+		"thumb": "thumbs/locomotive-sw1500.webp",
+		"front": "+x",
+		"scale": 1.01902,
+		"dimensions": {
+			"length": 13.6,
+			"width": 3.65,
+			"height": 4.75
+		},
+		"triangles": 132328,
+		"sizeKB": 1313,
+		"source": {
+			"site": "Sketchfab",
+			"id": "4777c1cf85ca4f3a9cd4898119a83d48",
+			"url": "https://sketchfab.com/3d-models/emd-sw1500-4777c1cf85ca4f3a9cd4898119a83d48",
+			"title": "EMD SW1500",
+			"author": "OUTPISTON",
+			"authorUrl": "https://sketchfab.com/outpiston",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "rail-tie-inserter",
+		"name": "Tie inserter / remover, rail-bound (Nordco TRIPP type)",
+		"category": "Rail",
+		"file": "rail-tie-inserter.glb",
+		"thumb": "thumbs/rail-tie-inserter.webp",
+		"front": "+z",
+		"scale": 0.85465,
+		"dimensions": {
+			"length": 9.51,
+			"width": 2.6,
+			"height": 3.06
+		},
+		"triangles": 120404,
+		"sizeKB": 762,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5390ac5a091545a2b4a16b3afd197296",
+			"url": "https://sketchfab.com/3d-models/nordco-tripp-tie-inserter-5390ac5a091545a2b4a16b3afd197296",
+			"title": "Nordco TRIPP (Tie Inserter)",
+			"author": "znttnt11",
+			"authorUrl": "https://sketchfab.com/znttnt11",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "shore-post-steel",
@@ -2413,6 +2621,32 @@
 		"own": "Weave-Trial: construction_site/Vibratory_Pile_Hammer.glb"
 	},
 	{
+		"id": "bus-shelter",
+		"name": "Bus shelter with bench and bollards (13 ft)",
+		"category": "Site services",
+		"file": "bus-shelter.glb",
+		"thumb": "thumbs/bus-shelter.webp",
+		"front": "+z",
+		"scale": 0.870928,
+		"dimensions": {
+			"length": 2.18,
+			"width": 4.22,
+			"height": 2.6
+		},
+		"triangles": 11616,
+		"sizeKB": 620,
+		"source": {
+			"site": "Sketchfab",
+			"id": "32cc4c5f6aa147acabdb173e2d2373fa",
+			"url": "https://sketchfab.com/3d-models/standard-bus-stop-32cc4c5f6aa147acabdb173e2d2373fa",
+			"title": "Standard Bus Stop",
+			"author": "Pukka Films",
+			"authorUrl": "https://sketchfab.com/pukkafilms",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "wheelbarrow",
 		"name": "Contractor wheelbarrow",
 		"category": "Site services",
@@ -2464,6 +2698,32 @@
 		"own": "Weave-Trial: construction_site/Dust_Fog_Cannon.glb"
 	},
 	{
+		"id": "fire-extinguisher-20lb",
+		"name": "Fire extinguisher, ABC (20 lb)",
+		"category": "Site services",
+		"file": "fire-extinguisher-20lb.glb",
+		"thumb": "thumbs/fire-extinguisher-20lb.webp",
+		"front": "+z",
+		"scale": 0.882069,
+		"dimensions": {
+			"length": 0.15,
+			"width": 0.27,
+			"height": 0.6
+		},
+		"triangles": 9560,
+		"sizeKB": 254,
+		"source": {
+			"site": "Sketchfab",
+			"id": "7fbd47c7e423461b86d599d30f4dfb33",
+			"url": "https://sketchfab.com/3d-models/fire-extinguisher-7fbd47c7e423461b86d599d30f4dfb33",
+			"title": "Fire Extinguisher",
+			"author": "Kantemir",
+			"authorUrl": "https://sketchfab.com/mottodor",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "torch-cart-oxy-acetylene",
 		"name": "Oxy-acetylene torch cart",
 		"category": "Site services",
@@ -2485,6 +2745,32 @@
 			"title": "Torch Welding Cart",
 			"author": "Jaibu10",
 			"authorUrl": "https://sketchfab.com/Jaibu10",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "park-bench",
+		"name": "Park bench, wood slats on cast iron (6 ft)",
+		"category": "Site services",
+		"file": "park-bench.glb",
+		"thumb": "thumbs/park-bench.webp",
+		"front": "+z",
+		"scale": 0.913784,
+		"dimensions": {
+			"length": 0.66,
+			"width": 1.83,
+			"height": 0.82
+		},
+		"triangles": 4796,
+		"sizeKB": 547,
+		"source": {
+			"site": "Sketchfab",
+			"id": "01a5b64427984632bb44242da3813bb1",
+			"url": "https://sketchfab.com/3d-models/classic-park-bench-low-poly-01a5b64427984632bb44242da3813bb1",
+			"title": "Classic Park Bench (Low Poly)",
+			"author": "Berk Gedik",
+			"authorUrl": "https://sketchfab.com/berkgedik",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -2791,6 +3077,32 @@
 		"own": "Weave-Trial: construction_site/Traffic_Drum_Channelizer.glb"
 	},
 	{
+		"id": "traffic-signal-mast-arm",
+		"name": "Traffic signal pole with mast arm (2 signal heads)",
+		"category": "Traffic control",
+		"file": "traffic-signal-mast-arm.glb",
+		"thumb": "thumbs/traffic-signal-mast-arm.webp",
+		"front": "+z",
+		"scale": 1.53539,
+		"dimensions": {
+			"length": 1.3,
+			"width": 7.01,
+			"height": 7
+		},
+		"triangles": 6787,
+		"sizeKB": 99,
+		"source": {
+			"site": "Sketchfab",
+			"id": "d2c5b630485f42d98c45a74168757209",
+			"url": "https://sketchfab.com/3d-models/traffic-light-d2c5b630485f42d98c45a74168757209",
+			"title": "Traffic Light",
+			"author": "James",
+			"authorUrl": "https://sketchfab.com/james",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "barricade-type-2-light",
 		"name": "Type II barricade with warning light",
 		"category": "Traffic control",
@@ -2912,6 +3224,32 @@
 		}
 	},
 	{
+		"id": "transformer-pad-mount",
+		"name": "Pad-mount transformer on concrete pad (3-phase)",
+		"category": "Utilities",
+		"file": "transformer-pad-mount.glb",
+		"thumb": "thumbs/transformer-pad-mount.webp",
+		"front": "+z",
+		"scale": 1.17766,
+		"dimensions": {
+			"length": 2.21,
+			"width": 1.72,
+			"height": 1.5
+		},
+		"triangles": 66,
+		"sizeKB": 64,
+		"source": {
+			"site": "Sketchfab",
+			"id": "b55aa6ccdfd1454899e081d9b4fce48d",
+			"url": "https://sketchfab.com/3d-models/electrical-transformer-b55aa6ccdfd1454899e081d9b4fce48d",
+			"title": "Electrical Transformer",
+			"author": "Nazzareno Giannelli",
+			"authorUrl": "https://sketchfab.com/nazzarenogiannelli",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "manhole-ring-precast",
 		"name": "Precast concrete manhole ring (1.2 m OD)",
 		"category": "Utilities",
@@ -2933,6 +3271,84 @@
 			"title": "Concrete Ring - Game Ready",
 			"author": "Irog",
 			"authorUrl": "https://sketchfab.com/Irog",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "street-light-cobra",
+		"name": "Street light, cobra head on davit pole (30 ft)",
+		"category": "Utilities",
+		"file": "street-light-cobra.glb",
+		"thumb": "thumbs/street-light-cobra.webp",
+		"front": "+z",
+		"scale": 0.0248192,
+		"dimensions": {
+			"length": 0.45,
+			"width": 3.19,
+			"height": 9.5
+		},
+		"triangles": 159466,
+		"sizeKB": 1692,
+		"source": {
+			"site": "Sketchfab",
+			"id": "fdf1673f1f6d41a99a90312db9bb2351",
+			"url": "https://sketchfab.com/3d-models/chicago-il-streetlight-2-fdf1673f1f6d41a99a90312db9bb2351",
+			"title": "Chicago IL Streetlight 2",
+			"author": "Streetlights & ETC",
+			"authorUrl": "https://sketchfab.com/daffyxxcoolxx",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "utility-pole-transformers",
+		"name": "Utility pole with two transformers (wood, 40 ft class)",
+		"category": "Utilities",
+		"file": "utility-pole-transformers.glb",
+		"thumb": "thumbs/utility-pole-transformers.webp",
+		"front": "+z",
+		"scale": 0.0230988,
+		"dimensions": {
+			"length": 0.72,
+			"width": 2.15,
+			"height": 10.5
+		},
+		"triangles": 5594,
+		"sizeKB": 507,
+		"source": {
+			"site": "Sketchfab",
+			"id": "92f4d3b0ef38472d8c1c62a28fe15135",
+			"url": "https://sketchfab.com/3d-models/utility-pole-pbr-92f4d3b0ef38472d8c1c62a28fe15135",
+			"title": "Utility Pole (PBR)",
+			"author": "SLASH / RENDAR",
+			"authorUrl": "https://sketchfab.com/SLASH-RENDAR",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "ambulance-type-3",
+		"name": "Ambulance, Type III van chassis (22 ft)",
+		"category": "Vehicles",
+		"file": "ambulance-type-3.glb",
+		"thumb": "thumbs/ambulance-type-3.webp",
+		"front": "-x",
+		"scale": 1.01725,
+		"dimensions": {
+			"length": 6.7,
+			"width": 2.85,
+			"height": 2.75
+		},
+		"triangles": 5394,
+		"sizeKB": 174,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3b1c46b48d1e4fbca113916774126899",
+			"url": "https://sketchfab.com/3d-models/ambulance-van-3b1c46b48d1e4fbca113916774126899",
+			"title": "Ambulance Van",
+			"author": "AxiØm",
+			"authorUrl": "https://sketchfab.com/axi0m",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -2984,6 +3400,58 @@
 			"accel": 1.8,
 			"brake": 5,
 			"reverse": 15
+		}
+	},
+	{
+		"id": "box-truck-16ft",
+		"name": "Box truck, cab-over (16 ft box)",
+		"category": "Vehicles",
+		"file": "box-truck-16ft.glb",
+		"thumb": "thumbs/box-truck-16ft.webp",
+		"front": "+z",
+		"scale": 0.169985,
+		"dimensions": {
+			"length": 6.6,
+			"width": 2.68,
+			"height": 2.97
+		},
+		"triangles": 31357,
+		"sizeKB": 595,
+		"source": {
+			"site": "Sketchfab",
+			"id": "b0e8788b6b774fe3a18eda1895a2b8fe",
+			"url": "https://sketchfab.com/3d-models/box-truck-b0e8788b6b774fe3a18eda1895a2b8fe",
+			"title": "Box-truck",
+			"author": "Cristian Rus",
+			"authorUrl": "https://sketchfab.com/CristianRus",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "car-sedan",
+		"name": "Car, sedan (midsize, 16 ft)",
+		"category": "Vehicles",
+		"file": "car-sedan.glb",
+		"thumb": "thumbs/car-sedan.webp",
+		"front": "+z",
+		"scale": 0.984382,
+		"dimensions": {
+			"length": 4.9,
+			"width": 2.13,
+			"height": 1.48
+		},
+		"triangles": 57398,
+		"sizeKB": 1941,
+		"source": {
+			"site": "Sketchfab",
+			"id": "58c33766470d46e7b2aed542650494e5",
+			"url": "https://sketchfab.com/3d-models/generic-sedan-car-58c33766470d46e7b2aed542650494e5",
+			"title": "Generic Sedan Car",
+			"author": "MMC Works",
+			"authorUrl": "https://sketchfab.com/mmcworks",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
 	},
 	{
@@ -3091,6 +3559,33 @@
 			"accel": 2.5,
 			"brake": 7,
 			"reverse": 15
+		}
+	},
+	{
+		"id": "fire-engine-pumper",
+		"name": "Fire engine, pumper (35 ft)",
+		"category": "Vehicles",
+		"file": "fire-engine-pumper.glb",
+		"thumb": "thumbs/fire-engine-pumper.webp",
+		"front": "-x",
+		"scale": 0.298882,
+		"dimensions": {
+			"length": 10.7,
+			"width": 3.43,
+			"height": 3.32
+		},
+		"triangles": 44312,
+		"sizeKB": 1271,
+		"source": {
+			"site": "Sketchfab",
+			"id": "1e6ca01035314dcc80a67e1b20b414a3",
+			"url": "https://sketchfab.com/3d-models/fire-engine-1e6ca01035314dcc80a67e1b20b414a3",
+			"title": "Fire Engine",
+			"author": "Builder",
+			"authorUrl": "https://sketchfab.com/overseerover12",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"extraCredit": "Credit to BonfireDeveloper (per the model's description)"
 		}
 	},
 	{
@@ -3217,6 +3712,59 @@
 				"right": -0.4,
 				"up": 1.65
 			}
+		}
+	},
+	{
+		"id": "pickup-service-body",
+		"name": "Pickup with service body (utility bed)",
+		"category": "Vehicles",
+		"file": "pickup-service-body.glb",
+		"thumb": "thumbs/pickup-service-body.webp",
+		"front": "+x",
+		"scale": 0.968173,
+		"dimensions": {
+			"length": 5.2,
+			"width": 1.94,
+			"height": 1.6
+		},
+		"triangles": 24664,
+		"sizeKB": 1878,
+		"source": {
+			"site": "Sketchfab",
+			"id": "d3aca50a8f2b4917bb9f4ce2bf1ccfe5",
+			"url": "https://sketchfab.com/3d-models/lightbody-90-md-utility-low-poly-model-d3aca50a8f2b4917bb9f4ce2bf1ccfe5",
+			"title": "Lightbody '90 MD Utility - Low poly model",
+			"author": "Daniel Zhabotinsky",
+			"authorUrl": "https://sketchfab.com/DanielZhabotinsky",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "police-suv",
+		"name": "Police SUV, patrol (Ford Interceptor type)",
+		"category": "Vehicles",
+		"file": "police-suv.glb",
+		"thumb": "thumbs/police-suv.webp",
+		"front": "+z",
+		"scale": 1.54791,
+		"dimensions": {
+			"length": 5.05,
+			"width": 2.22,
+			"height": 1.71
+		},
+		"triangles": 94162,
+		"sizeKB": 2378,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3c00056ec42b4552804fe5f4e5af768f",
+			"url": "https://sketchfab.com/3d-models/police-car-suv-3c00056ec42b4552804fe5f4e5af768f",
+			"title": "Police car SUV",
+			"author": "Larcenie Grant",
+			"authorUrl": "https://sketchfab.com/GrantLarcenie",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+			"extraCredit": "Textures and model by k26_k29"
 		}
 	},
 	{
@@ -3381,5 +3929,31 @@
 		"triangles": 4020,
 		"sizeKB": 32,
 		"own": "Weave-Trial: construction_site/Roll_Off_Dumpster_20yd.glb"
+	},
+	{
+		"id": "waste-lumber-pile",
+		"name": "Waste lumber / demolition wood pile (approx. 3 m across)",
+		"category": "Waste",
+		"file": "waste-lumber-pile.glb",
+		"thumb": "thumbs/waste-lumber-pile.webp",
+		"front": "+z",
+		"scale": 0.0936543,
+		"dimensions": {
+			"length": 3,
+			"width": 2.61,
+			"height": 0.75
+		},
+		"triangles": 69901,
+		"sizeKB": 950,
+		"source": {
+			"site": "Sketchfab",
+			"id": "c304473ac1484db7af09c0e516532f01",
+			"url": "https://sketchfab.com/3d-models/waste-construction-lumber-c304473ac1484db7af09c0e516532f01",
+			"title": "Waste construction lumber",
+			"author": "matousekfoto",
+			"authorUrl": "https://sketchfab.com/matousekfoto",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	}
 ]
