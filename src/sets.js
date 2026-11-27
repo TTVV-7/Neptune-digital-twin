@@ -451,6 +451,35 @@ export const SETS = [
 			{ item: 'worker-standing', right: 5, forward: 9.5, turn: 180 },
 		],
 	},
+	{
+		id: 'set-pole-replacement',
+		name: 'Pole replacement (digger derrick augering, pole trailer, old pole, lane closure, flagger, crew)',
+		keywords: 'pole replacement pole change utility pole power line digger derrick line crew lineman hydro lane closure',
+		members: [
+			// The digger derrick in the curb lane, outriggers down, augering the new hole on its right
+			// beside the old pole; the pole trailer parked behind it, a pickup ahead.
+			{ item: 'digger-derrick-47ft-working', right: 0, forward: 0, turn: 0 },
+			{ item: 'utility-pole-transformers', right: 9.8, forward: - 2, turn: 90 },
+			{ item: 'pole-trailer-loaded', right: 0, forward: - 13.8, turn: 0 },
+			{ item: 'pickup-truck', right: 0, forward: 9.5, turn: 0 },
+			// The lane closed with a cone taper from the front, the sign and flagger ahead of it.
+			{ item: 'traffic-cone', right: 1.2, forward: 22, turn: 0 },
+			{ item: 'traffic-cone', right: 0, forward: 18.5, turn: 0 },
+			{ item: 'traffic-cone', right: - 1.2, forward: 15, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.4, forward: 11.5, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: 5, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: - 2, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: - 9, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: - 16, turn: 0 },
+			{ item: 'traffic-cone', right: - 2.6, forward: - 22, turn: 0 },
+			{ item: 'sign-work-zone-stand', right: - 3, forward: 32, turn: 0 },
+			{ item: 'flagger', right: - 3.4, forward: 26, turn: 0 },
+			// The crew at the hole and the truck's controls.
+			{ item: 'worker-pointing', right: 6.8, forward: - 1.2, turn: 120 },
+			{ item: 'worker-standing', right: 9.6, forward: - 6, turn: 330 },
+			{ item: 'worker-walking', right: 2.2, forward: - 5.5, turn: 90 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
