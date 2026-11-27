@@ -24,6 +24,7 @@ import { FOUNDATION_ITEMS } from './foundation-rigs.js';
 import { MORE_PLANT_ITEMS } from './more-plant.js';
 import { BATCH_PLANT_ITEMS } from './batch-plant.js';
 import { CONTAINER_ITEMS, shippingContainer } from './containers.js';
+import { CIVIL_ITEMS } from './civil-pieces.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -110,6 +111,8 @@ export const PROCEDURAL_ITEMS = [
 	// a tool crib trailer, gang boxes and a tool cage (containers.js); the 20 ft and 40 ft high cube
 	// above are built there too.
 	...CONTAINER_ITEMS,
+	// Precast culvert, manhole and pipe, pipe stacks, site entrance pieces, a signal trailer and survey kit (civil-pieces.js).
+	...CIVIL_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
