@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, DoubleSide, Euler, ExtrudeGeometry, IcosahedronGeometry, Matrix4, PlaneGeometry, Quaternion, RepeatWrapping, Shape, Vector2, Vector3 } from 'three';
+import { BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, DoubleSide, Euler, ExtrudeGeometry, IcosahedronGeometry, Matrix4, PlaneGeometry, Quaternion, RepeatWrapping, Shape, Vector2, Vector3 } from 'three';
 import { BLACK, drawn, FT, GALVANISED, GLASS, IN, mat, Parts, RUBBER } from './parts.js';
 import { memberGeometry } from './plant-parts.js';
 import { extruded } from './site-extras.js';
@@ -67,9 +67,12 @@ export const BRIDGE_HIGHWAY_ITEMS = [
 		build: gabionRun, rowLength: 18 * FT },
 
 	// Roadside safety.
-	{ id: 'w-beam-guardrail-run', name: 'W-beam highway guardrail on steel posts (50 ft run, 31 in, end terminal)', category: 'Traffic control',
-		keywords: 'guardrail guide rail w-beam highway barrier roadside steel posts blockouts end terminal beam guard',
+	{ id: 'w-beam-guardrail-run', name: 'W-beam guardrail end section with terminal (50 ft, 31 in, steel posts)', category: 'Traffic control',
+		keywords: 'guardrail guide rail w-beam highway barrier roadside steel posts blockouts end terminal extruder head et skt beam guard',
 		build: guardrail },
+	{ id: 'w-beam-guardrail-25ft', name: 'W-beam guardrail on steel posts (25 ft, 31 in, no terminal)', category: 'Traffic control',
+		keywords: 'guardrail guide rail w-beam highway barrier roadside steel posts blockouts beam guard run line',
+		build: guardrailRow, rowLength: 25 * FT },
 	{ id: 'sand-barrel-crash-cushion', name: 'Sand barrel crash cushion (9 modules, yellow, inertial)', category: 'Traffic control',
 		keywords: 'sand barrels crash cushion attenuator impact attenuator fitch barrels energite gore point inertial barrier',
 		build: sandBarrels },
@@ -1293,64 +1296,158 @@ const W_BEAM = ( () => {
 
 } )();
 
-// 50 ft of strong-post W-beam guardrail facing the front (-Z): the rail at 31 in on 8 in blockouts
-// on W6 × 9 posts every 6 ft 3 in, the first two posts timber breakaway posts in steel foundation
-// tubes with the anchor cable, and an energy-absorbing extruder terminal head on the left (leading)
-// end with its yellow and black object marker.
+// Guardrail sizes: the rail's top at 31 in on 8 in blockouts, posts every 6 ft 3 in, 12 ft 6 in
+// rail panels.
+const RAIL_TOP = 31 * IN;
+const RAIL_Y = RAIL_TOP - 6.12 * IN;
+const POST_SPACING = 75 * IN;
+const PANEL = 12.5 * FT;
+
+// 50 ft of strong-post W-beam guardrail facing the front (-Z), the end section of a run: the rail
+// on blockouts on W6 × 9 posts, the first panel flared back 10 in toward its leading (left) end,
+// the first two posts timber breakaway posts in steel foundation tubes with the anchor cable, and
+// an energy-absorbing extruder terminal head on the leading end: a tapered chute the rail feeds
+// into, with a striking plate and yellow and black object marker sheeting facing traffic.
 function guardrail() {
 
 	const parts = new Parts();
 	const length = 50 * FT;
-	const spacing = 75 * IN;
-	const railTop = 31 * IN;
-	const railY = railTop - 6.12 * IN;
-	const block = 8 * IN;
+	const x0 = - length / 2;
+	const flare = 10 * IN;
+	// How far the rail is set back (+z) at x: the flare along the first panel, then straight.
+	const back = x => Math.max( 0, 1 - ( x - x0 ) / PANEL ) * flare;
+	guardrailRun( parts, x0, length, { back, laps: [ x0 + PANEL, x0 + 2 * PANEL ], first: x0, breakaway: 2 } );
+
+	// The anchor cable from the first post's foot to the rail at the second post.
+	const x1 = x0 + POST_SPACING;
+	parts.rod( mat( 0x55595c, { roughness: 0.5, metalness: 0.7 } ), [ x0, 0.12, back( x0 ) + 0.1 ], [ x1, RAIL_Y, back( x1 ) + 0.06 ], 0.01, 5 );
+	terminalHead( parts, [ x0, RAIL_Y, back( x0 ) - 1.6 * IN ], Math.atan2( flare, PANEL ) );
+	return parts.build();
+
+}
+
+// 25 ft of strong-post W-beam guardrail facing the front (-Z), to lay end to end in a run: two
+// 12 ft 6 in rail panels lapped and bolted at the posts, four posts, no terminal.
+function guardrailRow() {
+
+	const parts = new Parts();
+	const length = 25 * FT;
+	const x0 = - length / 2;
+	const lap = x0 + 0.15;
+	guardrailRun( parts, x0, length, { laps: [ lap, lap + PANEL ], first: lap } );
+	return parts.build();
+
+}
+
+// The rail, blockouts and posts of a W-beam guardrail from x0 along +x: the rail as panels lapped
+// at `laps` (splice bolts at each), posts every 6 ft 3 in from `first`, the first `breakaway`
+// of them timber breakaway posts in foundation tubes, and the whole set back by back( x ) (a
+// terminal's flare).
+function guardrailRun( parts, x0, length, { back = () => 0, laps = [], first = x0, breakaway = 0 } ) {
+
 	const rail = mat( 0xb9bdbf, { roughness: 0.4, metalness: 0.7 } );
 	const galv = GALVANISED();
 	const wood = mat( 0x7b6145, { roughness: 0.95 } );
-	const x0 = - length / 2;
+	const bolt = BRIGHT();
+	const block = 8 * IN;
+	const x1 = x0 + length;
 
-	// The rail, in two 25 ft panels lapped at the middle.
-	const shape = new Shape( W_BEAM.map( ( [ z, y ] ) => new Vector2( z, y ) ) );
-	const beam = new ExtrudeGeometry( shape, { depth: length, bevelEnabled: false } );
-	beam.rotateY( Math.PI / 2 );
-	beam.translate( x0, railY, 0 );
-	parts.add( rail, beam );
-	parts.add( rail, new ExtrudeGeometry( shape, { depth: 0.3, bevelEnabled: false } ), _m.makeRotationY( Math.PI / 2 ).setPosition( - 0.15, railY, - 0.004 ) );
+	// The rail: straight runs between the points where the set-back changes, and a short lap
+	// piece in front at each splice.
+	const bends = [ x0, ...laps.filter( x => back( x - 0.01 ) !== back( x ) ), x1 ];
+	for ( let i = 1; i < bends.length; i ++ ) railPanel( parts, rail, [ bends[ i - 1 ], back( bends[ i - 1 ] ) ], [ bends[ i ], back( bends[ i ] ) ] );
+	for ( const x of laps ) {
 
-	// Posts and blockouts behind the rail, splice bolts on the valley.
-	const posts = Math.round( length / spacing );
-	for ( let i = 0; i <= posts; i ++ ) {
+		railPanel( parts, rail, [ x - 0.15, back( x - 0.15 ) - 0.004 ], [ x + 0.15, back( x + 0.15 ) - 0.004 ] );
+		// Splice bolts through the valley of the lap.
+		for ( const dx of [ - 0.1, 0.1 ] ) for ( const dy of [ - 0.012, 0.012 ] ) {
 
-		const x = x0 + i * spacing;
-		const zb = 0.11 * IN;
-		parts.box( wood, [ 6 * IN, 14 * IN, block ], [ x, railY - 7 * IN, zb + block / 2 ] );
-		parts.rod( BRIGHT(), [ x, railY, - 0.01 ], [ x, railY, 0.02 ], 0.012, 6 );
-		const zp = zb + block + 3 * IN;
-		if ( i < 2 ) {
-
-			// Breakaway timber posts in steel tubes, the tubes standing 4 in out of the ground.
-			parts.box( wood, [ 5.5 * IN, railTop + 1 * IN, 7.5 * IN ], [ x, 0, zp + 0.01 ] );
-			parts.box( galv, [ 6.5 * IN, 4 * IN, 8.5 * IN ], [ x, 0, zp + 0.01 ] );
-
-		} else {
-
-			profile( parts, galv, W6, [ x, 0, zp ], [ x, railTop + 1 * IN, zp ] );
+			const z = back( x + dx );
+			parts.rod( bolt, [ x + dx, RAIL_Y + dy, z - 0.018 ], [ x + dx, RAIL_Y + dy, z + 0.02 ], 0.009, 6 );
 
 		}
 
 	}
 
-	// The anchor cable from the first post's foot to the rail at the second post.
-	parts.rod( mat( 0x55595c, { roughness: 0.5, metalness: 0.7 } ), [ x0, 0.12, 0.1 ], [ x0 + spacing, railY, 0.06 ], 0.01, 5 );
+	// Posts and blockouts behind the rail, the back of the rail's valley bolted flat to the
+	// blockout's face, the post bolt through the valley.
+	for ( let x = first; x <= x1 + 1e-6; x += POST_SPACING ) {
 
-	// The terminal head over the rail's end: a steel box with a feeder chute, and the object marker.
-	const head = paint( 0x707478 );
-	const hx = x0 - 0.35;
-	parts.box( head, [ 0.7, 0.62, 0.42 ], [ hx, railY - 0.33, - 0.04 ] );
-	parts.box( head, [ 0.3, 0.4, 0.3 ], [ hx + 0.45, railY - 0.2, - 0.02 ] );
-	label( parts, objectMarker(), [ 0.42, 0.6 ], [ hx - 0.352, railY - 0.03, - 0.04 ], - Math.PI / 2 );
-	return parts.build();
+		const i = Math.round( ( x - first ) / POST_SPACING );
+		const z = back( x );
+		const zb = z + 0.11 * IN;
+		parts.box( wood, [ 6 * IN, 14 * IN, block ], [ x, RAIL_Y - 7 * IN, zb + block / 2 ] );
+		parts.rod( bolt, [ x, RAIL_Y, z - 0.012 ], [ x, RAIL_Y, z + 0.02 ], 0.012, 6 );
+		const zp = zb + block + 3 * IN;
+		if ( i < breakaway ) {
+
+			// Breakaway timber posts in steel tubes, the tubes standing 4 in out of the ground.
+			parts.box( wood, [ 5.5 * IN, RAIL_TOP + 1 * IN, 7.5 * IN ], [ x, 0, zp + 0.01 ] );
+			parts.box( galv, [ 6.5 * IN, 4 * IN, 8.5 * IN ], [ x, 0, zp + 0.01 ] );
+
+		} else {
+
+			profile( parts, galv, W6, [ x, 0, zp ], [ x, RAIL_TOP + 1 * IN, zp ] );
+
+		}
+
+	}
+
+}
+
+// A length of W-beam from [ x, z ] to [ x, z ] (z the back of its valley), the peaks toward -z.
+function railPanel( parts, material, [ ax, az ], [ bx, bz ] ) {
+
+	const shape = new Shape( W_BEAM.map( ( [ z, y ] ) => new Vector2( z, y ) ) );
+	const length = Math.hypot( bx - ax, bz - az );
+	const geometry = new ExtrudeGeometry( shape, { depth: length, bevelEnabled: false } );
+	// The shape's x becomes z (peaks toward -z), its extrusion runs along +x from 0.
+	geometry.rotateY( - Math.PI / 2 );
+	geometry.translate( length, 0, 0 );
+	parts.add( material, geometry, _m.makeRotationY( - Math.atan2( bz - az, bx - ax ) ).setPosition( ax, RAIL_Y, az ) );
+
+}
+
+// An extruder terminal head (ET or SKT type) on the leading end of a rail at `end` (the middle of
+// the rail's depth), turned `turn` about y with the rail's flare: a chute tapering from the
+// striking plate at its leading end down to the rail it feeds onto, feeder channels above and
+// below the rail behind it, and object marker sheeting on the striking plate and on the chute's
+// traffic side.
+function terminalHead( parts, end, turn ) {
+
+	const head = paint( 0x8a8f93 );
+	const marker = objectMarker();
+	const frame = new Matrix4().makeRotationY( turn ).setPosition( ...end );
+	const at = ( x, y, z, angle = 0 ) => _m.makeRotationY( angle ).setPosition( x, y, z ).premultiply( frame );
+
+	// The chute: 0.8 m long, 25 × 16-1/2 in at the striking end tapering to 16-1/2 × 10-1/2 in
+	// where the rail comes out; a square frustum turned to lie along x.
+	const long = 0.8;
+	const [ h, d ] = [ 0.64, 0.42 ];
+	const taper = 0.65;
+	const chute = new CylinderGeometry( taper, 1, long, 4, 1 );
+	chute.rotateY( Math.PI / 4 );
+	chute.scale( h / Math.SQRT2, 1, d / Math.SQRT2 );
+	chute.rotateZ( - Math.PI / 2 );
+	// Flat faces: each side shaded on its own, not rounded off at the corners.
+	const flat = chute.toNonIndexed();
+	chute.dispose();
+	flat.computeVertexNormals();
+	const xs = - 0.55;
+	parts.add( head, flat, at( xs + long / 2, 0, 0 ) );
+
+	// The striking plate across the leading end, a little bigger than the chute, with the marker.
+	parts.add( head, new BoxGeometry( 0.03, h + 0.06, d + 0.05 ), at( xs - 0.015, 0, 0 ) );
+	parts.add( marker, new PlaneGeometry( d, h ), at( xs - 0.032, 0, 0, - Math.PI / 2 ) );
+
+	// Sheeting on the chute's traffic side, over its front half, laid on the taper.
+	const slope = Math.atan2( d * ( 1 - taper ) / 2, long );
+	const fx = xs + long * 0.28;
+	const fz = - d / 2 + ( fx - xs ) * Math.tan( slope ) - 0.004;
+	parts.add( marker, new PlaneGeometry( long * 0.5, h * 0.8 ), at( fx, 0, fz, Math.PI + slope ) );
+
+	// Feeder channels above and below the rail, behind the chute.
+	for ( const y of [ - 0.2, 0.2 ] ) parts.add( head, new BoxGeometry( 1.0, 0.06, d * taper ), at( xs + long + 0.5, y, 0 ) );
 
 }
 

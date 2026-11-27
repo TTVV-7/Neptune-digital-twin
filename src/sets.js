@@ -628,22 +628,26 @@ export const SETS = [
 	},
 	{
 		id: 'set-girder-erection',
-		name: 'Bridge girder erection (300 t and 100 t crawler cranes, 2 falsework bents, girders laid down and arriving, spreader bar)',
-		keywords: 'bridge girder erection girder setting tandem pick crawler cranes falsework bent precast girder bulb tee haul steerable dolly spreader bar highway bridge',
+		name: 'Bridge girder erection (300 t all-terrain and 100 t crawler cranes in a tandem pick, 2 falsework bents, girders laid down and arriving, spreader bar)',
+		keywords: 'bridge girder erection girder setting tandem pick crawler crane all terrain crane falsework bent precast girder bulb tee haul steerable dolly spreader bar highway bridge',
 		members: [
 			// The span across the middle: a falsework bent at each end, 130 ft apart, their caps
 			// across the girder line.
 			{ item: 'falsework-tower-bent', right: - 19.8, forward: 0, turn: 90 },
 			{ item: 'falsework-tower-bent', right: 19.8, forward: 0, turn: 90 },
-			// The two cranes behind the span for a tandem pick, booms out over it.
-			{ item: 'crane-crawler-300t-luffing', right: - 14, forward: - 26, turn: 0 },
-			{ item: 'crane-crawler-100t', right: 16, forward: - 20, turn: 0 },
-			// Girders laid down in front, the spreader bar beside them, the next one arriving on its
-			// dolly along the haul road.
-			{ item: 'bridge-girder-laydown', right: 0, forward: 10, turn: 90 },
-			{ item: 'bridge-girder-laydown', right: 0, forward: 14, turn: 90 },
-			{ item: 'spreader-bar-slings', right: - 6, forward: 5, turn: 0 },
-			{ item: 'precast-girder-on-trailer', right: 0, forward: 22, turn: 90 },
+			// Girders laid down just behind the span, between the cranes, so each crane picks its end
+			// and sets it on the bent without swinging over the span.
+			{ item: 'bridge-girder-laydown', right: 0, forward: - 9, turn: 90 },
+			{ item: 'bridge-girder-laydown', right: 0, forward: - 12.5, turn: 90 },
+			// A crane outboard of each end for the tandem pick, slewing centres level with the middle
+			// of the moves, booms in toward the girder ends: the 300 t all-terrain about 15 to 16 m
+			// from its picks and set, the 100 t crawler about 12 to 14 m from its.
+			{ item: 'crane-all-terrain-300t-superlift', right: - 32.1, forward: - 6, turn: 90 },
+			{ item: 'crane-crawler-100t', right: 26.3, forward: - 6, turn: 270 },
+			// The next girder arriving on its dolly along the haul road behind, the spreader bar
+			// on its dunnage behind that.
+			{ item: 'precast-girder-on-trailer', right: 0, forward: - 18, turn: 90 },
+			{ item: 'spreader-bar-slings', right: 0, forward: - 24, turn: 0 },
 			// Traffic control on the road in front and a light tower for the night shift.
 			{ item: 'jersey-barrier-run-3', right: - 12, forward: 29, turn: 90 },
 			{ item: 'arrow-board-trailer', right: 31, forward: 30, turn: 0 },
