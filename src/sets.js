@@ -713,6 +713,29 @@ export const SETS = [
 			{ item: 'water-truck-4000gal', right: 16, forward: 13, turn: 270 },
 		],
 	},
+	{
+		id: 'set-land-clearing',
+		name: 'Land clearing (feller buncher, forestry mulcher, grapple skidder, excavator feeding a horizontal grinder, logs, slash and chips)',
+		keywords: 'land clearing clearing grubbing right of way row tree clearing logging forestry mulcher feller buncher skidder grinder chips slash brush stumps greenfield solar pipeline',
+		members: [
+			// The tree line at the back: the feller buncher and the mulcher working into it, a faller
+			// with his saw and the stumps they've left between them.
+			{ item: 'feller-buncher', right: - 11, forward: - 9, turn: 180 },
+			{ item: 'forestry-mulcher-tracked', right: 7, forward: - 9, turn: 180 },
+			{ item: 'worker-chainsaw', right: - 2, forward: - 8, turn: 180 },
+			{ item: 'tree-stump-poplar', right: 0, forward: - 4, turn: 0 },
+			{ item: 'tree-stump-poplar', right: 12, forward: - 3, turn: 60 },
+			// The skidder dragging stems out to the log deck on the left, and the slash piled in the middle.
+			{ item: 'grapple-skidder', right: - 6, forward: 0, turn: 20 },
+			{ item: 'log-stack-trunks', right: - 13, forward: 7, turn: 90 },
+			{ item: 'brush-pile', right: 0, forward: 6, turn: 0 },
+			// The grinder along the front, its infeed apron to the left where the excavator loads it
+			// from the slash, its conveyor stacking chips on the right.
+			{ item: 'excavator-20t', right: 1, forward: 14, turn: 90 },
+			{ item: 'horizontal-grinder', right: 15, forward: 13, turn: 90 },
+			{ item: 'wood-chip-pile', right: 27, forward: 13, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
