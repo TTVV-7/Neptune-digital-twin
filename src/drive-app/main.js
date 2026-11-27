@@ -1068,10 +1068,12 @@ export async function start( { key, left = null, visit: token = null, earthVisit
 		const here = world;
 		send( 'GET', '/api/challenges' ).then( answer => {
 
-			const weekly = answer.ok && answer.body.challenges?.find?.( c => c.world === here && c.period === 'week' );
+			// (The week's, or on a world of hoop runs, which have a month's alone, the month's.)
+			const found = answer.ok ? answer.body.challenges ?? [] : [];
+			const weekly = Array.isArray( found ) ? found.find( c => c.world === here && c.period === 'week' ) ?? found.find( c => c.world === here && c.period === 'month' ) : null;
 			if ( ! weekly || challenges || state.mode !== 'driving' || ! $( 'toast' ).hidden ) return;
 			stats.add( 'challenge', 'nudge' );
-			screens.toast( `This week's challenge ${ onWorld( here ) }: ${ weekly.place }. A timed run with its own board.`, 10000, { label: 'Challenges', onClick: () => {
+			screens.toast( `This ${ weekly.period === 'week' ? 'week' : 'month' }'s ${ weekly.kind === 'hoops' ? 'hoop run' : 'challenge' } ${ onWorld( here ) }: ${ weekly.place }. A timed run with its own board.`, 10000, { label: 'Challenges', onClick: () => {
 
 				stats.add( 'challenge', 'nudge_open' );
 				openChallenges();

@@ -6319,6 +6319,13 @@ hoop runs too, each in its own look and at its own pace (below); the Earth keeps
 hunts and landmark drives. (`HOOP_WORLDS` in `challenge-rules.js`; `kindFor` gives those worlds
 nothing else. Design: `docs/superpowers/specs/2026-11-26-moon-hoop-runs-design.md`.)
 
+**A month's alone** (since 2026-11-27): the worlds of hoop runs have a monthly one and no weekly,
+few playing them (two of the ten live had never been driven), so each board has a month to fill: six
+live, the Earth's week and month and the four worlds' months (`HOOP_PERIODS` in `challenge-rules.js`;
+the Worker's `HOOP_PERIODS` setting, a comma-separated list as `CHALLENGE_PERIODS`, brings others
+back; `kindsOn`). A week fixed on one of them before is kept in D1, its board with it, but no longer
+listed. The nudge while driving says the month's hoop run where a world has no week's.
+
 **Each world its own** (`COURSES`, `HOOP_SHAPES`, `HOOP_FEEL` in `challenge-rules.js`; `HOOP_THEMES`
 in `challenges.js`; `COURSE_KMH` in `plane.js`, which a test keeps equal to `COURSES`):
 

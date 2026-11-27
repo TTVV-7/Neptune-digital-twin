@@ -1,7 +1,7 @@
 import { HttpError, base64url, isObject, json, jsonText, readJson } from '../http.js';
 import { cellMiddle, cellOf, checkCell, metresOn } from '../../src/drive-app/dropin-cells.js';
 import {
-	GRACE, HOOP_WORLDS, KINDS, KIND_NAMES, LINK_PATH, PERIODS, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, formatTime, kindFor, leastTime, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf,
+	GRACE, HOOP_PERIODS, HOOP_WORLDS, KINDS, periodKindsOn, KIND_NAMES, LINK_PATH, PERIODS, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, formatTime, kindFor, leastTime, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf,
 	periodsAt, randomFrom, rankText,
 } from '../../src/drive-app/challenge-rules.js';
 import { GHOST_TEXT, ghostFault } from '../../src/drive-app/ghost-rules.js';
@@ -137,6 +137,23 @@ export function liveKinds( env ) {
 	return kinds.length ? kinds : PERIOD_KINDS;
 
 }
+
+// The kinds of period a world of hoop runs has: the HOOP_PERIODS setting (a comma-separated list of
+// day, week and month, as CHALLENGE_PERIODS), or HOOP_PERIODS' (a month's alone) without it.
+export function hoopKinds( env ) {
+
+	const asked = String( env?.HOOP_PERIODS ?? '' ).split( ',' ).map( kind => kind.trim().toLowerCase() );
+	const kinds = PERIODS.filter( kind => asked.includes( kind ) );
+	return kinds.length ? kinds : HOOP_PERIODS;
+
+}
+
+// The kinds of period live on `world` (liveKinds', a world of hoop runs hoopKinds' of them).
+export function kindsOn( env, world ) {
+
+	return periodKindsOn( world, liveKinds( env ), hoopKinds( env ) );
+
+}
 // The admin page's busy places (dropins.js's topPlaces over the last BUSY_DAYS), kept BUSY_KEPT ms.
 const BUSY_DAYS = 30;
 const BUSY_KEPT = 10 * 60 * 1000;
@@ -264,7 +281,7 @@ export async function listChallenges( context ) {
 		now: context.now,
 		challenges: rows.map( row => ( { ...challengeOf( row ), ...tops[ row.id ], me: mine[ row.id ] ?? null } ) ),
 		// (Some held back for the next ask: checkedMost.)
-		...allThere( periodsAt( context.now, liveKinds( env ) ), rows ) ? {} : { more: true },
+		...allThere( env, periodsAt( context.now, liveKinds( env ) ), rows ) ? {} : { more: true },
 	}, 200, { 'X-Board-Cache': cached ? 'hit' : 'miss' } );
 
 }
@@ -911,7 +928,7 @@ async function adminAnswer( context ) {
 	const fixed = [ ...rows ];
 	for ( const period of [ ...current ].reverse().map( nextPeriod ) ) {
 
-		for ( const world of WORLDS ) {
+		for ( const world of onWorlds( env, period ) ) {
 
 			const pick = picks.results.find( p => p.period === period.key && p.world === world );
 			const chosen = pick ? pickedPlace( pick ) : await rotationPick( env, period, world, approved, fixed );
@@ -986,7 +1003,7 @@ export async function adminChange( context ) {
 	if ( action !== 'pick' && action !== 'unpick' ) throw bad();
 	const period = parsePeriod( body.period );
 	// (A day's is a period still, for the daily boards from before, but none is made by default.)
-	if ( ! period || ! liveKinds( context.env ).includes( period.kind ) || period.ends <= now || period.starts > now + AHEAD * DAY ) throw bad();
+	if ( ! period || ! kindsOn( context.env, world ).includes( period.kind ) || period.ends <= now || period.starts > now + AHEAD * DAY ) throw bad();
 	const pick = action === 'pick' ? await checkPick( context, db, body ) : null;
 	const isLive = period.starts <= now;
 	// The live one, and those live beside it and the one before (for the rotation's choice, clear of
@@ -1079,8 +1096,8 @@ export async function liveChallenges( context ) {
 	const keys = periods.map( period => period.key ).join( ',' );
 	const db = database( env );
 	const select = () => db.prepare( `SELECT * FROM challenges WHERE period IN ( ${ marks( periods ) } ) AND replaced_at IS NULL` ).bind( ...periods.map( period => period.key ) ).all();
-	let rows = ( await select() ).results;
-	const missing = periods.flatMap( period => WORLDS.map( world => ( { period, world } ) ) ).filter( ( { period, world } ) => ! rows.some( row => row.period === period.key && row.world === world ) );
+	let rows = ( await select() ).results.filter( row => liveRow( env, row ) );
+	const missing = periods.flatMap( period => onWorlds( env, period ).map( world => ( { period, world } ) ) ).filter( ( { period, world } ) => ! rows.some( row => row.period === period.key && row.world === world ) );
 	if ( missing.length ) {
 
 		const [ picks, places, before ] = await db.batch( [
@@ -1109,22 +1126,37 @@ export async function liveChallenges( context ) {
 
 		// (Two instances fixing the same period at once: the first one's row stays, and both read it.)
 		if ( made.length ) await db.batch( made.map( challenge => insertQuery( db, challenge ) ) );
-		rows = ( await select() ).results;
+		rows = ( await select() ).results.filter( row => liveRow( env, row ) );
 
 	}
 
 	await later( context.ctx, finishEnded( db, now ), 'Finishing challenges' );
 	rows.sort( ( a, b ) => WORLDS.indexOf( a.world ) - WORLDS.indexOf( b.world ) || PERIODS.indexOf( periodKind( a.period ) ) - PERIODS.indexOf( periodKind( b.period ) ) );
-	if ( allThere( periods, rows ) ) live = { keys, at: now, rows };
+	if ( allThere( env, periods, rows ) ) live = { keys, at: now, rows };
 	return rows;
 
 }
 
 // Whether `rows` has every world's challenge for each of `periods` (by period and world: not a
 // count, which a row of a world no longer in WORLDS would make up).
-function allThere( periods, rows ) {
+function allThere( env, periods, rows ) {
 
-	return periods.every( period => WORLDS.every( world => rows.some( row => row.period === period.key && row.world === world ) ) );
+	return periods.every( period => onWorlds( env, period ).every( world => rows.some( row => row.period === period.key && row.world === world ) ) );
+
+}
+
+// The worlds with a challenge for `period` (its kind one they have: kindsOn, a world of hoop runs a
+// month's alone by default), and whether `row` is one of those (a week's fixed on the Moon before its
+// weeks went is no longer live).
+function onWorlds( env, period ) {
+
+	return WORLDS.filter( world => kindsOn( env, world ).includes( period.kind ) );
+
+}
+
+function liveRow( env, row ) {
+
+	return kindsOn( env, row.world ).includes( periodKind( row.period ) );
 
 }
 

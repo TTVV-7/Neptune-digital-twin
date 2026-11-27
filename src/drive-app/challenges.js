@@ -1874,7 +1874,7 @@ export function setUpChallenges( app ) {
 		root.setAttribute( 'aria-labelledby', 'ch-title' );
 		root.innerHTML = `
 			<header class="ch-head"><h2 id="ch-title">${ FLAG } Challenges</h2><button type="button" class="close" aria-label="Close">&times;</button></header>
-			<p class="ch-intro">A weekly and a monthly one on ${ worldList() }, each with its own board. Your best time counts.</p>
+			<p class="ch-intro">A weekly and a monthly one on the Earth, and a monthly hoop run on the Moon, Mars, Vesta and Ceres, each with its own board. Your best time counts.</p>
 			<p class="ch-note" role="status" hidden></p>
 			<p class="ch-status" role="status" hidden></p>
 			<section class="ch-link" aria-label="A friend's challenge" hidden></section>
@@ -2297,14 +2297,6 @@ export function setUpChallenges( app ) {
 		};
 
 	}
-
-}
-
-// Every world, in a sentence: "the Earth, the Moon, Mars, Vesta and Ceres".
-function worldList() {
-
-	const names = WORLD_IDS.map( world => WORLDS[ world ].the );
-	return `${ names.slice( 0, - 1 ).join( ', ' ) } and ${ names.at( - 1 ) }`;
 
 }
 

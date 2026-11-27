@@ -103,7 +103,7 @@ import { OFF_EARTH, WORLD_IDS } from '../src/drive-app/worlds.js';
 import {
 	GHOST_BYTES, GHOST_DENSITY, GHOST_EVERY, GHOST_SAMPLES, GHOST_TEXT, PASS_SLACK, SAMPLE_SLACK, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime,
 } from '../src/drive-app/ghost-rules.js';
-import { HANDLE, escapeHtml, handleOf, linkWords, liveKinds } from '../worker/drive/challenges.js';
+import { HANDLE, escapeHtml, handleOf, hoopKinds, kindsOn, linkWords, liveChallenges, liveKinds } from '../worker/drive/challenges.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
 const MAPS_KEY = 'test-maps-key-not-real';
@@ -5902,6 +5902,32 @@ describe( 'World Drive challenges: hoop runs (the Moon\'s, since 2026-11-26)', (
 
 	} );
 
+	test( 'a month\'s alone on the worlds of hoop runs by default (HOOP_PERIODS), the Earth\'s week and month as before: six live, a week fixed on the Moon before no longer listed', async () => {
+
+		assert.deepEqual( hoopKinds( {} ), [ 'month' ] );
+		assert.deepEqual( hoopKinds( { HOOP_PERIODS: 'week, Month' } ), [ 'week', 'month' ] );
+		assert.deepEqual( kindsOn( {}, 'earth' ), [ 'week', 'month' ] );
+		for ( const world of HOOP_WORLDS ) assert.deepEqual( kindsOn( {}, world ), [ 'month' ] );
+		assert.deepEqual( kindsOn( { CHALLENGE_PERIODS: 'day,week,month' }, 'earth' ), [ 'day', 'week', 'month' ] );
+		assert.deepEqual( kindsOn( { CHALLENGE_PERIODS: 'day,week,month' }, 'moon' ), [ 'month' ] );
+		// With no month live at all, a world of hoop runs takes the longest that is.
+		assert.deepEqual( kindsOn( { CHALLENGE_PERIODS: 'day,week' }, 'mars' ), [ 'week' ] );
+		const d1 = sqliteD1();
+		// A day nothing else asks for (this process keeps the live ones it fixed a minute).
+		const now = Date.UTC( 2028, 0, 12, 12 );
+		const week = periodOf( 'week', now );
+		d1.db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( week.key, 'moon', 'landmark', 'Grimaldi', '', JSON.stringify( { start: { lat: 0, lon: 0 }, points: [ [ 0.1, 0 ] ], radius: 60 } ), 'rotation', week.starts, week.ends, now - DAY );
+		const env = { DB: d1.DB, TURNSTILE_SECRET: PASS_SECRET, ASSETS: heightsAssets() };
+		let rows = [];
+		for ( let ask = 0; ask < 4 && rows.length < 6; ask ++ ) rows = await liveChallenges( { env, now, ctx: { waitUntil: work => d1.pending.push( work ) } } );
+		await Promise.all( d1.pending );
+		assert.deepEqual( rows.map( row => `${ row.world } ${ row.period.split( ':' )[ 0 ] } ${ row.kind === 'hoops' ? 'hoops' : 'driven' }` ), [ 'earth week driven', 'earth month driven', 'moon month hoops', 'mars month hoops', 'vesta month hoops', 'ceres month hoops' ] );
+		// The Moon's week is still in D1 (its board kept), only no longer live.
+		assert.equal( d1.db.prepare( 'SELECT COUNT(*) AS n FROM challenges WHERE world = ? AND period = ?' ).get( 'moon', week.key ).n, 1 );
+
+	} );
+
 	test( 'each world its own: Mars\'s hoops close and low, turning sharper, at a slower pace; Vesta\'s far apart, fewer and bigger, at the fastest; Ceres\'s heights jumping; their places\' styles', () => {
 
 		const places = { moon: MOON_PLACES, mars: MARS_PLACES, vesta: VESTA_PLACES, ceres: CERES_PLACES };
@@ -6559,7 +6585,7 @@ describe( 'World Drive challenges: the rules', () => {
 			} };
 			// A day no other test asks for the fifteen on (this process keeps the fifteen it has fixed a minute).
 			const now = Date.UTC( 2027, 2, 10, 12 );
-			const env = { DB, TURNSTILE_SECRET: PASS_SECRET, CHALLENGE_PERIODS: 'day,week,month' };
+			const env = { DB, TURNSTILE_SECRET: PASS_SECRET, CHALLENGE_PERIODS: 'day,week,month', HOOP_PERIODS: 'day,week,month' };
 			const ask = async ( handler, path ) => {
 
 				const request = new Request( `https://worlddrive.app${ path }`, { headers: { 'CF-Connecting-IP': '198.51.100.70' } } );
@@ -8022,6 +8048,9 @@ describe( 'World Drive challenges', () => {
 				// The dailies too (gone by default since 2026-11-22: liveKinds), as these tests were written
 				// with them, and they test the most periods at once.
 				CHALLENGE_PERIODS: 'day,week,month',
+				// Every period on the worlds of hoop runs too (a month's alone by default since 2026-11-27:
+				// hoopKinds), as these tests were written with them on every world.
+				HOOP_PERIODS: 'day,week,month',
 			},
 			// The towns busy places are named by, and the Moon's, Mars's, Vesta's and Ceres's heights their
 			// routes are checked on, as the site has them.

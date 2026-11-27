@@ -25,6 +25,21 @@ export const WORLDS = WORLD_IDS;
 // before go on working, and CHALLENGE_PERIODS "day,week,month" would bring them back.
 export const PERIODS = [ 'day', 'week', 'month' ];
 export const PERIOD_KINDS = [ 'week', 'month' ];
+// The kinds of period a world of hoop runs has (since 2026-11-27: a month's alone, the owner finding
+// a week's and a month's too many for worlds few play, so each board has a month to fill): the
+// Earth has every kind live.
+export const HOOP_PERIODS = [ 'month' ];
+
+// The kinds of `kinds` (the live ones: the Worker's liveKinds) that `world` has challenges for: a
+// world of hoop runs only `hoopKinds`' (HOOP_PERIODS, or the Worker's HOOP_PERIODS setting), or, with
+// none of those live, the longest that is.
+export function periodKindsOn( world, kinds = PERIOD_KINDS, hoopKinds = HOOP_PERIODS ) {
+
+	if ( ! HOOP_WORLDS.includes( world ) ) return kinds;
+	const own = kinds.filter( kind => hoopKinds.includes( kind ) );
+	return own.length ? own : kinds.slice( - 1 );
+
+}
 export const KINDS = [ 'sprint', 'collect', 'landmark', 'hoops' ];
 export const PERIOD_NAMES = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 export const KIND_NAMES = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark', hoops: 'Hoop run' };
