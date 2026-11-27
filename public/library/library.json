@@ -837,6 +837,32 @@
 		}
 	},
 	{
+		"id": "rusty-drum-cluster",
+		"name": "Rusty steel drums, cluster of 8 (55 gal, 3 tipped over)",
+		"category": "Environmental & erosion control",
+		"file": "rusty-drum-cluster.glb",
+		"thumb": "thumbs/rusty-drum-cluster.webp",
+		"front": "+z",
+		"scale": 0.371,
+		"dimensions": {
+			"length": 2.05,
+			"width": 2.8,
+			"height": 0.88
+		},
+		"triangles": 9696,
+		"sizeKB": 724,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8df46c47099a4b9d9bc4a69edcad1b88",
+			"url": "https://sketchfab.com/3d-models/low-poly-closed-barrels-8df46c47099a4b9d9bc4a69edcad1b88",
+			"title": "Low Poly | Closed Barrels",
+			"author": "Anna Denisova",
+			"authorUrl": "https://sketchfab.com/Den1121",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "straw-bale-stack",
 		"name": "Straw bales, stacked (16 small square bales, 2.8 m / 9 ft long)",
 		"category": "Environmental & erosion control",
@@ -1414,6 +1440,32 @@
 		"own": "Weave-Trial: construction_site/Wheel_Loader_3yd.glb"
 	},
 	{
+		"id": "wrecked-car",
+		"name": "Abandoned car wreck, rusted sedan (14.5 ft)",
+		"category": "Landscaping & site context",
+		"file": "wrecked-car.glb",
+		"thumb": "thumbs/wrecked-car.webp",
+		"front": "-x",
+		"scale": 6.54103,
+		"dimensions": {
+			"length": 4.4,
+			"width": 1.75,
+			"height": 1.16
+		},
+		"triangles": 133315,
+		"sizeKB": 1368,
+		"source": {
+			"site": "Sketchfab",
+			"id": "edf5a6638e0e4176893192a3913e195f",
+			"url": "https://sketchfab.com/3d-models/katapola-car-wreck-edf5a6638e0e4176893192a3913e195f",
+			"title": "Katapola Car Wreck",
+			"author": "vswrks",
+			"authorUrl": "https://sketchfab.com/vswrks",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "tree-bb-pallet",
 		"name": "Balled-and-burlapped trees on pallet (4 nursery birches, 10 ft)",
 		"category": "Landscaping & site context",
@@ -1435,6 +1487,32 @@
 			"title": "Birch trees",
 			"author": "Igor_K.",
 			"authorUrl": "https://sketchfab.com/Igor_K.",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "rock-outcrop",
+		"name": "Bedrock outcrop / rock ledge, basalt (8 × 7 m, 2.2 m high)",
+		"category": "Landscaping & site context",
+		"file": "rock-outcrop.glb",
+		"thumb": "thumbs/rock-outcrop.webp",
+		"front": "+z",
+		"scale": 0.999328,
+		"dimensions": {
+			"length": 7.1,
+			"width": 8,
+			"height": 2.21
+		},
+		"triangles": 93422,
+		"sizeKB": 1060,
+		"source": {
+			"site": "Sketchfab",
+			"id": "7cfd1e2118c54a5da3dcb0e324eefec8",
+			"url": "https://sketchfab.com/3d-models/basalt-rock-outcrop-on-beach-7cfd1e2118c54a5da3dcb0e324eefec8",
+			"title": "Basalt rock outcrop on beach",
+			"author": "b_nealie",
+			"authorUrl": "https://sketchfab.com/b_nealie",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -1487,6 +1565,32 @@
 			"title": "Realistic boulder",
 			"author": "Luke.G",
 			"authorUrl": "https://sketchfab.com/LukeCG",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "cattail-reed-clump",
+		"name": "Cattails / wetland reeds clump (2 m across, 1.8 m high)",
+		"category": "Landscaping & site context",
+		"file": "cattail-reed-clump.glb",
+		"thumb": "thumbs/cattail-reed-clump.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.04,
+			"width": 2.07,
+			"height": 1.76
+		},
+		"triangles": 34356,
+		"sizeKB": 323,
+		"source": {
+			"site": "Sketchfab",
+			"id": "2f35ed566d3d4d74abd6e7c48d82f8eb",
+			"url": "https://sketchfab.com/3d-models/cattails-2f35ed566d3d4d74abd6e7c48d82f8eb",
+			"title": "Cattails",
+			"author": "AlkaliDragon",
+			"authorUrl": "https://sketchfab.com/AlkaliDragon",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -1910,6 +2014,58 @@
 		}
 	},
 	{
+		"id": "abandoned-barn",
+		"name": "Old timber barn, weathered and broken (gable roof, 12 × 9 m)",
+		"category": "Landscaping & site context",
+		"file": "abandoned-barn.glb",
+		"thumb": "thumbs/abandoned-barn.webp",
+		"front": "+z",
+		"scale": 0.0493,
+		"dimensions": {
+			"length": 9.05,
+			"width": 12.01,
+			"height": 6.65
+		},
+		"triangles": 9374,
+		"sizeKB": 205,
+		"source": {
+			"site": "Sketchfab",
+			"id": "1d0b768a8e2449de990b3f69f94c5db6",
+			"url": "https://sketchfab.com/3d-models/american-old-barn-1d0b768a8e2449de990b3f69f94c5db6",
+			"title": "American Old Barn",
+			"author": "andrewriddle",
+			"authorUrl": "https://sketchfab.com/andrewriddle",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "old-shed",
+		"name": "Old tool shed, weathered timber, roof damaged (3.4 × 3 m)",
+		"category": "Landscaping & site context",
+		"file": "old-shed.glb",
+		"thumb": "thumbs/old-shed.webp",
+		"front": "+z",
+		"scale": 0.01,
+		"dimensions": {
+			"length": 3.06,
+			"width": 3.39,
+			"height": 3.28
+		},
+		"triangles": 18278,
+		"sizeKB": 1247,
+		"source": {
+			"site": "Sketchfab",
+			"id": "761c0879b18041e1a42bc10de88d2228",
+			"url": "https://sketchfab.com/3d-models/old-wooden-shed-761c0879b18041e1a42bc10de88d2228",
+			"title": "Old Wooden Shed",
+			"author": "donnichols",
+			"authorUrl": "https://sketchfab.com/donnichols",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "ornamental-grass-clump",
 		"name": "Ornamental grass clump, plumed (1 m / 3 ft high)",
 		"category": "Landscaping & site context",
@@ -1957,6 +2113,32 @@
 			"title": "Realistic HD California fan palm (19/25)",
 			"author": "PlantCatalog",
 			"authorUrl": "https://sketchfab.com/PlantCatalog",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "partially-demolished-building",
+		"name": "Partially demolished building, 2-storey concrete shell, one side torn open (28 × 17 m)",
+		"category": "Landscaping & site context",
+		"file": "partially-demolished-building.glb",
+		"thumb": "thumbs/partially-demolished-building.webp",
+		"front": "-z",
+		"scale": 1,
+		"dimensions": {
+			"length": 17.44,
+			"width": 28.41,
+			"height": 8.53
+		},
+		"triangles": 152662,
+		"sizeKB": 1294,
+		"source": {
+			"site": "Sketchfab",
+			"id": "f307711cf52c4bbfa67ba95d487de775",
+			"url": "https://sketchfab.com/3d-models/destroyed-building-f307711cf52c4bbfa67ba95d487de775",
+			"title": "Destroyed building",
+			"author": "soleares2018",
+			"authorUrl": "https://sketchfab.com/soleares2018",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -2873,6 +3055,32 @@
 			"title": "N042 Chips Pile",
 			"author": "bimage",
 			"authorUrl": "https://sketchfab.com/bimage",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "wood-pallet-stack",
+		"name": "Wooden pallets, stacked 20 high (42 × 42 in, 2.7 m)",
+		"category": "Materials",
+		"file": "wood-pallet-stack.glb",
+		"thumb": "thumbs/wood-pallet-stack.webp",
+		"front": "+z",
+		"scale": 1.2125,
+		"dimensions": {
+			"length": 1.17,
+			"width": 1.16,
+			"height": 2.68
+		},
+		"triangles": 27440,
+		"sizeKB": 305,
+		"source": {
+			"site": "Sketchfab",
+			"id": "2f1abd705d4f4118b4c8d0b275441505",
+			"url": "https://sketchfab.com/3d-models/wooden-pallet-low-poly-2f1abd705d4f4118b4c8d0b275441505",
+			"title": "Wooden Pallet Low-poly",
+			"author": "MaX3Dd",
+			"authorUrl": "https://sketchfab.com/MaX3Dd",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -5086,6 +5294,58 @@
 		"own": "Weave-Trial: construction_site/Water_Truck_4000gal.glb"
 	},
 	{
+		"id": "brick-rubble-pile",
+		"name": "Brick and masonry rubble pile (6 m / 20 ft long, 1.2 m high)",
+		"category": "Waste",
+		"file": "brick-rubble-pile.glb",
+		"thumb": "thumbs/brick-rubble-pile.webp",
+		"front": "+x",
+		"scale": 0.292227,
+		"dimensions": {
+			"length": 6,
+			"width": 3.82,
+			"height": 1.19
+		},
+		"triangles": 77948,
+		"sizeKB": 900,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5a35d7918bb04a1bb21043b1915c0413",
+			"url": "https://sketchfab.com/3d-models/dirt-brick-pile-5a35d7918bb04a1bb21043b1915c0413",
+			"title": "Dirt brick pile",
+			"author": "axonite",
+			"authorUrl": "https://sketchfab.com/axonite",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "broken-asphalt-pile",
+		"name": "Broken asphalt and concrete chunks pile (2.5 m / 8 ft across)",
+		"category": "Waste",
+		"file": "broken-asphalt-pile.glb",
+		"thumb": "thumbs/broken-asphalt-pile.webp",
+		"front": "+z",
+		"scale": 1.47929,
+		"dimensions": {
+			"length": 2.55,
+			"width": 2.5,
+			"height": 0.43
+		},
+		"triangles": 24286,
+		"sizeKB": 454,
+		"source": {
+			"site": "Sketchfab",
+			"id": "87687f3171cb4474b1885bfba33f1020",
+			"url": "https://sketchfab.com/3d-models/crushed-asphalt-and-concrete-rubble-small-87687f3171cb4474b1885bfba33f1020",
+			"title": "Crushed asphalt and concrete rubble small",
+			"author": "Оrрндп ЯТG",
+			"authorUrl": "https://sketchfab.com/orphanrtg",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "brush-pile",
 		"name": "Brush pile / clearing slash (5 m / 16 ft across)",
 		"category": "Waste",
@@ -5107,6 +5367,58 @@
 			"title": "Cut branches and leaves heap",
 			"author": "matousekfoto",
 			"authorUrl": "https://sketchfab.com/matousekfoto",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "concrete-rubble-pile-rebar",
+		"name": "Concrete demolition rubble with exposed rebar (5 m / 17 ft across, 1.8 m high)",
+		"category": "Waste",
+		"file": "concrete-rubble-pile-rebar.glb",
+		"thumb": "thumbs/concrete-rubble-pile-rebar.webp",
+		"front": "+z",
+		"scale": 1.00055,
+		"dimensions": {
+			"length": 5.28,
+			"width": 4.61,
+			"height": 1.81
+		},
+		"triangles": 115309,
+		"sizeKB": 2664,
+		"source": {
+			"site": "Sketchfab",
+			"id": "a06fea588d0a4094869a07527fdc4ec8",
+			"url": "https://sketchfab.com/3d-models/blocks-of-reinforced-concrete-scrap-a06fea588d0a4094869a07527fdc4ec8",
+			"title": "Blocks of reinforced concrete scrap",
+			"author": "Оrрндп ЯТG",
+			"authorUrl": "https://sketchfab.com/orphanrtg",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "concrete-rubble-pile",
+		"name": "Concrete rubble pile, mixed demolition debris (8 m / 26 ft across, 2 m high)",
+		"category": "Waste",
+		"file": "concrete-rubble-pile.glb",
+		"thumb": "thumbs/concrete-rubble-pile.webp",
+		"front": "+z",
+		"scale": 0.368802,
+		"dimensions": {
+			"length": 8.3,
+			"width": 7.66,
+			"height": 1.99
+		},
+		"triangles": 132809,
+		"sizeKB": 2303,
+		"source": {
+			"site": "Sketchfab",
+			"id": "6c6d298a0c7d4c2792788fdb924df6ee",
+			"url": "https://sketchfab.com/3d-models/3d-scan-construction-debris-6c6d298a0c7d4c2792788fdb924df6ee",
+			"title": "3D Scan - Construction debris",
+			"author": "Ramzi Sfeir",
+			"authorUrl": "https://sketchfab.com/RamziSfeir",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -5154,6 +5466,58 @@
 		"triangles": 4020,
 		"sizeKB": 32,
 		"own": "Weave-Trial: construction_site/Roll_Off_Dumpster_20yd.glb"
+	},
+	{
+		"id": "scrap-metal-pile",
+		"name": "Scrap metal pile, mixed steel and salvage (9 m / 30 ft across)",
+		"category": "Waste",
+		"file": "scrap-metal-pile.glb",
+		"thumb": "thumbs/scrap-metal-pile.webp",
+		"front": "+z",
+		"scale": 1.00009,
+		"dimensions": {
+			"length": 7.31,
+			"width": 9.01,
+			"height": 1.59
+		},
+		"triangles": 71149,
+		"sizeKB": 2172,
+		"source": {
+			"site": "Sketchfab",
+			"id": "62a2fe42b6a748e38966c9169a1aefd3",
+			"url": "https://sketchfab.com/3d-models/scrapyard-ii-62a2fe42b6a748e38966c9169a1aefd3",
+			"title": "Scrapyard II.",
+			"author": "Оrрндп ЯТG",
+			"authorUrl": "https://sketchfab.com/orphanrtg",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tire-pile",
+		"name": "Used tire pile (approx. 5 m / 17 ft across, 1.5 m high)",
+		"category": "Waste",
+		"file": "tire-pile.glb",
+		"thumb": "thumbs/tire-pile.webp",
+		"front": "+z",
+		"scale": 1.00094,
+		"dimensions": {
+			"length": 3.59,
+			"width": 5.22,
+			"height": 1.49
+		},
+		"triangles": 40574,
+		"sizeKB": 830,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3ee27bba4aa7400aac276fb07d47cb21",
+			"url": "https://sketchfab.com/3d-models/pile-of-old-tires-3ee27bba4aa7400aac276fb07d47cb21",
+			"title": "Pile of Old Tires",
+			"author": "Оrрндп ЯТG",
+			"authorUrl": "https://sketchfab.com/orphanrtg",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "waste-lumber-pile",

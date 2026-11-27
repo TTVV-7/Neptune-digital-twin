@@ -626,6 +626,26 @@ export const SETS = [
 			{ item: 'worker-standing', right: - 1.5, forward: 3.8, turn: 180 },
 		],
 	},
+	{
+		id: 'set-demolition-yard',
+		name: 'Demolition yard (part-demolished building, rubble and scrap piles, roll-off, jaw crusher, water truck)',
+		keywords: 'demolition demo wreck tear down rubble debris concrete rebar brick scrap metal salvage crusher dust',
+		members: [
+			// The building being taken down at the back, the demolition excavator facing it and the
+			// sorted piles in front: concrete with rebar either side, brick to one side, scrap metal to the other.
+			{ item: 'partially-demolished-building', right: 0, forward: - 12, turn: 0 },
+			{ item: 'excavator-demolition-grapple', right: - 4, forward: 1, turn: 180 },
+			{ item: 'concrete-rubble-pile-rebar', right: - 12, forward: 1.5, turn: 20 },
+			{ item: 'concrete-rubble-pile-rebar', right: 4.5, forward: 0.5, turn: 0 },
+			{ item: 'brick-rubble-pile', right: - 19, forward: 2, turn: 90 },
+			{ item: 'scrap-metal-pile', right: 14, forward: 3, turn: 0 },
+			// Along the front: the roll-off for mixed waste, the jaw crusher for the concrete and the
+			// water truck keeping the dust down.
+			{ item: 'rolloff-40', right: 2, forward: 9, turn: 90 },
+			{ item: 'mobile-jaw-crusher', right: - 14, forward: 10, turn: 90 },
+			{ item: 'water-truck-4000gal', right: 16, forward: 13, turn: 270 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
