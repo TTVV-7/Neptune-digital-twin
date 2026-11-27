@@ -27,7 +27,7 @@ import { CERES_SPOTS } from '../src/drive-app/ceres-places.js';
 import { SPOTS } from '../src/drive-app/places.js';
 import { WORLDS } from '../src/drive-app/worlds.js';
 import { levelFrame, pointOn } from '../src/drive-app/level.js';
-import { checkPasses, destination } from '../src/drive-app/challenge-rules.js';
+import { COURSES, checkPasses, destination } from '../src/drive-app/challenge-rules.js';
 import { ghostFault } from '../src/drive-app/ghost-rules.js';
 import { startVite } from './worker-harness.mjs';
 import { HOP, openWorlds, pickWorld, worldShown } from './worlds-ui.mjs';
@@ -613,3 +613,169 @@ describe( 'World Drive challenges on Vesta', () => {
 	} );
 
 } );
+
+// A hoop run on Vesta: its violet hoops 24 m round, the plane at Vesta's pace (faster than the
+// Moon's), flown across a recentre (the hoops and orb moved with the scene, no crossing made up by it),
+// its time posted with a ghost the Worker takes; then Retry, a plane again over the start.
+describe( 'World Drive hoop runs on Vesta', () => {
+
+	const TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
+	const VESTA_VISIT = 'v1.vesta-hoops-visit';
+	const PLAYER = { id: 'vestaHoops000001', secret: 'h'.repeat( 32 ), name: 'Vesta Pilot' };
+	const at = ( north, up ) => {
+
+		const [ lat, lon ] = destination( 'vesta', MARCIA.lat, MARCIA.lon, 0, north );
+		return [ Math.round( lat * 1e6 ) / 1e6, Math.round( lon * 1e6 ) / 1e6, up ];
+
+	};
+	const [ orbLat, orbLon ] = at( 1100, 50 );
+	const HOOPS = { id: 45, period: 'week', key: 'week:2026-11-30', world: 'vesta', kind: 'hoops', place: 'Marcia', region: MARCIA.region, route: { start: { lat: MARCIA.lat, lon: MARCIA.lon, heading: 0 }, points: [ at( 700, 40 ), at( 1500, 50 ), at( 2300, 40 ) ], radius: 24, orbs: [ [ orbLat, orbLon, 50 ] ], tricks: [], style: 'crater' }, total: 0, top: [], me: null };
+	const listed = () => [ { ...HOOPS, startsAt: Date.now() - 3600e3, endsAt: Date.now() + 3600e3 } ];
+
+	test( 'flown at Vesta\'s pace across a recentre: every hoop through, the orb taken, the time and ghost taken; Retry a plane over the start again', async () => {
+
+		assert.ok( 1500 > WORLDS.vesta.recentre );
+		const page = await newPage();
+		try {
+
+			page.posted = [];
+			await page.addInitScript( player => localStorage.setItem( 'world-drive.player', JSON.stringify( player ) ), PLAYER );
+			const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
+			await page.route( 'https://challenges.cloudflare.com/turnstile/**', route => route.fulfill( { contentType: 'text/javascript', body: `window.turnstile = { render( el, options ) { setTimeout( () => options.callback( '${ TOKEN }' ), 50 ); return 'w1'; }, remove() {}, reset() {} };` } ) );
+			await page.route( `${ BASE }/api/config`, route => json( route, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true } ) );
+			await page.route( `${ BASE }/api/visit`, route => json( route, { moon: true, free: true, world: 'vesta', visit: VESTA_VISIT } ) );
+			await page.route( `${ BASE }/api/challenges?*`, route => json( route, { now: Date.now(), challenges: listed() } ) );
+			await page.route( `${ BASE }/api/challenges/time`, route => {
+
+				const body = JSON.parse( route.request().postData() );
+				page.posted.push( body );
+				json( route, { ms: body.ms, rank: 1, total: 1, isNewBest: true, top: [ { rank: 1, name: PLAYER.name, ms: body.ms, vehicle: 'go-kart', date: '2026-11-30', level: 1, title: 'rookie' } ] } );
+
+			} );
+			await page.goto( `${ BASE }/?spot=vesta-snowman` );
+			await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'vesta' && window.drive.panel.pinned?.id === 'vesta-snowman', null, { timeout: 90000 } );
+			await page.locator( '#globe-ui .challenges-open' ).click();
+			const dialog = page.locator( '#challenges' );
+			await dialog.locator( '.ch-card[data-id="45"]' ).waitFor();
+			await dialog.locator( '.ch-card[data-id="45"] .ch-start' ).click();
+			await page.waitForFunction( () => window.drive.mode === 'driving' && window.drive.driver.aircraft?.course?.held, null, { timeout: 240000 } );
+			// Vesta's violet, round (not Ceres's turning hexagons), 24 m.
+			const look = await page.evaluate( () => {
+
+				const mesh = window.drive.scene.children.find( child => child.isInstancedMesh && child.geometry?.parameters?.tubularSegments && child.visible && child.count === 3 && child.geometry.parameters.radialSegments === 8 );
+				const c = mesh && { r: mesh.instanceColor.array[ 0 ], g: mesh.instanceColor.array[ 1 ], b: mesh.instanceColor.array[ 2 ] };
+				return { found: !! mesh, colour: c, segments: mesh?.geometry.parameters.tubularSegments };
+
+			} );
+			assert.ok( look.found && look.segments === 64, JSON.stringify( look ) );
+			assert.ok( look.colour.b > look.colour.g && look.colour.r > look.colour.g, JSON.stringify( look ) );
+			await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 240000 } );
+			assert.ok( Math.abs( await page.evaluate( () => window.drive.driver.speed ) - COURSES.vesta.cruise / 3.6 ) < 1 );
+			await shot( page, 'hoops-vesta-1-flying' );
+			const flown = await page.evaluate( () => new Promise( resolve => {
+
+				let tank = null;
+				const step = () => {
+
+					const { run } = window.drive.challenges;
+					const d = window.drive.driver;
+					if ( ! run || run.phase === 'done' ) return resolve( { ms: run?.ms ?? null, recentres: window.drive.recentres, tank, missed: run?.gates.filter( g => g.missed ).length } );
+					const g = run.gates.find( gate => ! gate.passed );
+					const orb = run.orbs[ 0 ];
+					const aim = g.index === 1 && orb.back <= 0 ? orb : g;
+					const heading = Math.atan2( - aim.x - d.east, aim.z - d.north ) * 180 / Math.PI;
+					Object.assign( d, { heading, course: heading, y: aim.y - d.height / 2 } );
+					if ( orb.back > 0 && tank === null ) tank = d.aircraft.course.tank;
+					requestAnimationFrame( step );
+
+				};
+
+				step();
+
+			} ) );
+			assert.ok( flown.recentres >= 1, JSON.stringify( flown ) );
+			assert.equal( flown.missed, 0 );
+			assert.ok( flown.tank > 3, JSON.stringify( flown ) );
+			await page.locator( '.ch-finish' ).waitFor();
+			await page.waitForFunction( () => /^#\d/.test( document.querySelector( '.ch-f-note' ).textContent ), null, { timeout: 30000 } );
+			assert.equal( await page.locator( '.ch-f-missed' ).textContent(), 'Every hoop!' );
+			const [ posted ] = page.posted;
+			assert.equal( posted.ms, flown.ms );
+			assert.ok( checkPasses( HOOPS, posted.ms, posted.passes ) );
+			assert.equal( ghostFault( HOOPS, posted.ms, posted.passes, posted.ghost ), '' );
+			await shot( page, 'hoops-vesta-2-finish' );
+			// Retry: back over the start, a plane in course mode again.
+			await page.locator( '.ch-retry' ).click();
+			await page.waitForFunction( () => window.drive.challenges.run?.phase === 'countdown' && window.drive.driver.aircraft?.on && window.drive.driver.aircraft.course?.held, null, { timeout: 60000 } );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+} );
+
+// A hoop run on Ceres: its icy hoops are hexagons, turning as they stand, in its own colours; the
+// plane held over Occator at Ceres's pace.
+describe( 'World Drive hoop runs on Ceres', () => {
+
+	const TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
+	const at = ( north, up ) => {
+
+		const [ lat, lon ] = destination( 'ceres', OCCATOR.lat, OCCATOR.lon, 0, north );
+		return [ Math.round( lat * 1e6 ) / 1e6, Math.round( lon * 1e6 ) / 1e6, up ];
+
+	};
+	const HOOPS = { id: 46, period: 'week', key: 'week:2026-11-30', world: 'ceres', kind: 'hoops', place: 'Occator', region: OCCATOR.region, route: { start: { lat: OCCATOR.lat, lon: OCCATOR.lon, heading: 0 }, points: [ at( 250, 30 ), at( 600, 90 ), at( 1000, 20 ) ], radius: 18, orbs: [], tricks: [], style: 'crater' }, total: 0, top: [], me: null };
+
+	test( 'Ceres\'s hoops: hexagons in its icy colours, turning; the plane held over the start at Ceres\'s pace', async () => {
+
+		const page = await newPage();
+		try {
+
+			await page.addInitScript( player => localStorage.setItem( 'world-drive.player', JSON.stringify( player ) ), { id: 'ceresHoops000001', secret: 'c'.repeat( 32 ), name: 'Ceres Pilot' } );
+			const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
+			await page.route( 'https://challenges.cloudflare.com/turnstile/**', route => route.fulfill( { contentType: 'text/javascript', body: `window.turnstile = { render( el, options ) { setTimeout( () => options.callback( '${ TOKEN }' ), 50 ); return 'w1'; }, remove() {}, reset() {} };` } ) );
+			await page.route( `${ BASE }/api/config`, route => json( route, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true } ) );
+			await page.route( `${ BASE }/api/visit`, route => json( route, { moon: true, free: true, world: 'ceres', visit: 'v1.ceres-hoops-visit' } ) );
+			await page.route( `${ BASE }/api/challenges?*`, route => json( route, { now: Date.now(), challenges: [ { ...HOOPS, startsAt: Date.now() - 3600e3, endsAt: Date.now() + 3600e3 } ] } ) );
+			await page.goto( `${ BASE }/?spot=ceres-occator` );
+			await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'ceres' && window.drive.panel.pinned?.id === 'ceres-occator', null, { timeout: 90000 } );
+			await page.locator( '#globe-ui .challenges-open' ).click();
+			const card = page.locator( '#challenges .ch-card[data-id="46"]' );
+			await card.waitFor();
+			await card.locator( '.ch-start' ).click();
+			await page.waitForFunction( () => window.drive.mode === 'driving' && window.drive.driver.aircraft?.course?.held, null, { timeout: 240000 } );
+			const hoops = () => page.evaluate( () => {
+
+				const mesh = window.drive.scene.children.find( child => child.isInstancedMesh && child.visible && child.count === 3 && child.geometry?.parameters?.tubularSegments === 6 );
+				if ( ! mesh ) return null;
+				return { matrix: Array.from( mesh.instanceMatrix.array.slice( 0, 16 ) ), colour: Array.from( mesh.instanceColor.array.slice( 0, 3 ) ) };
+
+			} );
+			const first = await hoops();
+			assert.ok( first, 'hexagonal hoops shown' );
+			// Ice: bright, blue over red.
+			assert.ok( first.colour[ 2 ] > 0.8 && first.colour[ 2 ] >= first.colour[ 0 ], JSON.stringify( first.colour ) );
+			await page.waitForTimeout( 1500 );
+			const later = await hoops();
+			assert.ok( first.matrix.some( ( value, i ) => Math.abs( value - later.matrix[ i ] ) > 1e-3 ), 'turning' );
+			assert.equal( await page.evaluate( () => window.drive.driver.aircraft.course.cruise ), COURSES.ceres.cruise / 3.6 );
+			await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 240000 } );
+			await shot( page, 'hoops-ceres-1-flying' );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+} );
+

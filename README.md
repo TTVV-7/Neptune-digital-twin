@@ -998,10 +998,11 @@ rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#leve
 Vesta and Ceres, fifteen live at once, each a place and a route the same for everyone and with its own board of
 the best times (the leaderboard's nicknames and levels): a checkpoint sprint through gates in order,
 a hunt for stars round a place in any order, or a drive to a landmark a few kilometres off, against
-the clock; on the Moon, a **hoop run** instead, flown in the plane through hoops set over its real
-ground, laid out in the style of the place (a crater weaves, a mountain spirals, a landing site loops
+the clock; on the Moon, Mars, Vesta and Ceres, a **hoop run** instead (each world's own colours and
+pace: Mars's tight and slow, Vesta's fast with its hoops far apart, Ceres's climbing), flown in the
+plane through hoops set over its real ground, laid out in the style of the place (a crater weaves, a mountain spirals, a landing site loops
 back round), with a boost tank, carve and trick boosts and orbs to refill it, a miss costing 3 s
-([Hoop runs](docs/world-drive.md#hoop-runs-the-moons-since-2026-11-26)). Big rings, stars and beams of light mark them, on the ground the game has (the Earth's
+([Hoop runs](docs/world-drive.md#hoop-runs-the-moons-since-2026-11-26-marss-vestas-and-ceress-since-2026-11-27)). Big rings, stars and beams of light mark them, on the ground the game has (the Earth's
 tiles as they load, a few rays a frame, the other worlds' own heights, their routes kept off
 crater and canyon walls, measured on Vesta and Ceres from their level, no more than three of theirs
 laid out an ask so a Worker just started keeps within its CPU, the page asking again for the rest), with an arrow to the next on the HUD, a countdown, the timer and a finish card with

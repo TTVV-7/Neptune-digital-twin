@@ -112,3 +112,22 @@ Only during a hoop run (the challenges code turns it on and off):
 
 Exact tuning numbers (spacing, heights, carve timings) within the shape above; the hoop and orb
 look; where on the HUD the new parts go.
+
+## Addendum, 2026-11-27: Mars, Vesta and Ceres
+
+The owner wanted flying on the other free worlds too, each changed up: a different look for the
+rings and a different pace. Agreed design:
+
+- Mars, Vesta and Ceres's weekly and monthly challenges become hoop runs as well (`HOOP_WORLDS`);
+  the Earth keeps driving.
+- Mars: rust-orange rings, slower (380 km/h cruise) but rings close together (300-500 m), sharper
+  turns, lower over the ground: the technical one.
+- Vesta: violet rings 24 m across, fastest (650 km/h cruise, 1,300 boost), rings 1.2-2 km apart with
+  gentle turns and fewer of them: the speed run.
+- Ceres: icy white-cyan hexagonal rings that slowly turn, heights anywhere from 5 to 150 m: the
+  climbing one.
+- Everything else (tank, carve, tricks, orbs, misses) as on the Moon. Each world's times and ghosts
+  are checked against its own top speed, and a missed hoop's reach scales with its longest leg.
+
+Calls made: Vesta's hoop counts lowered (8/12/16) so a run stays about a minute and a half at its
+cruise; the course-style words extended for Mars's, Vesta's and Ceres's feature names.

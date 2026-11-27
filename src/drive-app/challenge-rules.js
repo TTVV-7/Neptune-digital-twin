@@ -28,10 +28,12 @@ export const PERIOD_KINDS = [ 'week', 'month' ];
 export const KINDS = [ 'sprint', 'collect', 'landmark', 'hoops' ];
 export const PERIOD_NAMES = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 export const KIND_NAMES = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark', hoops: 'Hoop run' };
-// The worlds whose challenges are all hoop runs (since 2026-11-26: few drove the Moon's, and its
-// open, airless ground suits the plane): flown in the plane's course mode (src/plane.js) through
-// hoops standing over the ground, rather than driven (docs/world-drive.md, "Hoop runs").
-export const HOOP_WORLDS = [ 'moon' ];
+// The worlds whose challenges are all hoop runs (the Moon's since 2026-11-26: few drove its
+// challenges, and its open, airless ground suits the plane; Mars's, Vesta's and Ceres's since
+// 2026-11-27, flying being more fun, each its own way: HOOP_FEEL): flown in the plane's course mode
+// (src/plane.js) through hoops standing over the ground, rather than driven (docs/world-drive.md,
+// "Hoop runs"). The Earth's are driven.
+export const HOOP_WORLDS = [ 'moon', 'mars', 'vesta', 'ceres' ];
 
 // The fastest anything in the game goes along the ground (m/s), which no leg of a route can be
 // driven faster than: the fastest ride's top speed, the hypercar's 215 km/h (src/drive-app/cars.js),
@@ -46,26 +48,36 @@ export const HOOP_WORLDS = [ 'moon' ];
 export const TOP_SPEED = 215;
 export const BOOSTED = 2;
 export const FASTEST = TOP_SPEED * BOOSTED / 3.6;
-// A hoop run is flown in the plane's course mode (src/plane.js's COURSE, which reads these): it
+// A hoop run is flown in the plane's course mode (src/plane.js's COURSE_KMH, a copy of these): it
 // cruises at `cruise` km/h by itself, boosts to `boost` at most (nothing in course mode goes faster:
-// a dive, a carve's burst and a boost all stop there) and brakes to `least`. So a hoop run's legs and
-// its ghost are checked against COURSE_FASTEST (250 m/s) instead of the ground's FASTEST.
-export const COURSE = { cruise: 450, boost: 900, least: 220 };
-export const COURSE_FASTEST = COURSE.boost / 3.6;
+// a dive, a carve's burst and a boost all stop there) and brakes to `least`. Each world's own pace
+// (COURSES): Mars slower and twisting, Vesta fastest with its hoops far apart, the Moon and Ceres
+// between. So a hoop run's legs and its ghost are checked against its world's boost (fastestFor)
+// instead of the ground's FASTEST. COURSE is the Moon's; COURSE_FASTEST the fastest of any world's.
+export const COURSES = {
+	moon: { cruise: 450, boost: 900, least: 220 },
+	mars: { cruise: 380, boost: 780, least: 200 },
+	vesta: { cruise: 650, boost: 1300, least: 300 },
+	ceres: { cruise: 450, boost: 900, least: 220 },
+};
+export const COURSE = COURSES.moon;
+export const COURSE_FASTEST = Math.max( ...Object.values( COURSES ).map( course => course.boost ) ) / 3.6;
 // A hoop missed (flown past, or through a later one) puts this much (ms) on a hoop run's clock at
 // once, and is posted as [ index, ms, 1 ]: so cutting straight to a later hoop doesn't pay.
 export const HOOP_MISS = 3000;
 // A missed hoop was still flown by: the run's ghost is within this (m) of it across the ground at the
 // miss's time (ghost-rules.js), so a run can't skip a course by missing every hoop on the way to a
-// finish near its start (a landing site's loop). More than any hoop run's legs (900 m at most, a
-// basin's 1.25 times that), as a hoop skipped is missed where the next is flown through.
+// finish near its start (a landing site's loop). More than any of the Moon's legs (900 m at most, a
+// basin's 1.25 times that), as a hoop skipped is missed where the next is flown through; on a world
+// with longer legs, hoopNear's (Vesta's).
 export const HOOP_NEAR = 1500;
 
-// The fastest (m/s) a challenge of `kind` can be gone round: the plane's course mode for a hoop run,
-// the ground's for the rest.
-export function fastestFor( kind ) {
+// The fastest (m/s) a challenge of `kind` on `world` can be gone round: the plane's course mode there
+// for a hoop run (the fastest world's, not knowing which), the ground's for the rest.
+export function fastestFor( kind, world = null ) {
 
-	return kind === 'hoops' ? COURSE_FASTEST : FASTEST;
+	if ( kind !== 'hoops' ) return FASTEST;
+	return COURSES[ world ] ? COURSES[ world ].boost / 3.6 : COURSE_FASTEST;
 
 }
 // A run's time is the game's own clock: the steps the frames drove the car by, each at most 0.1 s
@@ -134,9 +146,7 @@ export const SHAPES = {
 // `radius` m round, with `orbs` boost orbs off the line and `tricks` trick hoops. About 60 to 90 s for
 // a good pilot a week's, two minutes or so a month's.
 //   hoops: { hoops, spacing: [ m, m ], radius, orbs, tricks }
-SHAPES.moon.day.hoops = { hoops: 12, spacing: [ 450, 700 ], radius: 16, orbs: 3, tricks: 1 };
-SHAPES.moon.week.hoops = { hoops: 18, spacing: [ 500, 800 ], radius: 16, orbs: 4, tricks: 2 };
-SHAPES.moon.month.hoops = { hoops: 26, spacing: [ 600, 900 ], radius: 16, orbs: 6, tricks: 3 };
+// (Each world's below, once all the worlds' shapes are made: HOOP_SHAPES.)
 // How a hoop run is laid out at each kind of place (hoopStyle), so the course is the place's own:
 //   turn: [ °, ° ] how sharp each turn is; pattern: 'weave' (left and right in turn), 'spiral' (one
 //   way all round), 'wander' (either way), 'loop' (one way, coming back round to the start);
@@ -162,22 +172,61 @@ const ORB_OFF = [ 60, 140 ];
 export function hoopStyle( place ) {
 
 	const text = `${ place.id ?? '' } ${ place.name ?? '' } ${ place.region ?? '' }`.toLowerCase();
-	if ( /rille|vallis|valley/.test( text ) ) return 'valley';
-	if ( /apollo|lunokhod|chang'?e|chandrayaan|shiv shakti|tranquility base|ranger|surveyor|luna \d/.test( text ) ) return 'landing';
-	if ( /\bmons\b|montes|summit|highlands|mountain|peak/.test( text ) ) return 'mountain';
-	if ( /pole|basin|aitken|orientale|lowest/.test( text ) ) return 'basin';
-	if ( /\bmare\b|oceanus|sea of|ocean of/.test( text ) ) return 'sea';
+	if ( /rille|vallis|valles|valley|chasma|fossae|catena|labyrinth|rupes|canyon|trough/.test( text ) ) return 'valley';
+	if ( /apollo|lunokhod|chang'?e|chandrayaan|shiv shakti|tranquility base|ranger|surveyor|luna \d|curiosity|perseverance|opportunity|spirit|viking|pathfinder|sojourner|insight|zhurong|phoenix|beagle|bradbury/.test( text ) ) return 'landing';
+	if ( /\bmons\b|montes|summit|highland|mountain|peak|tholus|tholi|terra\b|volcano|plateau/.test( text ) ) return 'mountain';
+	if ( /pole|basin|aitken|orientale|lowest|deepest/.test( text ) ) return 'basin';
+	if ( /\bmare\b|oceanus|sea of|ocean of|planitia|planum|plains/.test( text ) ) return 'sea';
 	return 'crater';
 
 }
 
-SHAPES.mars = SHAPES.moon;
+SHAPES.mars = structuredClone( SHAPES.moon );
 SHAPES.vesta = {
 	day: { ...SHAPES.moon.day, sprint: { ...SHAPES.moon.day.sprint, turn: 35 } },
 	week: { ...SHAPES.moon.week, sprint: { ...SHAPES.moon.week.sprint, turn: 40 } },
 	month: { ...SHAPES.moon.month, sprint: { ...SHAPES.moon.month.sprint, turn: 45 } },
 };
-SHAPES.ceres = SHAPES.vesta;
+SHAPES.ceres = structuredClone( SHAPES.vesta );
+// Each world's hoop runs: the Moon's the all-rounder; Mars's close together (and slower: COURSES);
+// Vesta's far apart and bigger round, for its speed; Ceres's as the Moon's, its heights jumping
+// (HOOP_FEEL).
+// (A day's, a week's and a month's: how many hoops, and how far apart. Vesta's fewer, as each leg is
+// long: about a minute and a half at its cruise either way.)
+const HOOP_SHAPES = {
+	moon: { hoops: [ 12, 18, 26 ], spacing: [ [ 450, 700 ], [ 500, 800 ], [ 600, 900 ] ], radius: 16 },
+	mars: { hoops: [ 12, 18, 26 ], spacing: [ [ 300, 420 ], [ 320, 460 ], [ 350, 500 ] ], radius: 16 },
+	vesta: { hoops: [ 8, 12, 16 ], spacing: [ [ 1100, 1600 ], [ 1200, 1800 ], [ 1300, 2000 ] ], radius: 24 },
+	ceres: { hoops: [ 12, 18, 26 ], spacing: [ [ 450, 700 ], [ 500, 800 ], [ 600, 900 ] ], radius: 18 },
+};
+for ( const [ world, { hoops, spacing, radius } ] of Object.entries( HOOP_SHAPES ) ) {
+
+	[ [ 'day', 3, 1 ], [ 'week', 4, 2 ], [ 'month', 6, 3 ] ].forEach( ( [ size, orbs, tricks ], i ) => {
+
+		SHAPES[ world ][ size ].hoops = { hoops: hoops[ i ], spacing: spacing[ i ], radius, orbs, tricks };
+
+	} );
+
+}
+
+// How each world's hoop runs feel on top of their places' styles (HOOP_STYLES): `turn` times as
+// sharp, the hoops `up` times as high over the ground (or, as `upRange`, anywhere in it, for Ceres's
+// dives and climbs).
+export const HOOP_FEEL = {
+	moon: { turn: 1, up: 1 },
+	mars: { turn: 1.3, up: 0.6 },
+	vesta: { turn: 0.5, up: 1.2 },
+	ceres: { turn: 1, up: 1, upRange: [ 5, 150 ] },
+};
+
+// How near (m) a hoop run's ghost must have come to a hoop it missed on `world`: HOOP_NEAR, or more
+// where its legs are longer (Vesta's, up to 2.5 km).
+export function hoopNear( world ) {
+
+	const longest = Math.max( ...PERIODS.map( size => SHAPES[ world ]?.[ size ]?.hoops?.spacing[ 1 ] ?? 0 ) ) * Math.max( ...Object.values( HOOP_STYLES ).map( style => style.spacing ) );
+	return Math.max( HOOP_NEAR, Math.ceil( longest * 1.2 ) );
+
+}
 // The kinds a period's challenge is picked from, with how likely each is: a daily one is mostly a
 // sprint or a hunt for items (a landmark's drive is the longest of the three), the others any.
 export const KIND_ODDS = {
@@ -428,7 +477,11 @@ function layOut( kind, world, place, shape, random ) {
 function layHoops( world, place, shape, random ) {
 
 	const style = hoopStyle( place );
-	const { turn, pattern, up, spacing, dives } = HOOP_STYLES[ style ];
+	const { pattern, spacing, dives } = HOOP_STYLES[ style ];
+	// (This world's feel on top: sharper or gentler, higher or lower.)
+	const feel = HOOP_FEEL[ world ] ?? HOOP_FEEL.moon;
+	const turn = HOOP_STYLES[ style ].turn.map( degrees => degrees * feel.turn );
+	const up = feel.upRange ?? HOOP_STYLES[ style ].up.map( metres => metres * feel.up );
 	const count = shape.hoops;
 	let bearing = Number.isFinite( place.heading ) ? place.heading : random() * 360;
 	const side = random() < 0.5 ? - 1 : 1;
@@ -578,7 +631,7 @@ export function leastTime( { world, kind, route }, passes ) {
 	let from = [ route.start.lat, route.start.lon ];
 	let fromRadius = START_SLACK;
 	let least = 0;
-	const fastest = fastestFor( kind );
+	const fastest = fastestFor( kind, world );
 	for ( const [ index, , missed ] of passes ) {
 
 		// (A hoop missed: wherever the plane was, so the next leg's from the last one hit; its penalty
@@ -610,7 +663,7 @@ export function checkPasses( { world, kind, route }, ms, passes ) {
 	const count = route.points.length;
 	if ( ! Number.isSafeInteger( ms ) || ms <= 0 || ms > MAX_RUN || ! Array.isArray( passes ) || passes.length !== count ) return false;
 	const hoops = kind === 'hoops';
-	const fastest = fastestFor( kind );
+	const fastest = fastestFor( kind, world );
 	const seen = new Set();
 	let from = [ route.start.lat, route.start.lon ];
 	let fromRadius = START_SLACK;

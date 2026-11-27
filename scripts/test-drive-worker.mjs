@@ -90,7 +90,7 @@ import { CELL, PLACES_PER_POST, cellMiddle, cellOf, checkCell, checkPlaces, metr
 import { VISITOR_PREFIX, nameCell, readTowns, topCells, topPlaces, townsFor } from '../worker/drive/dropins.js';
 import { createStats } from '../src/drive-app/stats.js';
 import {
-	BOOSTED, COURSE, COURSE_FASTEST, FASTEST, GRACE, HOOP_MISS, HOOP_NEAR, HOOP_STYLES, HOOP_WORLDS, KINDS, LEG_SLACK, TRICK_UP, describe as describeChallenge, fastestFor, hoopStyle, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
+	BOOSTED, COURSE, COURSES, COURSE_FASTEST, FASTEST, GRACE, HOOP_FEEL, HOOP_MISS, HOOP_NEAR, hoopNear, HOOP_STYLES, HOOP_WORLDS, KINDS, LEG_SLACK, TRICK_UP, describe as describeChallenge, fastestFor, hoopStyle, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
 	bearingTo, checkPasses, destination, kindFor, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, PERIODS, PERIOD_KINDS, randomFrom, rankText, formatTime,
 } from '../src/drive-app/challenge-rules.js';
 import { GROUNDS, REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, legFaultsOn, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick, routeFaults, steepOn } from '../worker/drive/challenges.js';
@@ -5803,6 +5803,8 @@ function fairGhost( { world, route }, ms, passes, { inside = 0.95, alter = null 
 describe( 'World Drive challenges: hoop runs (the Moon\'s, since 2026-11-26)', () => {
 
 	const place = name => MOON_PLACES.find( p => p.name === name );
+	// The Moon's course mode flat out (m/s).
+	const MOON_TOP = COURSE.boost / 3.6;
 	const random = ( fill = 7 ) => randomFrom( new Uint8Array( 32 ).fill( fill ) );
 	// Passes for a hoop run flown at `speed` m/s along each leg (the crow's way), each hoop hit, and
 	// with those in `missed` missed (its penalty on the clock as it's missed): { ms, passes }.
@@ -5831,14 +5833,14 @@ describe( 'World Drive challenges: hoop runs (the Moon\'s, since 2026-11-26)', (
 
 	};
 
-	test( 'the Moon\'s challenges are all hoop runs, every other world\'s as before; an owner\'s hoop run only on the Moon', () => {
+	test( 'the Moon\'s, Mars\'s, Vesta\'s and Ceres\'s challenges are all hoop runs, the Earth\'s driven; an owner\'s hoop run only on those', () => {
 
-		assert.deepEqual( HOOP_WORLDS, [ 'moon' ] );
+		assert.deepEqual( HOOP_WORLDS, [ 'moon', 'mars', 'vesta', 'ceres' ] );
 		assert.ok( KINDS.includes( 'hoops' ) );
 		for ( const period of PERIODS ) for ( const u of [ 0, 0.3, 0.6, 0.99 ] ) {
 
-			assert.equal( kindFor( period, u, 'moon' ), 'hoops' );
-			for ( const world of [ 'earth', 'mars', 'vesta', 'ceres' ] ) assert.notEqual( kindFor( period, u, world ), 'hoops' );
+			for ( const world of HOOP_WORLDS ) assert.equal( kindFor( period, u, world ), 'hoops' );
+			assert.notEqual( kindFor( period, u, 'earth' ), 'hoops' );
 
 		}
 
@@ -5900,30 +5902,106 @@ describe( 'World Drive challenges: hoop runs (the Moon\'s, since 2026-11-26)', (
 
 	} );
 
+	test( 'each world its own: Mars\'s hoops close and low, turning sharper, at a slower pace; Vesta\'s far apart, fewer and bigger, at the fastest; Ceres\'s heights jumping; their places\' styles', () => {
+
+		const places = { moon: MOON_PLACES, mars: MARS_PLACES, vesta: VESTA_PLACES, ceres: CERES_PLACES };
+		const find = ( world, name ) => places[ world ].find( p => p.name === name );
+		assert.equal( hoopStyle( find( 'mars', 'Olympus Mons' ) ), 'mountain' );
+		assert.equal( hoopStyle( find( 'mars', 'Valles Marineris' ) ), 'valley' );
+		assert.equal( hoopStyle( find( 'mars', 'Jezero crater' ) ), 'landing' );
+		assert.equal( hoopStyle( find( 'mars', 'Utopia Planitia' ) ), 'sea' );
+		assert.equal( hoopStyle( find( 'mars', 'Hellas Planitia' ) ), 'basin' );
+		assert.equal( hoopStyle( find( 'vesta', 'Rheasilvia' ) ), 'basin' );
+		assert.equal( hoopStyle( find( 'vesta', 'Divalia Fossae' ) ), 'valley' );
+		assert.equal( hoopStyle( find( 'ceres', 'Ahuna Mons' ) ), 'mountain' );
+		assert.equal( hoopStyle( find( 'ceres', 'Occator' ) ), 'crater' );
+		// Their paces: Mars slower than the Moon, Vesta faster; each checked against its own.
+		assert.ok( COURSES.mars.boost < COURSES.moon.boost && COURSES.vesta.boost > COURSES.moon.boost );
+		for ( const world of HOOP_WORLDS ) assert.equal( fastestFor( 'hoops', world ), COURSES[ world ].boost / 3.6 );
+		assert.equal( COURSE_FASTEST, COURSES.vesta.boost / 3.6 );
+		const legs = route => {
+
+			let [ lat, lon ] = [ route.start.lat, route.start.lon ];
+			return route.points.map( ( [ toLat, toLon ] ) => {
+
+				const leg = metresOn( route.world, lat, lon, toLat, toLon );
+				[ lat, lon ] = [ toLat, toLon ];
+				return leg;
+
+			} );
+
+		};
+		const mean = list => list.reduce( ( a, b ) => a + b, 0 ) / list.length;
+		const lay = ( world, name ) => ( { ...makeRoute( { kind: 'hoops', size: 'week', world, place: find( world, name ) }, random() ), world } );
+		const mars = lay( 'mars', 'Gusev crater' );
+		const vesta = lay( 'vesta', 'Marcia' );
+		const ceres = lay( 'ceres', 'Kerwan' );
+		const moon = lay( 'moon', 'Copernicus crater' );
+		assert.equal( mars.points.length, SHAPES.mars.week.hoops.hoops );
+		assert.equal( vesta.points.length, SHAPES.vesta.week.hoops.hoops );
+		assert.ok( vesta.points.length < moon.points.length );
+		assert.ok( mean( legs( mars ) ) < mean( legs( moon ) ) && mean( legs( vesta ) ) > 2 * mean( legs( moon ) ) );
+		assert.equal( vesta.radius, 24 );
+		assert.ok( mean( mars.points.map( p => p[ 2 ] ) ) < mean( moon.points.map( p => p[ 2 ] ) ) );
+		// Ceres's in its range, from near the ground to high up.
+		const ups = ceres.points.filter( ( _, i ) => ! ceres.tricks.includes( i ) ).map( p => p[ 2 ] );
+		assert.ok( ups.every( up => up >= HOOP_FEEL.ceres.upRange[ 0 ] && up <= HOOP_FEEL.ceres.upRange[ 1 ] ) );
+		assert.ok( Math.max( ...ups ) - Math.min( ...ups ) > 60, JSON.stringify( ups ) );
+		// A missed hoop's reach: more than any of a world's legs.
+		for ( const world of HOOP_WORLDS ) for ( const size of PERIODS ) assert.ok( hoopNear( world ) > SHAPES[ world ][ size ].hoops.spacing[ 1 ] * Math.max( ...Object.values( HOOP_STYLES ).map( style => style.spacing ) ) );
+		assert.equal( hoopNear( 'moon' ), HOOP_NEAR );
+		// A Vesta run at its boost's top taken, the same at Mars's (slower) not quicker than Mars allows.
+		const at = ( challenge, speed ) => {
+
+			let from = [ challenge.route.start.lat, challenge.route.start.lon ];
+			let fromRadius = START_SLACK;
+			let t = 0;
+			const passes = challenge.route.points.map( ( point, index ) => {
+
+				t += Math.ceil( legMinimum( challenge.world, from, fromRadius, point, challenge.route.radius, speed ) );
+				from = point;
+				fromRadius = challenge.route.radius;
+				return [ index, t ];
+
+			} );
+			return { ms: t, passes };
+
+		};
+		const onVesta = { world: 'vesta', kind: 'hoops', route: vesta };
+		const fast = at( onVesta, COURSES.vesta.boost / 3.6 );
+		assert.ok( checkPasses( onVesta, fast.ms, fast.passes ) );
+		const onMars = { world: 'mars', kind: 'hoops', route: mars };
+		const tooFast = at( onMars, COURSES.vesta.boost / 3.6 );
+		assert.equal( checkPasses( onMars, tooFast.ms, tooFast.passes ), false );
+		const fair = at( onMars, COURSES.mars.boost / 3.6 );
+		assert.ok( checkPasses( onMars, fair.ms, fair.passes ) );
+
+	} );
+
 	test( 'a hoop run\'s time: checked against the course\'s top speed, a missed hoop taking HOOP_MISS and constraining nothing, the finish never missed', () => {
 
-		assert.equal( COURSE_FASTEST, COURSE.boost / 3.6 );
-		assert.ok( COURSE_FASTEST > FASTEST );
+		assert.ok( COURSE.boost / 3.6 > FASTEST );
+		assert.equal( fastestFor( 'hoops', 'moon' ), COURSE.boost / 3.6 );
 		assert.equal( fastestFor( 'hoops' ), COURSE_FASTEST );
 		assert.equal( fastestFor( 'sprint' ), FASTEST );
 		const route = makeRoute( { kind: 'hoops', size: 'week', world: 'moon', place: place( 'Copernicus crater' ) }, random() );
 		const challenge = { world: 'moon', kind: 'hoops', route };
 		// At the cruise, and at the boost's top flat out: taken; quicker than that, not.
-		for ( const speed of [ COURSE.cruise / 3.6, COURSE_FASTEST ] ) {
+		for ( const speed of [ COURSE.cruise / 3.6, MOON_TOP ] ) {
 
 			const { ms, passes } = flown( challenge, speed );
 			assert.ok( checkPasses( challenge, ms, passes ), `${ speed } m/s` );
 
 		}
 
-		const quick = flown( challenge, COURSE_FASTEST * 1.3 );
+		const quick = flown( challenge, MOON_TOP * 1.3 );
 		assert.equal( checkPasses( challenge, quick.ms, quick.passes ), false );
 		// The same passes as a sprint (the ground's FASTEST): too quick.
 		const cruise = flown( challenge, COURSE.cruise / 3.6 );
 		assert.equal( checkPasses( { ...challenge, kind: 'sprint' }, cruise.ms, cruise.passes ), false );
 		// Missed hoops: with their penalty, taken; the next leg's from the last hoop hit (flown at the top
 		// speed straight past one, quicker than the crow's way to it and on).
-		const missed = flown( challenge, COURSE_FASTEST, [ 3, 4, 9 ] );
+		const missed = flown( challenge, MOON_TOP, [ 3, 4, 9 ] );
 		assert.ok( checkPasses( challenge, missed.ms, missed.passes ) );
 		assert.equal( leastTime( challenge, missed.passes ) >= 3 * HOOP_MISS, true );
 		// A miss without its penalty, a miss marked other than 1, a miss of the finish, or a sprint's
@@ -5934,7 +6012,7 @@ describe( 'World Drive challenges: hoop runs (the Moon\'s, since 2026-11-26)', (
 		const marked = structuredClone( missed );
 		marked.passes[ 3 ][ 2 ] = 2;
 		assert.equal( checkPasses( challenge, marked.ms, marked.passes ), false );
-		const finish = flown( challenge, COURSE_FASTEST, [ route.points.length - 1 ] );
+		const finish = flown( challenge, MOON_TOP, [ route.points.length - 1 ] );
 		assert.equal( checkPasses( challenge, finish.ms, finish.passes ), false );
 		const sprint = makeRoute( { kind: 'sprint', size: 'week', world: 'moon', place: place( 'Copernicus crater' ) }, random() );
 		const run = fairRun( { world: 'moon', kind: 'sprint', route: sprint } );
@@ -5973,7 +6051,7 @@ describe( 'World Drive challenges: hoop runs (the Moon\'s, since 2026-11-26)', (
 			const off = fairGhost( challenge, missed.ms, missed.passes.filter( pass => ! pass[ 2 ] ) );
 			assert.equal( ( await post( 'Bea', 'b'.repeat( 16 ), missed, off ) ).status, 200 );
 			// A ghost flying faster than the course goes: turned away.
-			const fast = flown( challenge, COURSE_FASTEST );
+			const fast = flown( challenge, MOON_TOP );
 			const cheat = fairGhost( challenge, fast.ms, fast.passes, { alter: ghost => {
 
 				ghost.east[ 5 ] += 100000;
@@ -8114,7 +8192,7 @@ describe( 'World Drive challenges', () => {
 			// (A hoop run's hoops are flown over, and one on a slope is lifted clear of it by the page:
 			// on the roughest ground, a rim or a pole, the fewest steep of the tries may be one or two.)
 			if ( c.world === 'moon' ) assert.ok( movableFaults( c.route ) <= ( c.kind === 'hoops' ? 2 : 0 ), c.place );
-			if ( c.world === 'mars' ) assert.equal( movableFaults( c.route, 'mars' ), 0, c.place );
+			if ( c.world === 'mars' ) assert.ok( movableFaults( c.route, 'mars' ) <= ( c.kind === 'hoops' ? 2 : 0 ), c.place );
 
 		}
 

@@ -98,9 +98,15 @@ export const DROP = { terminal: 700, least: 450, dive: 1.6, pull: 60, boost: 10,
 //     go (under `release`) fires a burst: `bursts` of the cruise on top, for `times` s. Carving turns
 //     `sharper` times as fast.
 //   trick: tricks paid within `trickWindow` s of a hoop add `trick` bars (a trick hoop's `trickHoop`).
-export const COURSE_KMH = { cruise: 450, boost: 900, least: 220 };
+// (Each world's pace: COURSES in challenge-rules.js; the Moon's by default, and COURSE_MODE's own.)
+export const COURSE_KMH = {
+	moon: { cruise: 450, boost: 900, least: 220 },
+	mars: { cruise: 380, boost: 780, least: 200 },
+	vesta: { cruise: 650, boost: 1300, least: 300 },
+	ceres: { cruise: 450, boost: 900, least: 220 },
+};
 export const COURSE_MODE = {
-	cruise: COURSE_KMH.cruise / KMH_, boost: COURSE_KMH.boost / KMH_, least: COURSE_KMH.least / KMH_,
+	cruise: COURSE_KMH.moon.cruise / KMH_, boost: COURSE_KMH.moon.boost / KMH_, least: COURSE_KMH.moon.least / KMH_,
 	boostAccel: 90, brake: 110, ease: 0.35, rise: 18,
 	tank: 5, full: 3, burn: 1,
 	dive: 0.35, climb: 70, ceiling: 600,
@@ -230,9 +236,10 @@ export class PlaneMode {
 
 	}
 
-	// Course mode on (a hoop run set up: `up` m over the ground is where it's held till GO) or off
-	// (null): its tank full to COURSE_MODE.full, no carve or burst, held where it is.
-	setCourse( up ) {
+	// Course mode on (a hoop run on `world` set up: `up` m over the ground is where it's held till GO)
+	// or off (null): its tank full to COURSE_MODE.full, no carve or burst, held where it is, at the
+	// world's pace (COURSE_KMH, m/s here: cruise, boost, least).
+	setCourse( up, world = 'moon' ) {
 
 		if ( up === null || up === undefined ) {
 
@@ -241,7 +248,11 @@ export class PlaneMode {
 
 		}
 
-		this.course = { held: true, up, tank: COURSE_MODE.full, carve: 0, level: 0, burst: null, sinceHoop: Infinity, trickHoop: false, empty: false };
+		const pace = COURSE_KMH[ world ] ?? COURSE_KMH.moon;
+		this.course = {
+			held: true, up, tank: COURSE_MODE.full, carve: 0, level: 0, burst: null, sinceHoop: Infinity, trickHoop: false, empty: false,
+			cruise: pace.cruise / KMH_, boost: pace.boost / KMH_, least: pace.least / KMH_,
+		};
 
 	}
 
@@ -250,7 +261,7 @@ export class PlaneMode {
 
 		if ( ! this.course ) return;
 		this.course.held = false;
-		this.driver.speed = COURSE_MODE.cruise;
+		this.driver.speed = this.course.cruise;
 
 	}
 
@@ -683,7 +694,7 @@ export class PlaneMode {
 		// Its own climb, and the loop's hump (not kept in this.vy: the climb is as it was).
 		d.y += this.vy * dt + this.loopStep;
 		// A hoop run's dive is speed, and its climb costs it (within its least and the boost's top).
-		if ( course && ! course.held ) d.speed = MathUtils.clamp( d.speed - this.vy * dt * COURSE_MODE.dive, COURSE_MODE.least, COURSE_MODE.boost );
+		if ( course && ! course.held ) d.speed = MathUtils.clamp( d.speed - this.vy * dt * COURSE_MODE.dive, course.least, course.boost );
 		this.loopVy = dt > 0 ? this.loopStep / dt : 0;
 
 		// Never under the ground: kept CLEARANCE over it, or, coming down to land, down on it and
@@ -743,7 +754,7 @@ export class PlaneMode {
 
 		c.sinceHoop += dt;
 		// The carve: charged holding a hard turn at speed, fired letting go.
-		const hard = Math.abs( steerInput ) >= m.carve.hold && d.speed >= m.cruise * m.carve.fast;
+		const hard = Math.abs( steerInput ) >= m.carve.hold && d.speed >= c.cruise * m.carve.fast;
 		if ( hard ) {
 
 			c.carve += dt;
@@ -755,11 +766,11 @@ export class PlaneMode {
 
 			}
 
-		} else if ( Math.abs( steerInput ) < m.carve.release || d.speed < m.cruise * m.carve.fast ) {
+		} else if ( Math.abs( steerInput ) < m.carve.release || d.speed < c.cruise * m.carve.fast ) {
 
 			if ( c.level > 0 ) {
 
-				c.burst = { extra: m.carve.bursts[ c.level - 1 ] * m.cruise, left: m.carve.times[ c.level - 1 ], level: c.level };
+				c.burst = { extra: m.carve.bursts[ c.level - 1 ] * c.cruise, left: m.carve.times[ c.level - 1 ], level: c.level };
 				d.hud.flash( `Carve boost ${ [ 'I', 'II', 'III' ][ c.level - 1 ] }!` );
 
 			}
@@ -787,13 +798,13 @@ export class PlaneMode {
 		}
 
 		if ( boosting ) c.tank = Math.max( 0, c.tank - m.burn * dt );
-		const goal = boosting ? m.boost : Math.min( m.boost, m.cruise + ( c.burst?.extra ?? 0 ) );
-		if ( back ) d.speed = Math.max( m.least, d.speed - m.brake * dt );
+		const goal = boosting ? c.boost : Math.min( c.boost, c.cruise + ( c.burst?.extra ?? 0 ) );
+		if ( back ) d.speed = Math.max( c.least, d.speed - m.brake * dt );
 		else if ( d.speed < goal ) d.speed = Math.min( goal, d.speed + ( boosting || c.burst ? m.boostAccel : m.rise ) * dt );
 		else if ( d.speed > goal ) d.speed = Math.max( goal, d.speed - ( ( d.speed - goal ) * m.ease + 2 ) * dt );
 		// A hard turn sheds what it's over the cruise (unless it's a carve's, which is how it's charged).
-		if ( ! hard && d.speed > m.cruise ) d.speed -= ( d.speed - m.cruise ) * Math.abs( steerInput ) * m.bleed * dt;
-		d.speed = MathUtils.clamp( d.speed, m.least, m.boost );
+		if ( ! hard && d.speed > c.cruise ) d.speed -= ( d.speed - c.cruise ) * Math.abs( steerInput ) * m.bleed * dt;
+		d.speed = MathUtils.clamp( d.speed, c.least, c.boost );
 		this.thrust += ( ( boosting ? 1 : back ? 0.15 : c.burst ? 0.85 : 0.5 ) - this.thrust ) * Math.min( 1, dt * 3 );
 
 	}
@@ -803,7 +814,7 @@ export class PlaneMode {
 
 		const m = COURSE_MODE;
 		const c = this.course;
-		const turn = MathUtils.lerp( ...m.turn, MathUtils.clamp( ( this.driver.speed - m.least ) / ( m.boost - m.least ), 0, 1 ) );
+		const turn = MathUtils.lerp( ...m.turn, MathUtils.clamp( ( this.driver.speed - c.least ) / ( c.boost - c.least ), 0, 1 ) );
 		return c.held ? 0 : turn * ( c.carve > 0 ? m.carve.sharper : 1 );
 
 	}
@@ -916,7 +927,7 @@ export class PlaneMode {
 
 			if ( d.speed > 8 ) d.hud.flash( 'Bonk!' );
 			// (A hoop run's plane never hovers: knocked down to its least.)
-			d.speed = this.course && ! this.course.held ? COURSE_MODE.least : 0;
+			d.speed = this.course && ! this.course.held ? this.course.least : 0;
 
 		}
 

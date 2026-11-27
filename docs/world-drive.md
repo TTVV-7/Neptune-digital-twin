@@ -71,7 +71,8 @@ address, and the construction app is unchanged by it.
    and a monthly one on each world, a checkpoint sprint, a hunt for stars or a drive to a landmark
    against the clock, each with its own board ([Challenges](#challenges)). The Moon's are **hoop
    runs**, flown in the plane through hoops over its real ground, with a boost tank, carve boosts and
-   trick boosts ([Hoop runs](#hoop-runs-the-moons-since-2026-11-26)).
+   trick boosts, and so are Mars's, Vesta's and Ceres's, each its own way
+   ([Hoop runs](#hoop-runs-the-moons-since-2026-11-26-marss-vestas-and-ceress-since-2026-11-27)).
 7. **Discoveries and the data lens** (on the Moon, Mars, Vesta and Ceres): glowing beacons at real
    named places, the landing sites and the great craters, volcanoes and peaks, to drive or fly to and
    collect, each with a card of true facts and its height in the very data the ground is built from,
@@ -247,7 +248,7 @@ that speed is out of their sight in seconds anyway.
 
 - **No challenges, but hoop runs.** T does nothing during a challenge's countdown or run ("No plane
   during a challenge run"), so no driven board's time is ever flown. A hoop run (the Moon's) is flown
-  instead, in course mode ([Hoop runs](#hoop-runs-the-moons-since-2026-11-26)). Times are still checked against the fastest
+  instead, in course mode ([Hoop runs](#hoop-runs-the-moons-since-2026-11-26-marss-vestas-and-ceress-since-2026-11-27)). Times are still checked against the fastest
   anything drives along the ground (`FASTEST` in `challenge-rules.js`), which the plane isn't.
 - **No car stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
   out. As a plane there's no hop, drift or booster. Its run carries on once it's down: what its tricks
@@ -6308,14 +6309,34 @@ day's pick, and the Worker turns one away (400). The **Daily winner** achievemen
 in "n / total", and **Weekly winner** (first on a weekly board) is new beside it. The rest of this
 section was written with three a world and says "daily" where it describes how they worked.
 
-### Hoop runs (the Moon's, since 2026-11-26)
+### Hoop runs (the Moon's since 2026-11-26; Mars's, Vesta's and Ceres's since 2026-11-27)
 
 Few people drove the Moon's challenges, and most visits leave after about a minute, so the Moon's
 weekly and monthly challenges (and its daily ones, if `CHALLENGE_PERIODS` brings them back) are
 **hoop runs**: the ride turns into a plane and flies a line of hoops against the clock, with the same
-boards, ghosts, Retry and links as the rest. Every other world keeps its sprints, star hunts and
-landmark drives. (`HOOP_WORLDS` in `challenge-rules.js`; `kindFor` gives the Moon nothing else.
-Design: `docs/superpowers/specs/2026-11-26-moon-hoop-runs-design.md`.)
+boards, ghosts, Retry and links as the rest. Flying being more fun, Mars's, Vesta's and Ceres's are
+hoop runs too, each in its own look and at its own pace (below); the Earth keeps its sprints, star
+hunts and landmark drives. (`HOOP_WORLDS` in `challenge-rules.js`; `kindFor` gives those worlds
+nothing else. Design: `docs/superpowers/specs/2026-11-26-moon-hoop-runs-design.md`.)
+
+**Each world its own** (`COURSES`, `HOOP_SHAPES`, `HOOP_FEEL` in `challenge-rules.js`; `HOOP_THEMES`
+in `challenges.js`; `COURSE_KMH` in `plane.js`, which a test keeps equal to `COURSES`):
+
+| World | Hoops | Pace (cruise / boost / least) | Week: hoops, apart, round | Feel |
+| --- | --- | --- | --- | --- |
+| Moon | gold | 450 / 900 / 220 km/h | 18, 500-800 m, 16 m | the all-rounder |
+| Mars | rust orange | 380 / 780 / 200 km/h | 18, 320-460 m, 16 m | turns 1.3 times as sharp, hoops 0.6 times as high: tight and twisting, low over canyon floors and volcano slopes |
+| Vesta | violet | 650 / 1,300 / 300 km/h | 12, 1,200-1,800 m, 24 m | turns half as sharp, hoops 1.2 times as high: long straights where the boost decides it |
+| Ceres | icy white-cyan hexagons, turning | 450 / 900 / 220 km/h | 18, 500-800 m, 18 m | every hoop anywhere from 5 to 150 m up: dives and climbs |
+
+A day's and a month's are the same per world, with 12 and 26 hoops (Vesta's 8 and 16). The
+places' styles read each world's own words: Mars's Planitia (a sea's slalom), Chasma, Valles,
+Fossae and Catena (a valley's), Mons and Tholus (a mountain's), the landers and rovers (Curiosity,
+Perseverance, Viking...) a landing site's, Hellas and Rheasilvia a basin's. Each world's times are
+checked against its own boost (`fastestFor( kind, world )`), and a missed hoop's ghost against its
+own longest leg (`hoopNear`: 1.5 km, Vesta's 3 km). On Vesta and Ceres, where the scene follows the
+plane, a recentre moves the orbs with the hoops and forgets where the plane was the frame before, so
+no hoop is crossed by the move.
 
 **The course is the place's own.** `hoopStyle` reads what kind of place the rotation picked from its
 name and region, and `layHoops` lays it out in that style (`HOOP_STYLES`):

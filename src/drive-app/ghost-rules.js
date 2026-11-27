@@ -1,4 +1,4 @@
-import { HOOP_NEAR, START_SLACK, TALL, ZONE_UP, fastestFor } from './challenge-rules.js';
+import { START_SLACK, TALL, ZONE_UP, fastestFor, hoopNear } from './challenge-rules.js';
 import { RADIUS } from './dropin-cells.js';
 import { inFrame, levelFrame, levelled, pointOn } from './level.js';
 import { EARTH, isWorld } from './worlds.js';
@@ -345,7 +345,7 @@ export function ghostFault( { world, kind, route }, ms, passes, text ) {
 	if ( dx0 * dx0 + dy0 * dy0 > ( START_SLACK * 100 ) ** 2 ) return 'start';
 	let jumps = 0;
 	// (A hoop run's against the plane's course mode: fastestFor.)
-	const fastest = fastestFor( kind );
+	const fastest = fastestFor( kind, world );
 	const allowed = Math.min( JUMPS_MOST, JUMPS + Math.floor( ms / JUMP_EVERY ) );
 	for ( let i = 1; i < count; i ++ ) {
 
@@ -364,8 +364,8 @@ export function ghostFault( { world, kind, route }, ms, passes, text ) {
 
 	for ( const [ index, at, missed ] of passes ) {
 
-		// (A hoop missed wasn't flown through, but it was flown by: within HOOP_NEAR of it.)
-		const reach = missed ? HOOP_NEAR : route.radius;
+		// (A hoop missed wasn't flown through, but it was flown by: within hoopNear of it.)
+		const reach = missed ? hoopNear( world ) : route.radius;
 		const [ lat, lon ] = route.points[ index ];
 		const i = Math.min( Math.floor( at / every ), count - 2 );
 		const t0 = sampleTime( i, count, every, ms );

@@ -113,6 +113,16 @@ const LATER = new Color( 0x3ec1ff ).multiplyScalar( 0.75 );
 const GOAL = new Color( 0x5dff8a );
 const STAR = new Color( 0xffc531 );
 const TRICK = new Color( 0xff4fa8 );
+// Each world's hoops (a hoop run's next one, and those after it): the Moon's gold, Mars's rust,
+// Vesta's violet and Ceres's ice, which turn slowly (SPINNING, at HOOP_SPIN rad/s) as hexagons.
+const HOOP_THEMES = {
+	moon: { next: NEXT, later: LATER },
+	mars: { next: new Color( 0xff7a2f ), later: new Color( 0xb5522a ).multiplyScalar( 0.85 ) },
+	vesta: { next: new Color( 0xc08bff ), later: new Color( 0x6f4bb8 ).multiplyScalar( 0.85 ) },
+	ceres: { next: new Color( 0xeafcff ), later: new Color( 0x7fd8ff ).multiplyScalar( 0.75 ) },
+};
+const SPINNING = new Set( [ 'ceres' ] );
+const HOOP_SPIN = 0.6;
 const ORB_COLOUR = new Color( 0x3ec1ff );
 const MISSED = new Color( 0xff6b5e ).multiplyScalar( 0.6 );
 // A post that didn't get through is tried again after RETRY ms, TRIES times in all (a 429 asking
@@ -157,6 +167,8 @@ const _w = new Vector3();
 const _colour = new Color();
 const _m = new Matrix4();
 const _up = new Vector3( 0, 1, 0 );
+const _forward = new Vector3( 0, 0, 1 );
+const _turn = new Quaternion();
 const _inverse = new Matrix4();
 const _carto = { lat: 0, lon: 0, height: 0 };
 
@@ -1002,6 +1014,23 @@ export function setUpChallenges( app ) {
 
 		}
 
+		// A hoop run's orbs placed again too (taken or not, as they were), and where the plane was the
+		// frame before forgotten: in the old frame, it would look like a hoop crossed.
+		if ( run.challenge.kind === 'hoops' ) {
+
+			const heights = app.bodies?.[ run.challenge.world ];
+			( run.challenge.route.orbs ?? [] ).forEach( ( [ lat, lon, up ], i ) => {
+
+				const orb = run.orbs?.[ i ];
+				if ( ! orb ) return;
+				const local = sceneOf( app.globe, lat, lon, ( heights?.heightAt( lat, lon ) ?? 0 ) + up );
+				Object.assign( orb, { x: local.x, y: local.y, z: local.z } );
+
+			} );
+			run.lastAt = null;
+
+		}
+
 		meshes.moved( run );
 		if ( race?.ready && run.raced === race ) race.ghost.start( app.globe, run.challenge.route.start, run.challenge.world );
 
@@ -1212,7 +1241,7 @@ export function setUpChallenges( app ) {
 		const plane = d.aircraft;
 		if ( ! plane ) return;
 		if ( ! plane.on ) d.togglePlane();
-		plane.setCourse( Math.max( START_UP, route.points[ 0 ]?.[ 2 ] ?? 0 ) );
+		plane.setCourse( Math.max( START_UP, route.points[ 0 ]?.[ 2 ] ?? 0 ), world );
 
 	}
 
@@ -2007,7 +2036,9 @@ export function setUpChallenges( app ) {
 		const rings = new InstancedMesh( new TorusGeometry( 1, RING_TUBE, 6, 36 ), new MeshBasicMaterial( { toneMapped: false } ), most );
 		const items = new InstancedMesh( new OctahedronGeometry( 1 ), new MeshBasicMaterial( { toneMapped: false } ), most );
 		// A hoop run's: its hoops (a thicker ring, its route's radius round) and its orbs.
-		const hoops = new InstancedMesh( new TorusGeometry( 1, HOOP_TUBE, 8, 64 ), new MeshBasicMaterial( { toneMapped: false } ), most );
+		const round = new TorusGeometry( 1, HOOP_TUBE, 8, 64 );
+		const hexagon = new TorusGeometry( 1, HOOP_TUBE * 1.3, 4, 6 );
+		const hoops = new InstancedMesh( round, new MeshBasicMaterial( { toneMapped: false } ), most );
 		const orbs = new InstancedMesh( new OctahedronGeometry( 1, 2 ), new MeshBasicMaterial( { color: ORB_COLOUR, transparent: true, opacity: 0.85, toneMapped: false } ), most );
 		// The course's chevrons: a V pointing along +z, standing on the ground leaned forward.
 		const vee = new Shape( [ [ 0, 0.6 ], [ 1, - 0.4 ], [ 1, - 0.9 ], [ 0, 0.1 ], [ - 1, - 0.9 ], [ - 1, - 0.4 ] ].map( ( [ x, y ] ) => new Vector2( x, y ) ) );
@@ -2051,6 +2082,8 @@ export function setUpChallenges( app ) {
 				beams.count = shown.gates.length;
 				( hooped ? hoops : ringed ? rings : items ).count = shown.gates.length;
 				orbs.count = hooped ? Math.min( most, shown.orbs?.length ?? 0 ) : 0;
+				// (Ceres's ice hoops as hexagons, turning.)
+				hoops.geometry = SPINNING.has( shown.challenge.world ) ? hexagon : round;
 				rings.visible = ringed;
 				items.visible = ! ringed && ! hooped;
 				hoops.visible = orbs.visible = hooped;
@@ -2082,6 +2115,7 @@ export function setUpChallenges( app ) {
 				const moonly = shown.challenge.world !== EARTH;
 				const radius = shown.challenge.route.radius;
 				const hooped = shown.challenge.kind === 'hoops';
+				const spinning = hooped && SPINNING.has( shown.challenge.world );
 				const ringed = shown.challenge.kind !== 'collect';
 				const ring = Math.min( RING, radius * 0.5 );
 				const next = ringed ? shown.gates.find( gate => ! gate.passed ) : null;
@@ -2099,7 +2133,13 @@ export function setUpChallenges( app ) {
 					const size = ring * gone * ( gate === next ? breathe : 1 );
 					// A hoop at its own height, its route's radius round (a passed one gone, a missed one
 					// left, dim, where it was missed).
-					if ( hooped ) hoops.setMatrixAt( i, _m.compose( _v.set( gate.x, gate.y, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( radius * ( gate.passed && ! gate.missed ? 0 : 1 ) * ( gate === next ? breathe : 1 ) ) ) );
+					if ( hooped ) {
+
+						_q.setFromAxisAngle( _up, gate.facing );
+						if ( spinning ) _q.multiply( _turn.setFromAxisAngle( _forward, spin * HOOP_SPIN / SPIN + i ) );
+						hoops.setMatrixAt( i, _m.compose( _v.set( gate.x, gate.y, gate.z ), _q, _s.setScalar( radius * ( gate.passed && ! gate.missed ? 0 : 1 ) * ( gate === next ? breathe : 1 ) ) ) );
+
+					}
 					else if ( ringed ) rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( size ) ) );
 
 				} );
@@ -2123,7 +2163,8 @@ export function setUpChallenges( app ) {
 				const next = ordered ? shown.gates.find( gate => ! gate.passed ) : null;
 				shown.gates.forEach( ( gate, i ) => {
 
-					const colour = ! ordered ? STAR : gate.missed ? MISSED : i === shown.gates.length - 1 ? GOAL : gate.trick ? TRICK : gate === next ? NEXT : LATER;
+					const theme = gate.hoop ? HOOP_THEMES[ shown.challenge.world ] ?? HOOP_THEMES.moon : HOOP_THEMES.moon;
+					const colour = ! ordered ? STAR : gate.missed ? MISSED : i === shown.gates.length - 1 ? GOAL : gate.trick ? TRICK : gate === next ? theme.next : theme.later;
 					beams.setColorAt( i, colour );
 					( gate.hoop ? hoops : ordered ? rings : items ).setColorAt( i, colour );
 
@@ -2192,12 +2233,14 @@ export function setUpChallenges( app ) {
 				}
 
 				wave = ( wave + dt / WAVE_TIME ) % 1;
+				// (A hoop run's in its world's colours.)
+				const theme = shown.challenge.kind === 'hoops' ? HOOP_THEMES[ shown.challenge.world ] ?? HOOP_THEMES.moon : HOOP_THEMES.moon;
 				laid.forEach( ( chevron, i ) => {
 
 					// A crest running toward the gate: brightest where (distance / WAVE + time) is whole.
 					const phase = ( chevron.to / WAVE + wave ) % 1;
 					const light = 0.4 + 0.5 * Math.max( 0, Math.cos( phase * Math.PI * 2 ) ) ** 3;
-					_colour.copy( chevron.dim ? LATER : chevron.goal ? GOAL : NEXT ).multiplyScalar( chevron.dim ? 0.5 : light );
+					_colour.copy( chevron.dim ? theme.later : chevron.goal ? GOAL : theme.next ).multiplyScalar( chevron.dim ? 0.5 : light );
 					chevrons.setColorAt( i, _colour );
 
 				} );

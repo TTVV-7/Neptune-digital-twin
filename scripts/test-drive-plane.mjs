@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Driver } from '../src/drive.js';
 import { COURSE_KMH, COURSE_MODE, DROP, PARACHUTE, PlaneMode, chuteHeight, chuteSink, dropTerminal, planeTopSpeed } from '../src/plane.js';
-import { COURSE, COURSE_FASTEST } from '../src/drive-app/challenge-rules.js';
+import { COURSE, COURSES, COURSE_FASTEST, HOOP_WORLDS, fastestFor } from '../src/drive-app/challenge-rules.js';
 import { HEIGHTS, LOOP, PLANE_POINTS, PLANE_TRICKS, TURN_TOL, loopGate, loopOffset, noseAngle, planeTricksOf } from '../src/plane-tricks.js';
 import { TRICK } from '../worker/drive/scores.js';
 
@@ -543,8 +543,11 @@ describe( 'course mode (a hoop run)', () => {
 
 	test( 'its speeds are challenge-rules.js\'s COURSE, whose boost a hoop run\'s time is checked against', () => {
 
-		assert.deepEqual( COURSE_KMH, COURSE );
-		assert.ok( Math.abs( COURSE_MODE.boost - COURSE_FASTEST ) < 1e-9 );
+		assert.deepEqual( COURSE_KMH, COURSES );
+		assert.deepEqual( Object.keys( COURSE_KMH ).sort(), [ ...HOOP_WORLDS ].sort() );
+		assert.ok( Math.abs( COURSE_MODE.boost - COURSE.boost / KMH ) < 1e-9 );
+		assert.ok( Math.abs( Math.max( ...Object.values( COURSE_KMH ).map( pace => pace.boost ) ) / KMH - COURSE_FASTEST ) < 1e-9 );
+		for ( const world of HOOP_WORLDS ) assert.ok( Math.abs( fastestFor( 'hoops', world ) - COURSE_KMH[ world ].boost / KMH ) < 1e-9 );
 
 	} );
 
@@ -677,6 +680,31 @@ describe( 'course mode (a hoop run)', () => {
 		r.plane.setCourse( null );
 		r.plane.toggle();
 		assert.equal( r.plane.phase, 'dropping' );
+
+	} );
+
+	test( 'each world at its own pace: Mars slower, Vesta fastest; never past its boost, never under its least', () => {
+
+		for ( const world of HOOP_WORLDS ) {
+
+			const r = flying( rig( { gravity: G[ world ] ?? G.vesta, y: 40 } ) );
+			r.plane.setCourse( 40, world );
+			run( r, DT );
+			r.plane.courseGo();
+			assert.ok( Math.abs( r.d.speed - COURSE_KMH[ world ].cruise / KMH ) < 1e-9, world );
+			let top = 0;
+			hold( r, [ 'KeyW' ], 6, { each: () => {
+
+				top = Math.max( top, r.d.speed );
+
+			} } );
+			assert.ok( Math.abs( top - COURSE_KMH[ world ].boost / KMH ) < 1e-6, `${ world } ${ top }` );
+			hold( r, [ 'KeyS' ], 8 );
+			assert.ok( Math.abs( r.d.speed - COURSE_KMH[ world ].least / KMH ) < 1e-6, world );
+
+		}
+
+		assert.ok( COURSE_KMH.mars.cruise < COURSE_KMH.moon.cruise && COURSE_KMH.vesta.cruise > COURSE_KMH.moon.cruise );
 
 	} );
 
