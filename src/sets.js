@@ -506,6 +506,51 @@ export const SETS = [
 			{ item: 'worker-standing', right: 6.4, forward: - 2.2, turn: 180 },
 		],
 	},
+	{
+		id: 'set-solar-pile-install',
+		name: 'Solar pile install (pile driver on the row line, W6 posts and torque tubes ahead, module pallets, telehandler, finished tracker row)',
+		keywords: 'solar farm pile driving post driving tracker install pv modules panels telehandler laydown solar construction',
+		members: [
+			// The driver working up the new row line, bundles of posts and the torque tubes laid out
+			// ahead of it, the finished row one 20 ft pitch to its left.
+			{ item: 'solar-pile-driver', right: 0, forward: 0, turn: 0 },
+			{ item: 'solar-pile-bundle-w6', right: 1.6, forward: 9, turn: 0 },
+			{ item: 'solar-pile-bundle-w6', right: 1.6, forward: 22, turn: 0 },
+			{ item: 'pv-torque-tube-bundle', right: - 3, forward: 12, turn: 0 },
+			{ item: 'pv-tracker-row-300ft', right: - 6.1, forward: - 30, turn: 0 },
+			// Module pallets behind on the right with the telehandler picking them, the crew's
+			// container and toilet, and the water truck for dust.
+			{ item: 'pv-module-pallet-stack', right: 4, forward: - 6, turn: 0 },
+			{ item: 'pv-module-pallet-stack', right: 4, forward: - 9, turn: 0 },
+			{ item: 'telehandler-10k', right: 10, forward: - 7.5, turn: 270 },
+			{ item: 'container-20', right: 16, forward: - 16, turn: 0 },
+			{ item: 'porta-potty', right: 16, forward: - 10, turn: 0 },
+			{ item: 'water-truck-4000gal', right: 9, forward: 8, turn: 0 },
+		],
+	},
+	{
+		id: 'set-wind-turbine-erection',
+		name: 'Wind turbine erection pad (300 t crawler crane, tower base, hub, 3 blades on cradles, nacelle and tower section arriving, tailing crane)',
+		keywords: 'wind turbine erection wind farm crane pad tower nacelle hub blades rotor lift crawler crane tailing crane laydown',
+		members: [
+			// The main crane on the pad facing the foundation ahead, its mats beside it.
+			{ item: 'crane-crawler-300t-luffing', right: 0, forward: 0, turn: 0 },
+			{ item: 'crane-mat-stack-4x16', right: - 9, forward: - 14, turn: 0 },
+			// The base section across the front with the tailing crane at its end, the hub on its
+			// stand and the three blades side by side on the left, roots towards the foundation.
+			{ item: 'wind-tower-base-on-stands', right: 14, forward: 18, turn: 90 },
+			{ item: 'crane-rough-terrain-90t', right: 12, forward: 32, turn: 0 },
+			{ item: 'wind-hub-on-stand', right: - 10, forward: 16, turn: 0 },
+			{ item: 'wind-blade-on-cradles', right: - 20, forward: - 8, turn: 0 },
+			{ item: 'wind-blade-on-cradles', right: - 25, forward: - 8, turn: 0 },
+			{ item: 'wind-blade-on-cradles', right: - 30, forward: - 8, turn: 0 },
+			// The nacelle and the next tower section arriving on their trailers on the right, a
+			// tri-tri on the access road.
+			{ item: 'wind-nacelle-transport', right: 22, forward: - 12, turn: 0 },
+			{ item: 'wind-tower-section-transport', right: 30, forward: - 20, turn: 0 },
+			{ item: 'tri-tri', right: 42, forward: 20, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
