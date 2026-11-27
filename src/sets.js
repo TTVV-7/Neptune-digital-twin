@@ -478,6 +478,29 @@ export const SETS = [
 			{ item: 'worker-pointing', right: 6.8, forward: - 1.2, turn: 120 },
 			{ item: 'worker-standing', right: 9.6, forward: - 6, turn: 330 },
 			{ item: 'worker-walking', right: 2.2, forward: - 5.5, turn: 90 },
+		id: 'set-gate-security',
+		name: 'Gate and security (20 ft gate, turnstile, barrier arm, card reader, CCTV tower, PPE and rules signs, parking)',
+		keywords: 'gate security access control turnstile barrier arm card reader cctv camera tower ppe sign site rules parking wheel stops entrance',
+		members: [
+			// The vehicle gate in the fence line with a barrier arm inside it and the card reader on
+			// the driver's side ahead of the arm; the turnstile set into the fence to its right.
+			{ item: 'fence-gate-20ft', right: 0, forward: 0, turn: 0 },
+			...[ 4.572, 7.62, 10.668 ].map( d => ( { item: 'fence-panel', right: - d, forward: 0, turn: 0 } ) ),
+			{ item: 'fence-panel', right: 4.572, forward: 0, turn: 0 },
+			{ item: 'turnstile-full-height', right: 6.85, forward: 0, turn: 0 },
+			{ item: 'fence-panel', right: 9.14, forward: 0, turn: 0 },
+			{ item: 'fence-panel', right: 12.19, forward: 0, turn: 0 },
+			{ item: 'barrier-arm-12ft', right: 0, forward: - 5, turn: 0 },
+			{ item: 'card-reader-pedestal', right: 1.75, forward: - 2.6, turn: 0 },
+			// Signs outside facing the way in, the emergency board inside, and the camera tower
+			// watching the gate from inside the corner.
+			{ item: 'sign-ppe-required', right: 9.2, forward: 2, turn: 0 },
+			{ item: 'site-rules-board', right: 11.8, forward: 2, turn: 0 },
+			{ item: 'sign-emergency-contacts', right: 8.6, forward: - 2.2, turn: 180 },
+			{ item: 'cctv-tower-trailer', right: - 9, forward: - 6, turn: 0 },
+			// Parking along the fence outside, to the left of the gate.
+			...[ - 6, - 9, - 12 ].map( right => ( { item: 'wheel-stop-6ft', right, forward: 2.5, turn: 0 } ) ),
+			{ item: 'worker-standing', right: 6.4, forward: - 2.2, turn: 180 },
 		],
 	},
 ];
