@@ -837,6 +837,32 @@
 		}
 	},
 	{
+		"id": "straw-bale-stack",
+		"name": "Straw bales, stacked (16 small square bales, 2.8 m / 9 ft long)",
+		"category": "Environmental & erosion control",
+		"file": "straw-bale-stack.glb",
+		"thumb": "thumbs/straw-bale-stack.webp",
+		"front": "+z",
+		"scale": 0.508,
+		"dimensions": {
+			"length": 1.02,
+			"width": 2.78,
+			"height": 1.48
+		},
+		"triangles": 9492,
+		"sizeKB": 1290,
+		"source": {
+			"site": "Sketchfab",
+			"id": "e01a6a0f9ed843279adfac2427c99679",
+			"url": "https://sketchfab.com/3d-models/hay-bale-e01a6a0f9ed843279adfac2427c99679",
+			"title": "Hay bale",
+			"author": "NoodlePoodle",
+			"authorUrl": "https://sketchfab.com/NoodePoodle",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "backhoe-loader",
 		"name": "Backhoe loader (14 ft)",
 		"category": "Heavy equipment",
@@ -1388,6 +1414,58 @@
 		"own": "Weave-Trial: construction_site/Wheel_Loader_3yd.glb"
 	},
 	{
+		"id": "tree-bb-pallet",
+		"name": "Balled-and-burlapped trees on pallet (4 nursery birches, 10 ft)",
+		"category": "Landscaping & site context",
+		"file": "tree-bb-pallet.glb",
+		"thumb": "thumbs/tree-bb-pallet.webp",
+		"front": "+z",
+		"scale": 0.01,
+		"dimensions": {
+			"length": 2.97,
+			"width": 3.18,
+			"height": 3.56
+		},
+		"triangles": 3342,
+		"sizeKB": 161,
+		"source": {
+			"site": "Sketchfab",
+			"id": "de6263e5400b4a52a795decf84f06575",
+			"url": "https://sketchfab.com/3d-models/birch-trees-de6263e5400b4a52a795decf84f06575",
+			"title": "Birch trees",
+			"author": "Igor_K.",
+			"authorUrl": "https://sketchfab.com/Igor_K.",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-birch-clump",
+		"name": "Birch tree, two-stem clump (8 m / 26 ft high)",
+		"category": "Landscaping & site context",
+		"file": "tree-birch-clump.glb",
+		"thumb": "thumbs/tree-birch-clump.webp",
+		"front": "+z",
+		"scale": 0.69,
+		"dimensions": {
+			"length": 8.67,
+			"width": 7.24,
+			"height": 8
+		},
+		"triangles": 14120,
+		"sizeKB": 842,
+		"source": {
+			"site": "Sketchfab",
+			"id": "08fe5117138e4fdaa7ca440ef1201e07",
+			"url": "https://sketchfab.com/3d-models/five-birch-trees-pack-lowpoly-lods-08fe5117138e4fdaa7ca440ef1201e07",
+			"title": "Five Birch trees pack (lowpoly, LODs)",
+			"author": "LOLIPOP",
+			"authorUrl": "https://sketchfab.com/lolipop_1707",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "boulder-large-2m",
 		"name": "Boulder, large (2 m high, ~7 t)",
 		"category": "Landscaping & site context",
@@ -1487,6 +1565,32 @@
 			"title": "Construction",
 			"author": "Stas Gunko",
 			"authorUrl": "https://sketchfab.com/Stasgunko",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-dead-snag",
+		"name": "Dead tree / hazard snag (9 m / 30 ft high)",
+		"category": "Landscaping & site context",
+		"file": "tree-dead-snag.glb",
+		"thumb": "thumbs/tree-dead-snag.webp",
+		"front": "+z",
+		"scale": 0.19,
+		"dimensions": {
+			"length": 4.84,
+			"width": 4.56,
+			"height": 8.88
+		},
+		"triangles": 37582,
+		"sizeKB": 2125,
+		"source": {
+			"site": "Sketchfab",
+			"id": "ec6a65e8a9c9440d94927a6c15ef4bf5",
+			"url": "https://sketchfab.com/3d-models/dead-tree-ec6a65e8a9c9440d94927a6c15ef4bf5",
+			"title": "Dead tree",
+			"author": "YN14R",
+			"authorUrl": "https://sketchfab.com/YN14R",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -1806,6 +1910,58 @@
 		}
 	},
 	{
+		"id": "ornamental-grass-clump",
+		"name": "Ornamental grass clump, plumed (1 m / 3 ft high)",
+		"category": "Landscaping & site context",
+		"file": "ornamental-grass-clump.glb",
+		"thumb": "thumbs/ornamental-grass-clump.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.03,
+			"width": 0.95,
+			"height": 1
+		},
+		"triangles": 193,
+		"sizeKB": 385,
+		"source": {
+			"site": "Sketchfab",
+			"id": "422f42f618d342c6958b02613dc57403",
+			"url": "https://sketchfab.com/3d-models/grass-pack-lowpoly-game-ready-422f42f618d342c6958b02613dc57403",
+			"title": "Grass pack (lowpoly, game-ready)",
+			"author": "LOLIPOP",
+			"authorUrl": "https://sketchfab.com/lolipop_1707",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-palm-washingtonia",
+		"name": "Palm tree, Washingtonia fan palm (40 ft)",
+		"category": "Landscaping & site context",
+		"file": "tree-palm-washingtonia.glb",
+		"thumb": "thumbs/tree-palm-washingtonia.webp",
+		"front": "+z",
+		"scale": 0.954,
+		"dimensions": {
+			"length": 5.55,
+			"width": 5.28,
+			"height": 12.2
+		},
+		"triangles": 88284,
+		"sizeKB": 2027,
+		"source": {
+			"site": "Sketchfab",
+			"id": "053319107d4949f0b504199ed762a072",
+			"url": "https://sketchfab.com/3d-models/realistic-hd-california-fan-palm-1925-053319107d4949f0b504199ed762a072",
+			"title": "Realistic HD California fan palm (19/25)",
+			"author": "PlantCatalog",
+			"authorUrl": "https://sketchfab.com/PlantCatalog",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "tree-pine-20m",
 		"name": "Pine tree, Scots pine (20 m high, 7 m spread)",
 		"category": "Landscaping & site context",
@@ -1984,6 +2140,58 @@
 			"title": "Old Poplar tree stump -free",
 			"author": "matousekfoto",
 			"authorUrl": "https://sketchfab.com/matousekfoto",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-willow-weeping",
+		"name": "Weeping willow (11 m / 35 ft high)",
+		"category": "Landscaping & site context",
+		"file": "tree-willow-weeping.glb",
+		"thumb": "thumbs/tree-willow-weeping.webp",
+		"front": "+z",
+		"scale": 0.81,
+		"dimensions": {
+			"length": 9.09,
+			"width": 9.32,
+			"height": 10.65
+		},
+		"triangles": 86745,
+		"sizeKB": 1715,
+		"source": {
+			"site": "Sketchfab",
+			"id": "6c49b1d81c4949b0a409a278a283cc0d",
+			"url": "https://sketchfab.com/3d-models/weeping-willow-6c49b1d81c4949b0a409a278a283cc0d",
+			"title": "weeping Willow",
+			"author": "Pasha",
+			"authorUrl": "https://sketchfab.com/homxis-mydqyp-juNke1",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tree-cedar-western-red",
+		"name": "Western red cedar (18 m / 60 ft high)",
+		"category": "Landscaping & site context",
+		"file": "tree-cedar-western-red.glb",
+		"thumb": "thumbs/tree-cedar-western-red.webp",
+		"front": "+z",
+		"scale": 127,
+		"dimensions": {
+			"length": 7.31,
+			"width": 7.65,
+			"height": 18.3
+		},
+		"triangles": 28282,
+		"sizeKB": 1095,
+		"source": {
+			"site": "Sketchfab",
+			"id": "82d8305f9fd74687bedaa8be36e292d6",
+			"url": "https://sketchfab.com/3d-models/western-red-cedar-inspired-tree-spring-ver-82d8305f9fd74687bedaa8be36e292d6",
+			"title": "Western Red Cedar *Inspired* Tree - SPRING Ver.",
+			"author": "Sir Sonat",
+			"authorUrl": "https://sketchfab.com/SirSonat",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -2639,6 +2847,32 @@
 			"title": "Pile of Planks (Free/GameReady)",
 			"author": "Sebastian Webster",
 			"authorUrl": "https://sketchfab.com/Sebastian.Hamish.Webster",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "wood-chip-pile",
+		"name": "Wood chip / mulch pile (3.7 m / 12 ft across)",
+		"category": "Materials",
+		"file": "wood-chip-pile.glb",
+		"thumb": "thumbs/wood-chip-pile.webp",
+		"front": "+z",
+		"scale": 1.13,
+		"dimensions": {
+			"length": 3.37,
+			"width": 3.67,
+			"height": 1.36
+		},
+		"triangles": 21007,
+		"sizeKB": 1127,
+		"source": {
+			"site": "Sketchfab",
+			"id": "7e12a141e87c4b23a932a5bd7754caa7",
+			"url": "https://sketchfab.com/3d-models/n042-chips-pile-7e12a141e87c4b23a932a5bd7754caa7",
+			"title": "N042 Chips Pile",
+			"author": "bimage",
+			"authorUrl": "https://sketchfab.com/bimage",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -4850,6 +5084,32 @@
 		"triangles": 56784,
 		"sizeKB": 447,
 		"own": "Weave-Trial: construction_site/Water_Truck_4000gal.glb"
+	},
+	{
+		"id": "brush-pile",
+		"name": "Brush pile / clearing slash (4.6 m / 15 ft across)",
+		"category": "Waste",
+		"file": "brush-pile.glb",
+		"thumb": "thumbs/brush-pile.webp",
+		"front": "+z",
+		"scale": 1.07,
+		"dimensions": {
+			"length": 2.95,
+			"width": 4.6,
+			"height": 1.27
+		},
+		"triangles": 55897,
+		"sizeKB": 1878,
+		"source": {
+			"site": "Sketchfab",
+			"id": "31a023461b2f4b1fb912b25e86acb586",
+			"url": "https://sketchfab.com/3d-models/cut-branches-and-leaves-heap-31a023461b2f4b1fb912b25e86acb586",
+			"title": "Cut branches and leaves heap",
+			"author": "matousekfoto",
+			"authorUrl": "https://sketchfab.com/matousekfoto",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
 	},
 	{
 		"id": "frontload-4yd",
