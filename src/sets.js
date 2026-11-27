@@ -672,6 +672,27 @@ export const SETS = [
 			{ item: 'light-tower-led', right: - 32, forward: 6, turn: 0 },
 		],
 	},
+	{
+		id: 'set-interior-demo-abatement',
+		name: 'Interior demolition and abatement (decon trailer, dust walls, negative air machines, demolition robot, grapple excavator, 40 yd roll-off)',
+		keywords: 'abatement asbestos lead interior demolition selective demo containment decon negative air hepa brokk robot dumpster grapple',
+		members: [
+			// The containment line across the work area, the robot and two negative air machines
+			// inside it, the machines' ducts run out through the poly and on about a metre past it.
+			...[ - 6.1, 0, 6.1 ].map( right => ( { item: 'dust-barrier-zipwall', right, forward: - 6, turn: 0 } ) ),
+			{ item: 'demolition-robot', right: - 3, forward: - 11, turn: 180 },
+			{ item: 'negative-air-machine', right: 2, forward: - 7.5, turn: 180 },
+			{ item: 'negative-air-machine', right: 5, forward: - 7.5, turn: 180 },
+			// The decon trailer on the left, its equipment room door nearest the containment, with the
+			// generator and a toilet in front of it.
+			{ item: 'decon-trailer', right: - 13, forward: 1, turn: 0 },
+			{ item: 'generator-60kva', right: - 20, forward: 8, turn: 0 },
+			{ item: 'porta-potty', right: - 16, forward: 8, turn: 0 },
+			// The roll-off on the right, the grapple excavator behind it loading the debris.
+			{ item: 'rolloff-40', right: 13, forward: 0, turn: 0 },
+			{ item: 'excavator-demolition-grapple', right: 13, forward: - 10, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out

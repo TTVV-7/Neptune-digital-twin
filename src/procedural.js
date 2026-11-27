@@ -39,6 +39,7 @@ import { PIPELINE_ITEMS } from './pipeline.js';
 import { EARTHMOVING_ITEMS } from './earthmoving.js';
 import { BUILDING_MATERIAL_ITEMS } from './building-materials.js';
 import { BRIDGE_HIGHWAY_ITEMS } from './bridge-highway.js';
+import { FITOUT_DEMO_ITEMS } from './fitout-demo.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -157,6 +158,8 @@ export const PROCEDURAL_ITEMS = [
 	...BUILDING_MATERIAL_ITEMS,
 	// Bridge girders (hauled and laid down), deck finisher, overhang brackets, pier cap falsework, tower bent, cofferdam, panel bridge, MSE panels, wall blocks, gabions, W-beam guardrail, sand barrels and an overhead sign (bridge-highway.js).
 	...BRIDGE_HIGHWAY_ITEMS,
+	// Interior fit-out (Baker scaffold, drywall lift, studs, duct, pipe cart, wire cart, threader), crated switchgear, RTU and chiller, dust wall, negative air machine, decon trailer, demolition robot, grapple and pulverizer excavators (fitout-demo.js).
+	...FITOUT_DEMO_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {

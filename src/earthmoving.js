@@ -259,7 +259,7 @@ function bucket( parts, p, width, s, angle = 0 ) {
 
 // A two-piece ("banana") excavator boom from its foot, bent at a knee, and the stick hanging from
 // its tip: angles in degrees above level towards the front. Returns the points along it.
-function front( parts, body, { foot, boom: [ a1, l1, a2, l2 ], stick: [ a3, l3 ], section, x = foot[ 0 ] } ) {
+export function front( parts, body, { foot, boom: [ a1, l1, a2, l2 ], stick: [ a3, l3 ], section, x = foot[ 0 ] } ) {
 
 	const f = v( foot );
 	const knee = f.clone().addScaledVector( ahead( a1 ), l1 );
