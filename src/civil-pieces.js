@@ -1451,14 +1451,15 @@ function coveredWalkway() {
 // --- survey ----------------------------------------------------------------------------------
 
 // A survey tripod: three legs from a head at `head` metres to feet spread `spread` round, with a
-// bit of yellow at the top of each leg, and the head plate.
-function tripod( parts, head, spread, color = 0xd9b03a ) {
+// bit of yellow at the top of each leg, and the head plate. `turn` is where the first leg points
+// (radians round from behind). Exported for the surveyor in people.js.
+export function tripod( parts, head, spread, color = 0xd9b03a, turn = Math.PI / 6 ) {
 
 	const leg = mat( color, { roughness: 0.6 } );
 	const alu = mat( 0xb9bdc0, { roughness: 0.4, metalness: 0.6 } );
 	for ( let i = 0; i < 3; i ++ ) {
 
-		const a = ( i / 3 ) * Math.PI * 2 + Math.PI / 6;
+		const a = ( i / 3 ) * Math.PI * 2 + turn;
 		const top = [ 0.06 * Math.sin( a ), head - 0.03, 0.06 * Math.cos( a ) ];
 		const foot = [ spread * Math.sin( a ), 0.01, spread * Math.cos( a ) ];
 		const knee = top.map( ( v, k ) => v + ( foot[ k ] - v ) * 0.55 );
@@ -1480,6 +1481,15 @@ function totalStation() {
 	const parts = new Parts();
 	const head = 1.42;
 	tripod( parts, head, 0.5 );
+	stationHead( parts, head );
+	return parts.build();
+
+}
+
+// The total station itself on a tripod head at `head` metres, its telescope to the front (-Z)
+// and the eyepiece to the back. Exported for the surveyor in people.js.
+export function stationHead( parts, head ) {
+
 	const white = mat( 0xeceeea, { roughness: 0.45 } );
 	const grey = mat( 0x3a3e44, { roughness: 0.5 } );
 	let y = head + 0.012;
@@ -1495,7 +1505,6 @@ function totalStation() {
 	parts.rod( mat( 0x1a2430, { roughness: 0.1, metalness: 0.4 } ), [ 0, axis, - 0.131 ], [ 0, axis, - 0.135 ], 0.03, 16 );
 	parts.rod( grey, [ - 0.095, axis, 0 ], [ 0.095, axis, 0 ], 0.02, 10 );
 	parts.path( grey, [ [ - 0.075, y + 0.17, 0 ], [ - 0.05, y + 0.22, 0 ], [ 0.05, y + 0.22, 0 ], [ 0.075, y + 0.17, 0 ] ], 0.01, 6 );
-	return parts.build();
 
 }
 

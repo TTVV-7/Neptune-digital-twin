@@ -13,8 +13,9 @@ import { hPileBundle, hydraulicShoreItem, sheetPileBundle, trenchBoxItem, trench
 import { trailer } from './trailers.js';
 import { containerCanopy, fabricShelter, plywoodHoarding, popUpCanopy, scaffoldEnclosure, screenedFence } from './covers.js';
 import { dewateringBag, fracTank, flocDosingTrailer, sandFilterSkid, trashPump, weirTank } from './water-treatment.js';
-import { person } from './people.js';
+import { person, PEOPLE_ITEMS } from './people.js';
 import { POWER_ITEMS } from './power-models.js';
+import { TEMP_POWER_ITEMS } from './temp-power.js';
 import { CRANE_ITEMS } from './crane-models.js';
 import { TRUCK_ITEMS } from './truck-models.js';
 import { KART_ITEM } from './kart.js';
@@ -27,6 +28,7 @@ import { CONTAINER_ITEMS, shippingContainer } from './containers.js';
 import { CIVIL_ITEMS } from './civil-pieces.js';
 import { ENVIRONMENTAL_ITEMS } from './environmental.js';
 import { TOOL_ITEMS } from './tools-attachments.js';
+import { HEAVY_CIVIL_ITEMS } from './heavy-civil.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -77,6 +79,8 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'worker-standing', name: 'Construction worker, standing (1.75 m)', category: 'People', build: () => person( 'worker-standing' ) },
 	{ id: 'worker-walking', name: 'Construction worker, walking (1.75 m)', category: 'People', build: () => person( 'worker-walking' ) },
 	{ id: 'flagger', name: 'Traffic control person with STOP/SLOW paddle', category: 'People', build: () => person( 'flagger' ) },
+	// Workers at their jobs and a crew of three (people.js).
+	...PEOPLE_ITEMS,
 	{ id: 'pallet', name: 'Wooden pallet (48 x 40 in)', category: 'Materials', build: pallet },
 	// Drivable: "drive" tunes race mode, and type 'excavator' gives them the digging controls (excavator.js).
 	{ id: 'excavator-20t', name: 'Excavator (20 t)', category: 'Heavy equipment', build: () => buildExcavator( EXCAVATOR_20T ), drive: { type: 'excavator', topSpeed: 5.5, accel: 1.2, brake: 3, reverse: 5.5 } },
@@ -97,6 +101,8 @@ export const PROCEDURAL_ITEMS = [
 	// (crane-models.js, tower-crane.js).
 	...POWER_ITEMS,
 	...CRANE_ITEMS,
+	// Temporary power: service pole, spider box, cord reel, cords and lights on stands (temp-power.js).
+	...TEMP_POWER_ITEMS,
 	// Tridem dump trucks, pups, transfer, end dump, belly dump and lowboy trailers (truck-models.js).
 	...TRUCK_ITEMS,
 	// A go-kart with a driver (kart.js), drivable like the other vehicles.
@@ -119,6 +125,8 @@ export const PROCEDURAL_ITEMS = [
 	...ENVIRONMENTAL_ITEMS,
 	// Hi-rail trucks, track machines, a turnout and track stops, staged attachments and small site gear (tools-attachments.js).
 	...TOOL_ITEMS,
+	// Barges, a push boat, skiff, turbidity curtain and sheet pile template; a screener, cone crusher and asphalt plant; high-reach and long-reach excavators and a pile driving rig (heavy-civil.js).
+	...HEAVY_CIVIL_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {

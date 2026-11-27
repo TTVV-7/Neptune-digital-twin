@@ -14,6 +14,7 @@ export const CATEGORY_ORDER = [
 	'Material handling',
 	'Concrete & batching',
 	'Rail',
+	'Marine',
 	'Site trailers & containers',
 	'Temporary covers',
 	'Waste',
