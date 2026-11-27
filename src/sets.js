@@ -506,6 +506,31 @@ export const SETS = [
 			{ item: 'worker-standing', right: 6.4, forward: - 2.2, turn: 180 },
 		],
 	},
+	{
+		id: 'set-quarry-plant',
+		name: 'Quarry and aggregate plant (drill, magazine, 90 t excavator, haul truck, crushers, screen, stacker, wash plant, scale)',
+		keywords: 'quarry pit aggregate plant crushing screening wash plant blasting drill haul truck loader scale house gravel',
+		members: [
+			// The face at the back: the drill on the bench, the magazine well off to the side (a real
+			// one stands at the distance its quantity-distance table sets), the excavator loading the
+			// haul truck.
+			{ item: 'drill-rig-surface-blasthole', right: - 40, forward: - 32, turn: 0 },
+			{ item: 'explosives-magazine-type2', right: - 62, forward: - 40, turn: 0 },
+			{ item: 'excavator-mass-90t', right: - 28, forward: - 20, turn: 0 },
+			{ item: 'haul-truck-100t', right: - 19, forward: - 16, turn: 0 },
+			// The plant in a line: jaw crusher, impact crusher, screen, stacker and its pile, wash plant.
+			{ item: 'mobile-jaw-crusher', right: - 8, forward: - 5, turn: 0 },
+			{ item: 'impact-crusher-tracked', right: 2, forward: - 5, turn: 0 },
+			{ item: 'screening-plant-3deck-tracked', right: 22, forward: - 5, turn: 0 },
+			{ item: 'radial-stacker-100ft', right: 42, forward: - 8, turn: 0 },
+			{ item: 'gravel-pile', right: 42, forward: 12, turn: 0 },
+			{ item: 'wash-plant-sand-screw', right: 58, forward: - 5, turn: 0 },
+			{ item: 'wheel-loader-large-988', right: 30, forward: 14, turn: 0 },
+			// The way out: the scale across the front with the scale house beside it, its window to the scale.
+			{ item: 'truck-scale-70ft', right: - 10, forward: 22, turn: 90 },
+			{ item: 'scale-house', right: - 10, forward: 27, turn: 180 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out

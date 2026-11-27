@@ -114,7 +114,7 @@ function ram( parts, radius, a, b ) {
 
 // A pair of crawler tracks along z, `length` long and `width` across the outsides, shoes `shoe`
 // wide and `height` tall, standing at y0 and centred on z0, with the car body joining them.
-function tracks( parts, { length, width, shoe, height }, y0 = 0, z0 = 0 ) {
+export function tracks( parts, { length, width, shoe, height }, y0 = 0, z0 = 0 ) {
 
 	const gauge = width - shoe;
 	const r = height / 2;
@@ -145,7 +145,7 @@ function tracks( parts, { length, width, shoe, height }, y0 = 0, z0 = 0 ) {
 
 // A cab of [ width, height, length ] standing at (x, y, z) (its middle at x, z), glazed at the
 // front and sides.
-function cab( parts, [ w, h, l ], [ x, y, z ], body ) {
+export function cab( parts, [ w, h, l ], [ x, y, z ], body ) {
 
 	parts.box( body, [ w, h, l ], [ x, y, z ] );
 	parts.box( GLASS(), [ w * 0.86, h * 0.5, 0.02 ], [ x, y + h * 0.38, z - l / 2 - 0.01 ] );
@@ -255,7 +255,7 @@ export function crawlerCrane( parts, { y0 = 0, z0 = 0, track, boom, angle, half 
 
 // A troughed belt conveyor from its tail to its head (points on the belt's centre line): the
 // belt, side channels, cross members under it and the end drums.
-function conveyor( parts, tail, head, width, frame = DARK() ) {
+export function conveyor( parts, tail, head, width, frame = DARK() ) {
 
 	const a = v( tail );
 	const b = v( head );
@@ -297,7 +297,7 @@ function bitt( parts, [ x, y, z ], alongZ = true ) {
 }
 
 // Handrails round a rectangle at height y: posts and two rails along each side given.
-function railing( parts, [ x0, x1 ], [ z0, z1 ], y, sides = [ 0, 1, 2, 3 ], material = YELLOW() ) {
+export function railing( parts, [ x0, x1 ], [ z0, z1 ], y, sides = [ 0, 1, 2, 3 ], material = YELLOW() ) {
 
 	const corners = [ [ x0, z0 ], [ x1, z0 ], [ x1, z1 ], [ x0, z1 ] ];
 	for ( const s of sides ) {
@@ -871,7 +871,7 @@ function asphaltPlant() {
 // A crawler excavator's carrier without its front: tracks, the swing ring and the house (deck,
 // the counterweight curved to the tail swing radius, the engine hood and the right-hand tank
 // compartment). Front at -Z, the swing axis at x = z = 0.
-function carrier( parts, body, { track, swing, width, front, tail, deck, hood, counterweight } ) {
+export function carrier( parts, body, { track, swing, width, front, tail, deck, hood, counterweight } ) {
 
 	tracks( parts, track, 0, 0 );
 	parts.cylinder( BLACK(), width * 0.32, swing - track.height, [ 0, track.height, 0 ], 24 );

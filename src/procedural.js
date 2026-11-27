@@ -34,6 +34,7 @@ import { TUNNEL_FORMWORK_ITEMS } from './tunnel-formwork.js';
 import { ROAD_ITEMS } from './road-plant.js';
 import { UTILITY_PLANT_ITEMS } from './utility-plant.js';
 import { SAFETY_ITEMS } from './site-safety.js';
+import { EARTHMOVING_ITEMS } from './earthmoving.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -142,6 +143,8 @@ export const PROCEDURAL_ITEMS = [
 	...UTILITY_PLANT_ITEMS,
 	// Edge protection, fall arrest anchors, a lifeline, CCTV tower, turnstile, barrier arm, safety signs, wind sock and weather station (site-safety.js).
 	...SAFETY_ITEMS,
+	// Scraper, D10 dozer, 90 t and hammer excavators, 988 loader, 100 t haul truck, water wagon; drill rig, magazine, impact crusher, wash plant; truck scale and scale house; VMS, TMA and hydroseeder (earthmoving.js).
+	...EARTHMOVING_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
