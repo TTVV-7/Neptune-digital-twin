@@ -36,6 +36,7 @@ import { UTILITY_PLANT_ITEMS } from './utility-plant.js';
 import { SAFETY_ITEMS } from './site-safety.js';
 import { RENEWABLE_ITEMS } from './renewables.js';
 import { PIPELINE_ITEMS } from './pipeline.js';
+import { EARTHMOVING_ITEMS } from './earthmoving.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -148,6 +149,8 @@ export const PROCEDURAL_ITEMS = [
 	...RENEWABLE_ITEMS,
 	// A transmission pipeline spread: line pipe, stringing truck, wheel ditcher, bender, facing machine, weld shack, rig welder, vacuum lifter, holiday detector, pillows, weights, padder, track carrier, hydrotest skid and test head (pipeline.js).
 	...PIPELINE_ITEMS,
+	// Scraper, D10 dozer, 90 t and hammer excavators, 988 loader, 100 t haul truck, water wagon; drill rig, magazine, impact crusher, wash plant; truck scale and scale house; VMS, TMA and hydroseeder (earthmoving.js).
+	...EARTHMOVING_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
