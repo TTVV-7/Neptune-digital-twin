@@ -24,7 +24,7 @@ function cylinder( parent, material, radius, height, [ x0 = 0, y0 = 0, z0 = 0 ] 
 }
 
 let chainLinkMaterial;
-function chainLink() {
+export function chainLink() {
 
 	if ( ! chainLinkMaterial ) {
 

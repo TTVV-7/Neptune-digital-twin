@@ -243,6 +243,42 @@ export const SETS = [
 		],
 	},
 	{
+		id: 'set-box-culvert-install',
+		name: 'Box culvert install (crane, excavator, culvert sections laid and staged, laser)',
+		keywords: 'box culvert install precast culvert crossing crane excavator laser storm drain sections',
+		members: [
+			// Three 8 ft sections laid end to end across the set, three more staged in front for the
+			// rough-terrain crane to pick, the excavator trimming the bed at the far end.
+			...[ - 2.44, 0, 2.44 ].map( right => ( { item: 'box-culvert-6x4', right, forward: 0, turn: 90 } ) ),
+			...[ - 3, 0, 3 ].map( right => ( { item: 'box-culvert-6x4', right, forward: 7, turn: 0 } ) ),
+			{ item: 'crane-rough-terrain-40t', right: 11, forward: 5, turn: 270 },
+			{ item: 'excavator-20t', right: - 11, forward: - 1, turn: 90 },
+			{ item: 'rotating-laser-tripod', right: 1, forward: - 4, turn: 0 },
+			{ item: 'worker-pointing', right: 4.5, forward: 2.5, turn: 220 },
+			{ item: 'worker-standing', right: - 3.5, forward: 2.8, turn: 180 },
+			{ item: 'dump-truck-tandem', right: - 11, forward: 9, turn: 90 },
+		],
+	},
+	{
+		id: 'set-site-entrance',
+		name: 'Site entrance (20 ft gate, fence, rumble grid, project sign, safety station, muster point)',
+		keywords: 'site entrance gate access fence rumble grid track out sign board safety station muster point bins',
+		members: [
+			// The gate in the fence line, the track-out grid just inside it, the project sign outside
+			// facing the road, and a stop sign for trucks leaving.
+			{ item: 'fence-gate-20ft', right: 0, forward: 0, turn: 0 },
+			...[ - 1, 1 ].flatMap( s => [ 0, 1, 2 ].map( i => ( { item: 'fence-panel', right: s * ( 4.572 + i * 3.048 ), forward: 0, turn: 0 } ) ) ),
+			{ item: 'rumble-grid-12x20', right: 0, forward: - 5, turn: 0 },
+			{ item: 'site-sign-8x4', right: 8.5, forward: 2.5, turn: 0 },
+			{ item: 'stop-sign-portable', right: 3.4, forward: - 2.5, turn: 180 },
+			{ item: 'safety-station', right: - 7, forward: - 3.5, turn: 0 },
+			{ item: 'wheelie-bin-95', right: - 9.2, forward: - 3.4, turn: 0 },
+			{ item: 'recycling-bin-95', right: - 10.1, forward: - 3.4, turn: 0 },
+			{ item: 'muster-point-sign', right: 8, forward: - 5, turn: 0 },
+			{ item: 'worker-standing', right: - 4.5, forward: - 1.5, turn: 180 },
+		],
+	},
+	{
 		id: 'set-batch-plant',
 		name: 'Batch plant setup (portable plant, 3 mixer trucks, wheel loader, aggregate piles, office)',
 		keywords: 'batch plant ready mix concrete mixer trucks loader aggregate stockpile sand',
