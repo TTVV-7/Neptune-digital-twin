@@ -279,13 +279,13 @@ function ladder( parts, material, [ x, z ], y0, y1, width = 0.42 ) {
 
 // --- truck chassis -----------------------------------------------------------------------------
 
-const TRUCK_WIDTH = 2.59; // 8 ft 6 in
+export const TRUCK_WIDTH = 2.59; // 8 ft 6 in
 const R = 0.53; // 11R22.5 tyres
 
 // A conventional-cab truck from its bumper at z = front to the end of its frame at `back`: frame
 // rails, the steer axle, `axles` drive axles centred at `rear`, the hood, the cab and its exhaust
 // stack. Returns the back of the cab and the top of the frame, where a body goes on.
-function truck( parts, { colour, front, rear, back, axles = 2 } ) {
+export function truck( parts, { colour, front, rear, back, axles = 2 } ) {
 
 	const body = paint( colour );
 	const frameTop = 1.08;

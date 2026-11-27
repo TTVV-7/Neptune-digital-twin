@@ -506,6 +506,126 @@ export const SETS = [
 			{ item: 'worker-standing', right: 6.4, forward: - 2.2, turn: 180 },
 		],
 	},
+	{
+		id: 'set-solar-pile-install',
+		name: 'Solar pile install (pile driver on the row line, W6 posts and torque tubes ahead, module pallets, telehandler, finished tracker row)',
+		keywords: 'solar farm pile driving post driving tracker install pv modules panels telehandler laydown solar construction',
+		members: [
+			// The driver working up the new row line, bundles of posts and the torque tubes laid out
+			// ahead of it, the finished row one 20 ft pitch to its left.
+			{ item: 'solar-pile-driver', right: 0, forward: 0, turn: 0 },
+			{ item: 'solar-pile-bundle-w6', right: 1.6, forward: 9, turn: 0 },
+			{ item: 'solar-pile-bundle-w6', right: 1.6, forward: 22, turn: 0 },
+			{ item: 'pv-torque-tube-bundle', right: - 3, forward: 12, turn: 0 },
+			{ item: 'pv-tracker-row-300ft', right: - 6.1, forward: - 30, turn: 0 },
+			// Module pallets behind on the right with the telehandler picking them, the crew's
+			// container and toilet, and the water truck for dust.
+			{ item: 'pv-module-pallet-stack', right: 4, forward: - 6, turn: 0 },
+			{ item: 'pv-module-pallet-stack', right: 4, forward: - 9, turn: 0 },
+			{ item: 'telehandler-10k', right: 10, forward: - 7.5, turn: 270 },
+			{ item: 'container-20', right: 16, forward: - 16, turn: 0 },
+			{ item: 'porta-potty', right: 16, forward: - 10, turn: 0 },
+			{ item: 'water-truck-4000gal', right: 9, forward: 8, turn: 0 },
+		],
+	},
+	{
+		id: 'set-wind-turbine-erection',
+		name: 'Wind turbine erection pad (300 t crawler crane, tower base, hub, 3 blades on cradles, nacelle and tower section arriving, tailing crane)',
+		keywords: 'wind turbine erection wind farm crane pad tower nacelle hub blades rotor lift crawler crane tailing crane laydown',
+		members: [
+			// The main crane on the pad facing the foundation ahead, its mats beside it.
+			{ item: 'crane-crawler-300t-luffing', right: 0, forward: 0, turn: 0 },
+			{ item: 'crane-mat-stack-4x16', right: - 9, forward: - 14, turn: 0 },
+			// The base section across the front with the tailing crane at its end, the hub on its
+			// stand and the three blades side by side on the left, roots towards the foundation.
+			{ item: 'wind-tower-base-on-stands', right: 14, forward: 18, turn: 90 },
+			{ item: 'crane-rough-terrain-90t', right: 12, forward: 32, turn: 0 },
+			{ item: 'wind-hub-on-stand', right: - 10, forward: 16, turn: 0 },
+			{ item: 'wind-blade-on-cradles', right: - 20, forward: - 8, turn: 0 },
+			{ item: 'wind-blade-on-cradles', right: - 25, forward: - 8, turn: 0 },
+			{ item: 'wind-blade-on-cradles', right: - 30, forward: - 8, turn: 0 },
+			// The nacelle and the next tower section arriving on their trailers on the right, a
+			// tri-tri on the access road.
+			{ item: 'wind-nacelle-transport', right: 22, forward: - 12, turn: 0 },
+			{ item: 'wind-tower-section-transport', right: 30, forward: - 20, turn: 0 },
+			{ item: 'tri-tri', right: 42, forward: 20, turn: 0 },
+		],
+	},
+	{
+		id: 'set-pipeline-spread',
+		name: 'Pipeline spread (strung 36 in pipe, sidebooms, weld shack, rig welder, bender, stringing truck, vacuum lifter, holiday detector, padder)',
+		keywords: 'pipeline spread right of way row mainline line pipe stringing welding sideboom pipelayer bending padding oil gas transmission',
+		members: [
+			// Six joints strung end to end along the ditch line, the weld shack over the joint in
+			// the middle and the rig welder parked beside it on a short run of mats.
+			...[ - 2.5, - 1.5, - 0.5, 0.5, 1.5, 2.5 ].map( i => ( { item: 'line-pipe-joint-on-skids', right: 0, forward: i * 24.69, turn: 0 } ) ),
+			{ item: 'pipe-welding-shack', right: 0, forward: 0, turn: 0 },
+			...[ 14, 18.3, 22.6 ].map( forward => ( { item: 'access-mat-8x14', right: - 6, forward, turn: 0 } ) ),
+			{ item: 'welding-rig-truck', right: - 6, forward: 18, turn: 0 },
+			// Three sidebooms on the working side, their booms out over the pipe.
+			...[ - 22, - 8, 6 ].map( forward => ( { item: 'pipelayer-583', right: 5.8, forward, turn: 0 } ) ),
+			// The travel lane: the stringing truck, and the vacuum lifter excavator beside it facing
+			// across the line with its pad down on a strung joint, picking it; the bending machine ahead.
+			{ item: 'pipe-stringing-trailer', right: 12, forward: 30, turn: 0 },
+			{ item: 'pipe-vacuum-lifter-excavator', right: 6.2, forward: 37, turn: 270 },
+			{ item: 'pipe-bending-machine-36in', right: 12, forward: - 40, turn: 0 },
+			// The holiday detector jeeping the string ahead of lowering in, clear of the skids.
+			{ item: 'holiday-detector-ring', right: 0, forward: - 40, turn: 0 },
+			// The spoil side: the padder and the carrier.
+			{ item: 'padding-machine', right: - 8, forward: 45, turn: 0 },
+			{ item: 'tracked-carrier-morooka', right: - 7, forward: - 45, turn: 0 },
+		],
+	},
+	{
+		id: 'set-quarry-plant',
+		name: 'Quarry and aggregate plant (drill, magazine, 90 t excavator, haul truck, crushers, screen, stacker, wash plant, scale)',
+		keywords: 'quarry pit aggregate plant crushing screening wash plant blasting drill haul truck loader scale house gravel',
+		members: [
+			// The face at the back: the drill on the bench, the haul truck tipping shot rock beside the
+			// 90 t excavator, and the excavator feeding the jaw crusher's hopper from the side.
+			{ item: 'drill-rig-surface-blasthole', right: - 40, forward: - 32, turn: 0 },
+			{ item: 'haul-truck-100t', right: - 42, forward: - 5, turn: 270 },
+			{ item: 'excavator-mass-90t', right: - 30.5, forward: - 13, turn: 0 },
+			// The explosives magazine well away from the face, the plant and the haul road (over 100 m
+			// here; a real one stands at the distance its quantity-distance table sets).
+			{ item: 'explosives-magazine-type2', right: - 135, forward: - 75, turn: 0 },
+			// The crushing train laid head to tail, the rock moving to the right: the jaw crusher's
+			// conveyor drops into the impact crusher's hopper, the impact crusher's into the screen's,
+			// the screen's fines conveyor onto the stacker's tail, and the gravel pile under the
+			// stacker's head.
+			{ item: 'mobile-jaw-crusher', right: - 26, forward: - 5, turn: 90 },
+			{ item: 'impact-crusher-tracked', right: - 13.3, forward: - 5, turn: 90 },
+			{ item: 'screening-plant-3deck-tracked', right: 2.8, forward: - 5, turn: 90 },
+			{ item: 'radial-stacker-100ft', right: 26.9, forward: - 5, turn: 90 },
+			{ item: 'gravel-pile', right: 42.5, forward: - 5, turn: 90 },
+			// The loader facing the pile, loading the wash plant's feed conveyor behind it; the wash
+			// plant turned so its feed end comes towards the loader.
+			{ item: 'wheel-loader-large-988', right: 42.5, forward: 8, turn: 180 },
+			{ item: 'wash-plant-sand-screw', right: 62, forward: - 8, turn: 180 },
+			// The way out: the scale across the front with the scale house beside it, its window to the scale.
+			{ item: 'truck-scale-70ft', right: - 10, forward: 22, turn: 90 },
+			{ item: 'scale-house', right: - 10, forward: 27, turn: 180 },
+		],
+	},
+	{
+		id: 'set-landscape-restoration',
+		name: 'Landscape restoration (nursery trees on pallets, mulch pile, straw bales, plantings, skid steer)',
+		keywords: 'landscape landscaping restoration planting nursery balled burlapped trees mulch wood chips straw bales seeding ornamental grass shrubs skid steer',
+		members: [
+			// Deliveries staged at the back: nursery trees on their pallets, the mulch pile and the straw.
+			{ item: 'tree-bb-pallet', right: - 7, forward: - 5, turn: 0 },
+			{ item: 'tree-bb-pallet', right: - 3.8, forward: - 5.3, turn: 10 },
+			{ item: 'wood-chip-pile', right: 1.5, forward: - 5.5, turn: 0 },
+			{ item: 'straw-bale-stack', right: 6.5, forward: - 5.5, turn: 0 },
+			// The skid steer between the stock and the beds.
+			{ item: 'skid-steer-loader', right: - 1, forward: 0, turn: 200 },
+			// The new bed along the front: grass clumps and shrubs set out, a worker planting.
+			...[ - 6, - 4.5, - 3 ].map( right => ( { item: 'ornamental-grass-clump', right, forward: 5, turn: 0 } ) ),
+			{ item: 'shrub-round', right: 0, forward: 5.2, turn: 0 },
+			{ item: 'shrub-round', right: 2.5, forward: 5, turn: 40 },
+			{ item: 'worker-standing', right: - 1.5, forward: 3.8, turn: 180 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
