@@ -713,6 +713,28 @@ export const SETS = [
 			{ item: 'water-truck-4000gal', right: 16, forward: 13, turn: 270 },
 		],
 	},
+	{
+		id: 'set-geotech-investigation',
+		name: 'Geotechnical site investigation (truck drill rig, CPT truck, pickup, water trailer, crew)',
+		keywords: 'geotech geotechnical site investigation borehole bore hole soil boring drilling cpt cone test drill rig soils report test pit survey',
+		members: [
+			// The drill rig and the CPT truck side by side on their holes, their masts and push rods at
+			// the back, coned off behind; the driller at the rig's controls.
+			{ item: 'geotech-drill-truck', right: - 4, forward: 0, turn: 0 },
+			{ item: 'cpt-truck', right: 4, forward: 0.5, turn: 0 },
+			{ item: 'worker-standing', right: - 6.1, forward: - 2.8, turn: 90 },
+			{ item: 'traffic-cone', right: - 6.5, forward: - 5.5, turn: 0 },
+			{ item: 'traffic-cone', right: - 1.5, forward: - 5.5, turn: 0 },
+			{ item: 'traffic-cone', right: 1.5, forward: - 5.5, turn: 0 },
+			{ item: 'traffic-cone', right: 6.5, forward: - 5.5, turn: 0 },
+			// Water for the drilling beside the rig, the pickup parked in front, the surveyor picking
+			// up the hole locations and the sign at the way in.
+			{ item: 'water-trailer-500gal', right: - 8.5, forward: - 1, turn: 0 },
+			{ item: 'pickup-truck', right: - 1, forward: 10, turn: 180 },
+			{ item: 'worker-surveyor', right: 7, forward: 8, turn: 200 },
+			{ item: 'sign-a-frame-caution', right: 3, forward: 12, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
