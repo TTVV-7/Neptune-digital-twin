@@ -54,6 +54,9 @@ export const PIPELINE_ITEMS = [
 	{ id: 'holiday-detector', name: 'Holiday detector ring on 36 in pipe with operator (20 ft of pipe on skids)', category: 'Utilities',
 		keywords: 'holiday detector jeep jeeping ring coating inspection holiday test spark test pipeline qa qc',
 		build: holidayDetector },
+	{ id: 'holiday-detector-ring', name: 'Holiday detector ring and operator (for 36 in pipe; place on a strung joint)', category: 'Utilities',
+		keywords: 'holiday detector jeep jeeping ring coating inspection holiday test spark test pipeline qa qc inspector',
+		build: () => holidayDetector( false ) },
 	// Lowering in and backfill.
 	{ id: 'pipe-sandbag-pillows', name: 'Pipe support pillows, sandbag piers (4 at 20 ft, for 36 in pipe)', category: 'Utilities',
 		keywords: 'sandbag pillows pipe pillows sand bags piers pipe supports ditch bottom lowering in pipeline padding',
@@ -520,7 +523,7 @@ function wheelDitcher() {
 	// lifted by a ram each side.
 	const hub = [ 0, 2.85, 3.5 ];
 	const wheelR = 2.5;
-	const half = 0.62;
+	const half = 18 * IN; // the buckets cut a 36 in ditch
 	const band = wheelR - 0.35;
 	const onBand = ( x, a ) => [ x, hub[ 1 ] + Math.sin( a * DEG ) * band, hub[ 2 ] + Math.cos( a * DEG ) * band ];
 	for ( const s of [ - 1, 1 ] ) {
@@ -926,10 +929,11 @@ function carrier( parts, body, { track, swing, width, front, tail, deck, hood, c
 
 }
 
-// A 30 t class crawler excavator (about 10.4 m long with its front out, 3.2 m wide) with a
+// A 30 t class crawler excavator (about 9.7 m long with its front out, 3.2 m wide) with a
 // vacuum pipe lifter on a rotator at the end of its stick: the lifter's engine and vacuum pump
 // in a yellow housing, its beam and the curved, rubber-sealed pad for 36 in pipe, held across
-// the machine's front at about knee height, as when picking a joint off the truck.
+// the machine's front at the height of a joint strung on its skids, set down on the pipe to
+// pick it.
 function vacuumExcavator() {
 
 	const parts = new Parts();
@@ -945,8 +949,9 @@ function vacuumExcavator() {
 	const foot = new Vector3( 0.15, 2.1, - 1.0 );
 	const dir = a => new Vector3( 0, Math.sin( a * DEG ), - Math.cos( a * DEG ) );
 	const behind = a => new Vector3( 0, Math.cos( a * DEG ), Math.sin( a * DEG ) );
+	const arm = 24; // the boom's upper part, raised so the pad comes down onto a strung joint
 	const knee = foot.clone().addScaledVector( dir( 50 ), 3.6 );
-	const tip = knee.clone().addScaledVector( dir( 8 ), 2.7 );
+	const tip = knee.clone().addScaledVector( dir( arm ), 2.7 );
 	const end = tip.clone().addScaledVector( dir( - 82 ), 3.1 );
 	member( parts, body, [ 0.55, 0.8 ], foot, knee );
 	member( parts, body, [ 0.5, 0.7 ], knee, tip );
@@ -954,8 +959,8 @@ function vacuumExcavator() {
 	for ( const p of [ foot, tip, end ] ) parts.rod( STEEL(), [ p.x - 0.35, p.y, p.z ], [ p.x + 0.35, p.y, p.z ], 0.08, 10 );
 	for ( const x of [ - 0.2, 0.5 ] ) parts.box( dark, [ 0.1, 0.9, 1.2 ], [ x, 1.35, - 1.0 ] );
 	for ( const x of [ - 0.18, 0.48 ] ) ram( parts, 0.11, [ x, 1.5, - 2.0 ], knee.clone().add( new Vector3( x - 0.15, - 0.45, 0 ) ) );
-	ram( parts, 0.11, knee.clone().addScaledVector( behind( 8 ), 0.55 ), tip.clone().addScaledVector( dir( - 82 ), - 0.6 ).addScaledVector( behind( - 82 ), 0.35 ) );
-	parts.path( BLACK(), [ [ 0.15, 2.3, - 1.8 ], knee.clone().addScaledVector( behind( 50 ), 0.45 ).toArray(), tip.clone().addScaledVector( behind( 8 ), 0.45 ).toArray(), end.clone().addScaledVector( behind( - 82 ), 0.3 ).toArray() ], 0.035, 6 );
+	ram( parts, 0.11, knee.clone().addScaledVector( behind( arm ), 0.55 ), tip.clone().addScaledVector( dir( - 82 ), - 0.6 ).addScaledVector( behind( - 82 ), 0.35 ) );
+	parts.path( BLACK(), [ [ 0.15, 2.3, - 1.8 ], knee.clone().addScaledVector( behind( 50 ), 0.45 ).toArray(), tip.clone().addScaledVector( behind( arm ), 0.45 ).toArray(), end.clone().addScaledVector( behind( - 82 ), 0.3 ).toArray() ], 0.035, 6 );
 
 	// Rotator and link under the stick end, then the lifter: housing, beam and pad.
 	const [ x0, y0, z0 ] = [ end.x, end.y, end.z ];
@@ -985,15 +990,20 @@ function vacuumExcavator() {
 
 // Holiday testing before lowering in: 20 ft of 36 in coated pipe on two skids, with the holiday
 // detector's coil-spring electrode ring round it and its handle, the inspector walking beside it
-// with the detector unit on its strap and the ground lead trailing behind on the ground.
-function holidayDetector() {
+// with the detector unit on its strap and the ground lead trailing behind on the ground. Without
+// the pipe it is only the ring and the inspector, at the height of a joint strung on skids, to set
+// on the string.
+function holidayDetector( withPipe = true ) {
 
 	const parts = new Parts();
 	const length = 20 * FT;
-	let top = 0;
-	for ( const z of [ - length / 2 + 0.9, length / 2 - 0.9 ] ) top = skid( parts, [ 0, z ] );
-	const yc = top + PIPE_R;
-	pipe( parts, [ 0, yc, 0 ], length, { cutback: 0.01 } );
+	const yc = 3 * 6 * IN + PIPE_R; // a skid pile's top plus the pipe's radius
+	if ( withPipe ) {
+
+		for ( const z of [ - length / 2 + 0.9, length / 2 - 0.9 ] ) skid( parts, [ 0, z ] );
+		pipe( parts, [ 0, yc, 0 ], length, { cutback: 0.01 } );
+
+	}
 
 	// The spring ring and its frame: two guide wheels on top, the handle out to the right.
 	const ringZ = - 0.6;
