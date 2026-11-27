@@ -343,7 +343,53 @@ export const SETS = [
 			{ item: 'worker-standing', right: - 2, forward: 12.5, turn: 180 },
 			{ item: 'worker-pointing', right: 3, forward: 13, turn: 200 },
 			{ item: 'worker-vest-tool-belt', right: - 10, forward: - 8.5, turn: 160 },
+		],
+	},
+	{
+		id: 'set-erosion-perimeter',
+		name: 'Erosion control perimeter (silt fence, construction entrance, inlet protection, washout, tree protection)',
+		keywords: 'erosion sediment control esc swppp silt fence construction entrance inlet protection concrete washout tree protection perimeter',
+		members: [
+			// The stone entrance from the road (the set's front, downslope) into the site, with silt
+			// fence along the front either side of it, its fabric facing upslope into the site.
+			{ item: 'construction-entrance-20x50', right: 0, forward: 0, turn: 0 },
+			...[ - 1, 1 ].flatMap( s => [ 0, 1, 2, 3, 4, 5 ].map( i => ( { item: 'silt-fence-10ft', right: s * ( 3.6 + 1.524 + i * 3.048 ), forward: 6, turn: 180 } ) ) ),
+			// Catch basins inside protected, the washout back from the entrance where mixers can reach it.
+			{ item: 'inlet-filter-bag', right: 9, forward: - 2, turn: 0 },
+			{ item: 'inlet-gravel-bag-ring', right: - 12, forward: - 6, turn: 0 },
+			{ item: 'washout-rolloff', right: - 8, forward: - 14, turn: 90 },
+			{ item: 'spill-kit-95gal', right: - 4.5, forward: - 12, turn: 0 },
+			// A 20 ft square of tree protection fence round a tree to keep, with its sign at the front.
+			...[ - 1, 1 ].flatMap( i => [
+				{ item: 'tree-protection-fence-10ft', right: 14 + i * 1.524, forward: - 11, turn: 0 },
+				{ item: 'tree-protection-fence-10ft', right: 14 + i * 1.524, forward: - 17.1, turn: 180 },
+				{ item: 'tree-protection-fence-10ft', right: 17.05, forward: - 14.05 + i * 1.524, turn: 90 },
+				{ item: 'tree-protection-fence-10ft', right: 10.95, forward: - 14.05 + i * 1.524, turn: 270 },
+			] ),
+			{ item: 'tree-protection-sign', right: 14, forward: - 10.8, turn: 0 },
 			{ item: 'worker-standing', right: 4, forward: - 9.5, turn: 180 },
+		],
+	},
+	{
+		id: 'set-rail-work-block',
+		name: 'Rail work block (tamper, ballast regulator, track panels, hi-rail trucks, crew)',
+		keywords: 'rail work block track maintenance tamper regulator hi-rail surfacing gang railroad mow',
+		members: [
+			// One line of track along the set, 39 ft panels butted to the machines' own track: the
+			// tamper working towards the front, the regulator behind it.
+			{ item: 'rail-track-39ft', right: 0, forward: 29.72, turn: 0 },
+			{ item: 'rail-track-39ft', right: 0, forward: 17.83, turn: 0 },
+			{ item: 'production-tamper', right: 0, forward: 0, turn: 0 },
+			{ item: 'ballast-regulator', right: 0, forward: - 17.83, turn: 0 },
+			{ item: 'rail-track-39ft', right: 0, forward: - 29.72, turn: 0 },
+			// The hi-rail trucks set off on the access road beside the track, the crew on the shoulder.
+			{ item: 'hi-rail-pickup', right: 6, forward: 20, turn: 0 },
+			{ item: 'hi-rail-truck', right: 6, forward: - 14, turn: 0 },
+			{ item: 'worker-pointing', right: 2.8, forward: 13, turn: 270 },
+			{ item: 'worker-standing', right: 3.2, forward: 4, turn: 300 },
+			{ item: 'worker-vest-drawings', right: - 2.8, forward: - 6, turn: 90 },
+			{ item: 'worker-walking', right: 3.0, forward: - 24, turn: 0 },
+			{ item: 'flagger', right: 3.5, forward: 37, turn: 0 },
 		],
 	},
 ];

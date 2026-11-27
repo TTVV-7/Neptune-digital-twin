@@ -21,14 +21,20 @@ export const EXTRA_ITEMS = [
 
 // --- rail track ------------------------------------------------------------------------------
 
-const GAUGE = 56.5 * IN;
-const TIE = [ 8.5 * FT, 7 * IN, 9 * IN ]; // length across, depth, width along the track
-const TIES_PER_PANEL = 24; // 19.5 in centres
-const PLATE = [ 14 * IN, 0.75 * IN, 7.75 * IN ];
-const RAIL_HEAD = 2.94 * IN;
+// Exported for the other rail pieces (tools-attachments.js: turnout, bumping post, rail machines)
+// so they line up with a panel: same gauge, ties, ballast and rail height.
+export const GAUGE = 56.5 * IN;
+export const TIE = [ 8.5 * FT, 7 * IN, 9 * IN ]; // length across, depth, width along the track
+export const TIES_PER_PANEL = 24; // 19.5 in centres
+export const PLATE = [ 14 * IN, 0.75 * IN, 7.75 * IN ];
+export const RAIL_HEAD = 2.94 * IN;
+// Ballast under the ties, the centre of each rail across, and the top of the rail above the ground.
+export const BALLAST_UNDER = 12 * IN;
+export const RAIL_X = GAUGE / 2 + RAIL_HEAD / 2;
+export const RAIL_TOP = BALLAST_UNDER + TIE[ 1 ] + PLATE[ 1 ] + 7.31 * IN;
 
 // 136RE rail, simplified, in inches: x across, y up from the base.
-const RAIL_PROFILE = [
+export const RAIL_PROFILE = [
 	[ - 3, 0 ], [ 3, 0 ], [ 3, 0.55 ], [ 0.9, 1.25 ], [ 0.344, 1.7 ], [ 0.344, 5.0 ], [ 1.47, 5.45 ], [ 1.47, 7.1 ], [ 1.3, 7.31 ],
 	[ - 1.3, 7.31 ], [ - 1.47, 7.1 ], [ - 1.47, 5.45 ], [ - 0.344, 5.0 ], [ - 0.344, 1.7 ], [ - 0.9, 1.25 ], [ - 3, 0.55 ],
 ];
@@ -36,7 +42,15 @@ const RAIL_PROFILE = [
 function railTrack() {
 
 	const parts = new Parts();
-	const length = 39 * FT;
+	trackParts( parts, 39 * FT, TIES_PER_PANEL );
+	return parts.build();
+
+}
+
+// A straight piece of the track above, `length` long with `ties` ties, centred on z = 0, added to
+// `parts` (so a rail machine can stand on it).
+export function trackParts( parts, length, ties ) {
+
 	const ballast = mat( 0x807c75, { roughness: 1 } );
 	const tie = mat( 0x3d3129, { roughness: 0.95 } );
 	const plate = mat( 0x3a3633, { roughness: 0.7, metalness: 0.4 } );
@@ -45,17 +59,17 @@ function railTrack() {
 
 	// Ballast: 12 in under the ties and a 12 in shoulder past their ends, sloping 1.5 : 1, its top
 	// an inch below the top of the ties so they show.
-	const under = 12 * IN;
+	const under = BALLAST_UNDER;
 	const top = under + TIE[ 1 ] - 1 * IN;
 	const halfTop = TIE[ 0 ] / 2 + 12 * IN;
 	const halfBottom = halfTop + 1.5 * top;
 	parts.add( ballast, extruded( [ [ - halfBottom, 0 ], [ halfBottom, 0 ], [ halfTop, top ], [ - halfTop, top ] ], length ) );
 
 	// Ties, evenly spaced so a row of panels keeps the spacing through each joint.
-	const pitch = length / TIES_PER_PANEL;
+	const pitch = length / ties;
 	const tieTop = under + TIE[ 1 ];
-	const railX = GAUGE / 2 + RAIL_HEAD / 2;
-	for ( let i = 0; i < TIES_PER_PANEL; i ++ ) {
+	const railX = RAIL_X;
+	for ( let i = 0; i < ties; i ++ ) {
 
 		const z = - length / 2 + pitch * ( i + 0.5 );
 		parts.box( tie, [ TIE[ 0 ], TIE[ 1 ], TIE[ 2 ] ], [ 0, under, z ] );
@@ -73,12 +87,10 @@ function railTrack() {
 
 	}
 
-	return parts.build();
-
 }
 
 // A cross-section (points [ x, y ]) extruded along z, centred on z = 0.
-function extruded( points, length ) {
+export function extruded( points, length ) {
 
 	const shape = new Shape( points.map( ( [ x, y ] ) => new Vector2( x, y ) ) );
 	const geometry = new ExtrudeGeometry( shape, { depth: length, bevelEnabled: false, curveSegments: 4 } );
