@@ -22,6 +22,7 @@ export const CATEGORY_ORDER = [
 	'Site services',
 	'Power & air',
 	'Dewatering & water treatment',
+	'Environmental & erosion control',
 	'Utilities',
 	'Access & scaffolding',
 	'Shoring',

@@ -1137,7 +1137,7 @@ function palletRacking() {
 
 // A 95 gal rollout cart: tapered body 26.5 in wide and 34 in deep at the top, 45.5 in to the top
 // of the lid, its handle and wheels at the back, as it's put out (front to the street).
-function wheelieBin( color, decal ) {
+export function wheelieBin( color, decal ) {
 
 	const parts = new Parts();
 	const body = plastic( color );
