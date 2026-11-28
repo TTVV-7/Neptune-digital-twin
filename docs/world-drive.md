@@ -5459,7 +5459,7 @@ never more than one, however much you fly about:
   of token (visits.js), no key, never limited and counted against no cap, so the leaderboard,
   levels, the play stats and driving with others have a visit from the start. The Earth's drive,
   asked for at the first drive on the Earth, is the Maps key, only while the day's Earth drives are
-  under two caps: **DAILY_VISITS** for everyone together (300) and **PER_VISITOR_DAILY** for each
+  under two caps: **DAILY_VISITS** for everyone together (750) and **PER_VISITOR_DAILY** for each
   visitor (1: one free Earth drive a day; a supporter signed in has **PER_VISITOR_DAILY_SUPPORTER**,
   30, counted by their account, and never turned away by the cap for everyone). Both start again at
   midnight UTC. The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all. With the key
@@ -6056,7 +6056,7 @@ drop-in counted with it, and time: one place each 10 s of the visit, 10 a visit.
 a day for each address (an IPv6 /48) and once for each visit, so adding one to a cell takes both a
 new visit and a new address: one robot check and its token, replayed from a block of addresses, add
 a cell once, and a /48's 65,536 /64s are one visitor. An Earth place takes an Earth visit, one of
-the day's capped drives (`DAILY_VISITS`, 300, and `PER_VISITOR_DAILY`, 1 an address): pushing an
+the day's capped drives (`DAILY_VISITS`, 750, and `PER_VISITOR_DAILY`, 1 an address): pushing an
 Earth place up the table by 50 a day spends 50 of the day's drives from 50 addresses, each passing
 the robot check. Visits to the other worlds aren't capped (they cost nothing to stream), so a place
 on either can be pushed by many robot checks from many addresses (IPv4 addresses or /48s); each
@@ -8530,7 +8530,7 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 
 | Setting | Default | What it is |
 | --- | --- | --- |
-| `DAILY_VISITS` | 300 | Visits a day for everyone together; 0 closes for the day |
+| `DAILY_VISITS` | 750 (500 until 2026-11-28) | Visits a day for everyone together; 0 closes for the day |
 | `PER_VISITOR_DAILY` | 8 | Visits a day per visitor |
 | `TURNSTILE_SITE_KEY` | `0x4AAAAAAFs3k5sgUIQHSuGC` | The worlddrive.app Turnstile widget (public) |
 | `PER_VISITOR_DAILY_SUPPORTER` | 30 | Visits a day for a supporter (or a day pass), signed in |
@@ -9183,7 +9183,7 @@ Keep World Drive's key apart from the construction app's, so its limits and its 
    alone and set it as the secret `GOOGLE_TILES_KEY`.
 4. **A daily quota cap.** APIs & Services → Map Tiles API → **Quotas & system limits**: lower the
    per-day limit on 3D Tiles root tileset requests (the sessions) to well over `DAILY_VISITS`,
-   which supporters' drives aren't counted in (e.g. 1,000 with `DAILY_VISITS` at 500), and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
+   which supporters' drives aren't counted in (e.g. 1,250 with `DAILY_VISITS` at 750), and the per-day limit on 3D tile requests to a sensible multiple of that (a long drive
    loads a few thousand tiles). The console's names for these change now and then: look for the
    per-day ones. It's the backstop if the key is copied and used from somewhere the referrer check
    doesn't stop; once a limit is reached, tiles stop loading until midnight Pacific time rather than

@@ -36,7 +36,7 @@
 		// Each visit is one billed Google Maps session; a visit to the Moon or Mars is never counted, nor
 		// is a supporter's (PER_VISITOR_DAILY_SUPPORTER, by account, on top of these). Google's daily
 		// quota on 3D Tiles root tileset requests must stay above this and the supporters' together.
-		"DAILY_VISITS": "500",
+		"DAILY_VISITS": "750",
 		"PER_VISITOR_DAILY": "1",
 		// The Turnstile widget for worlddrive.app (public; its secret is the TURNSTILE_SECRET secret).
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAFs3k5sgUIQHSuGC",
