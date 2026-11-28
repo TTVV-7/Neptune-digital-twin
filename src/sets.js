@@ -713,6 +713,88 @@ export const SETS = [
 			{ item: 'water-truck-4000gal', right: 16, forward: 13, turn: 270 },
 		],
 	},
+	{
+		id: 'set-crane-pick-zone',
+		name: 'Crane pick zone (40 t rough-terrain crane, concrete bucket, pallet forks, debris skip, cribbing, outrigger pads, signaller)',
+		keywords: 'crane pick zone lifting area laydown rigging concrete bucket crane forks debris skip cribbing outrigger pads swing radius signaller hoisting',
+		members: [
+			// The crane at the back, its front to the laydown, with the spare outrigger pads beside it
+			// and the swing radius sign at its corner.
+			{ item: 'crane-rough-terrain-40t', right: 0, forward: - 6, turn: 0 },
+			{ item: 'outrigger-pads-4x4', right: 6, forward: - 2, turn: 0 },
+			{ item: 'sign-crane-radius', right: - 5.5, forward: 2.5, turn: 0 },
+			// The rigging laid down in a row in front, within reach of the hook, cribbing at the end.
+			{ item: 'crane-concrete-bucket-2yd', right: - 4.5, forward: 5, turn: 0 },
+			{ item: 'crane-pallet-forks', right: - 1.5, forward: 5, turn: 0 },
+			{ item: 'crane-debris-skip', right: 1.5, forward: 5, turn: 0 },
+			{ item: 'cribbing-stack-timber', right: 4.5, forward: 5, turn: 0 },
+			// The signaller in front of it all, facing the operator.
+			{ item: 'worker-crane-signaller', right: 0, forward: 9, turn: 180 },
+		],
+	},
+	{
+		id: 'set-equipment-delivery',
+		name: 'Equipment delivery at the gate (loaded lowboy, gooseneck with track loader, tag trailer with mini excavator, knuckle-boom drywall truck, flagger, cones)',
+		keywords: 'equipment delivery mobilization mobilisation lowboy float gooseneck tag trailer boom truck drywall delivery staging gate unloading',
+		// Side by side with their fronts lined up towards the gate, the boom truck on the right with
+		// its crane reaching out over its right side; a flagger and cones at the gate and a worker
+		// guiding the unload at the back.
+		members: [
+			{ item: 'lowboy-loaded-excavator', right: - 10, forward: 0.2, turn: 0 },
+			{ item: 'gooseneck-trailer-ctl', right: - 5.3, forward: 2.5, turn: 0 },
+			{ item: 'tag-trailer-mini-excavator', right: - 1, forward: 3.6, turn: 0 },
+			// Its middle is out to the right of the truck, as the boom reaches 8 m that way.
+			{ item: 'knuckle-boom-delivery-truck', right: 7.2, forward: 4, turn: 0 },
+			...[ - 12, - 7.5, - 3, 1.5 ].map( right => ( { item: 'traffic-cone', right, forward: 13, turn: 0 } ) ),
+			{ item: 'flagger', right: 6, forward: 14, turn: 0 },
+			{ item: 'worker-pointing', right: - 7.5, forward: - 9, turn: 90 },
+		],
+	},
+	{
+		id: 'set-geotech-investigation',
+		name: 'Geotechnical site investigation (truck drill rig, CPT truck, pickup, water trailer, crew)',
+		keywords: 'geotech geotechnical site investigation borehole bore hole soil boring drilling cpt cone test drill rig soils report test pit survey',
+		members: [
+			// The drill rig and the CPT truck side by side on their holes, their masts and push rods at
+			// the back, coned off behind; the driller at the rig's controls.
+			{ item: 'geotech-drill-truck', right: - 4, forward: 0, turn: 0 },
+			{ item: 'cpt-truck', right: 4, forward: 0.5, turn: 0 },
+			{ item: 'worker-standing', right: - 6.1, forward: - 2.8, turn: 90 },
+			{ item: 'traffic-cone', right: - 6.5, forward: - 5.5, turn: 0 },
+			{ item: 'traffic-cone', right: - 1.5, forward: - 5.5, turn: 0 },
+			{ item: 'traffic-cone', right: 1.5, forward: - 5.5, turn: 0 },
+			{ item: 'traffic-cone', right: 6.5, forward: - 5.5, turn: 0 },
+			// Water for the drilling beside the rig, the pickup parked in front, the surveyor picking
+			// up the hole locations and the sign at the way in.
+			{ item: 'water-trailer-500gal', right: - 8.5, forward: - 1, turn: 0 },
+			{ item: 'pickup-truck', right: - 1, forward: 10, turn: 180 },
+			{ item: 'worker-surveyor', right: 7, forward: 8, turn: 200 },
+			{ item: 'sign-a-frame-caution', right: 3, forward: 12, turn: 0 },
+		],
+	},
+	{
+		id: 'set-land-clearing',
+		name: 'Land clearing (feller buncher, forestry mulcher, grapple skidder, excavator feeding a horizontal grinder, logs, slash and chips)',
+		keywords: 'land clearing clearing grubbing right of way row tree clearing logging forestry mulcher feller buncher skidder grinder chips slash brush stumps greenfield solar pipeline',
+		members: [
+			// The tree line at the back: the feller buncher and the mulcher working into it, a faller
+			// with his saw and the stumps they've left between them.
+			{ item: 'feller-buncher', right: - 11, forward: - 9, turn: 180 },
+			{ item: 'forestry-mulcher-tracked', right: 7, forward: - 9, turn: 180 },
+			{ item: 'worker-chainsaw', right: - 2, forward: - 8, turn: 180 },
+			{ item: 'tree-stump-poplar', right: 0, forward: - 4, turn: 0 },
+			{ item: 'tree-stump-poplar', right: 12, forward: - 3, turn: 60 },
+			// The skidder dragging stems out to the log deck on the left, and the slash piled in the middle.
+			{ item: 'grapple-skidder', right: - 6, forward: 0, turn: 20 },
+			{ item: 'log-stack-trunks', right: - 13, forward: 7, turn: 90 },
+			{ item: 'brush-pile', right: 0, forward: 6, turn: 0 },
+			// The grinder along the front, its infeed apron to the left where the excavator loads it
+			// from the slash, its conveyor stacking chips on the right.
+			{ item: 'excavator-20t', right: 1, forward: 14, turn: 90 },
+			{ item: 'horizontal-grinder', right: 15, forward: 13, turn: 90 },
+			{ item: 'wood-chip-pile', right: 27, forward: 13, turn: 0 },
+		],
+	},
 ];
 
 // The sets whose pieces are in the library, with only those pieces, and their sizes worked out
