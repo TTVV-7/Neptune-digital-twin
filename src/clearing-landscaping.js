@@ -41,7 +41,7 @@ export const CLEARING_LANDSCAPING_ITEMS = [
 	{ id: 'stump-grinder-tracked', name: 'Stump grinder, tracked self-propelled (SC362 class, 23 in cutter wheel)', category: 'Landscaping & site context',
 		keywords: 'stump grinder stump cutter stump removal tree service cutter wheel tracked',
 		build: stumpGrinder },
-	{ id: 'tree-spade-truck', name: 'Tree spade truck (90 in spade, raised, Class 7)', category: 'Landscaping & site context',
+	{ id: 'tree-spade-truck', name: 'Tree spade truck (90 in spade, raised, Class 8 tandem axle)', category: 'Landscaping & site context',
 		keywords: 'tree spade tree mover tree transplanter big john spade truck transplant nursery landscaping',
 		build: treeSpadeTruck },
 	{ id: 'compact-tractor-tlb', name: 'Compact tractor loader backhoe (25 hp class, ROPS, front loader and rear backhoe)', category: 'Heavy equipment',
@@ -80,8 +80,8 @@ const GLASS = () => mat( 0x2b3d48, { roughness: 0.1, metalness: 0.3 } );
 const HOSE = () => mat( 0x1c1c1d, { roughness: 0.75 } );
 const AMBER = () => mat( 0xff9a1a, { roughness: 0.3, emissive: 0xc76a00, emissiveIntensity: 0.6 } );
 const TIMBER = () => mat( 0x9a7a52, { roughness: 0.95 } );
-const SOIL = () => mat( 0x4f3d2c, { roughness: 1 } );
-const GRASS = () => mat( 0x4f7a32, { roughness: 1 } );
+const SOIL = () => mat( 0x6e5a42, { roughness: 1 } );
+const GRASS = () => mat( 0x5e9a35, { roughness: 1 } );
 const BARK = () => mat( 0x6a4a30, { roughness: 1 } );
 
 // --- shared pieces -----------------------------------------------------------------------------
@@ -647,8 +647,8 @@ function stumpGrinder() {
 
 // --- tree spade truck --------------------------------------------------------------------------
 
-// A 90 in tree spade on a Class 7 truck (about 10.3 m long, 2.7 m wide at the spade and 4.4 m
-// high): the spade's mast standing upright at the back of the frame on its tilt frame and rams,
+// A 90 in tree spade on a Class 8 tandem-axle truck (about 10.9 m long, 2.7 m wide at the spade
+// and 4.4 m high): the spade's mast standing upright at the back of the frame on its tilt frame and rams,
 // the four blades closed in a cone and raised off the ground, with the opening ring and its gates
 // round their tops.
 function treeSpadeTruck() {
@@ -656,9 +656,9 @@ function treeSpadeTruck() {
 	const parts = new Parts();
 	const body = YELLOW();
 	const dark = DARK();
-	const front = - 5.0;
+	const front = - 5.6;
 	const back = 2.6;
-	const { cabBack, frameTop } = truck( parts, { colour: 0xe9e8e2, front, rear: 1.0, back, axles: 1 } );
+	const { cabBack, frameTop } = truck( parts, { colour: 0xe9e8e2, front, rear: 0.8, back } );
 
 	// Subframe on the truck frame and the hydraulic tank and valve bank behind the cab.
 	parts.box( dark, [ 1.1, 0.15, back - cabBack - 0.2 ], [ 0, frameTop, ( back + cabBack + 0.2 ) / 2 ] );
@@ -900,11 +900,13 @@ function trommel() {
 // --- sod on pallets ----------------------------------------------------------------------------
 
 // Four 48 × 40 in pallets of sod in a block of two by two, a hand's width apart: each 50 rolls of
-// 2 × 5 ft (500 ft²) in five layers of ten, soil side out with the grass showing at the ends.
+// 2 × 5 ft (500 ft²) in five layers of ten, rolled grass side in, so the soil shows along the rolls
+// and the grass and soil spiral shows at their ends.
 function sodPallets() {
 
 	const parts = new Parts();
-	const roll = 0.2;
+	const r = 0.1;
+	const len = 0.6;
 	const [ pl, pw ] = [ 48 * IN, 40 * IN ];
 	const gap = 0.15;
 	for ( const sx of [ - 1, 1 ] ) {
@@ -917,17 +919,30 @@ function sodPallets() {
 			for ( const z of [ - pw / 2 + 0.05, 0, pw / 2 - 0.05 ] ) parts.box( TIMBER(), [ pl, 0.09, 0.08 ], [ cx, 0, cz + z ] );
 			for ( let i = 0; i < 7; i ++ ) parts.box( TIMBER(), [ 0.1, 0.02, pw ], [ cx - pl / 2 + 0.05 + i * ( pl - 0.1 ) / 6, 0.09, cz ] );
 
-			// Five layers of rolls, two across and five along, each laid across x.
+			// Five layers of rolls, two end to end across the pallet and five along it.
 			for ( let layer = 0; layer < 5; layer ++ ) {
 
-				const y = 0.11 + roll / 2 + layer * roll * 0.92;
+				const y = 0.11 + r + layer * r * 1.84;
 				for ( let i = 0; i < 5; i ++ ) {
 
-					// Two rolls end to end across the pallet, and the grass rolled up inside them
-					// showing at the outer ends.
-					const z = cz - pw / 2 + roll / 2 + i * ( pw - roll ) / 4;
-					for ( const half of [ - 1, 1 ] ) parts.rod( SOIL(), [ cx + half * 0.005, y, z ], [ cx + half * 0.605, y, z ], roll / 2, 8 );
-					parts.rod( GRASS(), [ cx - 0.607, y, z ], [ cx + 0.607, y, z ], roll / 2 - 0.02, 8 );
+					const z = cz - pw / 2 + r + i * ( pw - 2 * r ) / 4;
+					for ( const half of [ - 1, 1 ] ) {
+
+						// The roll, soil outside, and at its outer end the spiral: rings of grass and
+						// soil standing a little proud of each other.
+						const x0 = cx + half * 0.005;
+						const x1 = x0 + half * len;
+						parts.rod( SOIL(), [ x0, y, z ], [ x1, y, z ], r, 10 );
+						parts.rod( GRASS(), [ x1 - half * 0.01, y, z ], [ x1 + half * 0.004, y, z ], r - 0.018, 10 );
+						parts.rod( SOIL(), [ x1 - half * 0.01, y, z ], [ x1 + half * 0.008, y, z ], r - 0.042, 10 );
+						parts.rod( GRASS(), [ x1 - half * 0.01, y, z ], [ x1 + half * 0.012, y, z ], r - 0.064, 8 );
+
+					}
+
+					// The outer lap's edge along the pair, where the grass shows as a green stripe,
+					// on the upper side of each roll facing out of the pallet (either way in the middle).
+					const t = ( i < 2 || ( i === 2 && layer % 2 ) ? 1 : - 1 ) * 0.6;
+					parts.block( GRASS(), [ 2 * len, 0.01, 0.075 ], [ cx, y + Math.cos( t ) * r, z - Math.sin( t ) * r ], [ - t, 0, 0 ] );
 
 				}
 
