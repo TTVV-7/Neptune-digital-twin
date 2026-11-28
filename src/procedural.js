@@ -43,6 +43,7 @@ import { FITOUT_DEMO_ITEMS } from './fitout-demo.js';
 import { SITE_LOGISTICS_ITEMS } from './site-logistics.js';
 import { TRUCKS_TRAILERS_ITEMS } from './trucks-trailers.js';
 import { GROUNDWORKS_ITEMS } from './groundworks-trenchless.js';
+import { CLEARING_LANDSCAPING_ITEMS } from './clearing-landscaping.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -169,6 +170,8 @@ export const PROCEDURAL_ITEMS = [
 	...TRUCKS_TRAILERS_ITEMS,
 	// Geotech drill rigs and a CPT truck, anchor, jet grout and vibro rigs, auger boring and pipe bursting pits, a microtunnel shaft, vac trailer, trench roller, mini dumper, walk-behind trencher, wellpoints and a deep well (groundworks-trenchless.js).
 	...GROUNDWORKS_ITEMS,
+	// Forestry mulcher and skid steer mulcher, feller buncher, grapple skidder, horizontal grinder, chipper, stump grinder, tree spade, compact TLB, stand-on loader, trommel, sod, bark blower and boom mower (clearing-landscaping.js).
+	...CLEARING_LANDSCAPING_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
