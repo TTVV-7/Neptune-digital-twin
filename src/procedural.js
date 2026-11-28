@@ -42,6 +42,7 @@ import { BRIDGE_HIGHWAY_ITEMS } from './bridge-highway.js';
 import { FITOUT_DEMO_ITEMS } from './fitout-demo.js';
 import { SITE_LOGISTICS_ITEMS } from './site-logistics.js';
 import { TRUCKS_TRAILERS_ITEMS } from './trucks-trailers.js';
+import { GROUNDWORKS_ITEMS } from './groundworks-trenchless.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -166,6 +167,8 @@ export const PROCEDURAL_ITEMS = [
 	...SITE_LOGISTICS_ITEMS,
 	// Knuckle-boom drywall truck, roll-off, pneumatic tanker, volumetric mixer, combo vac, side dump, crew van, 55 ft bucket truck, mechanic's truck; gooseneck, tag, utility, dump and fuel trailers and a loaded lowboy (trucks-trailers.js).
 	...TRUCKS_TRAILERS_ITEMS,
+	// Geotech drill rigs and a CPT truck, anchor, jet grout and vibro rigs, auger boring and pipe bursting pits, a microtunnel shaft, vac trailer, trench roller, mini dumper, walk-behind trencher, wellpoints and a deep well (groundworks-trenchless.js).
+	...GROUNDWORKS_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
